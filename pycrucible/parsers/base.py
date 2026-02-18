@@ -159,7 +159,7 @@ class BaseParser:
             files_to_upload=self.files_to_upload,
             scientific_metadata=self.scientific_metadata,
             keywords=self.keywords,
-            get_user_info_function=self.client.get_user,
+            # get_user_info_function=self.client.get_user,
             ingestor=ingestor,
             verbose=verbose,
             wait_for_ingestion_response=wait_for_ingestion_response
