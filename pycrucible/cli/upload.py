@@ -294,8 +294,8 @@ def execute(args):
 
     # Get ORCID - use flag if provided, otherwise fall back to config
     owner_orcid = args.owner_orcid
-    if owner_orcid is None:
-        owner_orcid = config.orcid_id
+    # if owner_orcid is None:
+        # owner_orcid = config.orcid_id
 
     # Determine parser class
     if args.dataset_type is None:
