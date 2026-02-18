@@ -140,6 +140,68 @@ def find_linked_images(content: str, markdown_dir: Path) -> List[str]:
     return list(set(image_files))  # Remove duplicates
 
 
+def find_crucible_links(content: str) -> Dict[str, List[str]]:
+    """
+    Find all Crucible dataset and sample references in markdown content.
+
+    Supports two formats:
+    1. Wiki-style: [[dataset:mfid-123]] or [[sample:sample-xyz|Display Text]]
+    2. Standard markdown: [text](https://crucible.lbl.gov/dataset/mfid-123)
+
+    Args:
+        content: Markdown content
+
+    Returns:
+        Dict with 'datasets' and 'samples' lists containing referenced IDs
+    """
+    datasets = []
+    samples = []
+
+    # Pattern for wiki-style links: [[dataset:id]] or [[dataset:id|display text]]
+    wiki_dataset_pattern = r'\[\[dataset:([^\]|]+)(?:\|[^\]]*)?\]\]'
+    wiki_sample_pattern = r'\[\[sample:([^\]|]+)(?:\|[^\]]*)?\]\]'
+
+    # Pattern for standard markdown links to Crucible URLs
+    # Matches: [text](https://crucible.lbl.gov/dataset/mfid-123)
+    # or: [text](crucible://dataset/mfid-123)
+    md_link_pattern = r'\[([^\]]+)\]\(([^)]+)\)'
+
+    # Find wiki-style links
+    datasets.extend(re.findall(wiki_dataset_pattern, content))
+    samples.extend(re.findall(wiki_sample_pattern, content))
+
+    # Find standard markdown links
+    for display_text, url in re.findall(md_link_pattern, content):
+        # Match URLs like: https://crucible.lbl.gov/dataset/mfid-123
+        # or custom scheme: crucible://dataset/mfid-123
+        if '/dataset/' in url or '://dataset/' in url:
+            # Extract the dataset ID (everything after /dataset/)
+            dataset_id = url.split('/dataset/')[-1].strip('/')
+            if dataset_id:
+                datasets.append(dataset_id)
+        elif '/sample/' in url or '://sample/' in url:
+            # Extract the sample ID (everything after /sample/)
+            sample_id = url.split('/sample/')[-1].strip('/')
+            if sample_id:
+                samples.append(sample_id)
+
+    # Remove duplicates while preserving order
+    unique_datasets = []
+    for d in datasets:
+        if d not in unique_datasets:
+            unique_datasets.append(d)
+
+    unique_samples = []
+    for s in samples:
+        if s not in unique_samples:
+            unique_samples.append(s)
+
+    return {
+        'datasets': unique_datasets,
+        'samples': unique_samples
+    }
+
+
 class MDNoteParser(BaseParser):
     """
     Parser for markdown notes with associated images.
@@ -201,6 +263,11 @@ class MDNoteParser(BaseParser):
         # Find linked images
         image_files = find_linked_images(content, markdown_dir)
 
+        # Find Crucible links (datasets and samples)
+        crucible_links = find_crucible_links(content)
+        linked_datasets = crucible_links['datasets']
+        linked_samples = crucible_links['samples']
+
         # Update file with mfid if it was added
         if file_was_updated:
             new_frontmatter_str = create_yaml_frontmatter(frontmatter)
@@ -217,6 +284,10 @@ class MDNoteParser(BaseParser):
         # Initialize parent class
         super().__init__(files_to_upload=files_to_upload, project_id=project_id)
 
+        # Store linked datasets and samples for upload
+        self.linked_datasets = linked_datasets
+        self.linked_samples = linked_samples
+
         # Build scientific metadata
         self.scientific_metadata = {
             'mfid': dataset_mfid,
@@ -225,7 +296,9 @@ class MDNoteParser(BaseParser):
             'headings': headings,
             'frontmatter': frontmatter,
             'num_images': len(image_files),
-            'image_files': [os.path.basename(img) for img in image_files]
+            'image_files': [os.path.basename(img) for img in image_files],
+            'linked_datasets': linked_datasets,
+            'linked_samples': linked_samples
         }
 
         # Set keywords
@@ -280,6 +353,7 @@ class MDNoteParser(BaseParser):
 
         Automatically sets measurement type to "MDNote".
         Uses parsed mfid and title if not provided.
+        Links referenced datasets as children and samples to the dataset.
 
         Args:
             mfid (str, optional): Unique dataset identifier. Uses parsed mfid if not provided.
@@ -292,7 +366,7 @@ class MDNoteParser(BaseParser):
             wait_for_ingestion_response (bool, optional): Wait for ingestion. Defaults to True.
 
         Returns:
-            dict: Dictionary containing upload results
+            dict: Dictionary containing upload results, including linked_datasets and linked_samples info
         """
         # Use parsed mfid if not provided
         if mfid is None:
@@ -302,7 +376,8 @@ class MDNoteParser(BaseParser):
         if dataset_name is None and self.title:
             dataset_name = self.title
 
-        return super().upload_dataset(
+        # Upload the dataset
+        result = super().upload_dataset(
             mfid=mfid,
             measurement=self._measurement,
             project_id=project_id,
@@ -313,3 +388,70 @@ class MDNoteParser(BaseParser):
             verbose=verbose,
             wait_for_ingestion_response=wait_for_ingestion_response
         )
+
+        # Get the created dataset ID
+        created_dataset_id = result.get('created_record', {}).get('unique_id')
+
+        if not created_dataset_id:
+            print("Warning: Could not determine created dataset ID, skipping link creation")
+            return result
+
+        # Link referenced datasets as children
+        linked_dataset_results = []
+        if self.linked_datasets:
+            if verbose:
+                print(f"\n=== Linking {len(self.linked_datasets)} child datasets ===")
+
+            for child_dataset_id in self.linked_datasets:
+                try:
+                    link_result = self.client.link_datasets(
+                        parent_dataset_id=created_dataset_id,
+                        child_dataset_id=child_dataset_id
+                    )
+                    linked_dataset_results.append({
+                        'child_id': child_dataset_id,
+                        'status': 'success',
+                        'result': link_result
+                    })
+                    if verbose:
+                        print(f"  ✓ Linked child dataset: {child_dataset_id}")
+                except Exception as e:
+                    linked_dataset_results.append({
+                        'child_id': child_dataset_id,
+                        'status': 'error',
+                        'error': str(e)
+                    })
+                    print(f"  ✗ Failed to link dataset {child_dataset_id}: {e}")
+
+        # Link referenced samples
+        linked_sample_results = []
+        if self.linked_samples:
+            if verbose:
+                print(f"\n=== Linking {len(self.linked_samples)} samples ===")
+
+            for sample_id in self.linked_samples:
+                try:
+                    link_result = self.client.add_sample_to_dataset(
+                        dataset_id=created_dataset_id,
+                        sample_id=sample_id
+                    )
+                    linked_sample_results.append({
+                        'sample_id': sample_id,
+                        'status': 'success',
+                        'result': link_result
+                    })
+                    if verbose:
+                        print(f"  ✓ Linked sample: {sample_id}")
+                except Exception as e:
+                    linked_sample_results.append({
+                        'sample_id': sample_id,
+                        'status': 'error',
+                        'error': str(e)
+                    })
+                    print(f"  ✗ Failed to link sample {sample_id}: {e}")
+
+        # Add linking results to the return dict
+        result['linked_datasets'] = linked_dataset_results
+        result['linked_samples'] = linked_sample_results
+
+        return result

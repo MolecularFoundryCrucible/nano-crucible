@@ -7,3 +7,4 @@ tutorial_data
 .env
 .DS_Store
 pycrucible/test-data
+pycrucible.egg-info

@@ -24,6 +24,8 @@ print("Keywords:", parser.keywords)
 print("Title:", parser.title)
 print("MFID:", parser.mfid)
 print("Files to upload:", parser.files_to_upload)
+print("Linked datasets:", parser.linked_datasets)
+print("Linked samples:", parser.linked_samples)
 
 # Example 2: Upload to Crucible
 # Upload the markdown note and all linked images
@@ -34,6 +36,8 @@ result = parser.upload_dataset(
 
 print("Upload complete!")
 print("Created record:", result['created_record'])
+print("\nLinked datasets:", result.get('linked_datasets', []))
+print("Linked samples:", result.get('linked_samples', []))
 
 # Example 3: Use with get_parser registry
 from pycrucible.parsers import get_parser
