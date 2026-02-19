@@ -11,12 +11,29 @@ Available subcommands:
 
 import argparse
 import sys
+import logging
 
 try:
     import argcomplete
     ARGCOMPLETE_AVAILABLE = True
 except ImportError:
     ARGCOMPLETE_AVAILABLE = False
+
+
+def setup_logging(verbose=False):
+    """
+    Configure logging for CLI usage.
+
+    Args:
+        verbose (bool): If True, set level to DEBUG; otherwise INFO
+    """
+    logging.basicConfig(
+        level=logging.DEBUG if verbose else logging.INFO,
+        format='%(message)s',  # Clean output for CLI
+        handlers=[
+            logging.StreamHandler(sys.stderr)  # Standard for CLI tools
+        ]
+    )
 
 
 def main():
