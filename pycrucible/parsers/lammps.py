@@ -9,6 +9,9 @@ Created on Tue Feb 10 17:22:34 2026
 from .base import BaseParser
 
 import os
+import logging
+
+logger = logging.getLogger(__name__)
 
 #%%
 
@@ -17,52 +20,60 @@ def store_variable(varname, varvalue, vardict):
     return
 
 class LAMMPSParser(BaseParser):
-    
+
     _measurement = "LAMMPS"
-    
-    def __init__(self, input_file, project_id=None):
-        """
-        Main driver, reads input file and find other relevant files, then
-        reads each one to extract metadata.
-        """
+    _data_format = "LAMMPS"
+    _instrument_name = None
 
-        # find input file
-        input_file = os.path.abspath(input_file)
+    def parse(self):
+        """
+        Parse LAMMPS input files and extract metadata.
 
-        # start by reading input file
+        Reads LAMMPS input file, data file, and log file to extract
+        simulation metadata, atomic structure, and version information.
+        Generates a thumbnail visualization of the atomic structure.
+        """
+        # Validate input
+        if not self.files_to_upload:
+            raise ValueError("No input files provided")
+
+        # Use first file as LAMMPS input
+        input_file = os.path.abspath(self.files_to_upload[0])
+
+        # Read input file to find related files
         lmp_metadata = self.read_lmp_input_file(input_file)
 
-        # build list of files to upload (only input, data, and log files)
-        files_to_upload = [input_file]
+        # Build list of files to upload (input, data, and log files)
+        files_list = [input_file]
 
-        # then read data file
+        # Read data file
         data_file = os.path.join(lmp_metadata["root"], lmp_metadata["data_file"])
-        data_file_metadata = self.read_data_file(data_file)
+        data_file_metadata, ase_atoms = self.read_data_file(data_file)
         lmp_metadata.update(data_file_metadata)
-        files_to_upload.append(data_file)
+        files_list.append(data_file)
 
-        # now read LOG file
+        # Read LOG file
         log_file = os.path.join(lmp_metadata["root"], lmp_metadata["log_files"][0])
         log_file_metadata = self.read_log_file(log_file)
         lmp_metadata.update(log_file_metadata)
-        # files_to_upload.append(log_file)
+        # Note: log file not added to upload list by default
+
+        # Update files to upload
+        self.files_to_upload = files_list
+
+        # Add extracted metadata
+        self.add_metadata(lmp_metadata)
+
+        # Add LAMMPS-specific keywords
+        self.add_keywords(["LAMMPS", "molecular dynamics"])
+        if "elements" in lmp_metadata:
+            self.add_keywords(lmp_metadata["elements"])
+
+        # Generate thumbnail visualization
+        self.thumbnail = self.render_thumbnail(ase_atoms, self.mfid)
 
         # Note: dump files are parsed but not uploaded by default
         # They are stored in scientific_metadata for reference
-
-        # initialize parent class with all files
-        super().__init__(files_to_upload=files_to_upload, project_id=project_id)
-
-        # store values internally
-        self.scientific_metadata = lmp_metadata
-
-        # set keywords based on parsed data
-        self.keywords = ["LAMMPS", "molecular dynamics"]
-        # Add elements as keywords
-        if "elements" in lmp_metadata:
-            self.keywords.extend(lmp_metadata["elements"])
-
-        return
     
     
     # main driver: reads input file and find relevant associated files
@@ -118,21 +129,21 @@ class LAMMPSParser(BaseParser):
         except:
             raise ImportError("ASE needs to be installed for LMP ingestor to work!")
             
-        data = {}
+        lmp_metadata = {}
 
         ase_atoms = ase.io.lammpsdata.read_lammps_data(data_file)
         
         #TODO this should not stay like that --> should be a json
-        # data["atoms"] = ase_atoms.todict()
+        # lmp_metadata["atoms"] = ase_atoms
         
         # store some info about the system to metadata
-        data['elements'] = list(set(ase_atoms.get_chemical_symbols()))
-        data['natoms']   = len(ase_atoms.get_chemical_symbols())
-        data["volume"]   = ase_atoms.get_volume()
+        lmp_metadata['elements'] = list(set(ase_atoms.get_chemical_symbols()))
+        lmp_metadata['natoms']   = len(ase_atoms.get_chemical_symbols())
+        lmp_metadata["volume"]   = ase_atoms.get_volume()
 
         # what else do we want from the data_file
 
-        return data    
+        return lmp_metadata, ase_atoms    
 
     @staticmethod
     def read_log_file(log_file):
@@ -147,53 +158,35 @@ class LAMMPSParser(BaseParser):
 
         return data
     
-    def to_dataset(self, mfid=None, measurement=None, project_id=None,
-                   owner_orcid=None, dataset_name=None):
-        """
-        Convert parsed data to Crucible dataset.
+    @staticmethod
+    def render_thumbnail(ase_atoms, mfid: str):
 
-        Note: measurement parameter is ignored; uses self._measurement instead.
-        """
-        dst = super().to_dataset(
-                                 mfid=mfid,
-                                 measurement=self._measurement,
-                                 project_id=project_id,
-                                 owner_orcid=owner_orcid,
-                                 dataset_name=dataset_name
-                                 )
+        from ase.io import write
+        from pycrucible.config import get_cache_dir
+        import os
+        import logging
 
-        return dst
+        # Suppress matplotlib's verbose output
+        logging.getLogger('matplotlib').setLevel(logging.WARNING)
+        logging.getLogger('matplotlib.font_manager').setLevel(logging.WARNING)
 
-    def upload_dataset(self, mfid=None, project_id=None, owner_orcid=None,
-                       dataset_name=None, get_user_info_function=None,
-                       ingestor='ApiUploadIngestor', verbose=False,
-                       wait_for_ingestion_response=True):
-        """
-        Upload LAMMPS dataset to Crucible.
-
-        Automatically sets measurement type to "LAMMPS".
-
-        Args:
-            mfid (str, optional): Unique dataset identifier
-            project_id (str, optional): Project ID. Uses self.project_id if not provided.
-            owner_orcid (str, optional): Owner's ORCID ID
-            dataset_name (str, optional): Human-readable dataset name
-            get_user_info_function (callable, optional): Function to get user info if needed
-            ingestor (str, optional): Ingestion class. Defaults to 'ApiUploadIngestor'
-            verbose (bool, optional): Print detailed progress. Defaults to False.
-            wait_for_ingestion_response (bool, optional): Wait for ingestion. Defaults to True.
-
-        Returns:
-            dict: Dictionary containing upload results
-        """
-        return super().upload_dataset(
-            mfid=mfid,
-            measurement=self._measurement,
-            project_id=project_id,
-            owner_orcid=owner_orcid,
-            dataset_name=dataset_name,
-            get_user_info_function=get_user_info_function,
-            ingestor=ingestor,
-            verbose=verbose,
-            wait_for_ingestion_response=wait_for_ingestion_response
-        )
+        # Get cache directory and create thumbnails_upload subdirectory
+        cache_dir = get_cache_dir()
+        thumbnail_dir = os.path.join(cache_dir, 'thumbnails_upload')
+        os.makedirs(thumbnail_dir, exist_ok=True)
+        
+        # Create file path
+        file_path = os.path.join(thumbnail_dir, f'{mfid}.png')
+        
+        # Make sure atoms are wrapped
+        ase_atoms.wrap()
+        
+        # Write directly to file
+        write(file_path, ase_atoms, 
+              format='png',
+              show_unit_cell=2, 
+              scale=20, 
+              maxwidth=512,
+              rotation='90x,0y,90z')
+        
+        return file_path

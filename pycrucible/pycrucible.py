@@ -3,10 +3,13 @@ import re
 import time
 import requests
 import json
+import logging
 from typing import Optional, List, Dict, Any
 from .models import BaseDataset
 from .utils import get_tz_isoformat, run_shell, checkhash
 from .constants import AVAILABLE_INGESTORS
+
+logger = logging.getLogger(__name__)
 
 class CrucibleClient:
     def __init__(self, api_url: str, api_key: str):
@@ -199,8 +202,7 @@ class CrucibleClient:
         Returns:
             Dict: Upload response 
         """
-        if verbose:
-                    print(f"uploading file {file_path}...")
+        logger.debug(f"Uploading file {file_path}...")
 
         use_upload_endpoint = self.check_small_files([file_path])
 
@@ -215,14 +217,12 @@ class CrucibleClient:
                 # use rclone to copy to bucket (using list args for security)
                 rclone_cmd = ['rclone', 'copy', file_path,
                              'mf-cloud-storage-upload:/crucible-uploads/api-uploads/']
-                if verbose:
-                    print(f"uploading file {file_path}...")
-                    print(f"Running: {' '.join(rclone_cmd)}")
+                logger.debug(f"Uploading file {file_path}...")
+                logger.debug(f"Running: {' '.join(rclone_cmd)}")
                 xx = run_shell(rclone_cmd)
-                if verbose:
-                    print(f"{xx.stdout=}")
-                    print(f"{xx.stderr=}")
-                    print(f"upload complete.")
+                logger.debug(f"stdout={xx.stdout}")
+                logger.debug(f"stderr={xx.stderr}")
+                logger.debug(f"Upload complete.")
 
                 # call add associated file
                 fname = os.path.basename(file_path)
@@ -341,7 +341,7 @@ class CrucibleClient:
             Dict: Ingestion request with id and status
         """
         params = {"ingestion_class": ingestion_class, "file_to_upload": file_to_upload}
-        print(params)
+        logger.debug(f"Ingestion params: {params}")
         req_info =  self._request('post', f'/datasets/{dsid}/ingest', params=params)
         if wait_for_response:
             req_info = self._wait_for_request_completion(dsid, req_info['id'], 'ingest')
@@ -402,14 +402,14 @@ class CrucibleClient:
             Dict: Final request status information
         """
         req_info = self.get_request_status(dsid, reqid, request_type)
-        print(f"Waiting for {request_type} request to complete...")
+        logger.info(f"Waiting for {request_type} request to complete...")
 
         while req_info['status'] in ['requested', 'started']:
             time.sleep(sleep_interval)
             req_info = self.get_request_status(dsid, reqid, request_type)
-            print(f"Current status: {req_info['status']}")
+            logger.debug(f"Current status: {req_info['status']}")
 
-        print(f"Request completed with status: {req_info['status']}")
+        logger.info(f"Request completed with status: {req_info['status']}")
         return req_info
     
 
@@ -715,7 +715,7 @@ class CrucibleClient:
             raise ValueError("Either instrument_name or instrument_id must be provided")
 
         if instrument_id:
-            print("Using Instrument ID to find Instrument")
+            logger.debug("Using Instrument ID to find Instrument")
             params = {"unique_id": instrument_id}
         else:
             params = {"instrument_name": instrument_name}
@@ -749,7 +749,7 @@ class CrucibleClient:
             new_instrum = {"instrument_name": instrument_name,
                         "location": location,
                         "owner": instrument_owner}
-            print(new_instrum)
+            logger.debug(f"Creating new instrument: {new_instrum}")
             instrument = self._request('post', '/instruments', json=new_instrum)
         return instrument
 
@@ -814,7 +814,7 @@ class CrucibleClient:
         if dataset_id:
             result = self._request('get', f"/datasets/{dataset_id}/samples", params=params)
         elif parent_id:
-            print(f'WARNING: using parent_id with list_samples is deprecated. Please use list_children_sample instead.')
+            logger.warning('Using parent_id with list_samples is deprecated. Please use list_children_sample instead.')
             result = self._request('get', f"/samples/{parent_id}/children", params=params)
         else:
             result = self._request('get', f"/samples", params=params)
@@ -1050,10 +1050,10 @@ class CrucibleClient:
 
         # get owner_id if orcid provided
         owner_orcid = dataset_details.get('owner_orcid')
-        print(f"{owner_orcid=}")
+        logger.debug(f"owner_orcid={owner_orcid}")
         if owner_orcid:
             owner = self.get_or_add_user(owner_orcid, get_user_info_function)
-            print(f"{owner=}")
+            logger.debug(f"owner={owner}")
             dataset_details['owner_user_id'] = owner['id']
         
         # get or add project
@@ -1074,30 +1074,27 @@ class CrucibleClient:
             else:
                 raise ValueError(f'Provided instrument does not exist: {instrument_name}')
 
-        if verbose:
-            print('creating new dataset record...')
-            
+        logger.debug('Creating new dataset record...')
+
         clean_dataset = {k: v for k, v in dataset_details.items() if v is not None}
-        print(f'[pycrucible] post request to /datasets... with {clean_dataset}')
+        logger.debug(f'POST request to /datasets with {clean_dataset}')
         new_ds_record = self._request('post', '/datasets', json = clean_dataset)
-        print(f'[pycrucible] request_complete')
+        logger.debug('Request complete')
         dsid = new_ds_record['unique_id']
-        
+
         # add scientific metadata
         scimd = None
         if scientific_metadata is not None:
-            if verbose:
-                print(f'adding scientific metadata record for {dsid}')
+            logger.debug(f'Adding scientific metadata record for {dsid}')
             scimd = self._request('post', f'/datasets/{dsid}/scientific_metadata', json=scientific_metadata)
-            if verbose:
-                print('metadata addition complete')
-                print(f'adding keywords to dataset {dsid}: {keywords}')
+            logger.debug('Metadata addition complete')
+            logger.debug(f'Adding keywords to dataset {dsid}: {keywords}')
 
         # add keywords
         for kw in keywords:
             self.add_dataset_keyword(dsid, kw)
 
-        print(f"{dsid=}")
+        logger.debug(f"dsid={dsid}")
         return {"created_record": new_ds_record, "scientific_metadata_record": scimd, "dsid": dsid}
 
     
@@ -1160,18 +1157,18 @@ class CrucibleClient:
         """
         # figure out the file path
         dataset_details = dict(**dataset.model_dump())
-        
-        print(f'{files_to_upload=}')
-        main_file = dataset_details.get('file_to_upload') 
-        print(f'from dataset_details: {main_file=}')
+
+        logger.debug(f'files_to_upload={files_to_upload}')
+        main_file = dataset_details.get('file_to_upload')
+        logger.debug(f'main_file from dataset_details: {main_file}')
         if not main_file:
             main_file = files_to_upload[0]
-            print(f'from files_to_upload: {main_file=}')
+            logger.debug(f'main_file from files_to_upload: {main_file}')
         base_file_name = os.path.basename(main_file)
-        print(f'{base_file_name=}')
+        logger.debug(f'base_file_name={base_file_name}')
         main_file_cloud = os.path.join(f'api-uploads/{base_file_name}')
         dataset_details['file_to_upload'] = main_file_cloud
-        print(f'{main_file_cloud=}')
+        logger.debug(f'main_file_cloud={main_file_cloud}')
         # create the dataset record / user / scimd / instrument / project
         cleaned_dataset = BaseDataset(**dataset_details)
         result = self.create_new_dataset(cleaned_dataset, 
@@ -1187,13 +1184,11 @@ class CrucibleClient:
         # Upload the files and add to dataset -- returns list of associated file objs (filename, size, sha)
         uploaded_files = [self.upload_dataset_file(dsid, each_file, verbose) for each_file in files_to_upload]
 
-        if verbose:
-            print(f"submitting {dsid} to be ingested from file {main_file_cloud} using the class {ingestor}")
-        
+        logger.debug(f"Submitting {dsid} to be ingested from file {main_file_cloud} using the class {ingestor}")
+
         ingest_req_info = self.request_ingestion(dsid, main_file_cloud, ingestor)
 
-        if verbose: 
-            print(f"ingestion request {ingest_req_info['id']} is added to the queue")
+        logger.debug(f"Ingestion request {ingest_req_info['id']} is added to the queue")
 
         if wait_for_ingestion_response:
             ingest_req_info = self._wait_for_request_completion(dsid, ingest_req_info['id'], 'ingest')
