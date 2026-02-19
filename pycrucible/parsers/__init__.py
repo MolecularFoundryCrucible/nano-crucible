@@ -5,16 +5,19 @@ Parsers for various data formats to upload to Crucible.
 
 Available parsers:
     - LAMMPSParser: Parse LAMMPS molecular dynamics simulations
+    - MatEnsembleLmpParser: Parse MatEnsemble MD-ML datasets (LAMMPS + bispectrum)
 """
 
 from .base import BaseParser
 from .lammps import LAMMPSParser
+from .matensemble import MatEnsembleLmpParser
 
 # Registry mapping dataset type names to parser classes
 # All keys should be lowercase
 PARSER_REGISTRY = {
     'base': BaseParser,
     'lammps': LAMMPSParser,
+    'matensemble': MatEnsembleLmpParser,
 }
 
 def get_parser(dataset_type):
@@ -42,4 +45,4 @@ def get_parser(dataset_type):
         )
     return parser_class
 
-__all__ = ['BaseParser', 'LAMMPSParser', 'PARSER_REGISTRY', 'get_parser']
+__all__ = ['BaseParser', 'LAMMPSParser', 'MatEnsembleLmpParser', 'PARSER_REGISTRY', 'get_parser']
