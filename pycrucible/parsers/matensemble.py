@@ -272,9 +272,7 @@ class MatEnsembleLmpParser(BaseParser):
 
         # Convert to ASE Atoms object
         try:
-            import numpy as np
             from ase import Atoms
-            from ase.geometry import Cell
 
             # Parse box info
             # box_info format: (lo, hi, xy, xz, yz, periodicity, triclinic)
