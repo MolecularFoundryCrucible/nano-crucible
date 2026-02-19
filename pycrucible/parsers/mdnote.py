@@ -212,15 +212,23 @@ class MDNoteParser(BaseParser):
 
     _measurement = "MDNote"
 
-    def __init__(self, markdown_file: str, project_id: Optional[str] = None):
+    def parse(self):
         """
-        Parse a markdown note file and find associated images.
+        Parse markdown file and extract metadata, images, and links.
 
-        Args:
-            markdown_file: Path to the markdown file
-            project_id: Optional project ID for upload
+        This method is called by BaseParser.__init__() after initialization.
+        It extracts:
+        - YAML frontmatter (generates mfid if missing)
+        - Document title from first H1 heading
+        - All headings for structure
+        - Linked images
+        - Crucible dataset and sample references
         """
-        # Resolve file path
+        # Get the markdown file from files_to_upload
+        if not self.files_to_upload:
+            raise ValueError("No markdown file provided")
+
+        markdown_file = self.files_to_upload[0]
         markdown_file = os.path.abspath(markdown_file)
 
         if not os.path.exists(markdown_file):
@@ -237,28 +245,36 @@ class MDNoteParser(BaseParser):
         if frontmatter is None:
             frontmatter = {}
 
-        # Check for mfid, generate if missing
+        # Check for mfid in frontmatter, use parser's mfid if available
         dataset_mfid = frontmatter.get('mfid')
         file_was_updated = False
 
         if not dataset_mfid:
-            # Generate new mfid using mfid package
-            dataset_mfid = mfid.mfid()[0]
+            # Use parser's mfid if set, otherwise generate new one
+            if self.mfid:
+                dataset_mfid = self.mfid
+            else:
+                dataset_mfid = mfid.mfid()[0]
+                self.mfid = dataset_mfid
+
             frontmatter['mfid'] = dataset_mfid
             file_was_updated = True
-
-        # Store the mfid
-        self.mfid = dataset_mfid
+        else:
+            # Use mfid from frontmatter
+            self.mfid = dataset_mfid
 
         # Extract headings
         headings = extract_headings(content)
 
-        # Get first H1 heading as title
+        # Get first H1 heading as title (if dataset_name not already set)
         title = None
         for heading in headings:
             if heading['level'] == 1:
                 title = heading['text']
                 break
+
+        if not self.dataset_name and title:
+            self.dataset_name = title
 
         # Find linked images
         image_files = find_linked_images(content, markdown_dir)
@@ -278,18 +294,15 @@ class MDNoteParser(BaseParser):
 
             print(f"Updated {markdown_file} with mfid: {dataset_mfid}")
 
-        # Build files to upload (markdown + images)
-        files_to_upload = [markdown_file] + image_files
-
-        # Initialize parent class
-        super().__init__(files_to_upload=files_to_upload, project_id=project_id)
+        # Update files to upload (markdown + images)
+        self.files_to_upload = [markdown_file] + image_files
 
         # Store linked datasets and samples for upload
         self.linked_datasets = linked_datasets
         self.linked_samples = linked_samples
 
-        # Build scientific metadata
-        self.scientific_metadata = {
+        # Add extracted metadata
+        extracted_metadata = {
             'mfid': dataset_mfid,
             'markdown_file': os.path.basename(markdown_file),
             'title': title,
@@ -300,67 +313,28 @@ class MDNoteParser(BaseParser):
             'linked_datasets': linked_datasets,
             'linked_samples': linked_samples
         }
+        self.add_metadata(extracted_metadata)
 
-        # Set keywords
-        self.keywords = ["markdown", "note", "MDNote"]
+        # Add keywords from parser and frontmatter tags
+        self.add_keywords(["markdown", "note", "MDNote"])
 
-        # Add tags from frontmatter if available
         if 'tags' in frontmatter:
             tags = frontmatter['tags']
             if isinstance(tags, list):
-                self.keywords.extend(tags)
+                self.add_keywords(tags)
             elif isinstance(tags, str):
                 # Handle comma-separated or space-separated tags
-                self.keywords.extend([t.strip() for t in re.split(r'[,\s]+', tags) if t.strip()])
+                tag_list = [t.strip() for t in re.split(r'[,\s]+', tags) if t.strip()]
+                self.add_keywords(tag_list)
 
-        # Store title for later use
-        self.title = title
-
-    def to_dataset(self, mfid=None, measurement=None, project_id=None,
-                   owner_orcid=None, dataset_name=None):
-        """
-        Convert parsed data to Crucible dataset.
-
-        Uses the extracted title as dataset_name if not provided.
-        Uses the parsed mfid if not provided.
-
-        Note: measurement parameter is ignored; uses self._measurement instead.
-        """
-        # Use parsed mfid if not provided
-        if mfid is None:
-            mfid = self.mfid
-
-        # Use extracted title if dataset_name not provided
-        if dataset_name is None and self.title:
-            dataset_name = self.title
-
-        dst = super().to_dataset(
-            mfid=mfid,
-            measurement=self._measurement,
-            project_id=project_id,
-            owner_orcid=owner_orcid,
-            dataset_name=dataset_name
-        )
-
-        return dst
-
-    def upload_dataset(self, mfid=None, project_id=None, owner_orcid=None,
-                       dataset_name=None, get_user_info_function=None,
-                       ingestor='ApiUploadIngestor', verbose=False,
-                       wait_for_ingestion_response=True):
+    def upload_dataset(self, ingestor='ApiUploadIngestor',
+                       verbose=False, wait_for_ingestion_response=True):
         """
         Upload MDNote dataset to Crucible.
 
-        Automatically sets measurement type to "MDNote".
-        Uses parsed mfid and title if not provided.
-        Links referenced datasets as children and samples to the dataset.
+        Automatically links referenced datasets as children and samples to the dataset.
 
         Args:
-            mfid (str, optional): Unique dataset identifier. Uses parsed mfid if not provided.
-            project_id (str, optional): Project ID. Uses self.project_id if not provided.
-            owner_orcid (str, optional): Owner's ORCID ID
-            dataset_name (str, optional): Human-readable dataset name. Uses title if not provided.
-            get_user_info_function (callable, optional): Function to get user info if needed
             ingestor (str, optional): Ingestion class. Defaults to 'ApiUploadIngestor'
             verbose (bool, optional): Print detailed progress. Defaults to False.
             wait_for_ingestion_response (bool, optional): Wait for ingestion. Defaults to True.
@@ -368,22 +342,8 @@ class MDNoteParser(BaseParser):
         Returns:
             dict: Dictionary containing upload results, including linked_datasets and linked_samples info
         """
-        # Use parsed mfid if not provided
-        if mfid is None:
-            mfid = self.mfid
-
-        # Use extracted title if dataset_name not provided
-        if dataset_name is None and self.title:
-            dataset_name = self.title
-
-        # Upload the dataset
+        # Upload the dataset using parent method
         result = super().upload_dataset(
-            mfid=mfid,
-            measurement=self._measurement,
-            project_id=project_id,
-            owner_orcid=owner_orcid,
-            dataset_name=dataset_name,
-            get_user_info_function=get_user_info_function,
             ingestor=ingestor,
             verbose=verbose,
             wait_for_ingestion_response=wait_for_ingestion_response
@@ -398,7 +358,7 @@ class MDNoteParser(BaseParser):
 
         # Link referenced datasets as children
         linked_dataset_results = []
-        if self.linked_datasets:
+        if hasattr(self, 'linked_datasets') and self.linked_datasets:
             if verbose:
                 print(f"\n=== Linking {len(self.linked_datasets)} child datasets ===")
 
@@ -425,7 +385,7 @@ class MDNoteParser(BaseParser):
 
         # Link referenced samples
         linked_sample_results = []
-        if self.linked_samples:
+        if hasattr(self, 'linked_samples') and self.linked_samples:
             if verbose:
                 print(f"\n=== Linking {len(self.linked_samples)} samples ===")
 
