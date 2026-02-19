@@ -32,7 +32,6 @@ class Config:
         'api_key': {'env': 'CRUCIBLE_API_KEY', 'ini': 'api_key'},
         'api_url': {'env': 'CRUCIBLE_API_URL', 'ini': 'api_url'},
         'cache_dir': {'env': 'PYCRUCIBLE_CACHE_DIR', 'ini': 'cache_dir'},
-        'orcid_id': {'env': 'ORCID_ID', 'ini': 'orcid_id'},
         'graph_explorer_url': {'env': 'CRUCIBLE_GRAPH_EXPLORER_URL', 'ini': 'graph_explorer_url'},
         'current_project': {'env': 'CRUCIBLE_CURRENT_PROJECT', 'ini': 'current_project'},
     }
@@ -129,16 +128,6 @@ class Config:
         return cache_path
 
     @property
-    def orcid_id(self):
-        """
-        Get the user's ORCID ID.
-
-        Returns:
-            str or None: The ORCID ID if configured, None otherwise
-        """
-        return self._data.get('orcid_id')
-
-    @property
     def graph_explorer_url(self):
         """
         Get the Crucible Graph Explorer URL.
@@ -172,18 +161,6 @@ class Config:
             from pycrucible import CrucibleClient
             self._client = CrucibleClient(self.api_url, self.api_key)
         return self._client
-
-    @property
-    def user_info(self):
-        """
-        Get the user info for the configured ORCID ID.
-
-        Returns:
-            dict or None: User information if ORCID is configured, None otherwise
-        """
-        if self.orcid_id is not None:
-            return self.client.get_user(self.orcid_id)
-        return None
 
     def reload(self):
         """Reload configuration from all sources."""
@@ -302,17 +279,16 @@ def get_client():
     return config.client
 
 
-def create_config_file(api_key, api_url=None, cache_dir=None, orcid_id=None,
+def create_config_file(api_key, api_url=None, cache_dir=None,
                        graph_explorer_url=None, current_project=None, **kwargs):
     """
     Create a configuration file with the given API key and optional settings.
 
     Args:
-        api_key (str): The API key to store
+        api_key (str): The API key to store (user info derived from this)
         api_url (str, optional): Custom API URL. Defaults to https://crucible.lbl.gov/testapi
         cache_dir (str, optional): Custom cache directory path. If not provided,
                                    defaults to platform-specific cache directory
-        orcid_id (str, optional): User's ORCID ID (e.g., '0000-0002-1234-5678')
         graph_explorer_url (str, optional): Graph Explorer URL
         current_project (str, optional): Default project ID
         **kwargs: Additional configuration values to store
@@ -346,12 +322,6 @@ def create_config_file(api_key, api_url=None, cache_dir=None, orcid_id=None,
             f.write(f"cache_dir = {cache_dir}\n\n")
         else:
             f.write(f"cache_dir = {default_cache_dir}\n\n")
-
-        f.write("# Your ORCID identifier (optional, e.g., 0000-0002-1234-5678)\n")
-        if orcid_id is not None:
-            f.write(f"orcid_id = {orcid_id}\n\n")
-        else:
-            f.write(f"# orcid_id = \n\n")
 
         f.write("# Crucible Graph Explorer URL\n")
         if graph_explorer_url is not None:

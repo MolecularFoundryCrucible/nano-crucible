@@ -132,15 +132,6 @@ Examples:
         help='Human-readable dataset name (optional)'
     )
 
-    # Owner ORCID (optional)
-    parser.add_argument(
-        '--orcid', '-oid',
-        dest='owner_orcid',
-        default=None,
-        metavar='ORCID',
-        help='Owner ORCID ID (uses config if not specified)'
-    )
-
     # Verbose output
     parser.add_argument(
         '-v', '--verbose',
@@ -240,12 +231,6 @@ def execute(args):
             logger.error("  Set default: crucible config set current_project YOUR_PROJECT_ID")
             sys.exit(1)
 
-    # Show which project is being used
-    if project_from_config:
-        logger.info(f"Project: {project_id} (from config)")
-    else:
-        logger.info(f"Project: {project_id}")
-
     # Validate input files exist
     input_files = [Path(f) for f in args.input]
     for input_file in input_files:
@@ -292,16 +277,10 @@ def execute(args):
         dataset_mfid = mfid.mfid()[0]
         logger.debug(f"Generated mfid: {dataset_mfid}")
 
-    # Get ORCID - use flag if provided, otherwise fall back to config
-    owner_orcid = args.owner_orcid
-    # if owner_orcid is None:
-        # owner_orcid = config.orcid_id
-
     # Determine parser class
     if args.dataset_type is None:
         # No dataset type specified - use BaseParser
         ParserClass = BaseParser
-        logger.info(f"Parser: BaseParser (generic upload, no parsing)")
     else:
         # Get specific parser for dataset type
         try:
@@ -309,17 +288,9 @@ def execute(args):
         except ValueError as e:
             logger.error(f"Error: {e}")
             sys.exit(1)
-        logger.info(f"Parser: {ParserClass.__name__}")
-        logger.info(f"Input: {input_files[0].name}")
 
     # Parser will use its default measurement if not provided
     measurement_type = args.measurement
-
-    # Show user-provided metadata/keywords
-    if metadata_dict:
-        logger.info(f"  User metadata: {len(metadata_dict)} fields")
-    if keywords_list:
-        logger.info(f"  User keywords: {', '.join(keywords_list)}")
 
     # Initialize parser with all dataset properties
     # Specific parsers will augment metadata/keywords with extracted data
@@ -331,7 +302,6 @@ def execute(args):
             keywords=keywords_list,
             mfid=dataset_mfid,
             measurement=measurement_type,
-            owner_orcid=owner_orcid,
             dataset_name=args.dataset_name,
             session_name=args.session_name,
             public=args.public,
@@ -345,29 +315,47 @@ def execute(args):
             traceback.print_exc()
         sys.exit(1)
 
-    # Display metadata (if not generic upload or if metadata provided)
-    if args.dataset_type is not None or args.metadata or args.keywords:
-        logger.info("\n=== Dataset Information ===")
-        logger.info(f"Files to upload: {len(parser.files_to_upload)}")
-        for f in parser.files_to_upload:
-            logger.info(f"  - {Path(f).name}")
+    # Display dataset information (always shown)
+    logger.info("\n=== Dataset Information ===")
 
-        if parser.keywords:
-            logger.info(f"\nKeywords: {', '.join(parser.keywords)}")
-
-        if parser.scientific_metadata:
-            logger.info(f"\nScientific Metadata:")
-            for key, value in parser.scientific_metadata.items():
-                if key == 'dump_files':
-                    logger.info(f"  {key}: {len(value)} files")
-                elif isinstance(value, (list, dict)) and len(str(value)) > 80:
-                    logger.info(f"  {key}: <{type(value).__name__} with {len(value)} items>")
-                else:
-                    logger.info(f"  {key}: {value}")
+    # Project and Parser
+    if project_from_config:
+        logger.info(f"Project: {project_id} (from config)")
     else:
-        logger.info("\n=== Files to Upload ===")
-        for f in parser.files_to_upload:
-            logger.info(f"  - {Path(f).name}")
+        logger.info(f"Project: {project_id}")
+    logger.info(f"Parser: {ParserClass.__name__}")
+
+    # Dataset properties
+    if parser.dataset_name:
+        logger.info(f"Name: {parser.dataset_name}")
+    logger.info(f"Measurement: {parser.measurement}")
+    if parser.data_format:
+        logger.info(f"Data format: {parser.data_format}")
+    if parser.session_name:
+        logger.info(f"Session: {parser.session_name}")
+    logger.info(f"Public: {'Yes' if parser.public else 'No'}")
+    if parser.instrument_name:
+        logger.info(f"Instrument: {parser.instrument_name}")
+
+    # Files
+    logger.info(f"\nFiles to upload ({len(parser.files_to_upload)}):")
+    for f in parser.files_to_upload:
+        logger.info(f"  - {Path(f).name}")
+
+    # Keywords
+    if parser.keywords:
+        logger.info(f"\nKeywords ({len(parser.keywords)}): {', '.join(parser.keywords)}")
+
+    # Metadata
+    if parser.scientific_metadata:
+        logger.info(f"\nScientific Metadata ({len(parser.scientific_metadata)} fields):")
+        for key, value in parser.scientific_metadata.items():
+            if key == 'dump_files':
+                logger.info(f"  {key}: {len(value)} files")
+            elif isinstance(value, (list, dict)) and len(str(value)) > 80:
+                logger.info(f"  {key}: <{type(value).__name__} with {len(value)} items>")
+            else:
+                logger.info(f"  {key}: {value}")
 
     # Upload if requested
     if args.upload:
@@ -375,8 +363,6 @@ def execute(args):
 
         if args.mfid:
             logger.info(f"Using provided mfid: {dataset_mfid}")
-        if owner_orcid:
-            logger.debug(f"Using ORCID: {owner_orcid}")
 
         try:
             # Upload - only pass behavioral flags

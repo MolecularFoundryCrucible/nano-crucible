@@ -22,9 +22,9 @@ class BaseParser:
 
     def __init__(self, files_to_upload=None, project_id=None,
                  metadata=None, keywords=None, mfid=None,
-                 measurement=None, owner_orcid=None, dataset_name=None,
+                 measurement=None, dataset_name=None,
                  session_name=None, public=False, instrument_name=None,
-                 data_format=None, thumbnail=None):
+                 data_format=None):
         """
         Initialize the parser with dataset properties.
 
@@ -35,7 +35,6 @@ class BaseParser:
             keywords (list, optional): Keywords for the dataset
             mfid (str, optional): Unique dataset identifier
             measurement (str, optional): Measurement type
-            owner_orcid (str, optional): Owner's ORCID ID
             dataset_name (str, optional): Human-readable dataset name
             session_name (str, optional): Session name for grouping datasets
             public (bool, optional): Whether dataset is public. Defaults to False.
@@ -55,21 +54,52 @@ class BaseParser:
         self.files_to_upload = files_to_upload or []
         self.mfid            = mfid
         self.measurement     = measurement
-        self.owner_orcid     = owner_orcid
         self.dataset_name    = dataset_name
         self.session_name    = session_name
         self.public          = public
         self.instrument_name = instrument_name
         self.data_format     = data_format
         self.source_folder   = os.getcwd()
-        self.thumbnail       = thumbnail
+        self.thumbnail       = None
 
-        # initialize with user-provided metadata/keywords
+        # Initialize with user-provided metadata/keywords
         self.scientific_metadata = metadata or {}
         self.keywords = keywords or []
         self._client = None
 
+        # Call parser-specific extraction (Template Method Pattern)
+        self.parse()
+
         return
+
+    def parse(self):
+        """
+        Parse domain-specific files and extract metadata.
+
+        This is a hook method that subclasses should override to implement
+        their specific parsing logic. The base implementation does nothing
+        (generic upload with no parsing).
+
+        Subclasses should:
+        - Read and parse domain-specific file formats
+        - Call self.add_metadata() to merge extracted metadata with user-provided metadata
+        - Call self.add_keywords() to add domain-specific keywords to user-provided keywords
+        - Update self.files_to_upload if needed (e.g., add related files)
+        - Set self.thumbnail if generating a visualization
+        - Access all instance variables (self.mfid, self.project_id, etc.)
+
+        Example:
+            def parse(self):
+                # Parse files
+                input_file = self.files_to_upload[0]
+                metadata = self._parse_file(input_file)
+
+                # Add to instance
+                self.add_metadata(metadata)
+                self.add_keywords(["domain", "specific"])
+                self.thumbnail = self._generate_thumbnail()
+        """
+        pass  # BaseParser does nothing - generic upload
 
     def add_metadata(self, metadata_dict):
         """
@@ -121,7 +151,7 @@ class BaseParser:
             unique_id      = self.mfid,
             measurement    = self.measurement,
             project_id     = self.project_id,
-            owner_orcid    = self.owner_orcid,
+            owner_orcid    = None,  # API key handles user authentication
             dataset_name   = self.dataset_name,
             session_name   = self.session_name,
             public         = self.public,

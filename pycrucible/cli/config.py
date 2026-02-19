@@ -41,10 +41,9 @@ Examples:
     crucible config edit
 
 Configuration keys:
-    api_key             Crucible API authentication key (required)
+    api_key             Crucible API authentication key (required, includes user info)
     api_url             Crucible API endpoint URL
     cache_dir           Directory for caching downloaded data
-    orcid_id            Your ORCID identifier (optional)
     graph_explorer_url  Crucible Graph Explorer URL (optional)
     current_project     Default project ID (optional)
 
@@ -87,7 +86,7 @@ Priority order (highest to lowest):
     )
     get_parser.add_argument(
         'key',
-        choices=['api_key', 'api_url', 'cache_dir', 'orcid_id', 'graph_explorer_url', 'current_project'],
+        choices=['api_key', 'api_url', 'cache_dir', 'graph_explorer_url', 'current_project'],
         help='Configuration key to retrieve'
     )
     get_parser.set_defaults(func=cmd_get)
@@ -99,7 +98,7 @@ Priority order (highest to lowest):
     )
     set_parser.add_argument(
         'key',
-        choices=['api_key', 'api_url', 'cache_dir', 'orcid_id', 'graph_explorer_url', 'current_project'],
+        choices=['api_key', 'api_url', 'cache_dir', 'graph_explorer_url', 'current_project'],
         help='Configuration key to set'
     )
     set_parser.add_argument(
@@ -164,22 +163,15 @@ def cmd_init(args):
     if not cache_dir:
         cache_dir = None
 
-    # Get ORCID ID
-    print("\n4. ORCID ID (optional)")
-    print("   Your ORCID identifier (e.g., 0000-0002-1234-5678)")
-    orcid_id = input("   ORCID ID: ").strip()
-    if not orcid_id:
-        orcid_id = None
-
     # Get Graph Explorer URL
-    print("\n5. Graph Explorer URL (optional)")
+    print("\n4. Graph Explorer URL (optional)")
     print("   Press Enter to use default: https://crucible-graph-explorer-776258882599.us-central1.run.app")
     graph_explorer_url = input("   Graph Explorer URL: ").strip()
     if not graph_explorer_url:
         graph_explorer_url = None
 
     # Get current project
-    print("\n6. Default Project ID (optional)")
+    print("\n5. Default Project ID (optional)")
     print("   Project ID to use when -pid is not specified")
     current_project = input("   Project ID: ").strip()
     if not current_project:
@@ -191,7 +183,6 @@ def cmd_init(args):
             api_key=api_key,
             api_url=api_url,
             cache_dir=cache_dir,
-            orcid_id=orcid_id,
             graph_explorer_url=graph_explorer_url,
             current_project=current_project
         )
@@ -232,13 +223,6 @@ def cmd_show(args):
     cache_dir = config.cache_dir
     print(f"  cache_dir   : {cache_dir}")
 
-    # ORCID ID
-    orcid_id = config.orcid_id
-    if orcid_id:
-        print(f"  orcid_id    : {orcid_id}")
-    else:
-        print(f"  orcid_id    : <not set>")
-
     # Graph Explorer URL
     graph_explorer_url = config.graph_explorer_url
     print(f"  graph_explorer_url : {graph_explorer_url}")
@@ -256,7 +240,6 @@ def cmd_show(args):
         'CRUCIBLE_API_KEY': os.environ.get('CRUCIBLE_API_KEY'),
         'CRUCIBLE_API_URL': os.environ.get('CRUCIBLE_API_URL'),
         'PYCRUCIBLE_CACHE_DIR': os.environ.get('PYCRUCIBLE_CACHE_DIR'),
-        'ORCID_ID': os.environ.get('ORCID_ID'),
         'CRUCIBLE_GRAPH_EXPLORER_URL': os.environ.get('CRUCIBLE_GRAPH_EXPLORER_URL'),
         'CRUCIBLE_CURRENT_PROJECT': os.environ.get('CRUCIBLE_CURRENT_PROJECT'),
     }
@@ -285,8 +268,6 @@ def cmd_get(args):
             value = config.api_url
         elif key == 'cache_dir':
             value = config.cache_dir
-        elif key == 'orcid_id':
-            value = config.orcid_id
         elif key == 'graph_explorer_url':
             value = config.graph_explorer_url
         elif key == 'current_project':

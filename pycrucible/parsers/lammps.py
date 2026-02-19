@@ -25,83 +25,55 @@ class LAMMPSParser(BaseParser):
     _data_format = "LAMMPS"
     _instrument_name = None
 
-    def __init__(self, files_to_upload, project_id=None, metadata=None, keywords=None,
-                 mfid=None, measurement=None, owner_orcid=None, dataset_name=None,
-                 session_name=None, public=False, instrument_name=None, data_format=None):
+    def parse(self):
         """
-        Main driver, reads input file and find other relevant files, then
-        reads each one to extract metadata.
+        Parse LAMMPS input files and extract metadata.
 
-        Args:
-            files_to_upload (list): List of files to upload (uses first file as LAMMPS input)
-            project_id (str, optional): Project ID
-            metadata (dict, optional): User-provided metadata (parser will add to this)
-            keywords (list, optional): User-provided keywords (parser will add to this)
-            mfid (str, optional): Unique dataset identifier
-            measurement (str, optional): Measurement type (defaults to "LAMMPS")
-            owner_orcid (str, optional): Owner's ORCID ID
-            dataset_name (str, optional): Human-readable dataset name
-            session_name (str, optional): Session name for grouping datasets
-            public (bool, optional): Whether dataset is public. Defaults to False.
-            instrument_name (str, optional): Instrument name
-            data_format (str, optional): Data format type (defaults to "LAMMPS")
+        Reads LAMMPS input file, data file, and log file to extract
+        simulation metadata, atomic structure, and version information.
+        Generates a thumbnail visualization of the atomic structure.
         """
-
-        # Use first file as input
-        if not files_to_upload:
+        # Validate input
+        if not self.files_to_upload:
             raise ValueError("No input files provided")
-        input_file = os.path.abspath(files_to_upload[0])
 
-        # start by reading input file
+        # Use first file as LAMMPS input
+        input_file = os.path.abspath(self.files_to_upload[0])
+
+        # Read input file to find related files
         lmp_metadata = self.read_lmp_input_file(input_file)
 
-        # build list of files to upload (only input, data, and log files)
-        files_to_upload = [input_file]
+        # Build list of files to upload (input, data, and log files)
+        files_list = [input_file]
 
-        # then read data file
+        # Read data file
         data_file = os.path.join(lmp_metadata["root"], lmp_metadata["data_file"])
         data_file_metadata, ase_atoms = self.read_data_file(data_file)
         lmp_metadata.update(data_file_metadata)
-        files_to_upload.append(data_file)
+        files_list.append(data_file)
 
-        # now read LOG file
+        # Read LOG file
         log_file = os.path.join(lmp_metadata["root"], lmp_metadata["log_files"][0])
         log_file_metadata = self.read_log_file(log_file)
         lmp_metadata.update(log_file_metadata)
-        # files_to_upload.append(log_file)
+        # Note: log file not added to upload list by default
+
+        # Update files to upload
+        self.files_to_upload = files_list
+
+        # Add extracted metadata
+        self.add_metadata(lmp_metadata)
+
+        # Add LAMMPS-specific keywords
+        self.add_keywords(["LAMMPS", "molecular dynamics"])
+        if "elements" in lmp_metadata:
+            self.add_keywords(lmp_metadata["elements"])
+
+        # Generate thumbnail visualization
+        self.thumbnail = self.render_thumbnail(ase_atoms, self.mfid)
 
         # Note: dump files are parsed but not uploaded by default
         # They are stored in scientific_metadata for reference
-        
-        # initialize parent class with user-provided properties
-        super().__init__(
-            files_to_upload=files_to_upload,
-            project_id=project_id,
-            metadata=metadata,
-            keywords=keywords,
-            mfid=mfid,
-            measurement=measurement,
-            owner_orcid=owner_orcid,
-            dataset_name=dataset_name,
-            session_name=session_name,
-            public=public,
-            instrument_name=instrument_name,
-            data_format=data_format,
-        )
-
-        # add parser-extracted metadata
-        self.add_metadata(lmp_metadata)
-
-        # add parser-extracted keywords
-        self.add_keywords(["LAMMPS", "molecular dynamics"])
-        # Add elements as keywords
-        if "elements" in lmp_metadata:
-            self.add_keywords(lmp_metadata["elements"])
-            
-        # generate thumbnail
-        self.thumbnail = self.render_thumbnail(ase_atoms, self.mfid)
-
-        return
     
     
     # main driver: reads input file and find relevant associated files
