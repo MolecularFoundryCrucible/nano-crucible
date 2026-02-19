@@ -69,18 +69,18 @@ class MatEnsembleLmpParser(BaseParser):
 
         # 6. Generate thumbnail from last snapshot
         if snapshot_info.get('ase_atoms'):
-            self.thumbnail = self._render_thumbnail(snapshot_info['ase_atoms'])
+            self.thumbnail = self._render_thumbnail(snapshot_info['ase_atoms'], self.mfid)
 
         # Add extracted metadata
         metadata = {
+            'root': str(dataset_dir.resolve()),
             'temperature_K': temp,
             'lattice_parameter': lattice,
             'natoms': snapshot_info['natoms'],
             'ntimesteps': file_stats['ntimesteps'],
             'last_timestep': last_timestep,
-            'simulation_type': 'recrystallization',
+            'simulation_type': 'recrystallization', #TODO need to do this better
             'material': 'MoS2',
-            'bispectrum_components': 55,
             'dataset_folder': folder_name,
             **sim_params,
             **file_stats
@@ -89,8 +89,8 @@ class MatEnsembleLmpParser(BaseParser):
 
         # Add keywords
         keywords = [
-            'molecular-dynamics',
-            'machine-learning',
+            'molecular dynamics',
+            'matensemble',
             'bispectrum',
             'MoS2',
             'recrystallization',
@@ -149,11 +149,6 @@ class MatEnsembleLmpParser(BaseParser):
         if version_match:
             params['lammps_version'] = version_match.group(1)
 
-        # Extract units
-        units_match = re.search(r'units\s+(\w+)', content)
-        if units_match:
-            params['units'] = units_match.group(1)
-
         # Extract dimension
         dim_match = re.search(r'dimension\s+(\d+)', content)
         if dim_match:
@@ -168,12 +163,6 @@ class MatEnsembleLmpParser(BaseParser):
         pair_match = re.search(r'pair_style\s+(\w+)', content)
         if pair_match:
             params['pair_style'] = pair_match.group(1)
-
-        # Extract box info
-        box_match = re.search(r'triclinic box = \((.*?)\) to \((.*?)\)', content)
-        if box_match:
-            params['box_lo'] = box_match.group(1)
-            params['box_hi'] = box_match.group(2)
 
         return params
 
@@ -339,7 +328,7 @@ class MatEnsembleLmpParser(BaseParser):
         return files
 
     @staticmethod
-    def _render_thumbnail(ase_atoms):
+    def _render_thumbnail(ase_atoms, mfid: str):
         """
         Generate thumbnail visualization from ASE Atoms.
 
@@ -363,7 +352,7 @@ class MatEnsembleLmpParser(BaseParser):
         os.makedirs(thumbnail_dir, exist_ok=True)
 
         # Use timestep or create unique name
-        file_path = os.path.join(thumbnail_dir, 'matensemble_thumbnail.png')
+        file_path = os.path.join(thumbnail_dir, f'{mfid}.png')
 
         # Wrap atoms to unit cell
         ase_atoms.wrap()
@@ -374,6 +363,7 @@ class MatEnsembleLmpParser(BaseParser):
               show_unit_cell=2,
               scale=20,
               maxwidth=512,
-              rotation='10x,10y,0z')
+              #rotation='90x,0y,90z'
+              )
 
         return file_path
