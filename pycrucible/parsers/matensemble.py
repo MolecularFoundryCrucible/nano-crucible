@@ -24,8 +24,8 @@ logger = logging.getLogger(__name__)
 class MatEnsembleLmpParser(BaseParser):
     """Parser for MatEnsemble LAMMPS MD-ML datasets."""
 
-    _measurement = "MD-ML"
-    _data_format = "LAMMPS-BiSpec"
+    _measurement = "MatEnsemble"
+    _data_format = "LAMMPS-MatEns"
     _instrument_name = None
 
     def parse(self):
@@ -91,7 +91,6 @@ class MatEnsembleLmpParser(BaseParser):
         keywords = [
             'molecular dynamics',
             'matensemble',
-            'bispectrum',
             'MoS2',
             'recrystallization',
             'LAMMPS'
@@ -169,42 +168,79 @@ class MatEnsembleLmpParser(BaseParser):
     @staticmethod
     def _count_files(dataset_dir):
         """
-        Count files and identify timesteps.
+        Count files and identify timesteps using pattern detection.
+
+        Automatically discovers file types matching patterns:
+        - {prefix}_{timestep}.{ext}
+        - {prefix}_{timestep}
+        - Ovito_dump.{timestep}.{ext}
 
         Args:
             dataset_dir (Path): Dataset directory
 
         Returns:
-            dict: File statistics
+            dict: File statistics including discovered file types
         """
         all_files = list(dataset_dir.iterdir())
 
-        # Count by type
-        bispec_files = [f for f in all_files if f.name.startswith('bispec_')]
-        snapshot_files = [f for f in all_files if f.name.startswith('lmp_snapshot_')]
-        ovito_files = [f for f in all_files if f.name.startswith('Ovito_dump.')]
-        vtk_files = [f for f in all_files if f.name.endswith('.vtk')]
+        # Dictionary to store files by type
+        file_types = {}
+        timesteps = set()
 
-        # Extract timesteps from snapshot files
-        timesteps = []
-        for f in snapshot_files:
-            match = re.search(r'lmp_snapshot_(\d+)\.pkl', f.name)
+        # Pattern 1: prefix_{timestep}.ext or prefix_{timestep}
+        pattern1 = re.compile(r'^([a-zA-Z_]+)_(\d+)(?:\.(.+))?$')
+        # Pattern 2: Ovito_dump.{timestep}.ext
+        pattern2 = re.compile(r'^(Ovito_dump)\.(\d+)\.(.+)$')
+
+        for f in all_files:
+            if not f.is_file():
+                continue
+
+            # Try pattern 1
+            match = pattern1.match(f.name)
             if match:
-                timesteps.append(int(match.group(1)))
+                prefix = match.group(1)
+                timestep = int(match.group(2))
+                ext = match.group(3) or ''
 
-        timesteps = sorted(timesteps)
+                # Create file type key
+                file_type = prefix
+                if file_type not in file_types:
+                    file_types[file_type] = []
+                file_types[file_type].append(f)
+                timesteps.add(timestep)
+                continue
 
-        return {
+            # Try pattern 2 (Ovito_dump)
+            match = pattern2.match(f.name)
+            if match:
+                prefix = match.group(1)
+                timestep = int(match.group(2))
+
+                file_type = 'Ovito_dump'
+                if file_type not in file_types:
+                    file_types[file_type] = []
+                file_types[file_type].append(f)
+                timesteps.add(timestep)
+                continue
+
+        timesteps = sorted(list(timesteps))
+
+        # Build file counts dictionary
+        nfiles = {file_type: len(files) for file_type, files in file_types.items()}
+
+        # Build statistics dict
+        stats = {
             'total_files': len(all_files),
-            'nbispec_files': len(bispec_files),
-            'nsnapshot_files': len(snapshot_files),
-            'novito_files': len(ovito_files),
-            'nvtk_files': len(vtk_files),
             'ntimesteps': len(timesteps),
             'first_timestep': timesteps[0] if timesteps else None,
             'last_timestep': timesteps[-1] if timesteps else None,
-            'timesteps': timesteps
+            'timesteps': timesteps,
+            'file_types': list(file_types.keys()),  # List of discovered file types
+            'nfiles': nfiles,  # Dictionary of file counts by type
         }
+
+        return stats
 
     @staticmethod
     def _read_snapshot(dataset_dir, timestep):
@@ -293,6 +329,8 @@ class MatEnsembleLmpParser(BaseParser):
         """
         Select representative files to upload (not entire dataset).
 
+        Automatically discovers all file types and includes last timestep version.
+
         Args:
             dataset_dir (Path): Dataset directory
             last_timestep (int): Last timestep number
@@ -307,23 +345,52 @@ class MatEnsembleLmpParser(BaseParser):
         if log_file.exists():
             files.append(log_file)
 
-        # 2. Include last snapshot files
-        snapshot_file = dataset_dir / f'lmp_snapshot_{last_timestep}.pkl'
-        if snapshot_file.exists():
-            files.append(snapshot_file)
+        # 2. Auto-discover and include files for last timestep
+        all_files = list(dataset_dir.iterdir())
 
-        bispec_file = dataset_dir / f'bispec_{last_timestep}.dat'
-        if bispec_file.exists():
-            files.append(bispec_file)
+        # Pattern 1: prefix_{timestep}.ext or prefix_{timestep}
+        pattern1 = re.compile(r'^([a-zA-Z_]+)_(\d+)(?:\.(.+))?$')
+        # Pattern 2: Ovito_dump.{timestep}.ext
+        pattern2 = re.compile(r'^(Ovito_dump)\.(\d+)\.(.+)$')
 
-        ovito_file = dataset_dir / f'Ovito_dump.{last_timestep}.lmp'
-        if ovito_file.exists():
-            files.append(ovito_file)
+        # Track which file types we've found for the last timestep
+        found_types = set()
+
+        for f in all_files:
+            if not f.is_file():
+                continue
+
+            # Try pattern 1
+            match = pattern1.match(f.name)
+            if match:
+                prefix = match.group(1)
+                timestep = int(match.group(2))
+                ext = match.group(3)
+
+                if timestep == last_timestep and prefix not in found_types:
+                    files.append(f)
+                    found_types.add(prefix)
+                continue
+
+            # Try pattern 2 (Ovito_dump)
+            match = pattern2.match(f.name)
+            if match:
+                timestep = int(match.group(2))
+
+                if timestep == last_timestep and 'Ovito_dump' not in found_types:
+                    files.append(f)
+                    found_types.add('Ovito_dump')
+                continue
 
         # 3. Include first snapshot for comparison (optional)
-        snapshot_0 = dataset_dir / 'lmp_snapshot_0.pkl'
-        if snapshot_0.exists():
-            files.append(snapshot_0)
+        first_snapshot_candidates = [
+            dataset_dir / 'lmp_snapshot_0.pkl',
+            dataset_dir / f'lmp_snapshot_0'
+        ]
+        for candidate in first_snapshot_candidates:
+            if candidate.exists():
+                files.append(candidate)
+                break
 
         return files
 
