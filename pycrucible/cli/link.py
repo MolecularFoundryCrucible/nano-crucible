@@ -79,89 +79,40 @@ def execute(args):
     """Execute the link command."""
     from pycrucible.config import config
 
-    # Validate arguments
+    # Determine parent and child IDs
     if args.dataset and args.sample:
-        # Case 1: Link sample to dataset
-        _link_sample_to_dataset(config, args.dataset, args.sample)
+        # Case 1: Explicit dataset + sample flags
+        parent_id = args.dataset
+        child_id = args.sample
+        logger.info(f"Linking sample '{child_id}' to dataset '{parent_id}'...")
     elif args.parent and args.child:
-        # Case 2: Link parent-child relationship
-        if args.type:
-            # Explicit type provided
-            _link_with_explicit_type(config, args.parent, args.child, args.type)
+        # Case 2: Generic parent-child flags
+        parent_id = args.parent
+        child_id = args.child
+
+        # Auto-detect types if not explicitly provided
+        if not args.type:
+            logger.info("Auto-detecting resource types...")
+            try:
+                parent_type = config.client.get_resource_type(parent_id)
+                child_type = config.client.get_resource_type(child_id)
+                logger.info(f"Detected: parent is {parent_type}, child is {child_type}")
+            except Exception as e:
+                logger.error(f"Failed to detect resource types: {e}")
+                sys.exit(1)
         else:
-            # Auto-detect types
-            _link_with_autodetect(config, args.parent, args.child)
+            logger.info(f"Linking {args.type}s: '{parent_id}' (parent) -> '{child_id}' (child)")
     else:
         logger.error("Invalid arguments. Use either:")
-        logger.error("  -p/--parent and -c/--child for parent-child relationships")
-        logger.error("  -d/--dataset and -s/--sample for sample-to-dataset linking")
+        logger.error("  -p/--parent and -c/--child for linking resources")
+        logger.error("  -d/--dataset and -s/--sample for linking sample to dataset")
         sys.exit(1)
 
-
-def _link_sample_to_dataset(config, dataset_id, sample_id):
-    """Link a sample to a dataset."""
-    logger.info(f"Linking sample '{sample_id}' to dataset '{dataset_id}'...")
-
+    # Use the unified link method
     try:
-        result = config.client.add_sample_to_dataset(dataset_id, sample_id)
-        logger.info(f"Successfully linked sample to dataset")
+        result = config.client.link(parent_id, child_id)
+        logger.info("Successfully linked resources")
         logger.debug(f"Result: {result}")
     except Exception as e:
-        logger.error(f"Failed to link sample to dataset: {e}")
+        logger.error(f"Failed to link resources: {e}")
         sys.exit(1)
-
-
-def _link_with_explicit_type(config, parent_id, child_id, resource_type):
-    """Link resources with explicitly specified type."""
-    logger.info(f"Linking {resource_type}s: '{parent_id}' (parent) -> '{child_id}' (child)")
-
-    try:
-        if resource_type == 'dataset':
-            result = config.client.link_datasets(parent_id, child_id)
-            logger.info(f"Successfully linked datasets")
-        elif resource_type == 'sample':
-            result = config.client.link_samples(parent_id, child_id)
-            logger.info(f"Successfully linked samples")
-        logger.debug(f"Result: {result}")
-    except Exception as e:
-        logger.error(f"Failed to link {resource_type}s: {e}")
-        sys.exit(1)
-
-
-def _link_with_autodetect(config, parent_id, child_id):
-    """Link resources with auto-detection of resource types."""
-    logger.info("Auto-detecting resource types...")
-
-    # Try to detect parent type
-    parent_type = _detect_resource_type(config, parent_id)
-    if not parent_type:
-        logger.error(f"Could not determine type of parent resource '{parent_id}'")
-        sys.exit(1)
-
-    # Try to detect child type
-    child_type = _detect_resource_type(config, child_id)
-    if not child_type:
-        logger.error(f"Could not determine type of child resource '{child_id}'")
-        sys.exit(1)
-
-    # Check that both are the same type
-    if parent_type != child_type:
-        logger.error(f"Type mismatch: parent is {parent_type}, child is {child_type}")
-        logger.error("Both resources must be the same type for parent-child linking")
-        sys.exit(1)
-
-    logger.info(f"Detected: both are {parent_type}s")
-    _link_with_explicit_type(config, parent_id, child_id, parent_type)
-
-
-def _detect_resource_type(config, resource_id):
-    """
-    Detect if a resource is a dataset or sample.
-
-    Returns:
-        str: 'dataset' or 'sample', or None if not found
-    """
-    resource_type, _ = config.client.get_resource_type(resource_id)
-    if resource_type:
-        logger.debug(f"'{resource_id}' is a {resource_type}")
-    return resource_type

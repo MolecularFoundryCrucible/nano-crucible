@@ -124,26 +124,6 @@ class CrucibleClient:
         result = self._request('get', f'/projects/{project_id}/users')
         return result
     
-    def get_dataset(self, dsid: str, include_metadata: bool = False) -> Dict:
-        """Get dataset details, optionally including scientific metadata.
-
-        Args:
-            dsid (str): Dataset unique identifier
-            include_metadata (bool): Whether to include scientific metadata
-
-        Returns:
-            Dict: Dataset object with optional metadata
-        """
-        dataset = self._request('get', f'/datasets/{dsid}')
-        if dataset and include_metadata:
-            try:
-                metadata = self._request('get', f'/datasets/{dsid}/scientific_metadata')
-                dataset['scientific_metadata'] = metadata or {}
-            except requests.exceptions.RequestException:
-                dataset['scientific_metadata'] = {}
-        return dataset
-    
-
     def list_datasets(self, sample_id: Optional[str] = None, include_metadata: bool = False, limit: int = 100, **kwargs) -> List[Dict]:
         """List datasets with optional filtering.
 
@@ -765,44 +745,75 @@ class CrucibleClient:
         """
         response = self._request('get', f"/samples/{sample_id}")
         return response
+    
+    def get_dataset(self, dsid: str, include_metadata: bool = False) -> Dict:
+        """Get dataset details, optionally including scientific metadata.
 
-    def get_resource_type(self, resource_id: str) -> tuple:
+        Args:
+            dsid (str): Dataset unique identifier
+            include_metadata (bool): Whether to include scientific metadata
+
+        Returns:
+            Dict: Dataset object with optional metadata
         """
-        Determine the type of a resource and return its data.
+        dataset = self._request('get', f'/datasets/{dsid}')
+        if dataset and include_metadata:
+            try:
+                metadata = self._request('get', f'/datasets/{dsid}/scientific_metadata')
+                dataset['scientific_metadata'] = metadata or {}
+            except requests.exceptions.RequestException:
+                dataset['scientific_metadata'] = {}
+        return dataset
 
-        Tries to fetch the resource as a sample first, then as a dataset.
+    def get_resource_type(self, resource_id: str) -> dict:
+        """
+        Determine the type of a resource.
 
         Args:
             resource_id (str): The unique identifier (mfid) of the resource
 
         Returns:
-            tuple: (resource_type, resource_data) where:
-                   - resource_type is 'sample', 'dataset', or None
-                   - resource_data is the fetched resource dict, or None
+            str: resource_type
+        """
+        # TODO IMPLEMENT THIS
+        response = self._request('get', f"/idtype/{resource_id}")
+        return response['object_type']
+
+    def get(self, resource_id: str, resource_type: str = None,
+            include_metadata: bool = False) -> Dict:
+        """
+        Get a resource by ID with automatic type detection.
+
+        Automatically determines if the resource is a sample or dataset
+        and returns the appropriate data.
+
+        Args:
+            resource_id (str): The unique identifier (mfid) of the resource
+            resource_type (str, optional): Resource type ('sample' or 'dataset').
+                                          If not provided, will be auto-detected.
+
+        Returns:
+            Dict: Resource data (sample or dataset)
+
+        Raises:
+            ValueError: If resource type is unknown or not supported
 
         Example:
-            >>> resource_type, data = client.get_resource_type('abc123')
-            >>> if resource_type == 'sample':
-            >>>     print(f"Found sample: {data['sample_name']}")
+            >>> resource = client.get('abc123')
+            >>> print(resource['project_id'])
+
+            >>> # Skip detection if you already know the type
+            >>> resource = client.get('abc123', resource_type='sample')
         """
-        # Try sample first
-        try:
-            resource = self.get_sample(resource_id)
-            if resource is not None:
-                return ('sample', resource)
-        except Exception:
-            pass
+        if resource_type is None:
+            resource_type = self.get_resource_type(resource_id)
 
-        # Try dataset
-        try:
-            resource = self.get_dataset(resource_id)
-            if resource is not None:
-                return ('dataset', resource)
-        except Exception:
-            pass
-
-        # Not found
-        return (None, None)
+        if resource_type == "sample":
+            return self.get_sample(resource_id)
+        elif resource_type == "dataset":
+            return self.get_dataset(resource_id, include_metadata=include_metadata)
+        else:
+            raise ValueError(f"Unknown or unsupported resource type: {resource_type}")
 
     def list_parents_of_sample(self, sample_id, limit = 100, **kwargs)-> List[Dict]:
         params = {**kwargs}
@@ -858,20 +869,6 @@ class CrucibleClient:
             result = self._request('get', f"/samples", params=params)
         return result
         
-
-    def link_samples(self, parent_id: str, child_id: str):
-        """Link two samples with a parent-child relationship.
-
-        Args:
-            parent_id (str): Unique sample identifier of parent sample (unique_id)
-            child_id (str): Unique sample identifier of child sample (unique_id)
-
-        Returns:
-            Dict: Created link object
-        """
-        return self._request('post', f"/samples/{parent_id}/children/{child_id}")
-
-
     def update_sample(self, unique_id: str = None, sample_name: str = None, description: str = None,
                    creation_date: str = None, owner_orcid: str = None, owner_id: int = None, project_id: str = None, sample_type: str = None,
                    parents: List[Dict] = [], children: List[Dict] = []):
@@ -1236,6 +1233,64 @@ class CrucibleClient:
                 "ingestion_request": ingest_req_info, 
                 "uploaded_files": uploaded_files}
 
+    def link(self, parent_id: str, child_id: str) -> Dict:
+        """
+        Link two resources with automatic type detection.
+
+        Automatically determines resource types and creates appropriate link:
+        - Both datasets: Creates parent-child dataset relationship
+        - Both samples: Creates parent-child sample relationship
+        - Dataset + sample: Links sample to dataset
+
+        Args:
+            parent_id (str): Parent resource unique identifier
+            child_id (str): Child resource unique identifier
+
+        Returns:
+            Dict: Information about the created link
+
+        Raises:
+            ValueError: If resource types cannot be determined or combination is invalid
+
+        Example:
+            >>> # Link two datasets
+            >>> client.link('parent_dataset_id', 'child_dataset_id')
+
+            >>> # Link two samples
+            >>> client.link('parent_sample_id', 'child_sample_id')
+
+            >>> # Link sample to dataset
+            >>> client.link('dataset_id', 'sample_id')
+        """
+        parent_type = self.get_resource_type(parent_id)
+        child_type = self.get_resource_type(child_id)
+
+        # Both are datasets
+        if parent_type == "dataset" and child_type == "dataset":
+            logger.info(f"Linking datasets: {parent_id} (parent) -> {child_id} (child)")
+            return self.link_datasets(parent_id, child_id)
+
+        # Both are samples
+        elif parent_type == "sample" and child_type == "sample":
+            logger.info(f"Linking samples: {parent_id} (parent) -> {child_id} (child)")
+            return self.link_samples(parent_id, child_id)
+
+        # Mixed: dataset and sample
+        elif parent_type == "dataset" and child_type == "sample":
+            logger.info(f"Linking sample {child_id} to dataset {parent_id}")
+            return self.add_sample_to_dataset(parent_id, child_id)
+
+        elif parent_type == "sample" and child_type == "dataset":
+            logger.info(f"Linking sample {parent_id} to dataset {child_id}")
+            return self.add_sample_to_dataset(child_id, parent_id)
+
+        else:
+            raise ValueError(
+                f"Cannot link resources: parent is {parent_type}, child is {child_type}. "
+                f"Valid combinations: dataset-dataset, sample-sample, or dataset-sample."
+            )
+    
+    
     def link_datasets(self, parent_dataset_id: str, child_dataset_id: str) -> Dict:
         """Link a derived dataset to a parent dataset.
 
@@ -1248,6 +1303,18 @@ class CrucibleClient:
         """
         new_link = self._request('post', f"/datasets/{parent_dataset_id}/children/{child_dataset_id}")
         return new_link
+    
+    def link_samples(self, parent_id: str, child_id: str):
+        """Link two samples with a parent-child relationship.
+
+        Args:
+            parent_id (str): Unique sample identifier of parent sample (unique_id)
+            child_id (str): Unique sample identifier of child sample (unique_id)
+
+        Returns:
+            Dict: Created link object
+        """
+        return self._request('post', f"/samples/{parent_id}/children/{child_id}")
     
     def list_children_of_dataset(self, parent_dataset_id: str, limit = 100, **kwargs) -> List[Dict]:
         params = {**kwargs}
