@@ -766,6 +766,44 @@ class CrucibleClient:
         response = self._request('get', f"/samples/{sample_id}")
         return response
 
+    def get_resource_type(self, resource_id: str) -> tuple:
+        """
+        Determine the type of a resource and return its data.
+
+        Tries to fetch the resource as a sample first, then as a dataset.
+
+        Args:
+            resource_id (str): The unique identifier (mfid) of the resource
+
+        Returns:
+            tuple: (resource_type, resource_data) where:
+                   - resource_type is 'sample', 'dataset', or None
+                   - resource_data is the fetched resource dict, or None
+
+        Example:
+            >>> resource_type, data = client.get_resource_type('abc123')
+            >>> if resource_type == 'sample':
+            >>>     print(f"Found sample: {data['sample_name']}")
+        """
+        # Try sample first
+        try:
+            resource = self.get_sample(resource_id)
+            if resource is not None:
+                return ('sample', resource)
+        except Exception:
+            pass
+
+        # Try dataset
+        try:
+            resource = self.get_dataset(resource_id)
+            if resource is not None:
+                return ('dataset', resource)
+        except Exception:
+            pass
+
+        # Not found
+        return (None, None)
+
     def list_parents_of_sample(self, sample_id, limit = 100, **kwargs)-> List[Dict]:
         params = {**kwargs}
         """List the parents of a given sample with optional filtering.

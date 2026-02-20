@@ -4,9 +4,11 @@
 Crucible CLI - Unified command-line interface for Crucible operations.
 
 Available subcommands:
+    config      Manage pycrucible configuration
     upload      Parse and upload datasets to Crucible
-    project     Manage Crucible projects (future)
-    dataset     Query and manage datasets (future)
+    open        Open resources in Crucible Graph Explorer
+    link        Link resources (datasets, samples)
+    completion  Install shell autocomplete
 """
 
 import argparse
@@ -47,13 +49,15 @@ Available commands:
     config      Manage pycrucible configuration
     upload      Parse and upload datasets to Crucible
     open        Open a resource in Crucible Graph Explorer
+    link        Link resources (datasets, samples)
     completion  Install shell autocomplete
 
 Examples:
     crucible config init        # First-time setup
     crucible config show        # View current settings
     crucible upload -i input.lmp -t lammps -pid my-project -u
-    crucible open <mfid> -pid my-project  # Open in browser
+    crucible open <mfid>        # Open in browser
+    crucible link -p parent_id -c child_id  # Link resources
     crucible completion bash    # Install bash autocomplete
 
 Future commands:
@@ -76,13 +80,14 @@ Future commands:
     )
 
     # Import subcommands
-    from . import upload, completion, config as config_cmd, open as open_cmd
+    from . import upload, completion, config as config_cmd, open as open_cmd, link
 
     # Register subcommands
     upload.register_subcommand(subparsers)
     completion.register_subcommand(subparsers)
     config_cmd.register_subcommand(subparsers)
     open_cmd.register_subcommand(subparsers)
+    link.register_subcommand(subparsers)
 
     # Enable shell completion if argcomplete is available
     if ARGCOMPLETE_AVAILABLE:
