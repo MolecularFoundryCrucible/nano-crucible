@@ -3,70 +3,41 @@
 """
 Open subcommand for opening Crucible resources in the browser.
 
-Opens datasets, samples, or projects in the Crucible Graph Explorer.
+Opens the Graph Explorer home page or a specific resource by mfid.
 """
 
 import sys
 import webbrowser
+import logging
 
-
-# Mapping from dtype to URL extension
-DTYPE_TO_EXT = {
-    "sample": "sample-graph",
-    "dataset": "dataset",
-    "main": "",
-}
-
+logger = logging.getLogger(__name__)
 
 def register_subcommand(subparsers):
     """Register the open subcommand."""
     parser = subparsers.add_parser(
         'open',
         help='Open a Crucible resource in the browser',
-        description='Open datasets, samples, projects, or the Graph Explorer in the browser',
+        description='Open the Graph Explorer or a specific resource by mfid',
         formatter_class=lambda prog: __import__('argparse').RawDescriptionHelpFormatter(prog, max_help_position=35),
         epilog="""
 Examples:
     # Open the Graph Explorer home page
     crucible open
 
-    # Open a specific project
-    crucible open -pid 10k_perovskites
-
-    # Open a sample in a project
-    crucible open 0tcbwt4cp9x1z000bazhkv5gkg -pid 10k_perovskites
-
-    # Open with explicit type
-    crucible open abc123xyz -pid my-project -t dataset
+    # Open a specific resource by mfid
+    crucible open 0tcbwt4cp9x1z000bazhkv5gkg
 
     # Just print the URL instead of opening
-    crucible open 0tcbwt4cp9x1z000bazhkv5gkg -pid my-project --print-url
+    crucible open 0tcbwt4cp9x1z000bazhkv5gkg --print-url
 """
     )
 
-    # mfid (optional now)
+    # mfid (optional positional argument)
     parser.add_argument(
         'mfid',
-        nargs='?',  # Make it optional
+        nargs='?',
         default=None,
         help='Unique identifier (mfid) of the resource to open (optional)'
-    )
-
-    # Project ID (optional, uses config default)
-    parser.add_argument(
-        '-pid', '--project-id',
-        default=None,
-        metavar='ID',
-        help='Project ID (uses config current_project if not specified for project pages; required for specific resources)'
-    )
-
-    # Resource type
-    parser.add_argument(
-        '-t', '--type',
-        dest='dtype',
-        choices=['sample', 'dataset', 'main'],
-        default='sample',
-        help='Resource type (default: sample)'
     )
 
     # Print URL instead of opening
@@ -84,48 +55,43 @@ def execute(args):
     from pycrucible.config import config
 
     mfid = args.mfid
-    project_id = args.project_id
-    dtype = args.dtype
 
     # Get graph explorer URL from config
     graph_explorer_url = config.graph_explorer_url.rstrip('/')
 
-    # Use current_project as fallback when not specified
-    if project_id is None and (mfid is not None):
-        # mfid provided but no project_id - try to use current_project from config
-        project_id = config.current_project
-        if project_id is None:
-            print("Error: Project ID required when opening a specific resource.", file=sys.stderr)
-            print("  Specify with -pid or set current_project in config:", file=sys.stderr)
-            print("  crucible config set current_project YOUR_PROJECT_ID", file=sys.stderr)
+    # Build URL
+    if mfid is None:
+        # No mfid -> open root URL
+        url = graph_explorer_url
+    else:
+        # mfid provided -> get resource with automatic type detection
+        try:
+            resource_type = config.client.get_resource_type(mfid)
+            resource = config.client.get(mfid, resource_type=resource_type)
+        except Exception as e:
+            logger.error(f"Resource '{mfid}' not found: {e}")
             sys.exit(1)
 
-    # Case 1: No mfid, no project_id (after fallback) -> open graph explorer home
-    if mfid is None and project_id is None:
-        url = graph_explorer_url
+        # Map resource type to URL path
+        dtype = "sample-graph" if resource_type == "sample" else "dataset"
 
-    # Case 2: No mfid, but project_id given/from config -> open project page
-    elif mfid is None and project_id is not None:
-        url = f"{graph_explorer_url}/{project_id}"
+        # Extract project ID
+        project_id = resource.get("project_id")
+        if not project_id:
+            logger.error(f"Resource '{mfid}' has no project_id")
+            sys.exit(1)
 
-    # Case 3: Both mfid and project_id (possibly from config) -> open specific resource
-    else:
-        ext = DTYPE_TO_EXT.get(dtype, "")
-        if ext:
-            url = f"{graph_explorer_url}/{project_id}/{ext}/{mfid}"
-        else:
-            url = f"{graph_explorer_url}/{project_id}/{mfid}"
+        url = f"{graph_explorer_url}/{project_id}/{dtype}/{mfid}"
 
     if args.print_url:
-        # Just print the URL
+        # Just print the URL for scripting
         print(url)
     else:
         # Open in browser
-        print(f"Opening in browser: {url}")
+        logger.info(f"Opening: {url}")
         try:
             webbrowser.open(url)
-            print("✓ Opened in browser")
         except Exception as e:
-            print(f"Error opening browser: {e}", file=sys.stderr)
-            print(f"URL: {url}", file=sys.stderr)
+            logger.error(f"Failed to open browser: {e}")
+            logger.info(f"URL: {url}")
             sys.exit(1)

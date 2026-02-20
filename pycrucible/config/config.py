@@ -31,7 +31,7 @@ class Config:
     _CONFIG_MAP = {
         'api_key': {'env': 'CRUCIBLE_API_KEY', 'ini': 'api_key'},
         'api_url': {'env': 'CRUCIBLE_API_URL', 'ini': 'api_url'},
-        'cache_dir': {'env': 'PYCRUCIBLE_CACHE_DIR', 'ini': 'cache_dir'},
+        'cache_dir': {'env': 'CRUCIBLE_CACHE_DIR', 'ini': 'cache_dir'},
         'graph_explorer_url': {'env': 'CRUCIBLE_GRAPH_EXPLORER_URL', 'ini': 'graph_explorer_url'},
         'current_project': {'env': 'CRUCIBLE_CURRENT_PROJECT', 'ini': 'current_project'},
     }
@@ -211,7 +211,7 @@ def get_cache_dir():
     Get the cache directory for storing downloaded data.
 
     Priority order:
-    1. PYCRUCIBLE_CACHE_DIR environment variable
+    1. CRUCIBLE_CACHE_DIR environment variable
     2. cache_dir from ~/.config/pycrucible/config.ini
     3. Default: ~/.cache/pycrucible/ (platform-specific)
 
