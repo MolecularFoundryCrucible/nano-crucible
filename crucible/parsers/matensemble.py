@@ -404,7 +404,7 @@ class MatEnsembleLmpParser(BaseParser):
             str: Path to thumbnail file
         """
         from ase.io import write
-        from pycrucible.config import get_cache_dir
+        from crucible.config import get_cache_dir
         import logging
 
         # Suppress matplotlib's verbose output

@@ -77,7 +77,7 @@ Examples:
 
 def execute(args):
     """Execute the link command."""
-    from pycrucible.config import config
+    from crucible.config import config
 
     # Determine parent and child IDs
     if args.dataset and args.sample:

@@ -8,7 +8,7 @@ Created on Tue Feb 10 17:45:48 2026
 
 import os
 import logging
-from pycrucible import BaseDataset
+from crucible import BaseDataset
 
 logger = logging.getLogger(__name__)
 
@@ -131,7 +131,7 @@ class BaseParser:
     def client(self):
         """Get or create CrucibleClient instance (lazy loaded)."""
         if self._client is None:
-            from pycrucible.config import get_client
+            from crucible.config import get_client
             self._client = get_client()
         return self._client
 

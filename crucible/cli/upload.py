@@ -32,7 +32,7 @@ def register_subcommand(subparsers):
     Args:
         subparsers: The subparsers object from argparse
     """
-    from pycrucible.parsers import PARSER_REGISTRY
+    from crucible.parsers import PARSER_REGISTRY
 
     parser = subparsers.add_parser(
         'upload',
@@ -213,9 +213,9 @@ def execute(args):
         args: Parsed command-line arguments from argparse
     """
     import json
-    from pycrucible.parsers import get_parser, BaseParser
-    from pycrucible.config import config
-    from pycrucible.cli import setup_logging
+    from crucible.parsers import get_parser, BaseParser
+    from crucible.config import config
+    from crucible.cli import setup_logging
 
     # Set up logging based on verbose flag
     setup_logging(verbose=args.verbose)

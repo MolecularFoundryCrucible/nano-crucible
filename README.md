@@ -1,4 +1,6 @@
-# PycrucibleClient
+# nano-crucible
+
+**N**ational **A**rchive for **N**SRC **O**bservations - Crucible
 
 A Python client library for the Crucible API - the Molecular Foundry data lakehouse containing experimental synthesis and characterization data, along with information about users, projects, and instruments.
 
@@ -16,14 +18,14 @@ A Python client library for the Crucible API - the Molecular Foundry data lakeho
 ## Installation
 
 ```bash
-pip install git+https://github.com/MolecularFoundryCrucible/pycrucible
+pip install git+https://github.com/MolecularFoundryCrucible/nano-crucible
 ```
 
 ## Quick Start
 API keys can be retrieved at https://crucible.lbl.gov/testapi/user_apikey
 
 ```python
-from pycrucible import CrucibleClient
+from crucible import CrucibleClient
 
 # Initialize the client
 client = CrucibleClient(

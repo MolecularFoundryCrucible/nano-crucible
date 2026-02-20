@@ -13,8 +13,8 @@ crucible config init
 ```
 
 This will prompt you for:
-- **API Key** (required) - Get it from https://crucible.lbl.gov/testapi/user_apikey (includes user authentication)
-- **API URL** (optional) - Defaults to https://crucible.lbl.gov/testapi
+- **API Key** (required) - Get it from https://crucible.lbl.gov/api/v1/user_apikey (includes user authentication)
+- **API URL** (optional) - Defaults to https://crucible.lbl.gov/api/v1
 - **Cache Directory** (optional) - Where to cache downloaded data
 - **Graph Explorer URL** (optional) - For opening datasets in browser
 - **Default Project** (optional) - Project to use when `-pid` not specified

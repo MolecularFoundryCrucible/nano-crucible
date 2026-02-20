@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 class Config:
     """
-    Configuration manager for pycrucible.
+    Configuration manager for nano-crucible.
 
     Loads configuration from environment variables and config file,
     providing a clean interface for accessing settings.
@@ -68,7 +68,7 @@ class Config:
     @property
     def config_file_path(self):
         """Get the path to the configuration file."""
-        return Path(user_config_dir("pycrucible")) / "config.ini"
+        return Path(user_config_dir("nano-crucible")) / "config.ini"
 
     @property
     def api_key(self):
@@ -90,7 +90,7 @@ class Config:
                 f"   [crucible]\n"
                 f"   api_key = your_key_here\n"
                 f"\nUse create_config_file() to create the config file automatically:\n"
-                f"from pycrucible.config import create_config_file\n"
+                f"from crucible.config import create_config_file\n"
                 f"create_config_file('your_key_here')"
             )
         return key
@@ -101,9 +101,9 @@ class Config:
         Get the Crucible API URL.
 
         Returns:
-            str: The API URL (defaults to https://crucible.lbl.gov/testapi)
+            str: The API URL (defaults to https://crucible.lbl.gov/api/v1)
         """
-        return self._data.get('api_url', 'https://crucible.lbl.gov/testapi')
+        return self._data.get('api_url', 'https://crucible.lbl.gov/api/v1')
 
     @property
     def cache_dir(self):
@@ -117,7 +117,7 @@ class Config:
 
         if cache_dir_str is None:
             # Use default platform-specific cache directory
-            cache_path = Path(user_cache_dir("pycrucible"))
+            cache_path = Path(user_cache_dir("nano-crucible"))
         else:
             # Expand ~ and convert to Path
             cache_path = Path(os.path.expanduser(cache_dir_str))
@@ -158,7 +158,7 @@ class Config:
         """
         if self._client is None:
             # Import here to avoid circular imports
-            from pycrucible import CrucibleClient
+            from crucible import CrucibleClient
             self._client = CrucibleClient(self.api_url, self.api_key)
         return self._client
 
@@ -180,7 +180,7 @@ def get_crucible_api_key():
 
     Priority order:
     1. CRUCIBLE_API_KEY environment variable
-    2. api_key from ~/.config/pycrucible/config.ini
+    2. api_key from ~/.config/nano-crucible/config.ini
 
     Returns:
         str: The API key
@@ -197,8 +197,8 @@ def get_api_url():
 
     Priority order:
     1. CRUCIBLE_API_URL environment variable
-    2. api_url from ~/.config/pycrucible/config.ini
-    3. Default: https://crucible.lbl.gov/testapi
+    2. api_url from ~/.config/nano-crucible/config.ini
+    3. Default: https://crucible.lbl.gov/api/v1
 
     Returns:
         str: The API URL
@@ -212,8 +212,8 @@ def get_cache_dir():
 
     Priority order:
     1. CRUCIBLE_CACHE_DIR environment variable
-    2. cache_dir from ~/.config/pycrucible/config.ini
-    3. Default: ~/.cache/pycrucible/ (platform-specific)
+    2. cache_dir from ~/.config/nano-crucible/config.ini
+    3. Default: ~/.cache/nano-crucible/ (platform-specific)
 
     Returns:
         Path: The cache directory path
@@ -227,7 +227,7 @@ def get_orcid_id():
 
     Priority order:
     1. ORCID_ID environment variable
-    2. orcid_id from ~/.config/pycrucible/config.ini
+    2. orcid_id from ~/.config/nano-crucible/config.ini
     3. None if not configured
 
     Returns:
@@ -242,7 +242,7 @@ def get_graph_explorer_url():
 
     Priority order:
     1. CRUCIBLE_GRAPH_EXPLORER_URL environment variable
-    2. graph_explorer_url from ~/.config/pycrucible/config.ini
+    2. graph_explorer_url from ~/.config/nano-crucible/config.ini
     3. Default: https://crucible-graph-explorer-776258882599.us-central1.run.app
 
     Returns:
@@ -257,7 +257,7 @@ def get_current_project():
 
     Priority order:
     1. CRUCIBLE_CURRENT_PROJECT environment variable
-    2. current_project from ~/.config/pycrucible/config.ini
+    2. current_project from ~/.config/nano-crucible/config.ini
     3. None if not configured
 
     Returns:
@@ -286,7 +286,7 @@ def create_config_file(api_key, api_url=None, cache_dir=None,
 
     Args:
         api_key (str): The API key to store (user info derived from this)
-        api_url (str, optional): Custom API URL. Defaults to https://crucible.lbl.gov/testapi
+        api_url (str, optional): Custom API URL. Defaults to https://crucible.lbl.gov/api/v1
         cache_dir (str, optional): Custom cache directory path. If not provided,
                                    defaults to platform-specific cache directory
         graph_explorer_url (str, optional): Graph Explorer URL
@@ -296,13 +296,13 @@ def create_config_file(api_key, api_url=None, cache_dir=None,
     Returns:
         Path: Path to the created config file
     """
-    config_dir = Path(user_config_dir("pycrucible"))
+    config_dir = Path(user_config_dir("nano-crucible"))
     config_dir.mkdir(parents=True, exist_ok=True)
     config_file = config_dir / "config.ini"
 
     # Get default values
-    default_api_url = 'https://crucible.lbl.gov/testapi'
-    default_cache_dir = str(user_cache_dir("pycrucible"))
+    default_api_url = 'https://crucible.lbl.gov/api/v1'
+    default_cache_dir = str(user_cache_dir("nano-crucible"))
     default_graph_explorer_url = 'https://crucible-graph-explorer-776258882599.us-central1.run.app'
 
     # Manually write the config file with comments for clarity

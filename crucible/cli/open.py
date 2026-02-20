@@ -52,7 +52,7 @@ Examples:
 
 def execute(args):
     """Execute the open command."""
-    from pycrucible.config import config
+    from crucible.config import config
 
     mfid = args.mfid
 

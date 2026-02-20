@@ -162,7 +162,7 @@ class LAMMPSParser(BaseParser):
     def render_thumbnail(ase_atoms, mfid: str):
 
         from ase.io import write
-        from pycrucible.config import get_cache_dir
+        from crucible.config import get_cache_dir
         import os
         import logging
 

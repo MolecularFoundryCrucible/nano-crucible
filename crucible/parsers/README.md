@@ -130,7 +130,7 @@ __all__ = ['BaseParser', 'LAMMPSParser', 'XRDParser', 'PARSER_REGISTRY', 'get_pa
 ### Step 3: Test Your Parser
 
 ```python
-from pycrucible.parsers import XRDParser
+from crucible.parsers import XRDParser
 
 # Create parser instance
 parser = XRDParser(
@@ -274,7 +274,7 @@ def parse(self):
 def _create_visualization():
     """Generate thumbnail and return file path."""
     # Use cache directory
-    from pycrucible.config import get_cache_dir
+    from crucible.config import get_cache_dir
     cache_dir = get_cache_dir()
     thumbnail_dir = os.path.join(cache_dir, 'thumbnails_upload')
     os.makedirs(thumbnail_dir, exist_ok=True)

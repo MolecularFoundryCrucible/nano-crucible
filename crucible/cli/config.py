@@ -127,7 +127,7 @@ Priority order (highest to lowest):
 
 def cmd_init(args):
     """Interactive configuration wizard."""
-    from pycrucible.config import create_config_file, config
+    from crucible.config import create_config_file, config
 
     print("=== Crucible Configuration Setup ===\n")
     print("This wizard will help you configure pycrucible.\n")
@@ -143,7 +143,7 @@ def cmd_init(args):
 
     # Get API key
     print("\n1. Crucible API Key (required)")
-    print("   Get your key from: https://crucible.lbl.gov/testapi/user_apikey")
+    print("   Get your key from: https://crucible.lbl.gov/api/v1/user_apikey")
     api_key = input("   API Key: ").strip()
     if not api_key:
         print("Error: API key is required")
@@ -151,7 +151,7 @@ def cmd_init(args):
 
     # Get API URL
     print("\n2. Crucible API URL (optional)")
-    print("   Press Enter to use default: https://crucible.lbl.gov/testapi")
+    print("   Press Enter to use default: https://crucible.lbl.gov/api/v1")
     api_url = input("   API URL: ").strip()
     if not api_url:
         api_url = None
@@ -196,7 +196,7 @@ def cmd_init(args):
 
 def cmd_show(args):
     """Show current configuration."""
-    from pycrucible.config import config
+    from crucible.config import config
 
     print("=== Crucible Configuration ===\n")
     print(f"Config file: {config.config_file_path}")
@@ -257,7 +257,7 @@ def cmd_show(args):
 
 def cmd_get(args):
     """Get a specific configuration value."""
-    from pycrucible.config import config
+    from crucible.config import config
 
     key = args.key
 
@@ -289,7 +289,7 @@ def cmd_get(args):
 def cmd_set(args):
     """Set a configuration value, preserving comments."""
     import configparser
-    from pycrucible.config import config
+    from crucible.config import config
 
     key = args.key
     value = args.value
@@ -329,7 +329,7 @@ def cmd_set(args):
 
 def cmd_path(args):
     """Show configuration file path."""
-    from pycrucible.config import config
+    from crucible.config import config
 
     config_file = config.config_file_path
     print(config_file)
@@ -343,7 +343,7 @@ def cmd_path(args):
 
 def cmd_edit(args):
     """Open config file in editor."""
-    from pycrucible.config import config
+    from crucible.config import config
 
     config_file = config.config_file_path
 
