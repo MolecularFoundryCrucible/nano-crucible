@@ -1,0 +1,63 @@
+[build-system]
+requires = ["setuptools >= 61.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nano-crucible"
+description = "Python Client for Crucible - National Archive for NSRC Observations"
+dynamic = ["version"]
+authors = [
+    {name = "mkywall", email = "mkywall3@gmail.com"}
+]
+readme = "README.md"
+license = {text = "BSD"}
+requires-python = ">=3.8"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: BSD License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Scientific/Engineering :: Chemistry",
+    "Topic :: Scientific/Engineering :: Physics",
+]
+keywords = ["crucible", "nsrc", "molecular-foundry", "data-management", "scientific-data", "nanoscience"]
+
+dependencies = [
+    "requests>=2.25.0",
+    "pytz>=2021.1",
+    "ipywidgets",
+    "pydantic",
+    "python-dotenv",
+    "argcomplete>=2.0.0",
+    "platformdirs>=2.5.0",
+    "mfid>=1.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=6.0",
+    "black>=21.0",
+    "flake8>=3.8",
+    "mypy>=0.812",
+]
+
+[project.scripts]
+crucible = "crucible.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/MolecularFoundryCrucible/nano-crucible"
+Repository = "https://github.com/MolecularFoundryCrucible/nano-crucible"
+"Bug Tracker" = "https://github.com/MolecularFoundryCrucible/nano-crucible/issues"
+
+[tool.setuptools]
+packages = {find = {}}
+
+[tool.setuptools.dynamic]
+version = {attr = "crucible.__version__"}
