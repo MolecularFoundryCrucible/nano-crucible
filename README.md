@@ -63,8 +63,9 @@ from crucible.config import config
 # Get client
 client = config.client
 
-# Method 1: Create dataset from JSON metadata (no files)
-dataset = client.build_new_dataset_from_json(
+# Method 1: Create dataset (no files)
+dataset = client.create_new_dataset(
+    unique_id = "my-unique-dataset-id",  # Optional, auto-generated if None
     dataset_name="High-Temperature Synthesis",
     measurement="XRD",
     project_id="nanomaterials-2024",
@@ -198,7 +199,7 @@ This project is licensed under the BSD-3-Clause License - see the [LICENSE](LICE
 For issues, questions, or feature requests:
 
 - **GitHub Issues**: [https://github.com/MolecularFoundryCrucible/nano-crucible/issues](https://github.com/MolecularFoundryCrucible/nano-crucible/issues)
-- **Email**: Contact the Molecular Foundry user support
+- **Email**: mkwall@lbl.gov, roncoroni@lbl.gov, esbarnard@lbl.gov
 
 ---
 
