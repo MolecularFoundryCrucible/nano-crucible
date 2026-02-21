@@ -192,7 +192,7 @@ This project is licensed under the BSD-3-Clause License - see the [LICENSE](LICE
 ## 🔗 Links
 
 - **Crucible API**: [https://crucible.lbl.gov/api/v1](https://crucible.lbl.gov/api/v1)
-- **Crucible Web Interface**: [https://crucible-graph-explorer.run.app](https://crucible-graph-explorer.run.app)
+- **Crucible Web Interface**: [https://crucible-graph-explorer-776258882599.us-central1.run.app](https://crucible-graph-explorer-776258882599.us-central1.run.app)
 
 ## 💬 Support
 
