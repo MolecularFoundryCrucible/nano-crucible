@@ -14,6 +14,7 @@ Available subcommands:
 import argparse
 import sys
 import logging
+from crucible import __version__
 
 try:
     import argcomplete
@@ -69,7 +70,7 @@ Future commands:
     parser.add_argument(
         '--version',
         action='version',
-        version='%(prog)s 1.0.0'
+        version=f'%(prog)s {__version__}'
     )
 
     # Subcommand parsers
