@@ -144,8 +144,6 @@ class BaseParser:
         Returns:
             BaseDataset: Crucible dataset object
         """
-        # Use the first file from files_to_upload as the main file
-        file_to_upload = self.files_to_upload[0] if self.files_to_upload else None
 
         crucible_dataset = BaseDataset(
             unique_id      = self.mfid,
@@ -158,7 +156,6 @@ class BaseParser:
             instrument_name = self.instrument_name,
             data_format    = self.data_format,
             source_folder  = self.source_folder,
-            file_to_upload = file_to_upload
         )
 
         return crucible_dataset
@@ -183,8 +180,8 @@ class BaseParser:
         # Create dataset object from instance variables
         dataset = self.to_dataset()
 
-        # Upload to Crucible
-        result = self.client.create_new_dataset_from_files(
+        # Upload to Crucible using resource-based API
+        result = self.client.datasets.create(
             dataset,
             files_to_upload=self.files_to_upload,
             scientific_metadata=self.scientific_metadata,
@@ -194,8 +191,8 @@ class BaseParser:
             verbose=verbose,
             wait_for_ingestion_response=wait_for_ingestion_response
         )
-        
+
         if self.thumbnail is not None:
-            self.client.add_thumbnail(self.mfid, self.thumbnail)
+            self.client.datasets.add_thumbnail(result['dsid'], self.thumbnail)
         
         return result

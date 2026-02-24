@@ -51,6 +51,7 @@ Resource commands:
     sample      Sample operations (list, get, create, link, link-dataset)
     project     Project operations (list, get, create)
     instrument  Instrument operations (list, get)
+    user        User operations (get, create) - requires admin permissions
 
 Utility commands:
     config      Manage configuration
@@ -97,7 +98,7 @@ Examples:
 
     # Import subcommands
     from . import (
-        dataset, sample, project, instrument,  # Resource commands
+        dataset, sample, project, instrument, user,  # Resource commands
         upload, completion, config as config_cmd, open as open_cmd, link  # Utility commands
     )
 
@@ -106,6 +107,7 @@ Examples:
     sample.register_subcommand(subparsers)
     project.register_subcommand(subparsers)
     instrument.register_subcommand(subparsers)
+    user.register_subcommand(subparsers)
 
     # Register utility commands (backward compatibility)
     upload.register_subcommand(subparsers)

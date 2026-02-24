@@ -63,6 +63,7 @@ crucible <resource> <action> [options]
 - **sample** - Sample operations (list, get, create, link, link-dataset)
 - **project** - Project operations (list, get, create)
 - **instrument** - Instrument operations (list, get)
+- **user** - User operations (get, create) - requires admin permissions
 
 ### Utility Commands
 
@@ -109,6 +110,7 @@ crucible dataset create -i <files> -t <type> -pid <project> [options]
 - `-t, --type TYPE` - Dataset type (lammps, matensemble, base, etc.) - if not specified, uploads without parsing
 - `-pid, --project-id ID` - Crucible project ID (uses config default if not specified)
 - `-n, --name NAME` - Human-readable dataset name
+- `--dry-run` - Show what would be uploaded without actually uploading
 - `-v, --verbose` - Show detailed output
 
 #### Advanced Options
@@ -125,13 +127,31 @@ crucible dataset create -i <files> -t <type> -pid <project> [options]
 - `--data-format FORMAT` - Data format type
 
 **Identifiers:**
-- `--mfid ID` - Unique dataset ID (auto-generated if not provided)
+- `--mfid [ID]` - Unique dataset ID
+  - Omitted: Server assigns mfid (default)
+  - `--mfid` (no value): Generate locally with mfid package
+  - `--mfid <value>`: Use specific mfid (e.g., for re-uploading)
 
 #### Examples
 
-**Basic upload** (no parsing):
+**Preview before uploading** (dry run):
+```bash
+crucible dataset create -i data.csv -pid my-project --dry-run
+```
+
+**Basic upload with server-assigned mfid** (default):
 ```bash
 crucible dataset create -i data.csv -pid my-project
+```
+
+**Upload with locally generated mfid**:
+```bash
+crucible dataset create -i data.csv -pid my-project --mfid
+```
+
+**Upload with explicit mfid** (e.g., re-upload):
+```bash
+crucible dataset create -i data.csv -pid my-project --mfid 0tcxz5xs5xr6q0002vmzmp3beg
 ```
 
 **LAMMPS simulation**:
@@ -229,9 +249,15 @@ crucible project get <project-id>
 
 ### Create Project
 
+**Interactive mode** (prompts for input):
 ```bash
-crucible project create -n "My Project" -f "ALS"
-crucible project create -n "Q1 2024 Experiments" -f "Molecular Foundry" --description "..."
+crucible project create
+```
+
+**Command-line mode** (provide all arguments):
+```bash
+crucible project create --project-id my-project -o "LBNL" -e "lead@lbl.gov"
+crucible project create --project-id alphafold-exp -o "Argonne" -e "researcher@anl.gov"
 ```
 
 ## Instrument Commands
@@ -247,6 +273,32 @@ crucible instrument list
 ```bash
 crucible instrument get <instrument-name>
 crucible instrument get <instrument-id> --by-id
+```
+
+## User Commands
+
+**Note:** User operations require admin permissions.
+
+### Get User
+
+```bash
+crucible user get --orcid 0000-0002-1825-0097
+crucible user get --email user@example.com
+```
+
+### Create User
+
+**Interactive mode** (prompts for input):
+```bash
+crucible user create
+```
+
+**Command-line mode** (provide all arguments):
+```bash
+crucible user create --orcid 0000-0002-1825-0097 \
+    --first-name "Jane" --last-name "Doe" \
+    --email "jane@example.com" \
+    --projects project1,project2
 ```
 
 ## Available Parsers

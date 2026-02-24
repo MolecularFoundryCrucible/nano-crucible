@@ -1,7 +1,11 @@
+
+import os
+import pytz
 import subprocess as sp
 import hashlib
-import pytz
 from datetime import datetime
+
+#%%
 
 def run_shell(cmd, checkflag = True, background = False):
     """Execute a shell command and return the result.
@@ -64,7 +68,13 @@ def get_tz_isoformat(timezone = "America/Los_Angeles"):
     curr_pct_time = datetime.now(pst).isoformat()
     return(curr_pct_time)
 
-
+def check_small_files(filelist):
+    for f in filelist:
+        if os.path.getsize(f) < 1e8:
+            continue
+        else:
+            return False
+    return True
 
 
 

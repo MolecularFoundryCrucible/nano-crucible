@@ -5,9 +5,11 @@ import json
 import logging
 from typing import Optional, List, Dict, Any
 from .models import BaseDataset
-from .constants import AVAILABLE_INGESTORS, DEFAULT_TIMEOUT, DEFAULT_LIMIT
+from .constants import DEFAULT_TIMEOUT, DEFAULT_LIMIT
 
 logger = logging.getLogger(__name__)
+
+#%%
 
 class CrucibleClient:
     def __init__(self, api_url: Optional[str] = None, api_key: Optional[str] = None):
@@ -120,6 +122,8 @@ class CrucibleClient:
         else:
             raise ValueError(f"Unsupported request_type: {request_type}")
     
+    #%% GENERIC METHODS
+    
     def get_resource_type(self, resource_id: str) -> dict:
         """
         Determine the type of a resource.
@@ -168,14 +172,6 @@ class CrucibleClient:
             return self.datasets.get(resource_id, include_metadata=include_metadata)
         else:
             raise ValueError(f"Unknown or unsupported resource type: {resource_type}")
-
-    def check_small_files(self, filelist):
-        for f in filelist:
-            if os.path.getsize(f) < 1e8:
-                continue
-            else:
-                return False
-        return True
 
     def link(self, parent_id: str, child_id: str) -> Dict:
         """

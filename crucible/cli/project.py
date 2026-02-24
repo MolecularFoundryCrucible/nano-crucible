@@ -95,30 +95,38 @@ def _register_create(subparsers):
         description='Create a new project in Crucible',
         epilog="""
 Examples:
-    crucible project create -n "My Project" -f "ALS"
-    crucible project create -n "Q1 2024 Experiments" -f "Molecular Foundry"
+    # Interactive mode (prompts for input)
+    crucible project create
+
+    # Command-line mode (all arguments provided)
+    crucible project create --project-id my-project -o "LBNL" -e "lead@lbl.gov"
+    crucible project create --project-id alphafold-exp -o "Argonne" -e "researcher@anl.gov"
 """
     )
 
     parser.add_argument(
-        '-n', '--name',
-        required=True,
-        metavar='NAME',
-        help='Project name'
-    )
-
-    parser.add_argument(
-        '-f', '--facility',
-        required=True,
-        metavar='FACILITY',
-        help='Facility name (e.g., "ALS", "Molecular Foundry")'
-    )
-
-    parser.add_argument(
-        '--description',
+        '--project-id', '-id',
+        required=False,
         default=None,
-        metavar='TEXT',
-        help='Project description (optional)'
+        metavar='ID',
+        help='Unique project identifier (e.g., "my-project"). If not provided, will prompt interactively.'
+    )
+
+    parser.add_argument(
+        '-o', '--organization',
+        required=False,
+        default=None,
+        metavar='ORG',
+        help='Organization name (e.g., "LBNL", "Argonne", "Molecular Foundry"). If not provided, will prompt interactively.'
+    )
+
+    parser.add_argument(
+        '-e', '--email',
+        required=False,
+        default=None,
+        metavar='EMAIL',
+        dest='project_lead_email',
+        help='Project lead email address. If not provided, will prompt interactively.'
     )
 
     parser.add_argument(
@@ -147,12 +155,12 @@ def _execute_list(args):
         if projects:
             for project in projects:
                 logger.info(f"ID: {project.get('project_id', 'N/A')}")
-                if project.get('project_name'):
-                    logger.info(f"  Name: {project['project_name']}")
-                if project.get('facility'):
-                    logger.info(f"  Facility: {project['facility']}")
-                if project.get('creation_time'):
-                    logger.info(f"  Created: {project['creation_time']}")
+                if project.get('organization'):
+                    logger.info(f"  Organization: {project['organization']}")
+                if project.get('title'):
+                    logger.info(f"  Title: {project['title']}")
+                if project.get('project_lead_email'):
+                    logger.info(f"  Lead: {project['project_lead_email']}")
                 logger.info("")
 
     except Exception as e:
@@ -180,14 +188,16 @@ def _execute_get(args):
 
         logger.info("\n=== Project Information ===")
         logger.info(f"ID: {project.get('project_id', 'N/A')}")
-        if project.get('project_name'):
-            logger.info(f"Name: {project['project_name']}")
-        if project.get('facility'):
-            logger.info(f"Facility: {project['facility']}")
-        if project.get('creation_time'):
-            logger.info(f"Created: {project['creation_time']}")
-        if project.get('description'):
-            logger.info(f"Description: {project['description']}")
+        if project.get('organization'):
+            logger.info(f"Organization: {project['organization']}")
+        if project.get('title'):
+            logger.info(f"Title: {project['title']}")
+        if project.get('project_lead_email'):
+            logger.info(f"Lead Email: {project['project_lead_email']}")
+        if project.get('project_lead_name'):
+            logger.info(f"Lead Name: {project['project_lead_name']}")
+        if project.get('status'):
+            logger.info(f"Status: {project['status']}")
 
         if args.verbose:
             logger.debug(f"\nFull project data: {json.dumps(project, indent=2)}")
@@ -202,23 +212,69 @@ def _execute_get(args):
 
 def _execute_create(args):
     """Execute the 'project create' subcommand."""
+    import re
     from crucible.client import CrucibleClient
     from crucible.cli import setup_logging
 
     setup_logging(verbose=args.verbose)
 
+    # Interactive mode if any required arguments are missing
+    project_id = args.project_id
+    organization = args.organization
+    project_lead_email = args.project_lead_email
+
+    if project_id is None or organization is None or project_lead_email is None:
+        logger.info("\n=== Interactive Project Creation ===")
+        logger.info("Please provide the following information:\n")
+
+    # Prompt for project_id
+    if project_id is None:
+        while True:
+            project_id = input("Project ID (e.g., my-project): ").strip()
+            if project_id:
+                # Validate project_id format (alphanumeric, hyphens, underscores)
+                if re.match(r'^[a-zA-Z0-9_-]+$', project_id):
+                    break
+                else:
+                    logger.error("Invalid project ID. Use only letters, numbers, hyphens, and underscores.")
+            else:
+                logger.error("Project ID is required.")
+
+    # Prompt for organization
+    if organization is None:
+        while True:
+            organization = input("Organization (e.g., LBNL, Argonne): ").strip()
+            if organization:
+                break
+            else:
+                logger.error("Organization is required.")
+
+    # Prompt for project lead email
+    if project_lead_email is None:
+        while True:
+            project_lead_email = input("Project lead email: ").strip()
+            if project_lead_email:
+                # Basic email validation
+                if re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', project_lead_email):
+                    break
+                else:
+                    logger.error("Invalid email format.")
+            else:
+                logger.error("Project lead email is required.")
+
     try:
+        logger.info("\n=== Creating Project ===")
         client = CrucibleClient()
-        result = client.projects.create(
-            project_name=args.name,
-            facility=args.facility,
-            description=args.description
+        result = client.projects.get_or_create(
+            project_id=project_id,
+            organization=organization,
+            project_lead_email=project_lead_email
         )
 
-        logger.info(f"✓ Project created successfully!")
+        logger.info(f"\n✓ Project created successfully!")
         logger.info(f"Project ID: {result.get('project_id', 'N/A')}")
-        logger.info(f"Name: {result.get('project_name', 'N/A')}")
-        logger.info(f"Facility: {result.get('facility', 'N/A')}")
+        logger.info(f"Organization: {result.get('organization', 'N/A')}")
+        logger.info(f"Lead Email: {result.get('project_lead_email', 'N/A')}")
 
         if args.verbose:
             logger.debug(f"\nFull result: {json.dumps(result, indent=2)}")

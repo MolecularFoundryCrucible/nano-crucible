@@ -7,10 +7,10 @@ Provides dataset-related operations: list, get, create, update-metadata, link, e
 """
 
 import sys
-import logging
-from pathlib import Path
 import json
+from pathlib import Path
 
+import logging
 logger = logging.getLogger(__name__)
 
 try:
@@ -25,6 +25,10 @@ try:
 except ImportError:
     ARGCOMPLETE_AVAILABLE = False
 
+#internal modules
+from ..constants import DEFAULT_LIMIT
+
+#%%
 
 def register_subcommand(subparsers):
     """
@@ -71,9 +75,9 @@ def _register_list(subparsers):
     )
 
     parser.add_argument(
-        '--limit',
+        '--limit', '-l',
         type=int,
-        default=100,
+        default=DEFAULT_LIMIT,
         metavar='N',
         help='Maximum number of results to return (default: 100)'
     )
@@ -127,8 +131,17 @@ def _register_create(subparsers):
         formatter_class=lambda prog: __import__('argparse').RawDescriptionHelpFormatter(prog, max_help_position=35),
         epilog="""
 Examples:
-    # Generic upload (no parsing)
+    # Preview what would be uploaded (dry run)
+    crucible dataset create -i file1.dat -pid my-project --dry-run
+
+    # Generic upload (server assigns mfid)
     crucible dataset create -i file1.dat file2.csv -pid my-project
+
+    # Upload with locally generated mfid
+    crucible dataset create -i data.csv -pid my-project --mfid
+
+    # Upload with explicit mfid (e.g., re-uploading same dataset)
+    crucible dataset create -i data.csv -pid my-project --mfid 0tcxz5xs5xr6q0002vmzmp3beg
 
     # Generic upload with metadata and keywords
     crucible dataset create -i data.csv -pid my-project \\
@@ -137,10 +150,6 @@ Examples:
 
     # Parse and upload LAMMPS simulation
     crucible dataset create -i input.lmp -t lammps -pid my-project
-
-    # Upload with custom dataset name and mfid
-    crucible dataset create -i input.lmp -t lammps -pid my-project \\
-        -n "Water MD Simulation" --mfid abc123xyz
 """
     )
 
@@ -181,9 +190,11 @@ Examples:
     parser.add_argument(
         '--mfid', '--uuid', '--unique-id', '--id',
         dest='mfid',
+        nargs='?',
+        const=True,
         default=None,
         metavar='ID',
-        help='Unique dataset ID (mfid). Auto-generated if not provided.'
+        help='Unique dataset ID (mfid). If omitted, server assigns ID. If flag provided without value, generates locally. If value provided, uses that ID.'
     )
 
     # Dataset name
@@ -262,6 +273,14 @@ Examples:
         default=None,
         metavar='FORMAT',
         help='Data format type (optional)'
+    )
+
+    # Dry run flag
+    parser.add_argument(
+        '--dry-run',
+        action='store_true',
+        dest='dry_run',
+        help='Show what would be uploaded without actually uploading'
     )
 
     parser.set_defaults(func=_execute_create)
@@ -460,14 +479,21 @@ def _execute_create(args):
     if args.keywords:
         keywords_list = [k.strip() for k in args.keywords.split(',')]
 
-    # Generate mfid if not provided
+    # Handle mfid: None (server assigns), True (generate locally), or explicit value
     dataset_mfid = args.mfid
-    if dataset_mfid is None:
+    if dataset_mfid is True:
+        # --mfid flag present without value, generate locally
         if mfid is None:
-            logger.error("Error: mfid package not installed. Install with 'pip install mfid' or provide --mfid")
+            logger.error("Error: mfid package not installed. Install with 'pip install mfid' or provide explicit --mfid <value>")
             sys.exit(1)
         dataset_mfid = mfid.mfid()[0]
-        logger.debug(f"Generated mfid: {dataset_mfid}")
+        logger.debug(f"Generated local mfid: {dataset_mfid}")
+    elif dataset_mfid is not None:
+        # Explicit mfid value provided
+        logger.debug(f"Using provided mfid: {dataset_mfid}")
+    else:
+        # None - let server assign mfid
+        logger.debug("No mfid provided, server will assign one")
 
     # Determine parser class
     if args.dataset_type is None:
@@ -519,6 +545,12 @@ def _execute_create(args):
     if parser.instrument_name:
         logger.info(f"Instrument: {parser.instrument_name}")
 
+    # Display mfid info
+    if dataset_mfid is None:
+        logger.info(f"MFID: Will be assigned by server")
+    else:
+        logger.info(f"MFID: {dataset_mfid}")
+
     logger.info(f"\nFiles to upload ({len(parser.files_to_upload)}):")
     for f in parser.files_to_upload:
         logger.info(f"  - {Path(f).name}")
@@ -536,31 +568,45 @@ def _execute_create(args):
             else:
                 logger.info(f"  {key}: {value}")
 
-    # Upload
-    logger.info("\n=== Uploading to Crucible ===")
-    if args.mfid:
-        logger.info(f"Using provided mfid: {dataset_mfid}")
+    # Upload or dry run
+    if args.dry_run:
+        logger.info("\n=== Dry Run (not uploading) ===")
+        if dataset_mfid is None:
+            logger.info("MFID would be assigned by server upon upload")
+        elif args.mfid is True:
+            logger.info(f"Would use locally generated mfid: {dataset_mfid}")
+        else:
+            logger.info(f"Would use provided mfid: {dataset_mfid}")
+        logger.info("\nTo upload this dataset, run the command again without --dry-run")
+    else:
+        logger.info("\n=== Uploading to Crucible ===")
+        if dataset_mfid is None:
+            logger.info("Server will assign mfid")
+        elif args.mfid is True:
+            logger.info(f"Using locally generated mfid: {dataset_mfid}")
+        else:
+            logger.info(f"Using provided mfid: {dataset_mfid}")
 
-    try:
-        result = parser.upload_dataset(
-            verbose=args.verbose,
-            wait_for_ingestion_response=True
-        )
+        try:
+            result = parser.upload_dataset(
+                verbose=args.verbose,
+                wait_for_ingestion_response=True
+            )
 
-        logger.info("\n✓ Upload successful!")
-        logger.info(f"Dataset ID: {result.get('created_record', {}).get('unique_id', 'N/A')}")
+            logger.info("\n✓ Upload successful!")
+            logger.info(f"Dataset ID: {result.get('created_record', {}).get('unique_id', 'N/A')}")
 
-        if result and args.verbose:
-            logger.debug("\nUpload result details:")
-            for key, value in result.items():
-                logger.debug(f"  {key}: {value}")
+            if result and args.verbose:
+                logger.debug("\nUpload result details:")
+                for key, value in result.items():
+                    logger.debug(f"  {key}: {value}")
 
-    except Exception as e:
-        logger.error(f"\n✗ Upload failed: {e}")
-        if args.verbose:
-            import traceback
-            traceback.print_exc()
-        sys.exit(1)
+        except Exception as e:
+            logger.error(f"\n✗ Upload failed: {e}")
+            if args.verbose:
+                import traceback
+                traceback.print_exc()
+            sys.exit(1)
 
     logger.info("\nDone!")
 

@@ -12,11 +12,16 @@ import logging
 import subprocess
 import requests
 from typing import Optional, List, Dict
+
+# internal modules
 from .base import BaseResource
 from ..constants import DEFAULT_LIMIT
+from ..utils import check_small_files
 
+# set up logging
 logger = logging.getLogger(__name__)
 
+#%%
 
 class DatasetOperations(BaseResource):
     """Dataset-related API operations.
@@ -125,7 +130,7 @@ class DatasetOperations(BaseResource):
         from ..utils import checkhash, run_shell
 
         logger.debug(f"Uploading file {file_path}...")
-        use_upload_endpoint = self._client.check_small_files([file_path])
+        use_upload_endpoint = check_small_files([file_path])
 
         if use_upload_endpoint:
             with open(file_path, 'rb') as f:
@@ -345,7 +350,7 @@ class DatasetOperations(BaseResource):
 
         # add keywords
         for kw in keywords:
-            self._client.add_dataset_keyword(dsid, kw)
+            self.add_keyword(dsid, kw)
 
         logger.debug(f"dsid={dsid}")
 
