@@ -319,7 +319,6 @@ class CrucibleClient:
                                    get_user_info_function=get_user_info_function,
                                    verbose=verbose)
 
-    
     def create_new_dataset_from_files(self,
                                      dataset: BaseDataset,
                                      files_to_upload: List[str],
@@ -329,15 +328,15 @@ class CrucibleClient:
                                      ingestor: str = 'ApiUploadIngestor',
                                      verbose: bool = False,
                                      wait_for_ingestion_response: bool = True) -> Dict:
-        """Backward compatible: Use client.datasets.create_from_files() instead."""
-        return self.datasets.create_from_files(dataset,
-                                              files_to_upload=files_to_upload,
-                                              scientific_metadata=scientific_metadata,
-                                              keywords=keywords,
-                                              get_user_info_function=get_user_info_function,
-                                              ingestor=ingestor,
-                                              verbose=verbose,
-                                              wait_for_ingestion_response=wait_for_ingestion_response)
+        """Backward compatible: Use client.datasets.create() with files_to_upload instead."""
+        return self.datasets.create(dataset,
+                                   scientific_metadata=scientific_metadata,
+                                   keywords=keywords,
+                                   get_user_info_function=get_user_info_function,
+                                   verbose=verbose,
+                                   files_to_upload=files_to_upload,
+                                   ingestor=ingestor,
+                                   wait_for_ingestion_response=wait_for_ingestion_response)
     
     def list_children_of_dataset(self, parent_dataset_id: str, limit = DEFAULT_LIMIT, **kwargs) -> List[Dict]:
         """Backward compatible: Use client.datasets.list_children() instead."""
