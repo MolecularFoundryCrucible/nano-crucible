@@ -42,12 +42,25 @@ pip install nano-crucible
 pip install git+https://github.com/MolecularFoundryCrucible/nano-crucible
 ```
 
+### With Optional Dependencies
+
+```bash
+# Install with parser support (includes ASE for LAMMPS and MatEnsemble parsers)
+pip install nano-crucible[parsers]
+
+# Install everything
+pip install nano-crucible[all]
+
+# For development
+pip install nano-crucible[dev]
+```
+
 ### For Development
 
 ```bash
 git clone https://github.com/MolecularFoundryCrucible/nano-crucible.git
 cd nano-crucible
-pip install -e .
+pip install -e ".[dev]"
 ```
 
 ## 🚀 Quick Start

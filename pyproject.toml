@@ -8,8 +8,9 @@ description = "Python Client for Crucible - National Archive for NSRC Observatio
 dynamic = ["version"]
 authors = [
     {name = "mkywall", email = "mkywall3@gmail.com"}
+    {name = "roncofaber", email = "fabrice.roncoroni@gmail.com"}
 ]
-readme = "README.md"
+readme = {file = "README.md", content-type = "text/markdown"}
 license = {text = "BSD"}
 requires-python = ">=3.8"
 classifiers = [
@@ -41,11 +42,17 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+parsers = [
+    "ase>=3.22.0",
+]
 dev = [
     "pytest>=6.0",
     "black>=21.0",
     "flake8>=3.8",
     "mypy>=0.812",
+]
+all = [
+    "ase>=3.22.0",
 ]
 
 [project.scripts]
