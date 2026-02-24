@@ -1,0 +1,32 @@
+Thermal Conductivity Measurement Notes
+========================================
+
+Sample: Silicon Wafer A
+Measurement Date: 2024-02-24
+Operator: J. Doe
+
+Equipment:
+- 3-omega sensor configuration
+- Temperature controller: Lakeshore 336
+- Lock-in amplifier: SR830
+
+Measurement Conditions:
+- Ambient pressure: 1 atm
+- Sample mounting: thermal paste (Arctic Silver 5)
+- Heating current: 10 mA
+- Frequency: 1 kHz
+
+Temperature Range: 273-363 K
+Number of points: 10
+Dwell time: 300 seconds per point
+
+Notes:
+- Sample cleaned with acetone and IPA before mounting
+- Thermal equilibration verified before each measurement
+- Slight drift observed above 350 K, data recollected
+- All measurements within expected uncertainty range
+
+Data Processing:
+- Background subtraction applied
+- Curve fitting: polynomial order 2
+- Uncertainty propagated from voltage and current measurements
