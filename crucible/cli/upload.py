@@ -36,8 +36,8 @@ def register_subcommand(subparsers):
 
     parser = subparsers.add_parser(
         'upload',
-        help='Parse and upload datasets to Crucible',
-        description='Parse dataset files and upload them to Crucible',
+        help='[Legacy] Parse and upload datasets (use "dataset create" instead)',
+        description='Parse dataset files and upload them to Crucible\n\nNOTE: This command is kept for backward compatibility. Use "crucible dataset create" instead.',
         formatter_class=lambda prog: __import__('argparse').RawDescriptionHelpFormatter(prog, max_help_position=35),
         epilog="""
 Examples:

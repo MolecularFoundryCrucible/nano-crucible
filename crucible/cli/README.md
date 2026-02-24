@@ -1,6 +1,6 @@
 # Crucible CLI
 
-Command-line interface for uploading and managing datasets in Crucible.
+Command-line interface for managing datasets, samples, projects, and instruments in Crucible.
 
 ## Quick Start
 
@@ -19,47 +19,99 @@ This will prompt you for:
 - **Graph Explorer URL** (optional) - For opening datasets in browser
 - **Default Project** (optional) - Project to use when `-pid` not specified
 
-### 2. Upload a Dataset
+### 2. Basic Operations
 
-**Generic upload** (no parsing):
+**List projects**:
 ```bash
-crucible upload -i mydata.csv -pid my-project -u
+crucible project list
 ```
 
-**LAMMPS simulation**:
+**List datasets in a project**:
 ```bash
-crucible upload -i input.lmp -t lammps -pid my-project -u
+crucible dataset list -pid my-project
+```
+
+**Create and upload a dataset** (generic upload):
+```bash
+crucible dataset create -i mydata.csv -pid my-project
+```
+
+**Create and upload a LAMMPS dataset**:
+```bash
+crucible dataset create -i input.lmp -t lammps -pid my-project
 ```
 
 **With metadata and keywords**:
 ```bash
-crucible upload -i input.lmp -t lammps -pid my-project -u \
+crucible dataset create -i input.lmp -t lammps -pid my-project \
     -n "Water MD Simulation" \
     --metadata '{"temperature": 300, "pressure": 1.0}' \
     --keywords "validation,benchmark"
 ```
 
-## Upload Command
+## Command Structure
 
-### Basic Syntax
+The CLI is organized by resource type, similar to the Python client API:
 
-```bash
-crucible upload -i <files> -t <type> -pid <project> -u [options]
+```
+crucible <resource> <action> [options]
 ```
 
-### Required Arguments
+### Resource Commands
+
+- **dataset** - Dataset operations (list, get, create, update-metadata, link)
+- **sample** - Sample operations (list, get, create, link, link-dataset)
+- **project** - Project operations (list, get, create)
+- **instrument** - Instrument operations (list, get)
+
+### Utility Commands
+
+- **config** - Manage configuration
+- **upload** - [Legacy] Upload datasets (use `dataset create` instead)
+- **open** - Open resources in Graph Explorer
+- **link** - Link resources directly
+- **completion** - Install shell autocomplete
+
+## Dataset Commands
+
+### List Datasets
+
+List all datasets in a project:
+```bash
+crucible dataset list -pid my-project
+crucible dataset list -pid my-project --limit 50
+```
+
+### Get Dataset
+
+Get detailed information about a specific dataset:
+```bash
+crucible dataset get <dataset-id>
+crucible dataset get <dataset-id> --include-metadata
+```
+
+### Create Dataset
+
+Create and upload a new dataset:
+
+#### Basic Syntax
+
+```bash
+crucible dataset create -i <files> -t <type> -pid <project> [options]
+```
+
+#### Required Arguments
 
 - `-i, --input FILE [FILE ...]` - Input file(s) to upload
 
-### Common Options
+#### Common Options
 
-- `-t, --type TYPE` - Dataset type (lammps, base, etc.) - if not specified, uploads without parsing
+- `-t, --type TYPE` - Dataset type (lammps, matensemble, base, etc.) - if not specified, uploads without parsing
 - `-pid, --project-id ID` - Crucible project ID (uses config default if not specified)
-- `-u, --upload` - Actually upload to Crucible (without this, just parses/validates)
 - `-n, --name NAME` - Human-readable dataset name
 - `-v, --verbose` - Show detailed output
 
-### Advanced Options
+#### Advanced Options
 
 **Metadata & Keywords:**
 - `--metadata JSON` - Scientific metadata as JSON string or path to JSON file
@@ -75,44 +127,34 @@ crucible upload -i <files> -t <type> -pid <project> -u [options]
 **Identifiers:**
 - `--mfid ID` - Unique dataset ID (auto-generated if not provided)
 
-## Examples
+#### Examples
 
-### Basic Upload
-
-Upload a single file without parsing:
+**Basic upload** (no parsing):
 ```bash
-crucible upload -i data.csv -pid my-project -u
+crucible dataset create -i data.csv -pid my-project
 ```
 
-### LAMMPS Simulation
-
-Parse and upload LAMMPS data:
+**LAMMPS simulation**:
 ```bash
-crucible upload -i input.lmp -t lammps -pid my-project -u
+crucible dataset create -i input.lmp -t lammps -pid my-project
 ```
 
-### With Metadata
-
-Add custom metadata to parsed data:
+**With metadata and keywords**:
 ```bash
-crucible upload -i input.lmp -t lammps -pid my-project -u \
+crucible dataset create -i input.lmp -t lammps -pid my-project \
     --metadata '{"experiment_id": "EXP-001", "run_number": 5}' \
     --keywords "production,validated"
 ```
 
-### Metadata from File
-
-Use a JSON file for complex metadata:
+**Metadata from file**:
 ```bash
 # metadata.json contains: {"sample": "Au-nanoparticles", "size_nm": 10, ...}
-crucible upload -i data.csv -pid my-project -u --metadata metadata.json
+crucible dataset create -i data.csv -pid my-project --metadata metadata.json
 ```
 
-### Complete Example
-
-Upload with all options:
+**Complete example with all options**:
 ```bash
-crucible upload -i input.lmp -t lammps -pid my-project -u \
+crucible dataset create -i input.lmp -t lammps -pid my-project \
     -n "Water MD at 300K" \
     --session "2024-Q1-water-study" \
     --metadata '{"temperature": 300, "ensemble": "NVT"}' \
@@ -121,25 +163,103 @@ crucible upload -i input.lmp -t lammps -pid my-project -u \
     --public
 ```
 
-### Without Uploading
+### Update Dataset Metadata
 
-Parse and validate without uploading (omit `-u`):
+Update scientific metadata for an existing dataset:
 ```bash
-crucible upload -i input.lmp -t lammps -pid my-project
+crucible dataset update-metadata <dataset-id> --metadata '{"temperature": 300}'
+crucible dataset update-metadata <dataset-id> --metadata metadata.json
 ```
 
-Shows what would be uploaded without actually uploading.
+### Link Datasets
+
+Create parent-child relationships between datasets:
+```bash
+crucible dataset link -p <parent-id> -c <child-id>
+```
+
+## Sample Commands
+
+### List Samples
+
+```bash
+crucible sample list -pid my-project
+```
+
+### Get Sample
+
+```bash
+crucible sample get <sample-id>
+```
+
+### Create Sample
+
+```bash
+crucible sample create -n "Silicon Wafer A" -pid my-project
+crucible sample create -n "Sample 001" -pid my-project --description "Test sample"
+```
+
+### Link Samples
+
+Create parent-child relationships:
+```bash
+crucible sample link -p <parent-sample-id> -c <child-sample-id>
+```
+
+### Link Sample to Dataset
+
+Associate a dataset with a sample:
+```bash
+crucible sample link-dataset -s <sample-id> -d <dataset-id>
+```
+
+## Project Commands
+
+### List Projects
+
+```bash
+crucible project list
+```
+
+### Get Project
+
+```bash
+crucible project get <project-id>
+```
+
+### Create Project
+
+```bash
+crucible project create -n "My Project" -f "ALS"
+crucible project create -n "Q1 2024 Experiments" -f "Molecular Foundry" --description "..."
+```
+
+## Instrument Commands
+
+### List Instruments
+
+```bash
+crucible instrument list
+```
+
+### Get Instrument
+
+```bash
+crucible instrument get <instrument-name>
+crucible instrument get <instrument-id> --by-id
+```
 
 ## Available Parsers
 
 Check current parsers:
 ```bash
-crucible upload --help
+crucible dataset create --help
 ```
 
 Currently available:
 - **base** - Generic upload, no parsing
 - **lammps** - LAMMPS molecular dynamics simulations
+- **matensemble** - MatEnsemble format files
 
 ## Configuration Management
 
@@ -175,7 +295,27 @@ crucible config edit
 crucible config path
 ```
 
+## Link Command
+
+For direct resource linking (datasets or samples):
+```bash
+crucible link -p <parent-id> -c <child-id>
+```
+
+This command works with both datasets and samples. For resource-specific linking, use:
+- `crucible dataset link` for datasets
+- `crucible sample link` for samples
+
 ## Other Commands
+
+### Legacy Upload Command
+
+The `crucible upload` command is maintained for backward compatibility:
+```bash
+crucible upload -i data.csv -pid my-project -u
+```
+
+**Note:** This command requires the `-u` flag to actually upload. The new `crucible dataset create` command uploads by default and is recommended for new workflows.
 
 ### Open in Browser
 
@@ -256,27 +396,35 @@ Shows API requests, file operations, and detailed progress.
 1. **Set a default project** to avoid typing `-pid` every time:
    ```bash
    crucible config set current_project my-project
-   crucible upload -i data.csv -u  # Uses default project
+   crucible dataset create -i data.csv  # Uses default project
    ```
 
-2. **Parse without uploading** to check what will be uploaded:
+2. **List resources** to find IDs:
    ```bash
-   crucible upload -i input.lmp -t lammps -pid my-project
-   # Omit -u flag to see what would be uploaded
+   crucible project list
+   crucible dataset list -pid my-project
+   crucible sample list -pid my-project
    ```
 
 3. **Use JSON files** for complex metadata:
    ```bash
    # Create metadata.json with your metadata
-   crucible upload -i data.csv -pid my-project -u --metadata metadata.json
+   crucible dataset create -i data.csv -pid my-project --metadata metadata.json
    ```
 
 4. **Combine user and parser metadata** - Parser-extracted metadata merges with your custom metadata:
    ```bash
    # LAMMPS parser extracts atoms, volume, etc.
    # Your metadata adds experiment-specific info
-   crucible upload -i input.lmp -t lammps -pid my-project -u \
+   crucible dataset create -i input.lmp -t lammps -pid my-project \
        --metadata '{"experiment_id": "EXP-001"}'
+   ```
+
+5. **Use resource-specific commands** for better organization:
+   ```bash
+   # Instead of generic link command
+   crucible dataset link -p parent-id -c child-id
+   crucible sample link-dataset -s sample-id -d dataset-id
    ```
 
 ## Getting Help
@@ -285,8 +433,16 @@ Shows API requests, file operations, and detailed progress.
 # General help
 crucible --help
 
-# Upload command help
-crucible upload --help
+# Resource command help
+crucible dataset --help
+crucible sample --help
+crucible project --help
+crucible instrument --help
+
+# Specific operation help
+crucible dataset create --help
+crucible sample list --help
+crucible project get --help
 
 # Config command help
 crucible config --help
@@ -304,12 +460,18 @@ crucible config --help
 - Check file path is correct and file exists
 
 **"Unknown dataset type"**
-- Run `crucible upload --help` to see available parser types
+- Run `crucible dataset create --help` to see available parser types
 - Use `-t base` or omit `-t` for generic upload
 
 **"mfid package not installed"**
 - Install mfid: `pip install mfid`
 - Or provide explicit mfid: `--mfid your-unique-id`
+
+**"Dataset/Sample/Project not found"**
+- Use list commands to find available resources:
+  - `crucible project list`
+  - `crucible dataset list -pid my-project`
+  - `crucible sample list -pid my-project`
 
 ## Documentation
 

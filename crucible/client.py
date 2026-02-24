@@ -10,14 +10,30 @@ from .constants import AVAILABLE_INGESTORS, DEFAULT_TIMEOUT, DEFAULT_LIMIT
 logger = logging.getLogger(__name__)
 
 class CrucibleClient:
-    def __init__(self, api_url: str, api_key: str):
+    def __init__(self, api_url: Optional[str] = None, api_key: Optional[str] = None):
         """
         Initialize the Crucible API client.
 
         Args:
-            api_url: Base URL for the Crucible API
-            api_key: API key for authentication
+            api_url: Base URL for the Crucible API (loads from config if not provided)
+            api_key: API key for authentication (loads from config if not provided)
+
+        Raises:
+            ValueError: If api_url or api_key not provided and not found in config
         """
+        # Load from config if not provided
+        if api_url is None or api_key is None:
+            from .config import config
+            if api_url is None:
+                api_url = config.api_url
+            if api_key is None:
+                api_key = config.api_key
+
+        if not api_url:
+            raise ValueError("api_url is required. Provide it directly or run 'crucible config init'")
+        if not api_key:
+            raise ValueError("api_key is required. Provide it directly or run 'crucible config init'")
+
         self.api_url = api_url.rstrip('/')
         self.api_key = api_key
         self.headers = {"Authorization": f"Bearer {api_key}"}

@@ -46,24 +46,39 @@ def main():
         description='Crucible API command-line interface',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-Available commands:
-    config      Manage pycrucible configuration
-    upload      Parse and upload datasets to Crucible
+Resource commands:
+    dataset     Dataset operations (list, get, create, update-metadata, link)
+    sample      Sample operations (list, get, create, link, link-dataset)
+    project     Project operations (list, get, create)
+    instrument  Instrument operations (list, get)
+
+Utility commands:
+    config      Manage configuration
+    upload      [Legacy] Parse and upload datasets (use 'dataset create' instead)
     open        Open a resource in Crucible Graph Explorer
-    link        Link resources (datasets, samples)
+    link        Link resources directly
     completion  Install shell autocomplete
 
 Examples:
-    crucible config init        # First-time setup
-    crucible config show        # View current settings
-    crucible upload -i input.lmp -t lammps -pid my-project -u
-    crucible open <mfid>        # Open in browser
-    crucible link -p parent_id -c child_id  # Link resources
-    crucible completion bash    # Install bash autocomplete
+    # Configuration
+    crucible config init
 
-Future commands:
+    # Dataset operations
+    crucible dataset list -pid my-project
+    crucible dataset get <dataset-id>
+    crucible dataset create -i input.lmp -t lammps -pid my-project
+
+    # Sample operations
+    crucible sample list -pid my-project
+    crucible sample create -n "My Sample" -pid my-project
+
+    # Project operations
     crucible project list
-    crucible dataset query --pid my-project
+    crucible project get <project-id>
+
+    # Other operations
+    crucible open <mfid>
+    crucible link -p parent_id -c child_id
 """
     )
 
@@ -81,9 +96,18 @@ Future commands:
     )
 
     # Import subcommands
-    from . import upload, completion, config as config_cmd, open as open_cmd, link
+    from . import (
+        dataset, sample, project, instrument,  # Resource commands
+        upload, completion, config as config_cmd, open as open_cmd, link  # Utility commands
+    )
 
-    # Register subcommands
+    # Register resource commands (new structure)
+    dataset.register_subcommand(subparsers)
+    sample.register_subcommand(subparsers)
+    project.register_subcommand(subparsers)
+    instrument.register_subcommand(subparsers)
+
+    # Register utility commands (backward compatibility)
     upload.register_subcommand(subparsers)
     completion.register_subcommand(subparsers)
     config_cmd.register_subcommand(subparsers)
