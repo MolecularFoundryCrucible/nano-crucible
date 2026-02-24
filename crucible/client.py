@@ -1,13 +1,10 @@
 import os
-# import re
 import time
-# import subprocess
 import requests
 import json
 import logging
 from typing import Optional, List, Dict, Any
 from .models import BaseDataset
-# from .utils import get_tz_isoformat, run_shell, checkhash
 from .constants import AVAILABLE_INGESTORS, DEFAULT_TIMEOUT, DEFAULT_LIMIT
 
 logger = logging.getLogger(__name__)
@@ -33,7 +30,6 @@ class CrucibleClient:
         self.users = UserOperations(self)
         self.instruments = InstrumentOperations(self)
     
-
     def _request(self, method: str, endpoint: str, **kwargs) -> Any:
         """Make an HTTP request to the API.
 
@@ -76,16 +72,37 @@ class CrucibleClient:
         Returns:
             Dict: Final request status information
         """
-        req_info = self.get_request_status(dsid, reqid, request_type)
+        req_info = self._get_request_status(dsid, reqid, request_type)
         logger.info(f"Waiting for {request_type} request to complete...")
 
         while req_info['status'] in ['requested', 'started']:
             time.sleep(sleep_interval)
-            req_info = self.get_request_status(dsid, reqid, request_type)
+            req_info = self._get_request_status(dsid, reqid, request_type)
             logger.debug(f"Current status: {req_info['status']}")
 
         logger.info(f"Request completed with status: {req_info['status']}")
         return req_info
+    
+    def _get_request_status(self, dsid: str, reqid: str, request_type: str) -> Dict:
+        """Get the status of any type of request.
+
+        Args:
+            dsid (str): Dataset ID
+            reqid (str): Request ID
+            request_type (str): Type of request ('ingest' or 'scicat_update')
+
+        Returns:
+            Dict: Request status information
+
+        Raises:
+            ValueError: If unsupported request_type is provided
+        """
+        if request_type == 'ingest':
+            return self._request('get', f'/datasets/{dsid}/ingest/{reqid}')
+        elif request_type == 'scicat_update':
+            return self._request('get', f'/datasets/{dsid}/scicat_update/{reqid}')
+        else:
+            raise ValueError(f"Unsupported request_type: {request_type}")
     
     def get_resource_type(self, resource_id: str) -> dict:
         """
@@ -130,9 +147,9 @@ class CrucibleClient:
             resource_type = self.get_resource_type(resource_id)
 
         if resource_type == "sample":
-            return self.get_sample(resource_id)
+            return self.samples.get(resource_id)
         elif resource_type == "dataset":
-            return self.get_dataset(resource_id, include_metadata=include_metadata)
+            return self.datasets.get(resource_id, include_metadata=include_metadata)
         else:
             raise ValueError(f"Unknown or unsupported resource type: {resource_type}")
 
@@ -179,21 +196,21 @@ class CrucibleClient:
         # Both are datasets
         if parent_type == "dataset" and child_type == "dataset":
             logger.info(f"Linking datasets: {parent_id} (parent) -> {child_id} (child)")
-            return self.link_datasets(parent_id, child_id)
+            return self.datasets.link_parent_child(parent_id, child_id)
 
         # Both are samples
         elif parent_type == "sample" and child_type == "sample":
             logger.info(f"Linking samples: {parent_id} (parent) -> {child_id} (child)")
-            return self.link_samples(parent_id, child_id)
+            return self.samples.link(parent_id, child_id)
 
         # Mixed: dataset and sample
         elif parent_type == "dataset" and child_type == "sample":
             logger.info(f"Linking sample {child_id} to dataset {parent_id}")
-            return self.add_sample_to_dataset(parent_id, child_id)
+            return self.samples.add_to_dataset(parent_id, child_id)
 
         elif parent_type == "sample" and child_type == "dataset":
             logger.info(f"Linking sample {parent_id} to dataset {child_id}")
-            return self.add_sample_to_dataset(child_id, parent_id)
+            return self.samples.add_to_dataset(child_id, parent_id)
 
         else:
             raise ValueError(
@@ -211,13 +228,13 @@ class CrucibleClient:
         """Backward compatible: Use client.projects.list() instead."""
         return self.projects.list(orcid=orcid, limit=limit)
 
-    def get_user(self, orcid: str = None, email: str = None) -> Dict:
-        """Backward compatible: Use client.users.get() instead."""
-        return self.users.get(orcid=orcid, email=email)
-        
     def get_project_users(self, project_id: str, limit: int = DEFAULT_LIMIT) -> List[Dict]:
         """Backward compatible: Use client.projects.get_users() instead."""
         return self.projects.get_users(project_id, limit=limit)
+
+    def add_user_to_project(self, orcid, project_id):
+        """Backward compatible: Use client.projects.add_user() instead."""
+        return self.projects.add_user(orcid, project_id)
     
     def get_or_add_project(self, project_id, get_project_info_function = None, **kwargs):
         """Backward compatible: Use client.projects.get_or_create() instead."""
@@ -236,12 +253,10 @@ class CrucibleClient:
         """Backward compatible: Use client.samples.list_parents() instead."""
         return self.samples.list_parents(sample_id, limit=limit, **kwargs)
     
-
     def list_children_of_sample(self, sample_id, limit = DEFAULT_LIMIT, **kwargs)-> List[Dict]:
         """Backward compatible: Use client.samples.list_children() instead."""
         return self.samples.list_children(sample_id, limit=limit, **kwargs)
     
-
     def list_samples(self, dataset_id: str = None, parent_id: str = None, limit: int = DEFAULT_LIMIT, **kwargs) -> List[Dict]:
         """Backward compatible: Use client.samples.list() instead."""
         return self.samples.list(dataset_id=dataset_id, parent_id=parent_id, limit=limit, **kwargs)
@@ -256,7 +271,6 @@ class CrucibleClient:
                                    owner_orcid=owner_orcid, owner_id=owner_id,
                                    project_id=project_id, sample_type=sample_type,
                                    parents=parents, children=children)
-
 
     def add_sample(self, unique_id: str = None, sample_name: str = None, description: str = None,
                    creation_date: str = None, owner_orcid: str = None, owner_id: int = None,
@@ -373,11 +387,7 @@ class CrucibleClient:
     def request_scicat_upload(self, dsid: str, wait_for_response: bool = False, overwrite_data: bool = False) -> Dict:
         """Backward compatible: Use client.datasets.request_scicat_upload() instead."""
         return self.datasets.request_scicat_upload(dsid, wait_for_response=wait_for_response, overwrite_data=overwrite_data)
-    
-    def get_request_status(self, dsid: str, reqid: str, request_type: str) -> Dict:
-        """Backward compatible: Use client.datasets.get_request_status() instead."""
-        return self.datasets.get_request_status(dsid, reqid, request_type)
-    
+
     def get_dataset_access_groups(self, dsid: str) -> List[str]:
         """Backward compatible: Use client.datasets.get_access_groups() instead."""
         return self.datasets.get_access_groups(dsid)
@@ -463,17 +473,15 @@ class CrucibleClient:
         return self.instruments.get_or_create(instrument_name, location=location, instrument_owner=instrument_owner)
     
     #%% USER METHODS (DEPRECATED)
-    
+
+    def get_user(self, orcid: str = None, email: str = None) -> Dict:
+        """Backward compatible: Use client.users.get() instead."""
+        return self.users.get(orcid=orcid, email=email)
+
     def add_user(self, user_info: Dict) -> Dict:
         """Backward compatible: Use client.users.create() instead."""
         return self.users.create(user_info)
 
-
-    def add_user_to_project(self, orcid, project_id):
-        """Backward compatible: Use client.projects.add_user() instead."""
-        return self.projects.add_user(orcid, project_id)
-        
-        
     def get_or_add_user(self, orcid, get_user_info_function, **kwargs):
         """Backward compatible: Use client.users.get_or_create() instead."""
         return self.users.get_or_create(orcid, get_user_info_function, **kwargs)

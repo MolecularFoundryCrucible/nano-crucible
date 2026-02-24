@@ -538,81 +538,6 @@ class DatasetOperations(BaseResource):
         """
         return self._request('post', f'/datasets/{dsid}/keywords', params={'keyword': keyword})
 
-    # Google Drive Methods
-    def get_google_drive_location(self, dsid: str) -> List[Dict]:
-        """Get current Google Drive location information for a dataset.
-
-        Args:
-            dsid (str): Dataset unique identifier
-
-        Returns:
-            Dict: Google Drive location information
-        """
-        return self._request('get', f'/datasets/{dsid}/drive_location')
-
-    def add_google_drive_location(self, dsid: str, drive_info: Dict) -> None:
-        """Add drive location information for a dataset (not implemented).
-
-        Args:
-            dsid (str): Dataset unique identifier
-            drive_info (Dict): Drive location information to add
-        """
-        # TODO: define this
-        pass
-
-    # SciCat Integration Methods
-    def request_scicat_upload(self, dsid: str, wait_for_response: bool = False,
-                             overwrite_data: bool = False) -> Dict:
-        """Request SciCat update for a dataset.
-
-        Args:
-            dsid (str): Dataset unique identifier
-            wait_for_response (bool): Whether to wait for completion
-            overwrite_data (bool): Whether to overwrite existing SciCat records
-
-        Returns:
-            Dict: SciCat update request information
-        """
-        params = {'overwrite_data': overwrite_data} if overwrite_data else None
-        scicat_req_info = self._request('post', f'/datasets/{dsid}/scicat_update', params=params)
-
-        if wait_for_response:
-            req_info = self._client._wait_for_request_completion(dsid, scicat_req_info['id'], 'scicat_update')
-            return req_info
-
-        return scicat_req_info
-
-    def update_scicat_upload_status(self, dsid: str, reqid: str, status: str,
-                                   timezone: str = "America/Los_Angeles"):
-        """Update the status of a SciCat upload request.
-
-        **Requires admin permissions.**
-
-        Args:
-            dsid (str): Dataset unique identifier
-            reqid (str): Request ID for the SciCat upload
-            status (str): New status ('complete', 'in_progress', 'failed')
-            timezone (str): Timezone for completion time
-
-        Returns:
-            requests.Response: HTTP response from the update request
-        """
-        import requests
-        from ..utils import get_tz_isoformat
-
-        if status == "complete":
-            completion_time = get_tz_isoformat(timezone)
-            patch_json = {"id": reqid,
-                        "status": status,
-                        "time_completed": completion_time}
-        else:
-            patch_json = {"id": reqid,
-                        "status": status}
-
-        url = f"{self._client.api_url}/datasets/{dsid}/scicat_update/{reqid}"
-        response = requests.request("patch", url, json=patch_json, headers=self._client.headers)
-        return response
-
     # Request Status Methods
     def get_request_status(self, dsid: str, reqid: str, request_type: str) -> Dict:
         """Get the status of any type of request.
@@ -663,37 +588,6 @@ class DatasetOperations(BaseResource):
                         "status": status}
 
         url = f"{self._client.api_url}/datasets/{dsid}/ingest/{reqid}"
-        response = requests.request("patch", url, json=patch_json, headers=self._client.headers)
-        return response
-
-    def update_transfer_status(self, dsid: str, reqid: str, status: str,
-                              timezone: str = "America/Los_Angeles"):
-        """Update the status of a dataset transfer request.
-
-        **Requires admin permissions.**
-
-        Args:
-            dsid (str): Dataset unique identifier
-            reqid (str): Request ID for the transfer
-            status (str): New status ('complete', 'in_progress', 'failed')
-            timezone (str): Timezone for completion time
-
-        Returns:
-            requests.Response: HTTP response from the update request
-        """
-        import requests
-        from ..utils import get_tz_isoformat
-
-        if status == "complete":
-            completion_time = get_tz_isoformat(timezone)
-            patch_json = {"id": reqid,
-                        "status": status,
-                        "time_completed": completion_time}
-        else:
-            patch_json = {"id": reqid,
-                        "status": status}
-
-        url = f"{self._client.api_url}/datasets/{dsid}/google_drive_transfer/{reqid}"
         response = requests.request("patch", url, json=patch_json, headers=self._client.headers)
         return response
 
