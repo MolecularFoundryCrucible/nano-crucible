@@ -49,7 +49,7 @@ def main():
 Resource commands:
     dataset     Dataset operations (list, get, create, update-metadata, link)
     sample      Sample operations (list, get, create, link, link-dataset)
-    project     Project operations (list, get, create)
+    project     Project operations (list, get, create, get-users, add-user)
     instrument  Instrument operations (list, get)
     user        User operations (get, create) - requires admin permissions
 

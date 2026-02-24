@@ -12,6 +12,12 @@ import json
 
 logger = logging.getLogger(__name__)
 
+try:
+    import argcomplete
+    ARGCOMPLETE_AVAILABLE = True
+except ImportError:
+    ARGCOMPLETE_AVAILABLE = False
+
 
 def register_subcommand(subparsers):
     """
@@ -37,6 +43,8 @@ def register_subcommand(subparsers):
     _register_list(project_subparsers)
     _register_get(project_subparsers)
     _register_create(project_subparsers)
+    _register_get_users(project_subparsers)
+    _register_add_user(project_subparsers)
 
 
 def _register_list(subparsers):
@@ -72,11 +80,14 @@ def _register_get(subparsers):
         description='Retrieve project information'
     )
 
-    parser.add_argument(
+    project_id_arg = parser.add_argument(
         'project_id',
         metavar='PROJECT_ID',
         help='Project ID'
     )
+    # Disable file completion for project_id
+    if ARGCOMPLETE_AVAILABLE:
+        project_id_arg.completer = argcomplete.completers.SuppressCompleter()
 
     parser.add_argument(
         '-v', '--verbose',
@@ -136,6 +147,83 @@ Examples:
     )
 
     parser.set_defaults(func=_execute_create)
+
+
+def _register_get_users(subparsers):
+    """Register the 'project get-users' subcommand."""
+    parser = subparsers.add_parser(
+        'get-users',
+        help='Get users in a project',
+        description='List all users associated with a project (requires admin permissions)',
+        epilog="""
+Examples:
+    crucible project get-users my-project
+    crucible project get-users lammps-test
+"""
+    )
+
+    project_id_arg = parser.add_argument(
+        'project_id',
+        metavar='PROJECT_ID',
+        help='Project ID'
+    )
+    # Disable file completion for project_id
+    if ARGCOMPLETE_AVAILABLE:
+        project_id_arg.completer = argcomplete.completers.SuppressCompleter()
+
+    parser.add_argument(
+        '--limit',
+        type=int,
+        default=100,
+        metavar='N',
+        help='Maximum number of results to return (default: 100)'
+    )
+
+    parser.add_argument(
+        '-v', '--verbose',
+        action='store_true',
+        help='Verbose output'
+    )
+
+    parser.set_defaults(func=_execute_get_users)
+
+
+def _register_add_user(subparsers):
+    """Register the 'project add-user' subcommand."""
+    parser = subparsers.add_parser(
+        'add-user',
+        help='Add a user to a project',
+        description='Add a user to a project by ORCID (requires admin permissions)',
+        epilog="""
+Examples:
+    crucible project add-user my-project --orcid 0000-0002-1825-0097
+    crucible project add-user lammps-test --orcid 0000-0001-2345-6789
+"""
+    )
+
+    project_id_arg = parser.add_argument(
+        'project_id',
+        metavar='PROJECT_ID',
+        help='Project ID'
+    )
+    # Disable file completion for project_id
+    if ARGCOMPLETE_AVAILABLE:
+        project_id_arg.completer = argcomplete.completers.SuppressCompleter()
+
+    parser.add_argument(
+        '--orcid',
+        required=True,
+        metavar='ORCID',
+        help='User ORCID identifier (format: 0000-0000-0000-000X)'
+    )
+
+    parser.add_argument(
+        '-v', '--verbose',
+        action='store_true',
+        help='Verbose output'
+    )
+
+    parser.set_defaults(func=_execute_add_user)
 
 
 def _execute_list(args):
@@ -281,6 +369,76 @@ def _execute_create(args):
 
     except Exception as e:
         logger.error(f"Error creating project: {e}")
+        if args.verbose:
+            import traceback
+            traceback.print_exc()
+        sys.exit(1)
+
+
+def _execute_get_users(args):
+    """Execute the 'project get-users' subcommand."""
+    from crucible.client import CrucibleClient
+    from crucible.cli import setup_logging
+
+    setup_logging(verbose=args.verbose)
+
+    try:
+        client = CrucibleClient()
+        users = client.projects.get_users(args.project_id, limit=args.limit)
+
+        logger.info(f"\n=== Users in project {args.project_id} ===")
+        logger.info(f"Found {len(users)} user(s)\n")
+
+        if users:
+            for user in users:
+                if user.get('orcid'):
+                    logger.info(f"ORCID: {user['orcid']}")
+                if user.get('first_name') or user.get('last_name'):
+                    name_parts = []
+                    if user.get('first_name'):
+                        name_parts.append(user['first_name'])
+                    if user.get('last_name'):
+                        name_parts.append(user['last_name'])
+                    logger.info(f"  Name: {' '.join(name_parts)}")
+                if user.get('email'):
+                    logger.info(f"  Email: {user['email']}")
+                if user.get('lbl_email'):
+                    logger.info(f"  LBL Email: {user['lbl_email']}")
+                logger.info("")
+
+    except Exception as e:
+        logger.error(f"Error listing project users: {e}")
+        if args.verbose:
+            import traceback
+            traceback.print_exc()
+        sys.exit(1)
+
+
+def _execute_add_user(args):
+    """Execute the 'project add-user' subcommand."""
+    import re
+    from crucible.client import CrucibleClient
+    from crucible.cli import setup_logging
+
+    setup_logging(verbose=args.verbose)
+
+    # Validate ORCID format
+    if not re.match(r'^\d{4}-\d{4}-\d{4}-\d{3}[0-9X]$', args.orcid):
+        logger.error(f"Invalid ORCID format: {args.orcid}")
+        logger.error("Expected format: 0000-0000-0000-000X")
+        sys.exit(1)
+
+    try:
+        client = CrucibleClient()
+        result = client.projects.add_user(args.orcid, args.project_id)
+
+        logger.info(f"\n✓ User {args.orcid} added to project {args.project_id} successfully!")
+
+        if args.verbose:
+            logger.debug(f"\nUpdated project users: {json.dumps(result, indent=2)}")
+
+    except Exception as e:
+        logger.error(f"Error adding user to project: {e}")
         if args.verbose:
             import traceback
             traceback.print_exc()

@@ -61,7 +61,7 @@ crucible <resource> <action> [options]
 
 - **dataset** - Dataset operations (list, get, create, update-metadata, link)
 - **sample** - Sample operations (list, get, create, link, link-dataset)
-- **project** - Project operations (list, get, create)
+- **project** - Project operations (list, get, create, get-users, add-user)
 - **instrument** - Instrument operations (list, get)
 - **user** - User operations (get, create) - requires admin permissions
 
@@ -258,6 +258,20 @@ crucible project create
 ```bash
 crucible project create --project-id my-project -o "LBNL" -e "lead@lbl.gov"
 crucible project create --project-id alphafold-exp -o "Argonne" -e "researcher@anl.gov"
+```
+
+### Get Project Users
+
+List all users in a project (requires admin permissions):
+```bash
+crucible project get-users my-project
+```
+
+### Add User to Project
+
+Add a user to a project by ORCID (requires admin permissions):
+```bash
+crucible project add-user my-project --orcid 0000-0002-1825-0097
 ```
 
 ## Instrument Commands

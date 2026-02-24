@@ -12,6 +12,12 @@ import json
 
 logger = logging.getLogger(__name__)
 
+try:
+    import argcomplete
+    ARGCOMPLETE_AVAILABLE = True
+except ImportError:
+    ARGCOMPLETE_AVAILABLE = False
+
 
 def register_subcommand(subparsers):
     """
@@ -71,11 +77,14 @@ def _register_get(subparsers):
         description='Retrieve instrument information'
     )
 
-    parser.add_argument(
+    instrument_arg = parser.add_argument(
         'instrument',
         metavar='NAME_OR_ID',
         help='Instrument name or unique ID'
     )
+    # Disable file completion for instrument name/ID
+    if ARGCOMPLETE_AVAILABLE:
+        instrument_arg.completer = argcomplete.completers.SuppressCompleter()
 
     parser.add_argument(
         '--by-id',

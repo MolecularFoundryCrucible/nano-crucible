@@ -99,11 +99,14 @@ def _register_get(subparsers):
         description='Retrieve dataset information'
     )
 
-    parser.add_argument(
+    dataset_id_arg = parser.add_argument(
         'dataset_id',
         metavar='DATASET_ID',
         help='Dataset unique ID'
     )
+    # Disable file completion for dataset_id
+    if ARGCOMPLETE_AVAILABLE:
+        dataset_id_arg.completer = argcomplete.completers.SuppressCompleter()
 
     parser.add_argument(
         '--include-metadata',
@@ -294,11 +297,14 @@ def _register_update_metadata(subparsers):
         description='Update scientific metadata for a dataset'
     )
 
-    parser.add_argument(
+    dataset_id_arg = parser.add_argument(
         'dataset_id',
         metavar='DATASET_ID',
         help='Dataset unique ID'
     )
+    # Disable file completion for dataset_id
+    if ARGCOMPLETE_AVAILABLE:
+        dataset_id_arg.completer = argcomplete.completers.SuppressCompleter()
 
     parser.add_argument(
         '--metadata',

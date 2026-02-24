@@ -12,6 +12,12 @@ import json
 
 logger = logging.getLogger(__name__)
 
+try:
+    import argcomplete
+    ARGCOMPLETE_AVAILABLE = True
+except ImportError:
+    ARGCOMPLETE_AVAILABLE = False
+
 
 def register_subcommand(subparsers):
     """
@@ -82,11 +88,14 @@ def _register_get(subparsers):
         description='Retrieve sample information'
     )
 
-    parser.add_argument(
+    sample_id_arg = parser.add_argument(
         'sample_id',
         metavar='SAMPLE_ID',
         help='Sample unique ID'
     )
+    # Disable file completion for sample_id
+    if ARGCOMPLETE_AVAILABLE:
+        sample_id_arg.completer = argcomplete.completers.SuppressCompleter()
 
     parser.add_argument(
         '-v', '--verbose',
