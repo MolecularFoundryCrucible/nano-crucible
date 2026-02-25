@@ -66,6 +66,9 @@ Examples:
     # Upload with custom dataset name
     crucible upload -i input.lmp -t lammps -pid my-project -u -n "Water MD Simulation"
 
+    # Upload multiple files using wildcards
+    crucible upload -i *.dat -pid my-project -u -m "raw_data"
+
     # Upload with session name and make public
     crucible upload -i input.lmp -t lammps -pid my-project -u \\
         --session "2024-Q1-experiments" --public
@@ -78,7 +81,7 @@ Examples:
         nargs='+',
         required=True,
         metavar='FILE',
-        help='Input file(s) to parse'
+        help='Input file(s) to parse (supports wildcards like *.dat)'
     )
     # Add file completion for input files
     if ARGCOMPLETE_AVAILABLE:
@@ -231,8 +234,19 @@ def execute(args):
             logger.error("  Set default: crucible config set current_project YOUR_PROJECT_ID")
             sys.exit(1)
 
+    # Expand wildcards in input files
+    import glob
+    expanded_files = []
+    for pattern in args.input:
+        matches = glob.glob(pattern)
+        if matches:
+            expanded_files.extend(matches)
+        else:
+            # No matches, keep the original (will fail validation if it doesn't exist)
+            expanded_files.append(pattern)
+
     # Validate input files exist
-    input_files = [Path(f) for f in args.input]
+    input_files = [Path(f) for f in expanded_files]
     for input_file in input_files:
         if not input_file.exists():
             logger.error(f"Error: Input file not found: {input_file}")

@@ -23,7 +23,7 @@ def register_subcommand(subparsers):
     """
     parser = subparsers.add_parser(
         'user',
-        help='User operations (get, create)',
+        help='User operations (get, create, list)',
         description='Manage Crucible users (requires admin permissions)',
     )
 
@@ -37,6 +37,7 @@ def register_subcommand(subparsers):
     # Register individual user commands
     _register_get(user_subparsers)
     _register_create(user_subparsers)
+    _register_list(user_subparsers)
 
 
 def _register_get(subparsers):
@@ -138,6 +139,36 @@ Examples:
     )
 
     parser.set_defaults(func=_execute_create)
+
+
+def _register_list(subparsers):
+    """Register the 'user list' subcommand."""
+    parser = subparsers.add_parser(
+        'list',
+        help='List all users',
+        description='List all users in the system (requires admin permissions)',
+        epilog="""
+Examples:
+    crucible user list
+    crucible user list --limit 50
+"""
+    )
+
+    parser.add_argument(
+        '--limit',
+        type=int,
+        default=100,
+        metavar='N',
+        help='Maximum number of users to return (default: 100)'
+    )
+
+    parser.add_argument(
+        '-v', '--verbose',
+        action='store_true',
+        help='Verbose output'
+    )
+
+    parser.set_defaults(func=_execute_list)
 
 
 def _execute_get(args):
@@ -300,6 +331,61 @@ def _execute_create(args):
 
     except Exception as e:
         logger.error(f"Error creating user: {e}")
+        if args.verbose:
+            import traceback
+            traceback.print_exc()
+        sys.exit(1)
+
+
+def _execute_list(args):
+    """Execute the 'user list' subcommand."""
+    from crucible.client import CrucibleClient
+    from crucible.cli import setup_logging
+
+    setup_logging(verbose=args.verbose)
+
+    try:
+        client = CrucibleClient()
+        users = client.users.list(limit=args.limit)
+
+        if not users:
+            logger.info("No users found.")
+            return
+
+        logger.info(f"\n=== Users ({len(users)}) ===\n")
+
+        for i, user in enumerate(users, 1):
+            # Format name
+            name_parts = []
+            if user.get('first_name'):
+                name_parts.append(user['first_name'])
+            if user.get('last_name'):
+                name_parts.append(user['last_name'])
+            name = ' '.join(name_parts) if name_parts else 'N/A'
+
+            # Format ORCID
+            orcid = user.get('orcid', 'N/A')
+
+            # Format email
+            email = user.get('email') or user.get('lbl_email', 'N/A')
+
+            logger.info(f"{i}. {name}")
+            logger.info(f"   ORCID: {orcid}")
+            logger.info(f"   Email: {email}")
+
+            if args.verbose:
+                if user.get('id'):
+                    logger.info(f"   ID: {user['id']}")
+                if user.get('creation_time'):
+                    logger.info(f"   Created: {user['creation_time']}")
+
+            logger.info("")
+
+        if args.verbose:
+            logger.debug(f"\nFull data: {json.dumps(users, indent=2)}")
+
+    except Exception as e:
+        logger.error(f"Error listing users: {e}")
         if args.verbose:
             import traceback
             traceback.print_exc()

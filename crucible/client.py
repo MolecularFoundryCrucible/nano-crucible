@@ -1,4 +1,11 @@
-import os
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Main client for Crucible API.
+
+Provides organized access to API endpoints.
+"""
+
 import time
 import requests
 import json

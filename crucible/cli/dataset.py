@@ -151,6 +151,9 @@ Examples:
         --metadata '{"temperature": 300, "pressure": 1.0}' \\
         --keywords "experiment,thermal" -m "thermal_analysis"
 
+    # Upload multiple files using wildcards
+    crucible dataset create -i *.dat -pid my-project -m "raw_data"
+
     # Parse and upload LAMMPS simulation
     crucible dataset create -i input.lmp -t lammps -pid my-project
 """
@@ -162,7 +165,7 @@ Examples:
         nargs='+',
         required=True,
         metavar='FILE',
-        help='Input file(s) to upload'
+        help='Input file(s) to upload (supports wildcards like *.dat)'
     )
     if ARGCOMPLETE_AVAILABLE:
         input_arg.completer = FilesCompleter()
@@ -455,8 +458,19 @@ def _execute_create(args):
             logger.error("Error: Project ID required. Specify with -pid or set current_project in config.")
             sys.exit(1)
 
+    # Expand wildcards in input files
+    import glob
+    expanded_files = []
+    for pattern in args.input:
+        matches = glob.glob(pattern)
+        if matches:
+            expanded_files.extend(matches)
+        else:
+            # No matches, keep the original (will fail validation if it doesn't exist)
+            expanded_files.append(pattern)
+
     # Validate input files
-    input_files = [Path(f) for f in args.input]
+    input_files = [Path(f) for f in expanded_files]
     for input_file in input_files:
         if not input_file.exists():
             logger.error(f"Error: Input file not found: {input_file}")

@@ -7,8 +7,9 @@ Provides organized access to user-related API endpoints.
 """
 
 import logging
-from typing import Optional, Dict
+from typing import Optional, Dict, List
 from .base import BaseResource
+from ..constants import DEFAULT_LIMIT
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +52,27 @@ class UserOperations(BaseResource):
                 return None
         else:
             raise ValueError('please provide orcid or email')
+
+    def list(self, limit: int = DEFAULT_LIMIT, **kwargs) -> List[Dict]:
+        """List all users in the system.
+
+        **Requires admin permissions.**
+
+        Args:
+            limit (int): Maximum number of results to return (default: 100)
+            **kwargs: Additional query parameters for filtering
+
+        Returns:
+            List[Dict]: List of user objects with orcid, name, email, timestamps
+
+        Example:
+            >>> users = client.users.list(limit=50)
+            >>> for user in users:
+            ...     print(f"{user['first_name']} {user['last_name']} ({user['orcid']})")
+        """
+        params = kwargs
+        params['limit'] = limit
+        return self._request('get', '/users', params=params)
 
     def create(self, user_info: Dict) -> Dict:
         """Add a new user to the system.
