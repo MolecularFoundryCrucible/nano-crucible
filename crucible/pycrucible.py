@@ -5,7 +5,7 @@ import requests
 import json
 import logging
 from typing import Optional, List, Dict, Any
-from .models import BaseDataset
+from .models import BaseDataset, Project
 from .utils import get_tz_isoformat, run_shell, checkhash
 from .constants import AVAILABLE_INGESTORS
 
@@ -1039,6 +1039,20 @@ class CrucibleClient:
         return True
 
 
+    def create_project(self, project: Project):
+        
+        project_details = dict(**project.model_dump())
+
+        # check if it already exists // avoid dupplicates
+        proj = self.get_project(project_details['project_id'])
+        if proj is not None:
+            return proj
+
+        # otherwise create it
+        new_project = self._request('post', "/projects", json = project_details)
+        return new_project
+
+
     def get_or_add_project(self, project_id, get_project_info_function = _build_project_from_args, **kwargs):
         """Get an existing project or create a new one if it doesn't exist.
         
@@ -1047,7 +1061,7 @@ class CrucibleClient:
             get_project_info_func (callable): Function to retrieve project info if not found
             **kwargs: Additional arguments to pass to get_project_info_func. 
             If relying on the default to build the project from arguments, 
-            please provide the project_id, project_organization, and project_lead_email. 
+            please provide the project_id, organization, and project_lead_email. 
             
         Returns:
             dict: Project information (existing or newly created)
