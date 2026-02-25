@@ -9,7 +9,7 @@ A Python client library and CLI tool for Crucible - the Molecular Foundry's data
 Crucible is the centralized data infrastructure for the [Molecular Foundry](https://foundry.lbl.gov/) and other [DOE Nanoscale Science Research Centers](https://science.osti.gov/bes/suf/User-Facilities/Nanoscale-Science-Research-Centers), providing:
 
 - **Unified data storage** for experimental and synthetic data
-- **Rich metadata** capture for to associate to datasets
+- **Rich metadata** capture to associate with datasets
 - **Sample provenance** tracking with parent-child relationships
 
 ## ✨ Features
@@ -24,9 +24,10 @@ Crucible is the centralized data infrastructure for the [Molecular Foundry](http
 ### 🖥️ Command-Line Interface
 
 - **`crucible config`**: One-time setup and configuration management
-- **`crucible upload`**: Upload datasets with automatic parsing and metadata extraction
+- **`crucible dataset`**: Create, list, update, and manage datasets
+- **`crucible sample`**: Create, list, and manage samples with relationships
+- **`crucible project`**: Manage projects and users (admin)
 - **`crucible open`**: Open resources in the Crucible Web Explorer with one command
-- **`crucible link`**: Create relationships between datasets and samples
 
 ## 📦 Installation
 
@@ -65,129 +66,80 @@ pip install -e ".[dev]"
 
 ## 🚀 Quick Start
 
-### Python API
+### Configuration
 
-#### Creating and Uploading Datasets
-
-```python
-from crucible import CrucibleClient, BaseDataset
-from crucible.config import config
-
-# Get client
-client = config.client
-
-# Method 1: Create dataset (no files)
-dataset = client.create_new_dataset(
-    unique_id = "my-unique-dataset-id",  # Optional, auto-generated if None
-    dataset_name="High-Temperature Synthesis",
-    measurement="XRD",
-    project_id="nanomaterials-2024",
-    public=False,
-    scientific_metadata={
-        "temperature_C": 800,
-        "pressure_bar": 1.0,
-        "duration_hours": 12,
-        "atmosphere": "nitrogen"
-    },
-    keywords=["synthesis", "high-temperature", "oxides"]
-)
-
-# Method 2: Upload dataset with files using BaseDataset
-dataset = BaseDataset(
-    unique_id="my-unique-dataset-id",  # Optional, auto-generated if None
-    dataset_name="Electron Microscopy Images",
-    measurement="TEM",
-    project_id="nanomaterials-2024",
-    public=False,
-    instrument_name="TEM-2100",
-    data_format="TIFF",
-    file_to_upload="/path/to/image.tiff"
-)
-
-# Upload with metadata and files
-result = client.create_new_dataset_from_files(
-    dataset=dataset,
-    scientific_metadata={
-        "magnification": 50000,
-        "voltage_kV": 200,
-        "spot_size": 3
-    },
-    keywords=["TEM", "imaging", "nanoparticles"],
-    files_to_upload=["/path/to/image.tiff", "/path/to/calibration.txt"],
-    thumbnail="/path/to/thumbnail.png",  # Optional
-    ingestor='ApiUploadIngestor',
-    wait_for_ingestion_response=True
-)
-
-print(f"Dataset created: {result['created_record']['unique_id']}")
-```
-
-#### Linking Resources
-
-```python
-# Link two datasets
-client.link_datasets("parent-dataset", "child-dataset")
-# Link two samples
-client.link_samples("parent-sample", "child-sample")
-# Link sample to dataset
-client.add_sample_to_dataset("dataset-id", "sample-id")
-```
-
-### Command-Line Interface
-
-#### 1. Initial Configuration
+First, configure your API credentials:
 
 ```bash
-# One-time setup
 crucible config init
-
-# View your configuration
-crucible config show
-
-# Update settings
-crucible config set api_key YOUR_NEW_KEY
 ```
 
 Get your API key at: [https://crucible.lbl.gov/api/v1/user_apikey](https://crucible.lbl.gov/api/v1/user_apikey)
 
-#### 2. Upload Data with Parsers
+### Python API
 
-```bash
-# Upload with generic dataset
-crucible upload -i data.txt -pid my-project \
-    --metadata '{"temperature=300,pressure=1.0"}' \
-    --keywords "experiment,test"
+```python
+from crucible import CrucibleClient
+from crucible.models import BaseDataset
 
-# Upload specific dataset (e.g. LAMMPS simulation)
-# Works only if the parser exists
-crucible upload -i simulation.lmp -t lammps -pid my-project
+# Initialize client
+client = CrucibleClient()
+
+# Create a dataset
+dataset = BaseDataset(
+    dataset_name="My Experiment",
+    measurement="XRD",
+    project_id="my-project",
+    public=False
+)
+
+result = client.datasets.create(
+    dataset=dataset,
+    scientific_metadata={"temperature_C": 300},
+    keywords=["experiment", "test"]
+)
+
+print(f"Dataset created: {result['dsid']}")
 ```
 
-#### 3. Link Resources
+**📓 For complete examples, see the tutorial notebooks:**
+- [**Main Tutorial**](examples/crucible_tutorial.ipynb) - Creating datasets, samples, linking, and downloading
+- [**Project Management**](examples/crucible_project_management.ipynb) - Managing projects and users (admin)
+
+### Command-Line Interface
 
 ```bash
-# Link two datasets
-crucible link -p parent_dataset_id -c child_dataset_id
-# Link two samples
-crucible link -p parent_sample_id -c child_sample_id
+# Configure API credentials
+crucible config init
+
+# Create a dataset with files
+crucible dataset create -i data.csv -n "My Dataset" -m "XRD" -pid my-project
+
+# List datasets in a project
+crucible dataset list -pid my-project
+
+# Get dataset details
+crucible dataset get DATASET_ID
+
+# Create a sample
+crucible sample create -n "Sample A" -pid my-project
+
 # Link sample to dataset
-crucible link -d dataset_id -s sample_id
+crucible sample add-to-dataset SAMPLE_ID DATASET_ID
+
+# Open a resource in your browser
+crucible open DATASET_ID
 ```
 
-#### 4. Open in Browser
-
-```bash
-# Open the Crucible Web Explorer
-crucible open
-# Open to a specific resource
-crucible open RESOURCE_MFID
-```
+**📖 For complete CLI documentation, see [cli/README.md](crucible/cli/README.md)**
 
 ## 📖 Documentation
 
-- **CLI Documentation**: See [cli/README.md](crucible/cli/README.md)
-- **Parser Documentation**: See [parsers/README.md](crucible/parsers/README.md)
-- **API Reference**: Coming soon
+- **Tutorial Notebooks**: See [examples/](examples/) - Comprehensive Jupyter notebooks with runnable examples
+  - [Main Tutorial](examples/crucible_tutorial.ipynb) - Datasets, samples, linking, downloading
+  - [Project Management](examples/crucible_project_management.ipynb) - Projects and users (admin)
+- **CLI Documentation**: See [cli/README.md](crucible/cli/README.md) - Complete command-line reference
+- **Parser Documentation**: See [parsers/README.md](crucible/parsers/README.md) - Custom data format parsers
 
 ## 🤝 Contributing
 
