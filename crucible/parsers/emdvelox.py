@@ -33,11 +33,12 @@ class EMDVeloxParser(BaseParser):
         ncempy_datafile = emdVelox.fileEMDVelox(input_file)
 
         # custom attribute: measurement_scientific_metadata
-        self.measurement_scientific_metadata = [ncempy_datafile.getMetadata(d) for d in ncempy_datafile.list_data]
+        # self.measurement_scientific_metadata = [ncempy_datafile.getMetadata(d) for d in ncempy_datafile.list_data]
+        self.measurement_scientific_metadata = [ncempy_datafile.parseMetaData(d) for d in ncempy_datafile.list_data]
 
     def upload_dataset(self, ingestor='ApiUploadIngestor', verbose=False, wait_for_ingestion_response=True):
         # upload the dataset for the entire file 
-        file_upload_result = super().upload_dataset(self, ingestor, verbose, wait_for_ingestion_response)
+        file_upload_result = super().upload_dataset(ingestor, verbose, wait_for_ingestion_response)
         file_dsid = file_upload_result['created_record']['unique_id'] # if using create_new_dataset instead of create_new_dataset_from_files, can directly use 
 
         # create & upload a dataset for each measurement
