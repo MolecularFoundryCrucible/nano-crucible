@@ -76,6 +76,16 @@ crucible config init
 
 Get your API key at: [https://crucible.lbl.gov/api/v1/user_apikey](https://crucible.lbl.gov/api/v1/user_apikey)
 
+**Alternative (without terminal access)**: Initialize the client directly with your credentials:
+
+```python
+from crucible import CrucibleClient
+client = CrucibleClient(
+    api_url="https://crucible.lbl.gov/api/v1",
+    api_key="your-api-key-here"
+)
+```
+
 ### Python API
 
 ```python

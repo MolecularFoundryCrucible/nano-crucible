@@ -66,6 +66,15 @@ The project management tutorial covers administrative operations (**requires adm
    - **For project management tutorial**: Admin API key
    - Access to project `crucible-demo` (or update the PROJECT_ID variable)
 
+   **Alternative (without terminal access)**: If you don't have terminal access, you can initialize the client directly in your notebook:
+   ```python
+   from crucible import CrucibleClient
+   client = CrucibleClient(
+       api_url="https://crucible.lbl.gov/api/v1",
+       api_key="your-api-key-here"
+   )
+   ```
+
 3. Install Jupyter:
    ```bash
    pip install jupyter
