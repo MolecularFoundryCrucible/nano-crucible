@@ -1,10 +1,23 @@
-from .base import BaseParser
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""EMD Parser
+
+Created on Wed Feb 25 2026
+"""
+
 import os
+import logging
+from .base import BaseParser
+
 from ncempy.io import emdVelox
 from crucible import BaseDataset
 
+logger = logging.getLogger(__name__)
+
 class EMDVeloxParser(BaseParser):
-    _data_format = ".emd" # sets default self.data_format
+    _measurement = "EMD"
+    _data_format = "EMD" 
+    _instrument_name = None # change?
 
     def parse(self):
         # Validate input
@@ -13,6 +26,8 @@ class EMDVeloxParser(BaseParser):
 
         # Use first file as EMD input
         input_file = os.path.abspath(self.files_to_upload[0])
+        if not os.path.exists(input_file):
+            raise FileNotFoundError(f"File not found: {input_file}")
 
         # Read input file using ncempy 
         ncempy_datafile = emdVelox.fileEMDVelox(input_file)
