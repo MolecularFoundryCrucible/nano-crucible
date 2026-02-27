@@ -190,7 +190,7 @@ class LAMMPSParser(BaseParser):
     def render_thumbnail(ase_atoms, mfid: str):
 
         from ase.io import write
-        from crucible.config import get_cache_dir
+        import tempfile
         import os
         import logging
 
@@ -198,11 +198,11 @@ class LAMMPSParser(BaseParser):
         logging.getLogger('matplotlib').setLevel(logging.WARNING)
         logging.getLogger('matplotlib.font_manager').setLevel(logging.WARNING)
 
-        # Get cache directory and create thumbnails_upload subdirectory
-        cache_dir = get_cache_dir()
-        thumbnail_dir = os.path.join(cache_dir, 'thumbnails_upload')
+        # Use system temp directory (platform-independent)
+        temp_dir = tempfile.gettempdir()
+        thumbnail_dir = os.path.join(temp_dir, 'crucible_thumbnails')
         os.makedirs(thumbnail_dir, exist_ok=True)
-        
+
         # Create file path
         file_path = os.path.join(thumbnail_dir, f'{mfid}.png')
         

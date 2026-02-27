@@ -414,16 +414,16 @@ class MatEnsembleParentParser(BaseParser):
             str: Path to thumbnail file
         """
         from ase.io import write
-        from crucible.config import get_cache_dir
+        import tempfile
         import logging
 
         # Suppress matplotlib's verbose output
         logging.getLogger('matplotlib').setLevel(logging.WARNING)
         logging.getLogger('matplotlib.font_manager').setLevel(logging.WARNING)
 
-        # Get cache directory
-        cache_dir = get_cache_dir()
-        thumbnail_dir = os.path.join(cache_dir, 'thumbnails_upload')
+        # Use system temp directory (platform-independent)
+        temp_dir = tempfile.gettempdir()
+        thumbnail_dir = os.path.join(temp_dir, 'crucible_thumbnails')
         os.makedirs(thumbnail_dir, exist_ok=True)
 
         # Use timestep or create unique name
