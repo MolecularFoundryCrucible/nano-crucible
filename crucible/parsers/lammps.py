@@ -193,6 +193,8 @@ class LAMMPSParser(BaseParser):
         import tempfile
         import os
         import logging
+        import random
+        import string
 
         # Suppress matplotlib's verbose output
         logging.getLogger('matplotlib').setLevel(logging.WARNING)
@@ -203,8 +205,15 @@ class LAMMPSParser(BaseParser):
         thumbnail_dir = os.path.join(temp_dir, 'crucible_thumbnails')
         os.makedirs(thumbnail_dir, exist_ok=True)
 
+        # Use mfid if available, otherwise generate random name
+        if mfid:
+            filename = f'{mfid}.png'
+        else:
+            random_str = ''.join(random.choices(string.ascii_lowercase + string.digits, k=12))
+            filename = f'thumbnail_{random_str}.png'
+
         # Create file path
-        file_path = os.path.join(thumbnail_dir, f'{mfid}.png')
+        file_path = os.path.join(thumbnail_dir, filename)
         
         # Make sure atoms are wrapped
         ase_atoms.wrap()
