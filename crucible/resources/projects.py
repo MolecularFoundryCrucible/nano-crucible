@@ -7,9 +7,10 @@ Provides organized access to project-related API endpoints.
 """
 
 import logging
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Union
 from .base import BaseResource
 from ..constants import DEFAULT_LIMIT
+from ..models import Project
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +55,33 @@ class ProjectOperations(BaseResource):
             return self._request('get', '/projects')
         else:
             return self._request('get', f'/users/{orcid}/projects')
+
+    def create(self, project: Union[Project, Dict]) -> Dict:
+        """Create a new project.
+
+        **Requires admin permissions.**
+
+        Args:
+            project: A Project model instance or a dict with project_id,
+                     organization, and project_lead_email.
+
+        Returns:
+            Dict: Created project object
+
+        Example:
+            >>> from crucible.models import Project
+            >>> project = Project(
+            ...     project_id="my-project",
+            ...     organization="Molecular Foundry",
+            ...     project_lead_email="lead@lbl.gov"
+            ... )
+            >>> result = client.projects.create(project)
+        """
+        if isinstance(project, Project):
+            project_details = project.model_dump(exclude_none=True)
+        else:
+            project_details = dict(project)
+        return self._request('post', "/projects", json=project_details)
 
     def get_users(self, project_id: str, limit: int = DEFAULT_LIMIT) -> List[Dict]:
         """Get users associated with a project.
@@ -118,7 +146,7 @@ class ProjectOperations(BaseResource):
         project_info = get_project_info_function(project_id=project_id, **kwargs)
 
         if project_info:
-            proj = self._request('post', "/projects", json=project_info)
+            proj = self.create(project_info)
             return proj
         else:
             raise ValueError(f"Project info for {project_id} not found in database or using the provided get_project_info_function")

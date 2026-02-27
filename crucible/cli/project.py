@@ -351,18 +351,33 @@ def _execute_create(args):
                 logger.error("Project lead email is required.")
 
     try:
-        logger.info("\n=== Creating Project ===")
+        from crucible.models import Project
         client = CrucibleClient()
-        result = client.projects.get_or_create(
+
+        # Check if project already exists
+        existing = client.projects.get(project_id)
+        if existing is not None:
+            logger.info(f"\n⚠ Project '{project_id}' already exists.")
+            logger.info(f"Project ID:   {existing.get('project_id', 'N/A')}")
+            logger.info(f"Organization: {existing.get('organization', 'N/A')}")
+            logger.info(f"Lead Email:   {existing.get('project_lead_email', 'N/A')}")
+            if args.verbose:
+                logger.debug(f"\nFull result: {json.dumps(existing, indent=2)}")
+            return
+
+        # Build Project model and create
+        logger.info("\n=== Creating Project ===")
+        project = Project(
             project_id=project_id,
             organization=organization,
             project_lead_email=project_lead_email
         )
+        result = client.projects.create(project)
 
         logger.info(f"\n✓ Project created successfully!")
-        logger.info(f"Project ID: {result.get('project_id', 'N/A')}")
+        logger.info(f"Project ID:   {result.get('project_id', 'N/A')}")
         logger.info(f"Organization: {result.get('organization', 'N/A')}")
-        logger.info(f"Lead Email: {result.get('project_lead_email', 'N/A')}")
+        logger.info(f"Lead Email:   {result.get('project_lead_email', 'N/A')}")
 
         if args.verbose:
             logger.debug(f"\nFull result: {json.dumps(result, indent=2)}")

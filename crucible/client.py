@@ -10,8 +10,8 @@ import time
 import requests
 import json
 import logging
-from typing import Optional, List, Dict, Any
-from .models import BaseDataset
+from typing import Optional, List, Dict, Any, Union
+from .models import BaseDataset, Project
 from .constants import DEFAULT_TIMEOUT, DEFAULT_LIMIT
 
 logger = logging.getLogger(__name__)
@@ -239,6 +239,10 @@ class CrucibleClient:
     
     #%% PROJECT METHODS (DEPRECATED)
     
+    def create_project(self, project: Union[Project, Dict]) -> Dict:
+        """Backward compatible: Use client.projects.create() instead."""
+        return self.projects.create(project)
+
     def get_project(self, project_id: str) -> Dict:
         """Backward compatible: Use client.projects.get() instead."""
         return self.projects.get(project_id)

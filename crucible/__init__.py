@@ -8,7 +8,7 @@ __version__ = "2.0.0"
 __author__ = "mkywall"
 
 from .client import CrucibleClient
-from .models import BaseDataset
+from .models import BaseDataset, Project
 from . import config
 
-__all__ = ['CrucibleClient', 'BaseDataset', 'config', '__version__', '__author__']
+__all__ = ['CrucibleClient', 'BaseDataset', 'Project', 'config', '__version__', '__author__']

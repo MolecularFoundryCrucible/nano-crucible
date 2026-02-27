@@ -1,6 +1,19 @@
 from pydantic import BaseModel
 from typing import List, Optional
 
+
+class Project(BaseModel):
+    project_id: str
+    organization: str
+    project_lead_email: str
+    status: Optional[str] = None
+    title: Optional[str] = None
+    project_lead_name: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
 class BaseDataset(BaseModel):
     unique_id: Optional[str] = None
     dataset_name: Optional[str] = None
