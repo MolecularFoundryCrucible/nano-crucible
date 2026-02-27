@@ -7,7 +7,10 @@ Created on Tue Feb 10 17:45:48 2026
 """
 
 import os
+import socket
+import json
 import logging
+from pathlib import Path
 from crucible import BaseDataset
 
 logger = logging.getLogger(__name__)
@@ -29,9 +32,9 @@ class BaseParser:
         Initialize the parser with dataset properties.
 
         Args:
-            files_to_upload (list, optional): Files to upload
+            files_to_upload (str, list, or None): File(s) to upload. Can be a single file path (str) or list of file paths
             project_id (str, optional): Crucible project ID
-            metadata (dict, optional): Scientific metadata
+            metadata (dict or str, optional): Scientific metadata as dict or path to JSON file
             keywords (list, optional): Keywords for the dataset
             mfid (str, optional): Unique dataset identifier
             measurement (str, optional): Measurement type
@@ -49,9 +52,15 @@ class BaseParser:
         if instrument_name is None:
             instrument_name = self._instrument_name
 
+        # Handle files_to_upload - convert string to list if needed
+        if files_to_upload is None:
+            files_to_upload = []
+        elif isinstance(files_to_upload, str):
+            files_to_upload = [files_to_upload]
+
         # Dataset properties
         self.project_id      = project_id
-        self.files_to_upload = files_to_upload or []
+        self.files_to_upload = files_to_upload
         self.mfid            = mfid
         self.measurement     = measurement
         self.dataset_name    = dataset_name
@@ -62,8 +71,11 @@ class BaseParser:
         self.source_folder   = os.getcwd()
         self.thumbnail       = None
 
+        # Handle metadata - can be a dict or path to JSON file
+        metadata_dict = self._load_metadata(metadata)
+
         # Initialize with user-provided metadata/keywords
-        self.scientific_metadata = metadata or {}
+        self.scientific_metadata = metadata_dict or {}
         self.keywords = keywords or []
         self._client = None
 
@@ -101,16 +113,69 @@ class BaseParser:
         """
         pass  # BaseParser does nothing - generic upload
 
-    def add_metadata(self, metadata_dict):
+    @staticmethod
+    def _load_metadata(metadata):
+        """
+        Load metadata from dict or JSON file.
+
+        Args:
+            metadata (dict, str, or None): Metadata as dict, path to JSON file, or None
+
+        Returns:
+            dict or None: Loaded metadata dictionary
+
+        Raises:
+            FileNotFoundError: If metadata is a string but file doesn't exist
+            json.JSONDecodeError: If file exists but contains invalid JSON
+        """
+        if metadata is None:
+            return None
+
+        # If it's already a dict, return it
+        if isinstance(metadata, dict):
+            return metadata
+
+        # If it's a string, treat it as a file path
+        if isinstance(metadata, str):
+            metadata_path = Path(metadata)
+            if metadata_path.exists():
+                try:
+                    with open(metadata_path, 'r') as f:
+                        metadata_dict = json.load(f)
+                    logger.info(f"Loaded metadata from file: {metadata_path}")
+                    return metadata_dict
+                except json.JSONDecodeError as e:
+                    logger.error(f"Invalid JSON in metadata file {metadata_path}: {e}")
+                    raise
+                except Exception as e:
+                    logger.error(f"Error reading metadata file {metadata_path}: {e}")
+                    raise
+            else:
+                raise FileNotFoundError(f"Metadata file not found: {metadata_path}")
+
+        # If we get here, metadata is an unsupported type
+        raise TypeError(f"metadata must be a dict, str (path to JSON file), or None, got {type(metadata)}")
+
+    def add_metadata(self, metadata):
         """
         Merge additional metadata into parser's metadata.
 
         Args:
-            metadata_dict (dict): Metadata to merge. Updates existing values.
+            metadata (dict or str): Metadata to merge as dict or path to JSON file.
+                                   Updates existing values.
+
+        Raises:
+            FileNotFoundError: If metadata is a string but file doesn't exist
+            json.JSONDecodeError: If file exists but contains invalid JSON
+            TypeError: If metadata is neither dict nor str
         """
-        if self.scientific_metadata is None:
-            self.scientific_metadata = {}
-        self.scientific_metadata.update(metadata_dict)
+        # Load metadata (handles dict, file path, or None)
+        metadata_dict = self._load_metadata(metadata)
+
+        if metadata_dict is not None:
+            if self.scientific_metadata is None:
+                self.scientific_metadata = {}
+            self.scientific_metadata.update(metadata_dict)
 
     def add_keywords(self, keywords_list):
         """
@@ -126,6 +191,29 @@ class BaseParser:
             if kw not in existing:
                 self.keywords.append(kw)
                 existing.add(kw)
+
+    def add_thumbnail(self, image_path):
+        """
+        Add a thumbnail image to the dataset.
+
+        Args:
+            image_path (str or Path): Path to the thumbnail image file
+
+        Raises:
+            FileNotFoundError: If the image file doesn't exist
+
+        Note:
+            The thumbnail will be automatically uploaded when upload_dataset() is called.
+        """
+        image_path = Path(image_path)
+
+        # Validate file exists
+        if not image_path.exists():
+            raise FileNotFoundError(f"Thumbnail image not found: {image_path}")
+
+        # Set thumbnail path
+        self.thumbnail = str(image_path.absolute())
+        logger.info(f"Thumbnail set to: {self.thumbnail}")
 
     @property
     def client(self):
@@ -192,7 +280,13 @@ class BaseParser:
             wait_for_ingestion_response=wait_for_ingestion_response
         )
 
+        dataset_id = result['dsid']
+        logger.info(f"Dataset uploaded successfully: {dataset_id}")
+        logger.info(f"  Dataset name: {result['created_record'].get('dataset_name', 'N/A')}")
+        logger.info(f"  Project: {result['created_record'].get('project_id', 'N/A')}")
+
         if self.thumbnail is not None:
-            self.client.datasets.add_thumbnail(result['dsid'], self.thumbnail)
-        
+            self.client.datasets.add_thumbnail(dataset_id, self.thumbnail)
+            logger.info(f"  Thumbnail uploaded")
+
         return result

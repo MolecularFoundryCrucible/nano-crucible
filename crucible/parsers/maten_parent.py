@@ -1,6 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
+Created on Fri Feb 27 09:04:08 2026
+
+@author: roncofaber
+"""
+
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
 MatEnsemble LAMMPS Parser for Molecular Dynamics + Machine Learning datasets.
 
 Parses datasets from MatEnsemble project containing:
@@ -17,16 +25,17 @@ import logging
 import pickle
 from pathlib import Path
 from .base import BaseParser
+import socket
 
 logger = logging.getLogger(__name__)
 
 
-class MatEnsembleLmpParser(BaseParser):
-    """Parser for MatEnsemble LAMMPS MD-ML datasets."""
+class MatEnsembleParentParser(BaseParser):
+    """Parser for parent MatEnsemble datasets."""
 
-    _measurement = "MatEnsemble"
-    _data_format = "LAMMPS-MatEns"
-    _instrument_name = None
+    _measurement = "MatEnsemble parent"
+    _data_format = "MatEns"
+    _instrument_name = "MatEnsemble"
 
     def parse(self):
         """
