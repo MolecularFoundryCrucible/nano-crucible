@@ -9,6 +9,7 @@ Created on Tue Feb 10 17:22:34 2026
 from .base import BaseParser
 
 import os
+import socket
 import logging
 
 logger = logging.getLogger(__name__)
@@ -72,6 +73,33 @@ class LAMMPSParser(BaseParser):
         log_file_metadata = self.read_log_file(log_file)
         lmp_metadata.update(log_file_metadata)
         # Note: log file not added to upload list by default
+
+        # Add hostname to metadata
+        lmp_metadata["hostname"] = socket.gethostname()
+
+        # Save XYZ file if we have atoms structure
+        if ase_atoms is not None:
+            import tempfile
+            temp_dir = tempfile.gettempdir()
+            xyz_dir = os.path.join(temp_dir, 'crucible_xyz')
+            os.makedirs(xyz_dir, exist_ok=True)
+
+            # Use mfid if available, otherwise generate random name
+            if self.mfid:
+                xyz_filename = f'{self.mfid}.xyz'
+            else:
+                import random
+                import string
+                random_str = ''.join(random.choices(string.ascii_lowercase + string.digits, k=12))
+                xyz_filename = f'structure_{random_str}.xyz'
+
+            xyz_path = os.path.join(xyz_dir, xyz_filename)
+
+            # Write XYZ file using ASE
+            from ase.io import write
+            write(xyz_path, ase_atoms, format='xyz')
+            files_list.append(xyz_path)
+            logger.info(f"XYZ structure file saved: {xyz_path}")
 
         # Add any extra files provided by user
         if extra_files:
