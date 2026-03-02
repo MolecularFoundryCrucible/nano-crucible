@@ -449,31 +449,36 @@ class DatasetOperations(BaseResource):
         """
         return self._request('get', f'/datasets/{dsid}/thumbnails')
 
-    def add_thumbnail(self, dsid: str, file_path: str, thumbnail_name: Optional[str] = None) -> Dict:
+    def add_thumbnail(self, dsid: str, image, thumbnail_name: Optional[str] = None) -> Dict:
         """Add a thumbnail to a dataset.
 
         Args:
             dsid (str): Dataset unique identifier
-            file_path (str): Path to image file
-            thumbnail_name (str, optional): Display name (uses filename if not provided)
+            image: Image to use as thumbnail. Accepts:
+                - str or Path: path to an image file
+                - PIL.Image.Image: PIL image object
+                - matplotlib.figure.Figure: matplotlib figure
+                - numpy.ndarray: array of shape (H, W) or (H, W, C)
+            thumbnail_name (str, optional): Display name. Defaults to the filename
+                for file paths, or the dataset ID for in-memory objects.
 
         Returns:
             Dict: Created thumbnail object
         """
         import base64
+        from ..utils import data2thumbnail
 
-        # Read file and encode to base64
-        with open(file_path, 'rb') as f:
-            file_content = f.read()
-            thumbnail_b64str = base64.b64encode(file_content).decode('utf-8')
+        png_path = data2thumbnail(image)
 
-        # Use filename if no thumbnail_name provided
         if thumbnail_name is None:
-            thumbnail_name = os.path.basename(file_path)
+            thumbnail_name = os.path.basename(png_path)
+
+        with open(png_path, 'rb') as f:
+            thumbnail_b64str = base64.b64encode(f.read()).decode('utf-8')
 
         thumbnail_data = {
             'thumbnail_name': thumbnail_name,
-            'thumbnail_b64str': thumbnail_b64str
+            'thumbnail_b64str': thumbnail_b64str,
         }
         return self._request('post', f'/datasets/{dsid}/thumbnails', json=thumbnail_data)
 

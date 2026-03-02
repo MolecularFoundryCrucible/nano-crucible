@@ -77,6 +77,75 @@ def check_small_files(filelist):
     return True
 
 
+def data2thumbnail(image) -> str:
+    """Convert an image object to a path to a PNG file.
+
+    For file paths the input is returned as-is. For in-memory objects
+    (PIL, matplotlib, numpy) the image is written to a temporary file.
+
+    Args:
+        image: Image source. Accepts:
+            - str or os.PathLike: path to an existing image file
+            - PIL.Image.Image: PIL image object
+            - matplotlib.figure.Figure: matplotlib figure
+            - numpy.ndarray: array of shape (H, W) or (H, W, C)
+
+    Returns:
+        str: Absolute path to a PNG file
+
+    Raises:
+        FileNotFoundError: If image is a path but the file does not exist
+        TypeError: If image type is not supported
+    """
+    import tempfile
+    import uuid
+
+    # Case 1: file path — return as-is after validating existence
+    if isinstance(image, (str, os.PathLike)):
+        path = os.path.abspath(image)
+        if not os.path.exists(path):
+            raise FileNotFoundError(f"Thumbnail image not found: {path}")
+        return path
+
+    # In-memory objects: write to a temp PNG file
+    thumbnail_dir = os.path.join(tempfile.gettempdir(), 'crucible_thumbnails')
+    os.makedirs(thumbnail_dir, exist_ok=True)
+    thumbnail_path = os.path.join(thumbnail_dir, f'{uuid.uuid4().hex}.png')
+
+    # Case 2: PIL Image
+    try:
+        from PIL import Image as PILImage
+        if isinstance(image, PILImage.Image):
+            image.save(thumbnail_path, format='PNG')
+            return thumbnail_path
+    except ImportError:
+        pass
+
+    # Case 3: matplotlib Figure
+    try:
+        from matplotlib.figure import Figure
+        if isinstance(image, Figure):
+            image.savefig(thumbnail_path, format='png', bbox_inches='tight', dpi=150)
+            return thumbnail_path
+    except ImportError:
+        pass
+
+    # Case 4: numpy array — convert via PIL
+    try:
+        import numpy as np
+        if isinstance(image, np.ndarray):
+            from PIL import Image as PILImage
+            PILImage.fromarray(image).save(thumbnail_path, format='PNG')
+            return thumbnail_path
+    except ImportError:
+        pass
+
+    raise TypeError(
+        f"Unsupported thumbnail type: {type(image)}. "
+        f"Supported types: str, Path, PIL.Image, matplotlib.Figure, numpy.ndarray"
+    )
+
+
 
 
 

@@ -7,7 +7,6 @@ Created on Tue Feb 10 17:45:48 2026
 """
 
 import os
-import socket
 import json
 import logging
 from pathlib import Path
@@ -194,94 +193,26 @@ class BaseParser:
 
     def add_thumbnail(self, image):
         """
-        Add a thumbnail image to the dataset.
+        Set the dataset thumbnail.
+
+        Conversion and upload are handled by client.datasets.add_thumbnail()
+        when upload_dataset() is called, so any supported image type can be
+        stored here and will be processed at upload time.
 
         Args:
-            image: Can be:
-                - str or Path: Path to an image file
-                - PIL.Image: PIL Image object
-                - matplotlib.figure.Figure: Matplotlib figure
-                - numpy.ndarray: Numpy array (will be saved as PNG)
+            image: Image to use as thumbnail. Accepts:
+                - str or Path: path to an image file
+                - PIL.Image.Image: PIL image object
+                - matplotlib.figure.Figure: matplotlib figure
+                - numpy.ndarray: array of shape (H, W) or (H, W, C)
 
         Raises:
-            FileNotFoundError: If image is a path but file doesn't exist
-            TypeError: If image type is not supported
-
-        Note:
-            The thumbnail will be automatically uploaded when upload_dataset() is called.
-            Image objects (PIL, matplotlib, numpy) are saved to a temporary directory.
+            FileNotFoundError: If image is a path but the file does not exist
         """
-        # Case 1: File path (str or Path)
-        if isinstance(image, (str, Path)):
-            image_path = Path(image)
-
-            # Validate file exists
-            if not image_path.exists():
-                raise FileNotFoundError(f"Thumbnail image not found: {image_path}")
-
-            # Set thumbnail path
-            self.thumbnail = str(image_path.absolute())
-            logger.info(f"Thumbnail set to: {self.thumbnail}")
-            return
-
-        # Case 2: Image object - need to save to temporary directory
-        import tempfile
-        import random
-        import string
-
-        # Use system temp directory (platform-independent)
-        temp_dir = tempfile.gettempdir()
-        thumbnail_dir = os.path.join(temp_dir, 'crucible_thumbnails')
-        os.makedirs(thumbnail_dir, exist_ok=True)
-
-        # Use mfid if available, otherwise generate random name
-        if self.mfid:
-            filename = f'{self.mfid}.png'
-        else:
-            random_str = ''.join(random.choices(string.ascii_lowercase + string.digits, k=12))
-            filename = f'thumbnail_{random_str}.png'
-
-        thumbnail_path = os.path.join(thumbnail_dir, filename)
-
-        # Try PIL Image
-        try:
-            from PIL import Image as PILImage
-            if isinstance(image, PILImage.Image):
-                image.save(thumbnail_path, format='PNG')
-                self.thumbnail = thumbnail_path
-                logger.info(f"PIL Image saved as thumbnail: {thumbnail_path}")
-                return
-        except ImportError:
-            pass
-
-        # Try matplotlib Figure
-        try:
-            from matplotlib.figure import Figure
-            if isinstance(image, Figure):
-                image.savefig(thumbnail_path, format='png', bbox_inches='tight', dpi=150)
-                self.thumbnail = thumbnail_path
-                logger.info(f"Matplotlib Figure saved as thumbnail: {thumbnail_path}")
-                return
-        except ImportError:
-            pass
-
-        # Try numpy array
-        try:
-            import numpy as np
-            if isinstance(image, np.ndarray):
-                from PIL import Image as PILImage
-                # Assume array is in format (H, W) or (H, W, C)
-                pil_image = PILImage.fromarray(image)
-                pil_image.save(thumbnail_path, format='PNG')
-                self.thumbnail = thumbnail_path
-                logger.info(f"Numpy array saved as thumbnail: {thumbnail_path}")
-                return
-        except ImportError:
-            pass
-
-        # If we get here, unsupported type
-        raise TypeError(f"Unsupported thumbnail type: {type(image)}. "
-                       f"Supported types: str, Path, PIL.Image, matplotlib.Figure, numpy.ndarray")
+        if isinstance(image, (str, Path)) and not Path(image).exists():
+            raise FileNotFoundError(f"Thumbnail image not found: {image}")
+        self.thumbnail = image
+        logger.info(f"Thumbnail set: {type(image).__name__}")
 
     @property
     def client(self):
