@@ -1,7 +1,7 @@
 """
 Crucible Configuration Module
 
-Provides configuration management for pycrucible API access.
+Provides configuration management for nano-crucible API access.
 """
 
 from .config import (

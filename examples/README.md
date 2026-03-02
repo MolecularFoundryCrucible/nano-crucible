@@ -24,7 +24,7 @@ The main tutorial demonstrates all core dataset and sample operations:
 
 1. **Setup and Configuration** - Initializing the Crucible client
 2. **Creating Samples** - Creating sample records in Crucible
-3. **Creating Datasets** - Creating datasets with and without files
+3. **Creating Datasets** - Creating metadata-only datasets and uploading files via parsers
 4. **Listing Datasets** - Retrieving datasets from a project
 5. **Getting Dataset Details** - Retrieving dataset metadata
 6. **Updating Dataset Metadata** - Modifying scientific metadata
@@ -110,6 +110,7 @@ jupyter lab
 - All example data files are located in the `data/` subdirectory
 - The notebooks create new resources (samples, datasets, projects, users) in Crucible when executed
 - Resource IDs are displayed for reference - you can use `crucible open <ID>` to view them in your browser
+- File uploads use parsers (`BaseParser` by default) — swap in a domain-specific parser (e.g. `LAMMPSParser`) for automatic metadata extraction
 - If running in VSCode Flatpak, you may need to set the API key as an environment variable (see notebook for details)
 
 ## Example Data Details

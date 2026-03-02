@@ -30,7 +30,7 @@ SubclassParser.parse()
 
 ### Step 1: Create Your Parser Class
 
-Create a new file in `pycrucible/parsers/` (e.g., `xrd.py`):
+Create a new file in `crucible/parsers/` (e.g., `xrd.py`):
 
 ```python
 #!/usr/bin/env python3
@@ -110,7 +110,7 @@ class XRDParser(BaseParser):
 
 ### Step 2: Register Your Parser
 
-Edit `pycrucible/parsers/__init__.py`:
+Edit `crucible/parsers/__init__.py`:
 
 ```python
 from .base import BaseParser
@@ -338,6 +338,7 @@ crucible upload -i sample.xrd -t xrd -pid my-project -u --public
 
 - **BaseParser** (`base`) - Generic upload, no parsing
 - **LAMMPSParser** (`lammps`) - LAMMPS molecular dynamics simulations
+- **MatEnsembleLmpParser** (`matensemble`) - MatEnsemble MD-ML datasets (LAMMPS + bispectrum)
 
 ## References
 

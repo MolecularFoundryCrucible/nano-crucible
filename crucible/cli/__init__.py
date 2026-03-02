@@ -4,7 +4,7 @@
 Crucible CLI - Unified command-line interface for Crucible operations.
 
 Available subcommands:
-    config      Manage pycrucible configuration
+    config      Manage crucible configuration
     upload      Parse and upload datasets to Crucible
     open        Open resources in Crucible Graph Explorer
     link        Link resources (datasets, samples)

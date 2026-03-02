@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Config subcommand for managing pycrucible configuration.
+Config subcommand for managing crucible configuration.
 
 Manages API keys, URLs, cache directories, and ORCID IDs.
 """
@@ -16,8 +16,8 @@ def register_subcommand(subparsers):
     """Register the config subcommand."""
     parser = subparsers.add_parser(
         'config',
-        help='Manage pycrucible configuration',
-        description='View and modify pycrucible configuration settings',
+        help='Manage crucible configuration',
+        description='View and modify crucible configuration settings',
         formatter_class=lambda prog: __import__('argparse').RawDescriptionHelpFormatter(prog, max_help_position=35),
         epilog="""
 Examples:
@@ -49,7 +49,7 @@ Configuration keys:
 
 Priority order (highest to lowest):
     1. Environment variables (CRUCIBLE_API_KEY, CRUCIBLE_API_URL, etc.)
-    2. Config file (~/.config/pycrucible/config.ini)
+    2. Config file (~/.config/nano-crucible/config.ini)
     3. Defaults
 """
     )
@@ -130,7 +130,7 @@ def cmd_init(args):
     from crucible.config import create_config_file, config
 
     print("=== Crucible Configuration Setup ===\n")
-    print("This wizard will help you configure pycrucible.\n")
+    print("This wizard will help you configure nano-crucible.\n")
 
     # Check if config exists
     config_file = config.config_file_path
@@ -239,7 +239,7 @@ def cmd_show(args):
     env_overrides = {
         'CRUCIBLE_API_KEY': os.environ.get('CRUCIBLE_API_KEY'),
         'CRUCIBLE_API_URL': os.environ.get('CRUCIBLE_API_URL'),
-        'PYCRUCIBLE_CACHE_DIR': os.environ.get('PYCRUCIBLE_CACHE_DIR'),
+        'CRUCIBLE_CACHE_DIR': os.environ.get('CRUCIBLE_CACHE_DIR'),
         'CRUCIBLE_GRAPH_EXPLORER_URL': os.environ.get('CRUCIBLE_GRAPH_EXPLORER_URL'),
         'CRUCIBLE_CURRENT_PROJECT': os.environ.get('CRUCIBLE_CURRENT_PROJECT'),
     }

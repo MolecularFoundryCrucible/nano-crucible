@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Enable running the CLI via: python -m pycrucible.cli
+Enable running the CLI via: python -m crucible.cli
 """
 
 from . import main

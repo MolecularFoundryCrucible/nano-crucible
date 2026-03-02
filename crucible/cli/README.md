@@ -542,5 +542,5 @@ crucible config --help
 ## Documentation
 
 - **Parser Development**: See `../parsers/README.md` for creating custom parsers
-- **Configuration**: Stored in `~/.config/pycrucible/config.ini`
-- **Cache**: Stored in `~/.cache/pycrucible/`
+- **Configuration**: Stored in `~/.config/nano-crucible/config.ini`
+- **Cache**: Stored in `~/.cache/nano-crucible/`
