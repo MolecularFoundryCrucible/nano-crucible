@@ -9,6 +9,7 @@ Created on Tue Feb 10 17:45:48 2026
 import os
 import json
 import logging
+import socket
 from pathlib import Path
 from crucible import BaseDataset
 
@@ -80,6 +81,9 @@ class BaseParser:
 
         # Call parser-specific extraction (Template Method Pattern)
         self.parse()
+
+        # Always record the hostname, unless the subclass already set it
+        self.scientific_metadata.setdefault("hostname", socket.gethostname())
 
         return
 

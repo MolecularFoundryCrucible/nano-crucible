@@ -338,7 +338,8 @@ crucible upload -i sample.xrd -t xrd -pid my-project -u --public
 
 - **BaseParser** (`base`) - Generic upload, no parsing
 - **LAMMPSParser** (`lammps`) - LAMMPS molecular dynamics simulations
-- **MatEnsembleLmpParser** (`matensemble`) - MatEnsemble MD-ML datasets (LAMMPS + bispectrum)
+- **MatEnsembleManagerParser** (`matensemble-manager`) - MatEnsemble root simulation setup (shared input files, initial structure)
+- **MatEnsembleRunParser** (`matensemble-run`) - Individual MatEnsemble run directory (one point in parameter space)
 
 ## References
 
