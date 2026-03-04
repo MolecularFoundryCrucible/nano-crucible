@@ -34,7 +34,7 @@ class BaseParser:
         Args:
             files_to_upload (str, list, or None): File(s) to upload. Can be a single file path (str) or list of file paths
             project_id (str, optional): Crucible project ID
-            metadata (dict or str, optional): Scientific metadata as dict or path to JSON file
+            metadata (dict, str, or Path, optional): Scientific metadata as dict or path to JSON file
             keywords (list, optional): Keywords for the dataset
             mfid (str, optional): Unique dataset identifier
             measurement (str, optional): Measurement type
@@ -122,13 +122,13 @@ class BaseParser:
         Load metadata from dict or JSON file.
 
         Args:
-            metadata (dict, str, or None): Metadata as dict, path to JSON file, or None
+            metadata (dict, str, Path, or None): Metadata as dict, path to JSON file, or None
 
         Returns:
             dict or None: Loaded metadata dictionary
 
         Raises:
-            FileNotFoundError: If metadata is a string but file doesn't exist
+            FileNotFoundError: If metadata is a path but file doesn't exist
             json.JSONDecodeError: If file exists but contains invalid JSON
         """
         if metadata is None:
@@ -138,8 +138,8 @@ class BaseParser:
         if isinstance(metadata, dict):
             return metadata
 
-        # If it's a string, treat it as a file path
-        if isinstance(metadata, str):
+        # If it's a string or Path, treat it as a file path
+        if isinstance(metadata, (str, Path)):
             metadata_path = Path(metadata)
             if metadata_path.exists():
                 try:
@@ -157,15 +157,15 @@ class BaseParser:
                 raise FileNotFoundError(f"Metadata file not found: {metadata_path}")
 
         # If we get here, metadata is an unsupported type
-        raise TypeError(f"metadata must be a dict, str (path to JSON file), or None, got {type(metadata)}")
+        raise TypeError(f"metadata must be a dict, str/Path (path to JSON file), or None, got {type(metadata)}")
 
     def add_metadata(self, metadata):
         """
         Merge additional metadata into parser's metadata.
 
         Args:
-            metadata (dict or str): Metadata to merge as dict or path to JSON file.
-                                   Updates existing values.
+            metadata (dict, str, or Path): Metadata to merge as dict or path to JSON file.
+                                           Updates existing values.
 
         Raises:
             FileNotFoundError: If metadata is a string but file doesn't exist
