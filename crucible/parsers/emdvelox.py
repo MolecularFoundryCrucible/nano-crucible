@@ -29,11 +29,11 @@ class EMDVeloxParser(BaseParser):
             raise FileNotFoundError(f"File not found: {input_file}")
 
         # Read input file using ncempy 
-        ncempy_datafile = emdVelox.fileEMDVelox(input_file)
+        ncempy_datafile = emdVelox.fileEMDVeloxWithSpectra(input_file)
 
         # custom attribute: measurement_scientific_metadata
-        # self.measurement_scientific_metadata = [ncempy_datafile.getMetadata(d) for d in ncempy_datafile.list_data] <- revert when ncempy version is updated
-        self.measurement_scientific_metadata = [ncempy_datafile.parseMetaData(d) for d in ncempy_datafile.list_data]
+        self.measurement_scientific_metadata = [ncempy_datafile.getMetadata(d) for d in ncempy_datafile.list_data] #<- revert when ncempy version is updated
+        # self.measurement_scientific_metadata = [ncempy_datafile.parseMetaData(d) for d in ncempy_datafile.list_data]
 
     def upload_dataset(self, ingestor='ApiUploadIngestor', verbose=False, wait_for_ingestion_response=True):
         upload_file = False # for testing purposes 
@@ -52,19 +52,21 @@ class EMDVeloxParser(BaseParser):
 
         # create & upload a dataset for each measurement
         for md in self.measurement_scientific_metadata: 
-            detector = md['detectorName'] or "" # testing: using parseMetadata instead of getMetadata
-            # detector = md['Detector'] # only works if BinaryResult is unpacked. <- revert when ncempy version is updated
+            # detector = md['detectorName'] or "" # testing: using parseMetadata instead of getMetadata
+            detector = md['Detector'] # only works if BinaryResult is unpacked. <- revert when ncempy version is updated
+            measurement_field = md['General']['groupType'] if 'groupType' in  md['General'] else "" # TODO: VERIFY (STEM, TEM, EDS)
+            dataset_name = md['General']['title'] if 'title' in  md['General'] else "" # TODO: VERIFY, prev (detector)
 
             # create dataset
             measurement_ds = BaseDataset(
                 # unique_id      = self.mfid, # need a new id for each measurement ds?
-                measurement    = self.measurement, # how to determine this?
+                measurement    = measurement_field, 
                 project_id     = self.project_id,
                 owner_orcid    = None,  # API key handles user authentication
-                dataset_name   = (self.dataset_name or "") + f"({detector})",
+                dataset_name   = (self.dataset_name or "") + dataset_name + f"({detector})", # TODO: use metadata.title
                 session_name   = self.session_name,
                 public         = self.public,
-                instrument_name = self.instrument_name,
+                instrument_name = self.instrument_name, # TODO: include detector here? 
                 data_format    = self.data_format,
                 source_folder  = self.source_folder,
                 # file_to_upload = self.files_to_upload[0] <- INCLUDE if upload_file
@@ -74,7 +76,7 @@ class EMDVeloxParser(BaseParser):
             
             # pre-processing: remove AcquisitionTime from metadata <- remove when ncempy version is updated
             md_to_upload = md
-            del md_to_upload["AcquisitionTime"] # DateTime is not JSON serializable
+            # del md_to_upload["AcquisitionTime"] # DateTime is not JSON serializable
             
             if upload_file: 
                 measurement_upload_result = self.client.create_new_dataset_from_files(
