@@ -11,6 +11,7 @@ Available parsers:
 from .base import BaseParser
 from .lammps import LAMMPSParser
 from .matensemble import MatEnsembleLmpParser
+from .emdvelox import EMDVeloxParser
 
 # Registry mapping dataset type names to parser classes
 # All keys should be lowercase
@@ -18,6 +19,7 @@ PARSER_REGISTRY = {
     'base': BaseParser,
     'lammps': LAMMPSParser,
     'matensemble': MatEnsembleLmpParser,
+    'emdvelox': EMDVeloxParser
 }
 
 def get_parser(dataset_type):
@@ -45,4 +47,4 @@ def get_parser(dataset_type):
         )
     return parser_class
 
-__all__ = ['BaseParser', 'LAMMPSParser', 'MatEnsembleLmpParser', 'PARSER_REGISTRY', 'get_parser']
+__all__ = ['BaseParser', 'LAMMPSParser', 'MatEnsembleLmpParser', 'EMDVeloxParser', 'PARSER_REGISTRY', 'get_parser']
