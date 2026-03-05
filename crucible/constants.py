@@ -1,3 +1,7 @@
+# API request defaults
+DEFAULT_TIMEOUT = 10  # seconds
+DEFAULT_LIMIT = 100   # maximum results to return
+
 AVAILABLE_INGESTORS = [
     'ApiUploadIngestor',
     'AFMIngestor',
