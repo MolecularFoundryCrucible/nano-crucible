@@ -3,51 +3,72 @@
 """
 Parsers for various data formats to upload to Crucible.
 
-Available parsers:
+Built-in parsers:
+    - BaseParser:   Generic upload, no parsing
     - LAMMPSParser: Parse LAMMPS molecular dynamics simulations
-    - MatEnsembleManagerParser: Parse MatEnsemble root simulation setup
-    - MatEnsembleRunParser: Parse individual MatEnsemble run directories
+
+Additional parsers can be made available by installing third-party packages
+that register them under the ``crucible.parsers`` entry-point group::
+
+    [project.entry-points."crucible.parsers"]
+    myparser = "mypackage.mymodule:MyParserClass"
 """
 
 from .base import BaseParser
 from .lammps import LAMMPSParser
-from .maten_manager import MatEnsembleManagerParser
-from .maten_run import MatEnsembleRunParser
 
-# Registry mapping dataset type names to parser classes
-# All keys should be lowercase
+# Built-in parser registry (lowercase keys)
 PARSER_REGISTRY = {
-    'base': BaseParser,
+    'base':   BaseParser,
     'lammps': LAMMPSParser,
-    'matensemble-manager': MatEnsembleManagerParser,
-    'matensemble-run': MatEnsembleRunParser,
 }
 
 def get_parser(dataset_type):
     """
     Get the appropriate parser class for a given dataset type.
 
+    Checks the built-in registry first, then discovers parsers registered
+    by third-party packages via the ``crucible.parsers`` entry-point group.
+    Installing a package that declares::
+
+        [project.entry-points."crucible.parsers"]
+        myparser = "mypackage.mymodule:MyParserClass"
+
+    makes ``get_parser('myparser')`` available automatically.
+
     Args:
-        dataset_type (str): The type of dataset (e.g., 'lammps', 'LAMMPS', 'xrd')
-                           Case-insensitive.
+        dataset_type (str): The type of dataset (e.g., 'lammps', 'xrd').
+                            Case-insensitive.
 
     Returns:
-        class: The parser class for that dataset type
+        class: The parser class for that dataset type.
 
     Raises:
-        ValueError: If dataset_type is not supported
+        ValueError: If dataset_type is not found in the built-in registry
+                    or any installed entry points.
     """
-    # Normalize to lowercase for case-insensitive lookup
     dataset_type_lower = dataset_type.lower()
-    parser_class = PARSER_REGISTRY.get(dataset_type_lower)
-    if parser_class is None:
-        available = ', '.join(sorted(PARSER_REGISTRY.keys()))
-        raise ValueError(
-            f"Unknown dataset type '{dataset_type}'. "
-            f"Available types: {available}"
-        )
-    return parser_class
 
-__all__ = ['BaseParser', 'LAMMPSParser',
-           'MatEnsembleManagerParser', 'MatEnsembleRunParser',
-           'PARSER_REGISTRY', 'get_parser']
+    # 1. Check built-in registry
+    if dataset_type_lower in PARSER_REGISTRY:
+        return PARSER_REGISTRY[dataset_type_lower]
+
+    # 2. Discover parsers from installed packages
+    try:
+        from importlib.metadata import entry_points
+        eps = entry_points(group="crucible.parsers")
+        for ep in eps:
+            if ep.name.lower() == dataset_type_lower:
+                return ep.load()
+    except Exception:
+        pass
+
+    available = ', '.join(sorted(PARSER_REGISTRY.keys()))
+    raise ValueError(
+        f"Unknown dataset type '{dataset_type}'. "
+        f"Built-in types: {available}. "
+        f"Additional parsers can be installed via third-party packages."
+    )
+
+
+__all__ = ['BaseParser', 'LAMMPSParser', 'PARSER_REGISTRY', 'get_parser']

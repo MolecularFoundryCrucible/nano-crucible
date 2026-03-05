@@ -336,10 +336,18 @@ crucible upload -i sample.xrd -t xrd -pid my-project -u --public
 
 ## Available Parsers
 
+### Built-in
 - **BaseParser** (`base`) - Generic upload, no parsing
 - **LAMMPSParser** (`lammps`) - LAMMPS molecular dynamics simulations
-- **MatEnsembleManagerParser** (`matensemble-manager`) - MatEnsemble root simulation setup (shared input files, initial structure)
-- **MatEnsembleRunParser** (`matensemble-run`) - Individual MatEnsemble run directory (one point in parameter space)
+
+### Third-party (installed separately)
+
+Additional parsers can be installed via packages that register themselves
+under the `crucible.parsers` entry-point group. Once installed, they are
+automatically discovered by `get_parser()` — no code change needed.
+
+See [crucible-parsers](https://github.com/MolecularFoundryCrucible/crucible-parsers)
+for community-developed parsers under active development.
 
 ## References
 
