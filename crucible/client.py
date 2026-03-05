@@ -10,11 +10,27 @@ import time
 import requests
 import json
 import logging
+import warnings
+import functools
 from typing import Optional, List, Dict, Any, Union
 from .models import BaseDataset, Project
 from .constants import DEFAULT_TIMEOUT, DEFAULT_LIMIT
 
 logger = logging.getLogger(__name__)
+
+def _deprecated(new_api: str):
+    """Decorator that emits a DeprecationWarning pointing to the new API."""
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            warnings.warn(
+                f"{func.__name__}() is deprecated; use {new_api} instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            return func(*args, **kwargs)
+        return wrapper
+    return decorator
 
 #%%
 
@@ -238,27 +254,33 @@ class CrucibleClient:
             )
     
     #%% PROJECT METHODS (DEPRECATED)
-    
+
+    @_deprecated("client.projects.create()")
     def create_project(self, project: Union[Project, Dict]) -> Dict:
         """Backward compatible: Use client.projects.create() instead."""
         return self.projects.create(project)
 
+    @_deprecated("client.projects.get()")
     def get_project(self, project_id: str) -> Dict:
         """Backward compatible: Use client.projects.get() instead."""
         return self.projects.get(project_id)
 
+    @_deprecated("client.projects.list()")
     def list_projects(self, orcid: str = None, limit: int = DEFAULT_LIMIT) -> List[Dict]:
         """Backward compatible: Use client.projects.list() instead."""
         return self.projects.list(orcid=orcid, limit=limit)
 
+    @_deprecated("client.projects.get_users()")
     def get_project_users(self, project_id: str, limit: int = DEFAULT_LIMIT) -> List[Dict]:
         """Backward compatible: Use client.projects.get_users() instead."""
         return self.projects.get_users(project_id, limit=limit)
 
+    @_deprecated("client.projects.add_user()")
     def add_user_to_project(self, orcid, project_id):
         """Backward compatible: Use client.projects.add_user() instead."""
         return self.projects.add_user(orcid, project_id)
     
+    @_deprecated("client.projects.get_or_create()")
     def get_or_add_project(self, project_id, get_project_info_function = None, **kwargs):
         """Backward compatible: Use client.projects.get_or_create() instead."""
         if get_project_info_function is None:
@@ -267,23 +289,28 @@ class CrucibleClient:
         return self.projects.get_or_create(project_id, get_project_info_function=get_project_info_function, **kwargs)
     
     #%% SAMPLE METHODS (DEPRECATED)
-    
+
+    @_deprecated("client.samples.get()")
     def get_sample(self, sample_id: str) -> Dict:
         """Backward compatible: Use client.samples.get() instead."""
         return self.samples.get(sample_id)
     
+    @_deprecated("client.samples.list_parents()")
     def list_parents_of_sample(self, sample_id, limit = DEFAULT_LIMIT, **kwargs)-> List[Dict]:
         """Backward compatible: Use client.samples.list_parents() instead."""
         return self.samples.list_parents(sample_id, limit=limit, **kwargs)
     
+    @_deprecated("client.samples.list_children()")
     def list_children_of_sample(self, sample_id, limit = DEFAULT_LIMIT, **kwargs)-> List[Dict]:
         """Backward compatible: Use client.samples.list_children() instead."""
         return self.samples.list_children(sample_id, limit=limit, **kwargs)
     
+    @_deprecated("client.samples.list()")
     def list_samples(self, dataset_id: str = None, parent_id: str = None, limit: int = DEFAULT_LIMIT, **kwargs) -> List[Dict]:
         """Backward compatible: Use client.samples.list() instead."""
         return self.samples.list(dataset_id=dataset_id, parent_id=parent_id, limit=limit, **kwargs)
         
+    @_deprecated("client.samples.update()")
     def update_sample(self, unique_id: str = None, sample_name: str = None, description: str = None,
                    creation_date: str = None, owner_orcid: str = None, owner_id: int = None,
                    project_id: str = None, sample_type: str = None,
@@ -295,6 +322,7 @@ class CrucibleClient:
                                    project_id=project_id, sample_type=sample_type,
                                    parents=parents, children=children)
 
+    @_deprecated("client.samples.create()")
     def add_sample(self, unique_id: str = None, sample_name: str = None, description: str = None,
                    creation_date: str = None, owner_orcid: str = None, owner_id: int = None,
                    project_id: str = None, sample_type: str = None,
@@ -306,11 +334,13 @@ class CrucibleClient:
                                    project_id=project_id, sample_type=sample_type,
                                    parents=parents, children=children)
     
+    @_deprecated("client.samples.remove_from_dataset()")
     def remove_sample_from_dataset(self, dataset_id: str, sample_id: str) -> Dict:
         """Backward compatible: Use client.samples.remove_from_dataset() instead."""
         return self.samples.remove_from_dataset(dataset_id, sample_id)
     
 
+    @_deprecated("client.samples.add_to_dataset()")
     def add_sample_to_dataset(self, dataset_id: str, sample_id: str) -> Dict:
         """Backward compatible: Use client.samples.add_to_dataset() instead."""
         return self.samples.add_to_dataset(dataset_id, sample_id)
@@ -319,16 +349,19 @@ class CrucibleClient:
     add_dataset_to_sample = add_sample_to_dataset
     remove_dataset_from_sample = remove_sample_from_dataset
 
+    @_deprecated("client.samples.link()")
     def link_samples(self, parent_id: str, child_id: str):
         """Backward compatible: Use client.samples.link() instead."""
         return self.samples.link(parent_id, child_id)
     
     #%% DATASET METHODS (DEPRECATED)
 
+    @_deprecated("client.datasets.get()")
     def get_dataset(self, dsid: str, include_metadata: bool = False) -> Dict:
         """Backward compatible: Use client.datasets.get() instead."""
         return self.datasets.get(dsid, include_metadata=include_metadata)
     
+    @_deprecated("client.datasets.create()")
     def create_new_dataset(self,
                             dataset: BaseDataset,
                             scientific_metadata: Optional[dict] = {},
@@ -342,6 +375,7 @@ class CrucibleClient:
                                    get_user_info_function=get_user_info_function,
                                    verbose=verbose)
 
+    @_deprecated("client.datasets.create()")
     def create_new_dataset_from_files(self,
                                      dataset: BaseDataset,
                                      files_to_upload: List[str],
@@ -361,35 +395,42 @@ class CrucibleClient:
                                    ingestor=ingestor,
                                    wait_for_ingestion_response=wait_for_ingestion_response)
     
+    @_deprecated("client.datasets.list_children()")
     def list_children_of_dataset(self, parent_dataset_id: str, limit = DEFAULT_LIMIT, **kwargs) -> List[Dict]:
         """Backward compatible: Use client.datasets.list_children() instead."""
         return self.datasets.list_children(parent_dataset_id, limit=limit, **kwargs)
 
 
+    @_deprecated("client.datasets.list_parents()")
     def list_parents_of_dataset(self, child_dataset_id: str, limit = DEFAULT_LIMIT, **kwargs) -> List[Dict]:
         """Backward compatible: Use client.datasets.list_parents() instead."""
         return self.datasets.list_parents(child_dataset_id, limit=limit, **kwargs)
     
+    @_deprecated("client.datasets.list()")
     def list_datasets(self, sample_id: Optional[str] = None, include_metadata: bool = False,
                      limit: int = DEFAULT_LIMIT, **kwargs) -> List[Dict]:
         """Backward compatible: Use client.datasets.list() instead."""
         return self.datasets.list(sample_id=sample_id, include_metadata=include_metadata,
                                  limit=limit, **kwargs)
 
+    @_deprecated("client.datasets.update()")
     def update_dataset(self, dsid: str, **updates) -> Dict:
         """Backward compatible: Use client.datasets.update() instead."""
         return self.datasets.update(dsid, **updates)
 
 
+    @_deprecated("client.datasets.upload_file()")
     def upload_dataset_file(self, dsid: str, file_path: str, verbose=True) -> Dict:
         """Backward compatible: Use client.datasets.upload_file() instead."""
         return self.datasets.upload_file(dsid, file_path, verbose=verbose)
 
 
+    @_deprecated("client.datasets.get_download_links()")
     def get_dataset_download_links(self, dsid: str):
         """Backward compatible: Use client.datasets.get_download_links() instead."""
         return self.datasets.get_download_links(dsid)
 
+    @_deprecated("client.datasets.download()")
     def download_dataset(self, dsid: str, file_name: Optional[str] = None,
                         output_dir: Optional[str] = 'crucible-downloads',
                         overwrite_existing: bool = True) -> List[str]:
@@ -398,6 +439,7 @@ class CrucibleClient:
                                      output_dir=output_dir,
                                      overwrite_existing=overwrite_existing)
         
+    @_deprecated("client.datasets.request_ingestion()")
     def request_ingestion(self, dsid: str, file_to_upload: Optional[str] = None,
                          ingestion_class: Optional[str] = None,
                          wait_for_response: bool = False) -> Dict:
@@ -406,104 +448,128 @@ class CrucibleClient:
                                               ingestion_class=ingestion_class,
                                               wait_for_response=wait_for_response)
 
+    @_deprecated("client.datasets.request_scicat_upload()")
     def request_scicat_upload(self, dsid: str, wait_for_response: bool = False, overwrite_data: bool = False) -> Dict:
         """Backward compatible: Use client.datasets.request_scicat_upload() instead."""
         return self.datasets.request_scicat_upload(dsid, wait_for_response=wait_for_response, overwrite_data=overwrite_data)
 
+    @_deprecated("client.datasets.get_access_groups()")
     def get_dataset_access_groups(self, dsid: str) -> List[str]:
         """Backward compatible: Use client.datasets.get_access_groups() instead."""
         return self.datasets.get_access_groups(dsid)
 
+    @_deprecated("client.datasets.get_scientific_metadata()")
     def get_scientific_metadata(self, dsid: str) -> Dict:
         """Backward compatible: Use client.datasets.get_scientific_metadata() instead."""
         return self.datasets.get_scientific_metadata(dsid)
 
+    @_deprecated("client.datasets.update_scientific_metadata()")
     def update_scientific_metadata(self, dsid: str, metadata: Dict, overwrite = False) -> Dict:
         """Backward compatible: Use client.datasets.update_scientific_metadata() instead."""
         return self.datasets.update_scientific_metadata(dsid, metadata, overwrite=overwrite)
 
+    @_deprecated("client.datasets.get_thumbnails()")
     def get_thumbnails(self, dsid: str, limit: int = DEFAULT_LIMIT) -> List[Dict]:
         """Backward compatible: Use client.datasets.get_thumbnails() instead."""
         return self.datasets.get_thumbnails(dsid, limit=limit)
 
+    @_deprecated("client.datasets.add_thumbnail()")
     def add_thumbnail(self, dsid: str, file_path: str, thumbnail_name: str = None) -> Dict:
         """Backward compatible: Use client.datasets.add_thumbnail() instead."""
         return self.datasets.add_thumbnail(dsid, file_path, thumbnail_name=thumbnail_name)
     
+    @_deprecated("client.datasets.get_associated_files()")
     def get_associated_files(self, dsid: str, limit: int = DEFAULT_LIMIT) -> List[Dict]:
         """Backward compatible: Use client.datasets.get_associated_files() instead."""
         return self.datasets.get_associated_files(dsid, limit=limit)
 
+    @_deprecated("client.datasets.add_associated_file()")
     def add_associated_file(self, dsid: str, file_path: str, filename: str = None) -> Dict:
         """Backward compatible: Use client.datasets.add_associated_file() instead."""
         return self.datasets.add_associated_file(dsid, file_path, filename=filename)
     
+    @_deprecated("client.datasets.get_keywords()")
     def get_keywords(self, dsid: str = None, limit: int = DEFAULT_LIMIT) -> List[Dict]:
         """Backward compatible: Use client.datasets.get_keywords() instead."""
         return self.datasets.get_keywords(dsid=dsid, limit=limit)
 
+    @_deprecated("client.datasets.add_keyword()")
     def add_dataset_keyword(self, dsid: str, keyword: str) -> Dict:
         """Backward compatible: Use client.datasets.add_keyword() instead."""
         return self.datasets.add_keyword(dsid, keyword)
 
+    @_deprecated("client.datasets.delete()")
     def delete_dataset(self, dsid: str) -> Dict:
         """Backward compatible: Use client.datasets.delete() instead."""
         return self.datasets.delete(dsid)
 
+    @_deprecated("client.datasets.get_google_drive_location()")
     def get_google_drive_location(self, dsid: str) -> List[Dict]:
         """Backward compatible: Use client.datasets.get_google_drive_location() instead."""
         return self.datasets.get_google_drive_location(dsid)
 
+    @_deprecated("client.datasets.add_google_drive_location()")
     def add_google_drive_location(self, dsid: str, drive_info: Dict) -> None:
         """Backward compatible: Use client.datasets.add_google_drive_location() instead."""
         return self.datasets.add_google_drive_location(dsid, drive_info)
 
+    @_deprecated("client.datasets.update_ingestion_status()")
     def update_ingestion_status(self, dsid: str, reqid: str, status: str, timezone: str = "America/Los_Angeles"):
         """Backward compatible: Use client.datasets.update_ingestion_status() instead."""
         return self.datasets.update_ingestion_status(dsid, reqid, status, timezone=timezone)
 
+    @_deprecated("client.datasets.update_scicat_upload_status()")
     def update_scicat_upload_status(self, dsid: str, reqid: str, status: str, timezone: str = "America/Los_Angeles"):
         """Backward compatible: Use client.datasets.update_scicat_upload_status() instead."""
         return self.datasets.update_scicat_upload_status(dsid, reqid, status, timezone=timezone)
 
+    @_deprecated("client.datasets.update_transfer_status()")
     def update_transfer_status(self, dsid: str, reqid: str, status: str, timezone: str = "America/Los_Angeles"):
         """Backward compatible: Use client.datasets.update_transfer_status() instead."""
         return self.datasets.update_transfer_status(dsid, reqid, status, timezone=timezone)
     
+    @_deprecated("client.datasets.link_parent_child()")
     def link_datasets(self, parent_dataset_id: str, child_dataset_id: str) -> Dict:
         """Backward compatible: Use client.datasets.link_parent_child() instead."""
         return self.datasets.link_parent_child(parent_dataset_id, child_dataset_id)
     
+    @_deprecated("client.datasets.request_carrier_segmentation()")
     def request_carrier_segmentation(self, dataset_id):
         """Backward compatible: Use client.datasets.request_carrier_segmentation() instead."""
         return self.datasets.request_carrier_segmentation(dataset_id)
     
     #%% INSTRUMENT METHODS (DEPRECATED)
-    
+
+    @_deprecated("client.instruments.list()")
     def list_instruments(self, limit: int = DEFAULT_LIMIT) -> List[Dict]:
         """Backward compatible: Use client.instruments.list() instead."""
         return self.instruments.list(limit=limit)
 
 
+    @_deprecated("client.instruments.get()")
     def get_instrument(self, instrument_name: str = None, instrument_id: str = None) -> Dict:
         """Backward compatible: Use client.instruments.get() instead."""
         return self.instruments.get(instrument_name=instrument_name, instrument_id=instrument_id)
 
 
+    @_deprecated("client.instruments.get_or_create()")
     def get_or_add_instrument(self, instrument_name: str, location: str = None, instrument_owner: str = None) -> Dict:
         """Backward compatible: Use client.instruments.get_or_create() instead."""
         return self.instruments.get_or_create(instrument_name, location=location, instrument_owner=instrument_owner)
     
     #%% USER METHODS (DEPRECATED)
 
+    @_deprecated("client.users.get()")
     def get_user(self, orcid: str = None, email: str = None) -> Dict:
         """Backward compatible: Use client.users.get() instead."""
         return self.users.get(orcid=orcid, email=email)
 
+    @_deprecated("client.users.create()")
     def add_user(self, user_info: Dict) -> Dict:
         """Backward compatible: Use client.users.create() instead."""
         return self.users.create(user_info)
 
+    @_deprecated("client.users.get_or_create()")
     def get_or_add_user(self, orcid, get_user_info_function, **kwargs):
         """Backward compatible: Use client.users.get_or_create() instead."""
         return self.users.get_or_create(orcid, get_user_info_function, **kwargs)
