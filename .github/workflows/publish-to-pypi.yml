@@ -1,7 +1,9 @@
 name: Publish Python distribution to PyPI
 
-on: workflow_dispatch # run manually; change to autodeploy
-
+on:
+  release:
+    types: [published]
+    
 jobs:
   build:
     name: Build distribution
@@ -9,6 +11,14 @@ jobs:
   
     steps:
         - uses: actions/checkout@v4
+        - name: Check version matches tag
+          run: |
+            TAG_VERSION="${GITHUB_REF#refs/tags/v}"
+            INIT_VERSION=$(python -c "import mypackage; print(mypackage.__version__)")
+            if [ "$TAG_VERSION" != "$INIT_VERSION" ]; then
+              echo "Version mismatch: tag=$TAG_VERSION, __init__.py=$INIT_VERSION"
+              exit 1
+            fi
         - name: Set up Python
           uses: actions/setup-python@v5
           with:
@@ -27,7 +37,7 @@ jobs:
             name: python-package-distributions
             path: dist/
 
-  publish-to-pypi:
+  publish-to-pypi:        
     name: Publish Python distribution to PyPI
     # if: startsWith(github.event.ref, 'refs/tags/') # only if tagged
     
