@@ -1,8 +1,9 @@
 name: Publish Python distribution to PyPI
 
-on:
-  release:
-    types: [published]
+on: workflow_dispatch
+# on:
+#   release:
+#     types: [published]
     
 jobs:
   build:
@@ -14,7 +15,7 @@ jobs:
         - name: Check version matches tag
           run: |
             TAG_VERSION="${GITHUB_REF#refs/tags/v}"
-            INIT_VERSION=$(python -c "import mypackage; print(mypackage.__version__)")
+            INIT_VERSION=$(grep -Po '(?<=__version__ = ")[^"]*' crucible/__init__.py)
             if [ "$TAG_VERSION" != "$INIT_VERSION" ]; then
               echo "Version mismatch: tag=$TAG_VERSION, __init__.py=$INIT_VERSION"
               exit 1
