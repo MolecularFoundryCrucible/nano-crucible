@@ -23,7 +23,7 @@ class BaseParser:
     _data_format = None
     _instrument_name = None
 
-    def __init__(self, files_to_upload=None, project_id=None,
+    def __init__(self, files_to_upload=None, project_id=None, owner_orcid=None,
                  metadata=None, keywords=None, mfid=None,
                  measurement=None, dataset_name=None,
                  session_name=None, public=False, instrument_name=None,
@@ -65,6 +65,7 @@ class BaseParser:
         self.measurement     = measurement
         self.dataset_name    = dataset_name
         self.session_name    = session_name
+        self.owner_orcid     = owner_orcid
         self.public          = public
         self.instrument_name = instrument_name
         self.data_format     = data_format
@@ -240,7 +241,7 @@ class BaseParser:
             unique_id      = self.mfid,
             measurement    = self.measurement,
             project_id     = self.project_id,
-            owner_orcid    = None,  # API key handles user authentication
+            owner_orcid    = self.owner_orcid,  # API key handles user authentication
             dataset_name   = self.dataset_name,
             session_name   = self.session_name,
             public         = self.public,

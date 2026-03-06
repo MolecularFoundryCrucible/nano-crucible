@@ -1,6 +1,7 @@
 # nano-crucible : **N**ational **A**rchive for **N**SRC **O**bservations
 
-[![PyPI version](https://img.shields.io/pypi/v/nano-crucible.svg)](https://pypi.org/project/nano-crucible/) [![PyPI downloads](https://img.shields.io/pypi/dm/nano-crucible.svg)](https://pypi.org/project/nano-crucible/) [![GitHub release](https://img.shields.io/github/v/release/MolecularFoundryCrucible/nano-crucible)](https://github.com/MolecularFoundryCrucible/nano-crucible/releases) [![Python Version](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/) [![License](https://img.shields.io/badge/license-BSD-green.svg)](LICENSE) [![GitHub stars](https://img.shields.io/github/stars/MolecularFoundryCrucible/nano-crucible?style=social)](https://github.com/MolecularFoundryCrucible/nano-crucible)
+[![PyPI version](https://img.shields.io/pypi/v/nano-crucible.svg)](https://pypi.org/project/nano-crucible/) [![PyPI downloads](https://img.shields.io/pypi/dm/nano-crucible.svg)](https://pypi.org/project/nano-crucible/) [![GitHub release](https://img.shields.io/github/v/release/MolecularFoundryCrucible/nano-crucible)](https://github.com/MolecularFoundryCrucible/nano-crucible/releases) [![Python Version](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/) [![License](https://img.shields.io/badge/license-BSD-green.svg)](LICENSE)
+[![GitHub stars](https://img.shields.io/github/stars/MolecularFoundryCrucible/nano-crucible?style=social)](https://github.com/MolecularFoundryCrucible/nano-crucible) [![Discord](https://img.shields.io/discord/1476722549424394242?logo=discord&label=Discord&color=5865F2)](https://discord.gg/Wrepphsgbx)
 
 A Python client library and CLI tool for Crucible - the Molecular Foundry's data lakehouse for scientific research. Crucible stores experimental and synthetic data from DOE Nanoscale Science Research Centers (NSRCs), along with comprehensive metadata about samples, projects, instruments, and users.
 
@@ -173,6 +174,7 @@ This project is licensed under the BSD-3-Clause License - see the [LICENSE](LICE
 
 For issues, questions, or feature requests:
 
+- **Discord Server**: [Join our Discord](https://discord.gg/Wrepphsgbx)
 - **GitHub Issues**: [https://github.com/MolecularFoundryCrucible/nano-crucible/issues](https://github.com/MolecularFoundryCrucible/nano-crucible/issues)
 - **Email**: mkwall@lbl.gov, roncoroni@lbl.gov, esbarnard@lbl.gov
 
