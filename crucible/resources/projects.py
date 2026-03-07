@@ -93,7 +93,7 @@ class ProjectOperations(BaseResource):
             return proj
 
         if project_details:
-            proj = self.create(project_details)
+            proj = self._request('post', "/projects", json=project_details)
             return proj
         else:
             raise ValueError(f"Project info for {project_id} not found in database or using the provided get_project_info_function")

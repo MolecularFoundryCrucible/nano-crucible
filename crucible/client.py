@@ -32,6 +32,18 @@ def _deprecated(new_api: str):
         return wrapper
     return decorator
 
+
+def _removed(reason: str):
+    """Decorator that raises NotImplementedError for methods removed from the API."""
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            raise NotImplementedError(
+                f"{func.__name__}() has been removed and is no longer available. {reason}"
+            )
+        return wrapper
+    return decorator
+
 #%%
 
 class CrucibleClient:
@@ -448,10 +460,9 @@ class CrucibleClient:
                                               ingestion_class=ingestion_class,
                                               wait_for_response=wait_for_response)
 
-    @_deprecated("client.datasets.request_scicat_upload()")
+    @_removed("SciCat upload functionality has been removed from the Crucible API.")
     def request_scicat_upload(self, dsid: str, wait_for_response: bool = False, overwrite_data: bool = False) -> Dict:
-        """Backward compatible: Use client.datasets.request_scicat_upload() instead."""
-        return self.datasets.request_scicat_upload(dsid, wait_for_response=wait_for_response, overwrite_data=overwrite_data)
+        pass
 
     @_deprecated("client.datasets.get_access_groups()")
     def get_dataset_access_groups(self, dsid: str) -> List[str]:
@@ -503,30 +514,26 @@ class CrucibleClient:
         """Backward compatible: Use client.datasets.delete() instead."""
         return self.datasets.delete(dsid)
 
-    @_deprecated("client.datasets.get_google_drive_location()")
+    @_removed("Google Drive location functionality has been removed from the Crucible API.")
     def get_google_drive_location(self, dsid: str) -> List[Dict]:
-        """Backward compatible: Use client.datasets.get_google_drive_location() instead."""
-        return self.datasets.get_google_drive_location(dsid)
+        pass
 
-    @_deprecated("client.datasets.add_google_drive_location()")
+    @_removed("Google Drive location functionality has been removed from the Crucible API.")
     def add_google_drive_location(self, dsid: str, drive_info: Dict) -> None:
-        """Backward compatible: Use client.datasets.add_google_drive_location() instead."""
-        return self.datasets.add_google_drive_location(dsid, drive_info)
+        pass
 
     @_deprecated("client.datasets.update_ingestion_status()")
     def update_ingestion_status(self, dsid: str, reqid: str, status: str, timezone: str = "America/Los_Angeles"):
         """Backward compatible: Use client.datasets.update_ingestion_status() instead."""
         return self.datasets.update_ingestion_status(dsid, reqid, status, timezone=timezone)
 
-    @_deprecated("client.datasets.update_scicat_upload_status()")
+    @_removed("SciCat upload status functionality has been removed from the Crucible API.")
     def update_scicat_upload_status(self, dsid: str, reqid: str, status: str, timezone: str = "America/Los_Angeles"):
-        """Backward compatible: Use client.datasets.update_scicat_upload_status() instead."""
-        return self.datasets.update_scicat_upload_status(dsid, reqid, status, timezone=timezone)
+        pass
 
-    @_deprecated("client.datasets.update_transfer_status()")
+    @_removed("Transfer status functionality has been removed from the Crucible API.")
     def update_transfer_status(self, dsid: str, reqid: str, status: str, timezone: str = "America/Los_Angeles"):
-        """Backward compatible: Use client.datasets.update_transfer_status() instead."""
-        return self.datasets.update_transfer_status(dsid, reqid, status, timezone=timezone)
+        pass
     
     @_deprecated("client.datasets.link_parent_child()")
     def link_datasets(self, parent_dataset_id: str, child_dataset_id: str) -> Dict:
