@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Tue Feb 10 17:22:34 2026
-
-@author: roncofaber
+LAMMPS parser for uploading molecular dynamics simulation data to Crucible.
 """
 
 from .base import BaseParser

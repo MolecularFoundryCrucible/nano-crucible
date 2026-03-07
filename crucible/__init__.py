@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
 nano-crucible: National Archive for NSRC Observations - Crucible
 

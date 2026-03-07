@@ -1,3 +1,9 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Package-wide constants for the Crucible API client.
+"""
+
 # API request defaults
 DEFAULT_TIMEOUT = 10  # seconds
 DEFAULT_LIMIT = 100   # maximum results to return

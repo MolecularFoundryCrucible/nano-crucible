@@ -17,6 +17,7 @@ from typing import Optional, List, Dict
 from .base import BaseResource
 from ..constants import DEFAULT_LIMIT
 from ..utils import check_small_files
+from ..utils.deprecation import _deprecated
 
 # set up logging
 logger = logging.getLogger(__name__)
@@ -76,6 +77,125 @@ class DatasetOperations(BaseResource):
             result = self._request('get', '/datasets', params=params)
         return result
 
+    def create(self, dataset, scientific_metadata: Optional[Dict] = None,
+               keywords: Optional[List[str]] = None,
+               get_user_info_function=None, verbose: bool = False,
+               files_to_upload: Optional[List[str]] = None,
+               ingestor: str = 'ApiUploadIngestor',
+               wait_for_ingestion_response: bool = True) -> Dict:
+        """Create a new dataset with metadata and optionally upload files.
+
+        Args:
+            dataset: BaseDataset object with dataset details
+            scientific_metadata (dict, optional): Scientific metadata
+            keywords (list, optional): Keywords to associate with dataset
+            get_user_info_function (callable, optional): Function to get user info
+            verbose (bool): Enable verbose output
+            files_to_upload (List[str], optional): List of file paths to upload
+            ingestor (str): Ingestion class to use (default: 'ApiUploadIngestor')
+            wait_for_ingestion_response (bool): Wait for ingestion to complete
+
+        Returns:
+            Dict: created_record, scientific_metadata_record, dsid, and optionally
+                  uploaded_files and ingestion_request if files_to_upload provided
+        """
+        from ..utils import get_tz_isoformat
+        from ..models import BaseDataset
+
+        if scientific_metadata is None:
+            scientific_metadata = {}
+        if keywords is None:
+            keywords = []
+
+        dataset_details = dict(**dataset.model_dump())
+
+        # Handle file upload path if files provided
+        if files_to_upload:
+            logger.debug(f'files_to_upload={files_to_upload}')
+            main_file = dataset_details.get('file_to_upload')
+            logger.debug(f'main_file from dataset_details: {main_file}')
+            if not main_file:
+                main_file = files_to_upload[0]
+                logger.debug(f'main_file from files_to_upload: {main_file}')
+            base_file_name = os.path.basename(main_file)
+            logger.debug(f'base_file_name={base_file_name}')
+            main_file_cloud = os.path.join(f'api-uploads/{base_file_name}')
+            dataset_details['file_to_upload'] = main_file_cloud
+            logger.debug(f'main_file_cloud={main_file_cloud}')
+
+        # add creation time
+        if dataset_details.get('creation_time') is None:
+            dataset_details['creation_time'] = get_tz_isoformat()
+
+        # get owner_id if orcid provided
+        owner_orcid = dataset_details.get('owner_orcid')
+        logger.debug(f"owner_orcid={owner_orcid}")
+        if owner_orcid:
+            owner = self._client.users.get_or_create(owner_orcid, get_user_info_function)
+            logger.debug(f"owner={owner}")
+            dataset_details['owner_user_id'] = owner['id']
+
+        # get or add project
+        project_id = dataset_details.get('project_id')
+        if project_id:
+            project = self._client.projects.get(project_id)
+            if not project:
+                raise ValueError(f"Project with ID '{project_id}' does not exist in the database.")
+            else:
+                project_id = project['project_id']
+
+        # get instrument_id if instrument_name provided
+        instrument_name = dataset_details.get('instrument_name')
+        if instrument_name:
+            instrument = self._client.instruments.get(instrument_name=instrument_name)
+            if instrument:
+                dataset_details['instrument_id'] = instrument['id']
+            else:
+                raise ValueError(f'Provided instrument does not exist: {instrument_name}')
+
+        logger.debug('Creating new dataset record...')
+
+        clean_dataset = {k: v for k, v in dataset_details.items() if v is not None}
+        logger.debug(f'POST request to /datasets with {clean_dataset}')
+        new_ds_record = self._request('post', '/datasets', json=clean_dataset)
+        logger.debug('Request complete')
+        dsid = new_ds_record['unique_id']
+
+        # add scientific metadata
+        scimd = None
+        if scientific_metadata is not None:
+            logger.debug(f'Adding scientific metadata record for {dsid}')
+            scimd = self._request('post', f'/datasets/{dsid}/scientific_metadata', json=scientific_metadata)
+            logger.debug('Metadata addition complete')
+            
+        # add keywords
+        if keywords:
+            logger.debug(f'Adding keywords to dataset {dsid}: {keywords}')
+            for kw in keywords:
+                self.add_keyword(dsid, kw)
+
+        logger.debug(f"dsid={dsid}")
+
+        result = {"created_record": new_ds_record, "scientific_metadata_record": scimd, "dsid": dsid}
+
+        # Handle file upload and ingestion if files provided
+        if files_to_upload:
+            uploaded_files = [self.upload_file(dsid, each_file, verbose) for each_file in files_to_upload]
+
+            logger.debug(f"Submitting {dsid} to be ingested from file {main_file_cloud} using the class {ingestor}")
+
+            ingest_req_info = self.request_ingestion(dsid, main_file_cloud, ingestor)
+
+            logger.debug(f"Ingestion request {ingest_req_info['id']} is added to the queue")
+
+            if wait_for_ingestion_response:
+                ingest_req_info = self._client._wait_for_request_completion(dsid, ingest_req_info['id'], 'ingest')
+
+            result["uploaded_files"] = uploaded_files
+            result["ingestion_request"] = ingest_req_info
+
+        return result
+    
     def update(self, dsid: str, **updates) -> Dict:
         """Update an existing dataset with new field values.
 
@@ -256,124 +376,7 @@ class DatasetOperations(BaseResource):
 
         return req_info
 
-    def create(self, dataset, scientific_metadata: Optional[Dict] = None,
-               keywords: Optional[List[str]] = None,
-               get_user_info_function=None, verbose: bool = False,
-               files_to_upload: Optional[List[str]] = None,
-               ingestor: str = 'ApiUploadIngestor',
-               wait_for_ingestion_response: bool = True) -> Dict:
-        """Create a new dataset with metadata and optionally upload files.
-
-        Args:
-            dataset: BaseDataset object with dataset details
-            scientific_metadata (dict, optional): Scientific metadata
-            keywords (list, optional): Keywords to associate with dataset
-            get_user_info_function (callable, optional): Function to get user info
-            verbose (bool): Enable verbose output
-            files_to_upload (List[str], optional): List of file paths to upload
-            ingestor (str): Ingestion class to use (default: 'ApiUploadIngestor')
-            wait_for_ingestion_response (bool): Wait for ingestion to complete
-
-        Returns:
-            Dict: created_record, scientific_metadata_record, dsid, and optionally
-                  uploaded_files and ingestion_request if files_to_upload provided
-        """
-        from ..utils import get_tz_isoformat
-        from ..models import BaseDataset
-
-        if scientific_metadata is None:
-            scientific_metadata = {}
-        if keywords is None:
-            keywords = []
-
-        dataset_details = dict(**dataset.model_dump())
-
-        # Handle file upload path if files provided
-        if files_to_upload:
-            logger.debug(f'files_to_upload={files_to_upload}')
-            main_file = dataset_details.get('file_to_upload')
-            logger.debug(f'main_file from dataset_details: {main_file}')
-            if not main_file:
-                main_file = files_to_upload[0]
-                logger.debug(f'main_file from files_to_upload: {main_file}')
-            base_file_name = os.path.basename(main_file)
-            logger.debug(f'base_file_name={base_file_name}')
-            main_file_cloud = os.path.join(f'api-uploads/{base_file_name}')
-            dataset_details['file_to_upload'] = main_file_cloud
-            logger.debug(f'main_file_cloud={main_file_cloud}')
-
-        # add creation time
-        if dataset_details.get('creation_time') is None:
-            dataset_details['creation_time'] = get_tz_isoformat()
-
-        # get owner_id if orcid provided
-        owner_orcid = dataset_details.get('owner_orcid')
-        logger.debug(f"owner_orcid={owner_orcid}")
-        if owner_orcid:
-            owner = self._client.get_or_add_user(owner_orcid, get_user_info_function)
-            logger.debug(f"owner={owner}")
-            dataset_details['owner_user_id'] = owner['id']
-
-        # get or add project
-        project_id = dataset_details.get('project_id')
-        if project_id:
-            project = self._client.get_project(project_id)
-            if not project:
-                raise ValueError(f"Project with ID '{project_id}' does not exist in the database.")
-            else:
-                project_id = project['project_id']
-
-        # get instrument_id if instrument_name provided
-        instrument_name = dataset_details.get('instrument_name')
-        if instrument_name:
-            instrument = self._client.get_instrument(instrument_name)
-            if instrument:
-                dataset_details['instrument_id'] = instrument['id']
-            else:
-                raise ValueError(f'Provided instrument does not exist: {instrument_name}')
-
-        logger.debug('Creating new dataset record...')
-
-        clean_dataset = {k: v for k, v in dataset_details.items() if v is not None}
-        logger.debug(f'POST request to /datasets with {clean_dataset}')
-        new_ds_record = self._request('post', '/datasets', json=clean_dataset)
-        logger.debug('Request complete')
-        dsid = new_ds_record['unique_id']
-
-        # add scientific metadata
-        scimd = None
-        if scientific_metadata is not None:
-            logger.debug(f'Adding scientific metadata record for {dsid}')
-            scimd = self._request('post', f'/datasets/{dsid}/scientific_metadata', json=scientific_metadata)
-            logger.debug('Metadata addition complete')
-            logger.debug(f'Adding keywords to dataset {dsid}: {keywords}')
-
-        # add keywords
-        for kw in keywords:
-            self.add_keyword(dsid, kw)
-
-        logger.debug(f"dsid={dsid}")
-
-        result = {"created_record": new_ds_record, "scientific_metadata_record": scimd, "dsid": dsid}
-
-        # Handle file upload and ingestion if files provided
-        if files_to_upload:
-            uploaded_files = [self.upload_file(dsid, each_file, verbose) for each_file in files_to_upload]
-
-            logger.debug(f"Submitting {dsid} to be ingested from file {main_file_cloud} using the class {ingestor}")
-
-            ingest_req_info = self.request_ingestion(dsid, main_file_cloud, ingestor)
-
-            logger.debug(f"Ingestion request {ingest_req_info['id']} is added to the queue")
-
-            if wait_for_ingestion_response:
-                ingest_req_info = self._client._wait_for_request_completion(dsid, ingest_req_info['id'], 'ingest')
-
-            result["uploaded_files"] = uploaded_files
-            result["ingestion_request"] = ingest_req_info
-
-        return result
-
+    @_deprecated("create() with files_to_upload parameter")
     def create_from_files(self, dataset, files_to_upload: List[str],
                          scientific_metadata: Optional[Dict] = None,
                          keywords: Optional[List[str]] = None,
