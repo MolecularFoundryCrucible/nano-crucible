@@ -10,7 +10,6 @@ import os
 import re
 import logging
 import subprocess
-import warnings
 import requests
 from typing import Optional, List, Dict
 
@@ -18,6 +17,7 @@ from typing import Optional, List, Dict
 from .base import BaseResource
 from ..constants import DEFAULT_LIMIT
 from ..utils import check_small_files
+from ..utils.deprecation import _deprecated
 
 # set up logging
 logger = logging.getLogger(__name__)
@@ -376,6 +376,7 @@ class DatasetOperations(BaseResource):
 
         return req_info
 
+    @_deprecated("create() with files_to_upload parameter")
     def create_from_files(self, dataset, files_to_upload: List[str],
                          scientific_metadata: Optional[Dict] = None,
                          keywords: Optional[List[str]] = None,
@@ -401,11 +402,6 @@ class DatasetOperations(BaseResource):
         Returns:
             Dict: created_record, scientific_metadata_record, ingestion_request, uploaded_files
         """
-        warnings.warn(
-            "create_from_files() is deprecated; use create() with files_to_upload parameter instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
         return self.create(dataset=dataset,
                           scientific_metadata=scientific_metadata,
                           keywords=keywords,

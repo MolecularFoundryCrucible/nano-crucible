@@ -6,8 +6,6 @@ Crucible Configuration Management
 Loads Crucible API keys and configuration from:
 1. Environment variables (highest priority)
 2. INI config file in user config directory
-
-@author: roncofaber
 """
 
 import os

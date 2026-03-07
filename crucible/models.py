@@ -1,3 +1,9 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Pydantic models for Crucible API request and response objects.
+"""
+
 from pydantic import BaseModel
 from typing import List, Optional
 

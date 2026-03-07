@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Tue Feb 10 17:45:48 2026
+Base parser class for uploading datasets to Crucible.
 
-@author: roncofaber
+Provides the generic upload interface that format-specific parsers extend.
 """
 
 import os

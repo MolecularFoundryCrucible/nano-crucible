@@ -10,39 +10,12 @@ import time
 import requests
 import json
 import logging
-import warnings
-import functools
 from typing import Optional, List, Dict, Any, Union
 from .models import BaseDataset, Project
 from .constants import DEFAULT_TIMEOUT, DEFAULT_LIMIT
+from .utils.deprecation import _deprecated, _removed
 
 logger = logging.getLogger(__name__)
-
-def _deprecated(new_api: str):
-    """Decorator that emits a DeprecationWarning pointing to the new API."""
-    def decorator(func):
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-            warnings.warn(
-                f"{func.__name__}() is deprecated; use {new_api} instead.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-            return func(*args, **kwargs)
-        return wrapper
-    return decorator
-
-
-def _removed(reason: str):
-    """Decorator that raises NotImplementedError for methods removed from the API."""
-    def decorator(func):
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-            raise NotImplementedError(
-                f"{func.__name__}() has been removed and is no longer available. {reason}"
-            )
-        return wrapper
-    return decorator
 
 #%%
 
