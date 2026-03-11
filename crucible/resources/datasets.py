@@ -436,6 +436,23 @@ class DatasetOperations(BaseResource):
         else:
             return self._request('patch', f'/datasets/{dsid}/scientific_metadata', json=metadata)
 
+    def search_scientific_metadata(self, q: str) -> list:
+        """Perform a ranked full-text search on scientific metadata.
+
+        Uses PostgreSQL full-text search on the server to find and rank
+        datasets whose scientific metadata matches the query string.
+
+        Args:
+            q (str): Plain-text search query (e.g. "temperature", "XRD silicon").
+
+        Returns:
+            List[Dict]: Matching scientific metadata records, ranked by relevance.
+
+        Example:
+            >>> results = client.datasets.search_scientific_metadata("thermal conductivity")
+        """
+        return self._request('get', '/scientific_metadata/search', params={"q": q})
+
     # Thumbnail Methods
     def get_thumbnails(self, dsid: str, limit: int = DEFAULT_LIMIT) -> List[Dict]:
         """Get thumbnails for a dataset.
