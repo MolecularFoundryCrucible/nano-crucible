@@ -77,11 +77,26 @@ class ProjectOperations(BaseResource):
             ... )
             >>> result = client.projects.create(project)
         """
+        
+        # check input type
         if isinstance(project, Project):
             project_details = project.model_dump(exclude_none=True)
         else:
             project_details = dict(project)
-        return self._request('post', "/projects", json=project_details)
+        
+        # obtain project id
+        project_id = project_details.get("project_id")
+        
+        # try to return project
+        proj = self.get(project_id)
+        if proj is not None:
+            return proj
+
+        if project_details:
+            proj = self._request('post', "/projects", json=project_details)
+            return proj
+        else:
+            raise ValueError(f"Project info for {project_id} not found in database or using the provided get_project_info_function")
 
     def get_users(self, project_id: str, limit: int = DEFAULT_LIMIT) -> List[Dict]:
         """Get users associated with a project.

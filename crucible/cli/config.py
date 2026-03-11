@@ -353,7 +353,7 @@ def cmd_edit(args):
         sys.exit(1)
 
     # Determine editor
-    editor = os.environ.get('EDITOR', os.environ.get('VISUAL', 'vi'))
+    editor = os.environ.get('EDITOR', os.environ.get('VISUAL', 'nano'))
 
     print(f"Opening {config_file} with {editor}...")
 
