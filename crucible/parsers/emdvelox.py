@@ -9,6 +9,7 @@ import os
 import logging
 from .base import BaseParser
 
+import matplotlib.pyplot as plt
 from ncempy.io import emdVelox
 from crucible import BaseDataset
 
@@ -33,12 +34,33 @@ class EMDVeloxParser(BaseParser):
         self._measurement_scientific_metadata = [self._ncempy_datafile.getMetadata(d) for d in self._ncempy_datafile.list_data]
 
         # Parse dataset_name and measurement for the file 
-        self.dataset_name = (self.dataset_name + " " if self.dataset_name else "") + os.path.basename(self.files_to_upload[0]) # append the filename to user-provided dataset_name
+        input_file_basename = os.path.basename(self.files_to_upload[0])
+        self.dataset_name = (self.dataset_name + " " if self.dataset_name else "") + input_file_basename # append the filename to user-provided dataset_name
         self.measurement = self._ncempy_datafile.getMeasurementType()
         # prev: self.measurement = self._measurement_scientific_metadata[-1]['General']['groupType'] # last measurement's groupType options (in order): EDS_SI, Image (STEM or TEM), EDS_Spectrum
 
+        self.thumbnail = self._create_thumbnail()
+
+    def _create_thumbnail(self):
+        """
+        Creates a thumbnail using the first slice of the last image in file. 
+        Return thumbnail filepath (str) or None if no images in the dataset.
+        """
+        if '/Data/Image' not in self._ncempy_datafile._file_hdl: 
+            return None
+        
+        file_basename = os.path.basename(self.files_to_upload[0])
+        thumbail_name = os.path.splitext(file_basename)[0]+ "_thumbnail.png" # or just, thumbnail.png? 
+
+        image_dataset = list(self._ncempy_datafile._file_hdl['/Data/Image'].values())[-1]
+        image_2d_array = image_dataset['Data'][:,:,0]
+        plt.imshow(image_2d_array, cmap='gray')
+        plt.savefig(thumbail_name, bbox_inches='tight')
+        return thumbail_name
+
     def upload_dataset(self, ingestor='ApiUploadIngestor', verbose=False, wait_for_ingestion_response=True):
         upload_file = False # for testing purposes 
+        measurement_dsids = []
          
         get_groupType_from_md = lambda md: md['General']['groupType'] if 'groupType' in md['General'] else "" # options: STEM, TEM, EDS_Processed, EDS
         get_title_from_md = lambda md: md['General']['title'] if 'title' in  md['General'] else "" # options: EDS_SI, EDS_Spectrum, HAADF, element name
@@ -98,19 +120,25 @@ class EMDVeloxParser(BaseParser):
                 verbose=verbose,
             )
         file_dsid = file_upload_result['created_record']['unique_id'] # if using create_new_dataset instead of create_new_dataset_from_files, can directly use 
+        measurement_dsids.append(file_dsid) # REMOVE LATER when upload_file is true, i.e. using super().upload_dataset() should handle it 
 
         # 2. upload measurement datasets 
         spectrum_image_dsid = None
 
         # iterate backwards through groups to catch if spectrum image exists (then handle nested uploads)
         for i, md in enumerate(self._measurement_scientific_metadata[::-1]):
-            # expect that spectrum image will be at the end of measurement_scientific_metadata if it exists  
+            # ensure that processed images are nested properly (assume: processed image exists => spectrum_image exists)
+            parent_dsid = spectrum_image_dsid if (get_groupType_from_md(md) == self._ncempy_datafile.PROCESSED_IMAGE_GROUP_NAME and spectrum_image_dsid != None) else file_dsid 
+            dsid = upload_measurement(md, parent_dsid)
+            measurement_dsids.append(dsid)
+
+            # assume that spectrum will always be at the end of list_data if it exists; therefore, we only update spectrum_image_dsid in the first iteration 
             if i == 0 and get_groupType_from_md(md) == self._ncempy_datafile.SPECTRUM_IMAGE_GROUP_NAME:
-                spectrum_image_dsid = upload_measurement(md, file_dsid) # spectrum image dsid
-            else: 
-                # ensure that processed images are nested properly (assume: processed image exists => spectrum_image exists)
-                parent_dsid = spectrum_image_dsid if get_groupType_from_md(md) == self._ncempy_datafile.PROCESSED_IMAGE_GROUP_NAME else file_dsid
-                upload_measurement(md, parent_dsid)
+                spectrum_image_dsid = dsid
+
+        # 3. add thumbnails to all new datasets (including file_dsid if not handed earlier)
+        for dsid in measurement_dsids: 
+            self.client.add_thumbnail(dsid, self.thumbnail)
                 
         return file_upload_result
     

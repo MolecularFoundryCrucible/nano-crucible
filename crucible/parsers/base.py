@@ -194,6 +194,8 @@ class BaseParser:
             verbose=verbose,
             wait_for_ingestion_response=wait_for_ingestion_response
         )
+
+        self.mfid = result['created_record']['unique_id'] # ensure mfid != None before client.add_thumbnail()
         
         if self.thumbnail is not None:
             self.client.add_thumbnail(self.mfid, self.thumbnail)
