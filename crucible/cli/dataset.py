@@ -61,6 +61,7 @@ def register_subcommand(subparsers):
     _register_list_children(dataset_subparsers)
     _register_download(dataset_subparsers)
     _register_search(dataset_subparsers)
+    _register_add_keyword(dataset_subparsers)
     _register_parsers(dataset_subparsers)
     _register_ingestors(dataset_subparsers)
 
@@ -745,6 +746,45 @@ def _execute_search(args):
 
     except Exception as e:
         logger.error(f"Error searching datasets: {e}")
+        if args.verbose:
+            import traceback
+            traceback.print_exc()
+        sys.exit(1)
+
+
+def _register_add_keyword(subparsers):
+    """Register the 'dataset add-keyword' subcommand."""
+    parser = subparsers.add_parser(
+        'add-keyword',
+        help='Add a keyword to a dataset',
+        description='Associate a keyword tag with an existing dataset',
+        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+    crucible dataset add-keyword DATASET_ID silicon
+    crucible dataset add-keyword DATASET_ID "in-situ TEM"
+"""
+    )
+
+    parser.add_argument('dataset_id', metavar='DATASET_ID', help='Dataset unique ID')
+    parser.add_argument('keyword', metavar='KEYWORD', help='Keyword to add')
+    parser.add_argument('-v', '--verbose', action='store_true', help='Verbose output')
+    parser.set_defaults(func=_execute_add_keyword)
+
+
+def _execute_add_keyword(args):
+    """Execute the 'dataset add-keyword' subcommand."""
+    from crucible.client import CrucibleClient
+    try:
+        client = CrucibleClient()
+        result = client.datasets.add_keyword(args.dataset_id, args.keyword)
+
+        logger.info(f"✓ Keyword '{args.keyword}' added to {args.dataset_id}")
+        if args.verbose:
+            logger.debug(f"Result: {result}")
+
+    except Exception as e:
+        logger.error(f"Error adding keyword: {e}")
         if args.verbose:
             import traceback
             traceback.print_exc()
