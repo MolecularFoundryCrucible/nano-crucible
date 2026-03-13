@@ -4,7 +4,7 @@
 Pydantic models for Crucible API request and response objects.
 """
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from typing import Optional
 
 
@@ -18,8 +18,7 @@ class BaseSample(BaseModel):
     project_id: Optional[str] = None
     description: Optional[str] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class BaseDataset(BaseModel):
@@ -29,7 +28,7 @@ class BaseDataset(BaseModel):
     owner_user_id: Optional[int] = None
     owner_orcid: Optional[str] = None
     project_id: Optional[str] = None
-    instrument_id: Optional[str] = None
+    instrument_id: Optional[int] = None
     instrument_name: Optional[str] = None
     measurement: Optional[str] = None
     session_name: Optional[str] = None
@@ -41,8 +40,7 @@ class BaseDataset(BaseModel):
     source_folder: Optional[str] = None
     json_link: Optional[str] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class Project(BaseModel):
@@ -53,5 +51,4 @@ class Project(BaseModel):
     title: Optional[str] = None
     project_lead_name: Optional[str] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

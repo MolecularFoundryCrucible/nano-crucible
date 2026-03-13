@@ -38,6 +38,10 @@ def register_subcommand(subparsers):
     _register_get(user_subparsers)
     _register_create(user_subparsers)
     _register_list(user_subparsers)
+    _register_list_datasets(user_subparsers)
+    _register_check_access(user_subparsers)
+    _register_get_access_groups(user_subparsers)
+    _register_get_projects(user_subparsers)
 
 
 def _register_get(subparsers):
@@ -374,6 +378,167 @@ def _execute_list(args):
 
     except Exception as e:
         logger.error(f"Error listing users: {e}")
+        if args.verbose:
+            import traceback
+            traceback.print_exc()
+        sys.exit(1)
+
+
+def _register_list_datasets(subparsers):
+    """Register the 'user list-datasets' subcommand."""
+    parser = subparsers.add_parser(
+        'list-datasets',
+        help='List datasets accessible to a user',
+        description='List dataset IDs the user has access to (requires admin permissions)',
+        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+    crucible user list-datasets 0000-0002-1825-0097
+"""
+    )
+    parser.add_argument('orcid', metavar='ORCID', help='User ORCID identifier')
+    parser.add_argument('-v', '--verbose', action='store_true', help='Verbose output')
+    parser.set_defaults(func=_execute_list_datasets)
+
+
+def _register_check_access(subparsers):
+    """Register the 'user check-access' subcommand."""
+    parser = subparsers.add_parser(
+        'check-access',
+        help='Check user access to a dataset',
+        description='Check read/write permissions for a user on a specific dataset (requires admin permissions)',
+        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+    crucible user check-access 0000-0002-1825-0097 0tcbwt4cp9x1z000bazhkv5gkg
+"""
+    )
+    parser.add_argument('orcid', metavar='ORCID', help='User ORCID identifier')
+    parser.add_argument('dataset_id', metavar='DATASET_ID', help='Dataset unique ID')
+    parser.add_argument('-v', '--verbose', action='store_true', help='Verbose output')
+    parser.set_defaults(func=_execute_check_access)
+
+
+def _register_get_access_groups(subparsers):
+    """Register the 'user get-access-groups' subcommand."""
+    parser = subparsers.add_parser(
+        'get-access-groups',
+        help='List access groups for a user',
+        description="List the access groups a user belongs to",
+        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+    crucible user get-access-groups 0000-0002-1825-0097
+"""
+    )
+    parser.add_argument('orcid', metavar='ORCID', help='User ORCID identifier')
+    parser.add_argument('-v', '--verbose', action='store_true', help='Verbose output')
+    parser.set_defaults(func=_execute_get_access_groups)
+
+
+def _register_get_projects(subparsers):
+    """Register the 'user get-projects' subcommand."""
+    parser = subparsers.add_parser(
+        'get-projects',
+        help='List projects for a user',
+        description='List projects a user is associated with',
+        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+    crucible user get-projects 0000-0002-1825-0097
+"""
+    )
+    parser.add_argument('orcid', metavar='ORCID', help='User ORCID identifier')
+    parser.add_argument('-v', '--verbose', action='store_true', help='Verbose output')
+    parser.set_defaults(func=_execute_get_projects)
+
+
+def _execute_list_datasets(args):
+    """Execute the 'user list-datasets' subcommand."""
+    from crucible.client import CrucibleClient
+    try:
+        client = CrucibleClient()
+        dataset_ids = client.users.list_datasets(args.orcid)
+
+        if not dataset_ids:
+            logger.info(f"No datasets found for user {args.orcid}.")
+            return
+
+        logger.info(f"\n=== Datasets accessible to {args.orcid} ({len(dataset_ids)}) ===\n")
+        for dsid in dataset_ids:
+            logger.info(f"  {dsid}")
+
+    except Exception as e:
+        logger.error(f"Error listing user datasets: {e}")
+        if args.verbose:
+            import traceback
+            traceback.print_exc()
+        sys.exit(1)
+
+
+def _execute_check_access(args):
+    """Execute the 'user check-access' subcommand."""
+    from crucible.client import CrucibleClient
+    try:
+        client = CrucibleClient()
+        perms = client.users.check_dataset_access(args.orcid, args.dataset_id)
+
+        logger.info(f"\n=== Access for {args.orcid} on {args.dataset_id} ===\n")
+        logger.info(f"  Read:  {'yes' if perms.get('read') else 'no'}")
+        logger.info(f"  Write: {'yes' if perms.get('write') else 'no'}")
+
+    except Exception as e:
+        logger.error(f"Error checking access: {e}")
+        if args.verbose:
+            import traceback
+            traceback.print_exc()
+        sys.exit(1)
+
+
+def _execute_get_access_groups(args):
+    """Execute the 'user get-access-groups' subcommand."""
+    from crucible.client import CrucibleClient
+    try:
+        client = CrucibleClient()
+        groups = client.users.list_access_groups(args.orcid)
+
+        if not groups:
+            logger.info(f"No access groups found for user {args.orcid}.")
+            return
+
+        logger.info(f"\n=== Access Groups for {args.orcid} ({len(groups)}) ===\n")
+        for g in groups:
+            logger.info(f"  {g}")
+
+    except Exception as e:
+        logger.error(f"Error retrieving access groups: {e}")
+        if args.verbose:
+            import traceback
+            traceback.print_exc()
+        sys.exit(1)
+
+
+def _execute_get_projects(args):
+    """Execute the 'user get-projects' subcommand."""
+    from crucible.client import CrucibleClient
+    try:
+        client = CrucibleClient()
+        projects = client.users.get_projects(args.orcid)
+
+        if not projects:
+            logger.info(f"No projects found for user {args.orcid}.")
+            return
+
+        logger.info(f"\n=== Projects for {args.orcid} ({len(projects)}) ===\n")
+        for p in projects:
+            pid = p.get('project_id', 'N/A')
+            title = p.get('title') or p.get('project_id', '')
+            logger.info(f"  {pid}  {title}")
+            if args.verbose:
+                logger.debug(f"    org={p.get('organization')}  lead={p.get('project_lead_email')}")
+
+    except Exception as e:
+        logger.error(f"Error retrieving user projects: {e}")
         if args.verbose:
             import traceback
             traceback.print_exc()

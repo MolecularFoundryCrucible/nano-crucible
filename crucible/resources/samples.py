@@ -87,10 +87,12 @@ class SampleOperations(BaseResource):
         return result
 
     def create(self, unique_id: Optional[str] = None, sample_name: Optional[str] = None,
-               description: Optional[str] = None, creation_date: Optional[str] = None,
-               owner_orcid: Optional[str] = None, owner_id: Optional[int] = None,
+               description: Optional[str] = None, date_created: Optional[str] = None,
+               owner_orcid: Optional[str] = None, owner_user_id: Optional[int] = None,
                project_id: Optional[str] = None, sample_type: Optional[str] = None,
-               parents: List[Dict] = [], children: List[Dict] = []) -> Dict:
+               parents: List[Dict] = [], children: List[Dict] = [],
+               # deprecated aliases
+               creation_date: Optional[str] = None, owner_id: Optional[int] = None) -> Dict:
         """Add a new sample with optional parent-child relationships.
 
         Args:
@@ -98,9 +100,9 @@ class SampleOperations(BaseResource):
             sample_name (str, optional): Human-readable sample name
             sample_type (str, optional): Category of sample (for filtering)
             description (str, optional): Sample description
-            creation_date (str, optional): Sample creation date
+            date_created (str, optional): Sample creation date
             owner_orcid (str, optional): Owner's ORCID
-            owner_id (int, optional): Owner's user ID
+            owner_user_id (int, optional): Owner's user ID
             project_id (str, optional): Project ID (Name)
             parents (List[Dict], optional): Parent samples
             children (List[Dict], optional): Child samples
@@ -111,15 +113,31 @@ class SampleOperations(BaseResource):
         Raises:
             Exception: If neither unique_id nor sample_name is provided
         """
+        import warnings
+        if creation_date is not None:
+            warnings.warn(
+                "Parameter 'creation_date' is deprecated; use 'date_created' instead.",
+                DeprecationWarning, stacklevel=2
+            )
+            if date_created is None:
+                date_created = creation_date
+        if owner_id is not None:
+            warnings.warn(
+                "Parameter 'owner_id' is deprecated; use 'owner_user_id' instead.",
+                DeprecationWarning, stacklevel=2
+            )
+            if owner_user_id is None:
+                owner_user_id = owner_id
+
         sample_info = {
             "unique_id": unique_id,
             "sample_name": sample_name,
             "sample_type": sample_type,
             "owner_orcid": owner_orcid,
-            "owner_user_id": owner_id,
+            "owner_user_id": owner_user_id,
             "description": description,
             "project_id": project_id,
-            "date_created": creation_date
+            "date_created": date_created
         }
 
         if unique_id is None and sample_name is None:
@@ -140,10 +158,12 @@ class SampleOperations(BaseResource):
         return new_samp
 
     def update(self, unique_id: str, sample_name: Optional[str] = None,
-               description: Optional[str] = None, creation_date: Optional[str] = None,
-               owner_orcid: Optional[str] = None, owner_id: Optional[int] = None,
+               description: Optional[str] = None, date_created: Optional[str] = None,
+               owner_orcid: Optional[str] = None, owner_user_id: Optional[int] = None,
                project_id: Optional[str] = None, sample_type: Optional[str] = None,
-               parents: List[Dict] = [], children: List[Dict] = []) -> Dict:
+               parents: List[Dict] = [], children: List[Dict] = [],
+               # deprecated aliases
+               creation_date: Optional[str] = None, owner_id: Optional[int] = None) -> Dict:
         """Update an existing sample.
 
         Args:
@@ -151,9 +171,9 @@ class SampleOperations(BaseResource):
             sample_name (str, optional): Human-readable sample name
             sample_type (str, optional): Category of sample (for filtering)
             description (str, optional): Sample description
-            creation_date (str, optional): Sample creation date
+            date_created (str, optional): Sample creation date
             owner_orcid (str, optional): Owner's ORCID
-            owner_id (int, optional): Owner's user ID
+            owner_user_id (int, optional): Owner's user ID
             project_id (str, optional): Project ID (Name)
             parents (List[Dict], optional): Parent samples to link
             children (List[Dict], optional): Child samples to link
@@ -161,15 +181,31 @@ class SampleOperations(BaseResource):
         Returns:
             Dict: Updated sample object
         """
+        import warnings
+        if creation_date is not None:
+            warnings.warn(
+                "Parameter 'creation_date' is deprecated; use 'date_created' instead.",
+                DeprecationWarning, stacklevel=2
+            )
+            if date_created is None:
+                date_created = creation_date
+        if owner_id is not None:
+            warnings.warn(
+                "Parameter 'owner_id' is deprecated; use 'owner_user_id' instead.",
+                DeprecationWarning, stacklevel=2
+            )
+            if owner_user_id is None:
+                owner_user_id = owner_id
+
         sample_info = {
             "unique_id": unique_id,
             "sample_name": sample_name,
             "owner_orcid": owner_orcid,
-            "owner_user_id": owner_id,
+            "owner_user_id": owner_user_id,
             "sample_type": sample_type,
             "description": description,
             "project_id": project_id,
-            "date_created": creation_date
+            "date_created": date_created
         }
 
         sample_info = {k: v for k, v in sample_info.items() if v is not None}

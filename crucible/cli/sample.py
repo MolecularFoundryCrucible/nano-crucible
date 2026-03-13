@@ -45,6 +45,8 @@ def register_subcommand(subparsers):
     _register_create(sample_subparsers)
     _register_update(sample_subparsers)
     _register_link(sample_subparsers)
+    _register_list_parents(sample_subparsers)
+    _register_list_children(sample_subparsers)
     _register_link_dataset(sample_subparsers)
 
 
@@ -324,6 +326,44 @@ def _register_link_dataset(subparsers):
     parser.set_defaults(func=_execute_link_dataset)
 
 
+def _register_list_parents(subparsers):
+    """Register the 'sample list-parents' subcommand."""
+    parser = subparsers.add_parser(
+        'list-parents',
+        help='List parent samples',
+        description='List parent samples of a given sample',
+        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+    crucible sample list-parents SAMPLE_ID
+"""
+    )
+    parser.add_argument('sample_id', metavar='SAMPLE_ID', help='Sample unique ID')
+    parser.add_argument('--limit', type=int, default=100, metavar='N',
+                        help='Maximum number of results (default: 100)')
+    parser.add_argument('-v', '--verbose', action='store_true', help='Verbose output')
+    parser.set_defaults(func=_execute_list_parents)
+
+
+def _register_list_children(subparsers):
+    """Register the 'sample list-children' subcommand."""
+    parser = subparsers.add_parser(
+        'list-children',
+        help='List child samples',
+        description='List child samples derived from a given sample',
+        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+    crucible sample list-children SAMPLE_ID
+"""
+    )
+    parser.add_argument('sample_id', metavar='SAMPLE_ID', help='Sample unique ID')
+    parser.add_argument('--limit', type=int, default=100, metavar='N',
+                        help='Maximum number of results (default: 100)')
+    parser.add_argument('-v', '--verbose', action='store_true', help='Verbose output')
+    parser.set_defaults(func=_execute_list_children)
+
+
 def _execute_list(args):
     """Execute the 'sample list' subcommand."""
     from crucible.config import config
@@ -447,6 +487,60 @@ def _execute_link(args):
 
     except Exception as e:
         logger.error(f"Error linking samples: {e}")
+        if args.verbose:
+            import traceback
+            traceback.print_exc()
+        sys.exit(1)
+
+
+def _execute_list_parents(args):
+    """Execute the 'sample list-parents' subcommand."""
+    from crucible.client import CrucibleClient
+    try:
+        client = CrucibleClient()
+        parents = client.samples.list_parents(args.sample_id, limit=args.limit)
+
+        if not parents:
+            logger.info("No parent samples found.")
+            return
+
+        logger.info(f"\n=== Parent Samples of {args.sample_id} ({len(parents)}) ===\n")
+        for s in parents:
+            uid = s.get('unique_id', 'N/A')
+            name = s.get('sample_name') or '(unnamed)'
+            logger.info(f"  {uid}  {name}")
+            if args.verbose:
+                logger.debug(f"    type={s.get('sample_type')}  project={s.get('project_id')}")
+
+    except Exception as e:
+        logger.error(f"Error listing parent samples: {e}")
+        if args.verbose:
+            import traceback
+            traceback.print_exc()
+        sys.exit(1)
+
+
+def _execute_list_children(args):
+    """Execute the 'sample list-children' subcommand."""
+    from crucible.client import CrucibleClient
+    try:
+        client = CrucibleClient()
+        children = client.samples.list_children(args.sample_id, limit=args.limit)
+
+        if not children:
+            logger.info("No child samples found.")
+            return
+
+        logger.info(f"\n=== Child Samples of {args.sample_id} ({len(children)}) ===\n")
+        for s in children:
+            uid = s.get('unique_id', 'N/A')
+            name = s.get('sample_name') or '(unnamed)'
+            logger.info(f"  {uid}  {name}")
+            if args.verbose:
+                logger.debug(f"    type={s.get('sample_type')}  project={s.get('project_id')}")
+
+    except Exception as e:
+        logger.error(f"Error listing child samples: {e}")
         if args.verbose:
             import traceback
             traceback.print_exc()

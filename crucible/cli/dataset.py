@@ -57,6 +57,8 @@ def register_subcommand(subparsers):
     _register_update(dataset_subparsers)
     _register_update_metadata(dataset_subparsers)
     _register_link(dataset_subparsers)
+    _register_list_parents(dataset_subparsers)
+    _register_list_children(dataset_subparsers)
     _register_download(dataset_subparsers)
     _register_search(dataset_subparsers)
     _register_parsers(dataset_subparsers)
@@ -537,6 +539,46 @@ def _register_link(subparsers):
     )
 
     parser.set_defaults(func=_execute_link)
+
+
+def _register_list_parents(subparsers):
+    """Register the 'dataset list-parents' subcommand."""
+    parser = subparsers.add_parser(
+        'list-parents',
+        help='List parent datasets',
+        description='List parent datasets of a given dataset',
+        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+    crucible dataset list-parents DATASET_ID
+    crucible dataset list-parents DATASET_ID --limit 20
+"""
+    )
+    parser.add_argument('dataset_id', metavar='DATASET_ID', help='Dataset unique ID')
+    parser.add_argument('--limit', type=int, default=DEFAULT_LIMIT, metavar='N',
+                        help=f'Maximum number of results (default: {DEFAULT_LIMIT})')
+    parser.add_argument('-v', '--verbose', action='store_true', help='Verbose output')
+    parser.set_defaults(func=_execute_list_parents)
+
+
+def _register_list_children(subparsers):
+    """Register the 'dataset list-children' subcommand."""
+    parser = subparsers.add_parser(
+        'list-children',
+        help='List child datasets',
+        description='List child datasets derived from a given dataset',
+        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+    crucible dataset list-children DATASET_ID
+    crucible dataset list-children DATASET_ID --limit 20
+"""
+    )
+    parser.add_argument('dataset_id', metavar='DATASET_ID', help='Dataset unique ID')
+    parser.add_argument('--limit', type=int, default=DEFAULT_LIMIT, metavar='N',
+                        help=f'Maximum number of results (default: {DEFAULT_LIMIT})')
+    parser.add_argument('-v', '--verbose', action='store_true', help='Verbose output')
+    parser.set_defaults(func=_execute_list_children)
 
 
 def _register_download(subparsers):
@@ -1111,6 +1153,60 @@ def _execute_link(args):
 
     except Exception as e:
         logger.error(f"Error linking datasets: {e}")
+        if args.verbose:
+            import traceback
+            traceback.print_exc()
+        sys.exit(1)
+
+
+def _execute_list_parents(args):
+    """Execute the 'dataset list-parents' subcommand."""
+    from crucible.client import CrucibleClient
+    try:
+        client = CrucibleClient()
+        parents = client.datasets.list_parents(args.dataset_id, limit=args.limit)
+
+        if not parents:
+            logger.info("No parent datasets found.")
+            return
+
+        logger.info(f"\n=== Parent Datasets of {args.dataset_id} ({len(parents)}) ===\n")
+        for ds in parents:
+            uid = ds.get('unique_id', 'N/A')
+            name = ds.get('dataset_name') or '(unnamed)'
+            logger.info(f"  {uid}  {name}")
+            if args.verbose:
+                logger.debug(f"    measurement={ds.get('measurement')}  project={ds.get('project_id')}")
+
+    except Exception as e:
+        logger.error(f"Error listing parent datasets: {e}")
+        if args.verbose:
+            import traceback
+            traceback.print_exc()
+        sys.exit(1)
+
+
+def _execute_list_children(args):
+    """Execute the 'dataset list-children' subcommand."""
+    from crucible.client import CrucibleClient
+    try:
+        client = CrucibleClient()
+        children = client.datasets.list_children(args.dataset_id, limit=args.limit)
+
+        if not children:
+            logger.info("No child datasets found.")
+            return
+
+        logger.info(f"\n=== Child Datasets of {args.dataset_id} ({len(children)}) ===\n")
+        for ds in children:
+            uid = ds.get('unique_id', 'N/A')
+            name = ds.get('dataset_name') or '(unnamed)'
+            logger.info(f"  {uid}  {name}")
+            if args.verbose:
+                logger.debug(f"    measurement={ds.get('measurement')}  project={ds.get('project_id')}")
+
+    except Exception as e:
+        logger.error(f"Error listing child datasets: {e}")
         if args.verbose:
             import traceback
             traceback.print_exc()

@@ -236,6 +236,24 @@ class DatasetOperations(BaseResource):
         groups = self._request('get', f'/datasets/{dsid}/access_groups')
         return [group['group_name'] for group in groups]
 
+    def add_access_group(self, dsid: str, group_name: str,
+                         read: bool = True, write: bool = False) -> Dict:
+        """Add an access group to a dataset.
+
+        **Requires admin permissions.**
+
+        Args:
+            dsid (str): Dataset unique identifier
+            group_name (str): Name of the access group to add
+            read (bool): Grant read access (default: True)
+            write (bool): Grant write access (default: False)
+
+        Returns:
+            Dict: Created ACL entry
+        """
+        params = {"group_name": group_name, "read": read, "write": write}
+        return self._request('post', f'/datasets/{dsid}/access_groups', params=params)
+
     def upload_file(self, dsid: str, file_path: str, verbose: bool = True) -> Dict:
         """Upload a file to a dataset.
 

@@ -104,6 +104,69 @@ class UserOperations(BaseResource):
                                       "project_ids": user_projects})
         return new_user
 
+    def list_datasets(self, orcid: str) -> List[str]:
+        """List dataset IDs accessible to a user.
+
+        **Requires admin permissions.**
+
+        Args:
+            orcid (str): User ORCID identifier
+
+        Returns:
+            List[str]: Dataset unique IDs the user has access to
+        """
+        return self._request('get', f'/users/{orcid}/datasets')
+
+    def check_dataset_access(self, orcid: str, dsid: str) -> Dict:
+        """Check a user's read/write access to a specific dataset.
+
+        **Requires admin permissions.**
+
+        Args:
+            orcid (str): User ORCID identifier
+            dsid (str): Dataset unique identifier
+
+        Returns:
+            Dict: Permissions dict with 'read' and 'write' boolean keys
+        """
+        return self._request('get', f'/users/{orcid}/datasets/{dsid}')
+
+    def list_access_groups(self, orcid: str) -> List[str]:
+        """List access group names for a user.
+
+        Args:
+            orcid (str): User ORCID identifier
+
+        Returns:
+            List[str]: Access group names the user belongs to
+        """
+        return self._request('get', f'/users/{orcid}/access_groups')
+
+    def add_to_access_group(self, orcid: str, group_name: str) -> Dict:
+        """Add a user to an access group.
+
+        **Requires admin permissions.**
+
+        Args:
+            orcid (str): User ORCID identifier
+            group_name (str): Name of the access group
+
+        Returns:
+            Dict: Updated access group object
+        """
+        return self._request('post', f'/users/{orcid}/access_groups/{group_name}')
+
+    def get_projects(self, orcid: str) -> List[Dict]:
+        """List projects associated with a user.
+
+        Args:
+            orcid (str): User ORCID identifier
+
+        Returns:
+            List[Dict]: Project objects the user is associated with
+        """
+        return self._request('get', f'/users/{orcid}/projects')
+
     def get_or_create(self, orcid: str, get_user_info_function, **kwargs) -> Dict:
         """Get an existing user or create a new one if they don't exist.
 
