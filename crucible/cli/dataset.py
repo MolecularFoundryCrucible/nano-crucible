@@ -62,6 +62,7 @@ def register_subcommand(subparsers):
     _register_download(dataset_subparsers)
     _register_search(dataset_subparsers)
     _register_add_keyword(dataset_subparsers)
+    _register_get_keywords(dataset_subparsers)
     _register_parsers(dataset_subparsers)
     _register_ingestors(dataset_subparsers)
 
@@ -785,6 +786,44 @@ def _execute_add_keyword(args):
 
     except Exception as e:
         logger.error(f"Error adding keyword: {e}")
+        if args.verbose:
+            import traceback
+            traceback.print_exc()
+        sys.exit(1)
+
+
+def _register_get_keywords(subparsers):
+    """Register the 'dataset get-keywords' subcommand."""
+    parser = subparsers.add_parser(
+        'get-keywords',
+        help='List keywords for a dataset',
+        description='Show all keywords associated with a dataset',
+    )
+    parser.add_argument('dataset_id', metavar='DATASET_ID', help='Dataset unique ID')
+    parser.add_argument('-v', '--verbose', action='store_true', help='Verbose output')
+    parser.set_defaults(func=_execute_get_keywords)
+
+
+def _execute_get_keywords(args):
+    """Execute the 'dataset get-keywords' subcommand."""
+    from crucible.client import CrucibleClient
+    try:
+        client = CrucibleClient()
+        keywords = client.datasets.get_keywords(args.dataset_id)
+
+        if not keywords:
+            logger.info(f"No keywords found for {args.dataset_id}.")
+            return
+
+        logger.info(f"\nKeywords for {args.dataset_id}:")
+        for kw in keywords:
+            word = kw.get('keyword', kw) if isinstance(kw, dict) else kw
+            count = kw.get('num_datasets') if isinstance(kw, dict) else None
+            suffix = f"  (used in {count} datasets)" if args.verbose and count is not None else ""
+            logger.info(f"  {word}{suffix}")
+
+    except Exception as e:
+        logger.error(f"Error retrieving keywords: {e}")
         if args.verbose:
             import traceback
             traceback.print_exc()
