@@ -104,10 +104,6 @@ def _register_get(subparsers):
 def _execute_list(args):
     """Execute the 'instrument list' subcommand."""
     from crucible.client import CrucibleClient
-    from crucible.cli import setup_logging
-
-    setup_logging(verbose=args.verbose)
-
     try:
         client = CrucibleClient()
         instruments = client.instruments.list(limit=args.limit)
@@ -139,10 +135,6 @@ def _execute_list(args):
 def _execute_get(args):
     """Execute the 'instrument get' subcommand."""
     from crucible.client import CrucibleClient
-    from crucible.cli import setup_logging
-
-    setup_logging(verbose=args.verbose)
-
     try:
         client = CrucibleClient()
 

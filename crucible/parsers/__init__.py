@@ -23,6 +23,29 @@ PARSER_REGISTRY = {
     'lammps': LAMMPSParser,
 }
 
+def get_all_parsers():
+    """
+    Return a dict of all available parsers: built-in + entry-point installed.
+
+    Returns:
+        dict: Mapping of parser name (str) → parser class, combining built-ins
+              and any parsers registered via the ``crucible.parsers`` entry-point
+              group by installed third-party packages.
+    """
+    all_parsers = dict(PARSER_REGISTRY)
+    try:
+        from importlib.metadata import entry_points
+        for ep in entry_points(group="crucible.parsers"):
+            if ep.name.lower() not in all_parsers:
+                try:
+                    all_parsers[ep.name.lower()] = ep.load()
+                except Exception:
+                    pass
+    except Exception:
+        pass
+    return all_parsers
+
+
 def get_parser(dataset_type):
     """
     Get the appropriate parser class for a given dataset type.
@@ -48,27 +71,17 @@ def get_parser(dataset_type):
                     or any installed entry points.
     """
     dataset_type_lower = dataset_type.lower()
+    all_parsers = get_all_parsers()
 
-    # 1. Check built-in registry
-    if dataset_type_lower in PARSER_REGISTRY:
-        return PARSER_REGISTRY[dataset_type_lower]
+    if dataset_type_lower in all_parsers:
+        return all_parsers[dataset_type_lower]
 
-    # 2. Discover parsers from installed packages
-    try:
-        from importlib.metadata import entry_points
-        eps = entry_points(group="crucible.parsers")
-        for ep in eps:
-            if ep.name.lower() == dataset_type_lower:
-                return ep.load()
-    except Exception:
-        pass
-
-    available = ', '.join(sorted(PARSER_REGISTRY.keys()))
+    available = ', '.join(sorted(all_parsers.keys()))
     raise ValueError(
         f"Unknown dataset type '{dataset_type}'. "
-        f"Built-in types: {available}. "
+        f"Available types: {available}. "
         f"Additional parsers can be installed via third-party packages."
     )
 
 
-__all__ = ['BaseParser', 'LAMMPSParser', 'PARSER_REGISTRY', 'get_parser']
+__all__ = ['BaseParser', 'LAMMPSParser', 'PARSER_REGISTRY', 'get_parser', 'get_all_parsers']

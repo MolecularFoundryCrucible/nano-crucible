@@ -123,6 +123,9 @@ Examples:
     # Parse arguments
     args = parser.parse_args()
 
+    # Configure logging once for the entire CLI
+    setup_logging(verbose=getattr(args, 'verbose', False))
+
     # If no command specified, show help
     if args.command is None:
         parser.print_help()

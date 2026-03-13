@@ -218,11 +218,7 @@ def execute(args):
     import json
     from crucible.parsers import get_parser, BaseParser
     from crucible.config import config
-    from crucible.cli import setup_logging
-
     # Set up logging based on verbose flag
-    setup_logging(verbose=args.verbose)
-
     # Get project_id - use flag if provided, otherwise fall back to config
     project_id = args.project_id
     project_from_config = False

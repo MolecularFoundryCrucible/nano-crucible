@@ -43,6 +43,7 @@ def register_subcommand(subparsers):
     _register_list(sample_subparsers)
     _register_get(sample_subparsers)
     _register_create(sample_subparsers)
+    _register_update(sample_subparsers)
     _register_link(sample_subparsers)
     _register_link_dataset(sample_subparsers)
 
@@ -52,7 +53,14 @@ def _register_list(subparsers):
     parser = subparsers.add_parser(
         'list',
         help='List samples',
-        description='List samples in a project'
+        description='List samples, with optional filters',
+        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+    crucible sample list -pid my-project
+    crucible sample list -pid my-project -n "Silicon*"
+    crucible sample list -pid my-project --type wafer
+"""
     )
 
     parser.add_argument(
@@ -61,6 +69,21 @@ def _register_list(subparsers):
         default=None,
         metavar='ID',
         help='Crucible project ID (uses config current_project if not specified)'
+    )
+
+    parser.add_argument(
+        '-n', '--name',
+        default=None,
+        metavar='NAME',
+        help='Filter by sample name (exact match)'
+    )
+
+    parser.add_argument(
+        '--type',
+        default=None,
+        dest='sample_type',
+        metavar='TYPE',
+        help='Filter by sample type (exact match)'
     )
 
     parser.add_argument(
@@ -150,6 +173,95 @@ Examples:
     parser.set_defaults(func=_execute_create)
 
 
+def _sample_updatable_fields():
+    """Return sorted list of fields that can be updated on a sample (derived from BaseSample model)."""
+    from ..models import BaseSample
+    # Exclude server-managed / identifier fields
+    _readonly = {'unique_id', 'owner_user_id'}
+    return sorted(set(BaseSample.model_fields.keys()) - _readonly)
+
+
+def _register_update(subparsers):
+    """Register the 'sample update' subcommand."""
+    fields = _sample_updatable_fields()
+    parser = subparsers.add_parser(
+        'update',
+        help='Update sample fields',
+        description='Update fields of an existing sample',
+        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        epilog=f"""
+Updatable fields:
+    {', '.join(fields)}
+
+Examples:
+    crucible sample update SAMPLE_ID --set sample_name="Silicon Wafer B"
+    crucible sample update SAMPLE_ID --set description="Annealed at 900C"
+    crucible sample update SAMPLE_ID --set sample_type=substrate --set project_id=my-project
+"""
+    )
+
+    sample_id_arg = parser.add_argument(
+        'sample_id',
+        metavar='SAMPLE_ID',
+        help='Sample unique ID'
+    )
+    if ARGCOMPLETE_AVAILABLE:
+        sample_id_arg.completer = argcomplete.completers.SuppressCompleter()
+
+    parser.add_argument(
+        '--set', '-s',
+        action='append',
+        dest='set_fields',
+        metavar='KEY=VALUE',
+        required=True,
+        help='Set a sample field (repeatable). Values are auto-cast to int, float, bool, or string.'
+    )
+
+    parser.add_argument(
+        '-v', '--verbose',
+        action='store_true',
+        help='Verbose output'
+    )
+
+    parser.set_defaults(func=_execute_update)
+
+
+def _execute_update(args):
+    """Execute the 'sample update' subcommand."""
+    from crucible.client import CrucibleClient
+    valid_fields = set(_sample_updatable_fields())
+    updates = {}
+    for field in args.set_fields:
+        if '=' not in field:
+            logger.error(f"Error: --set requires KEY=VALUE format, got: '{field}'")
+            sys.exit(1)
+        key, _, value = field.partition('=')
+        key = key.strip()
+        if key not in valid_fields:
+            logger.error(
+                f"Unknown field '{key}'.\n"
+                f"Valid fields: {', '.join(sorted(valid_fields))}"
+            )
+            sys.exit(1)
+        updates[key] = value  # samples API expects strings; no cast needed
+
+    try:
+        client = CrucibleClient()
+        result = client.samples.update(args.sample_id, **updates)
+
+        logger.info(f"✓ Sample {args.sample_id} updated")
+        if args.verbose:
+            logger.debug(f"Updated fields: {list(updates.keys())}")
+            logger.debug(f"Result: {json.dumps(result, indent=2)}")
+
+    except Exception as e:
+        logger.error(f"Error updating sample: {e}")
+        if args.verbose:
+            import traceback
+            traceback.print_exc()
+        sys.exit(1)
+
+
 def _register_link(subparsers):
     """Register the 'sample link' subcommand."""
     parser = subparsers.add_parser(
@@ -216,10 +328,6 @@ def _execute_list(args):
     """Execute the 'sample list' subcommand."""
     from crucible.config import config
     from crucible.client import CrucibleClient
-    from crucible.cli import setup_logging
-
-    setup_logging(verbose=args.verbose)
-
     # Get project_id
     project_id = args.project_id
     if project_id is None:
@@ -228,11 +336,20 @@ def _execute_list(args):
             logger.error("Error: Project ID required. Specify with -pid or set current_project in config.")
             sys.exit(1)
 
+    filters = {}
+    if args.name:
+        filters['sample_name'] = args.name
+    if args.sample_type:
+        filters['sample_type'] = args.sample_type
+
     try:
         client = CrucibleClient()
-        samples = client.samples.list(project_id=project_id, limit=args.limit)
+        samples = client.samples.list(project_id=project_id, limit=args.limit, **filters)
 
-        logger.info(f"\n=== Samples in project {project_id} ===")
+        header = f"\n=== Samples in project {project_id} ===" if project_id else "\n=== Samples ==="
+        logger.info(header)
+        if filters:
+            logger.info(f"Filters: {', '.join(f'{k}={v}' for k, v in filters.items())}")
         logger.info(f"Found {len(samples)} sample(s)\n")
 
         if samples:
@@ -255,10 +372,6 @@ def _execute_list(args):
 def _execute_get(args):
     """Execute the 'sample get' subcommand."""
     from crucible.client import CrucibleClient
-    from crucible.cli import setup_logging
-
-    setup_logging(verbose=args.verbose)
-
     try:
         client = CrucibleClient()
         sample = client.samples.get(args.sample_id)
@@ -290,10 +403,6 @@ def _execute_create(args):
     """Execute the 'sample create' subcommand."""
     from crucible.config import config
     from crucible.client import CrucibleClient
-    from crucible.cli import setup_logging
-
-    setup_logging(verbose=args.verbose)
-
     # Get project_id
     project_id = args.project_id
     if project_id is None:
@@ -328,10 +437,6 @@ def _execute_create(args):
 def _execute_link(args):
     """Execute the 'sample link' subcommand."""
     from crucible.client import CrucibleClient
-    from crucible.cli import setup_logging
-
-    setup_logging(verbose=args.verbose)
-
     try:
         client = CrucibleClient()
         result = client.samples.link(args.parent, args.child)
@@ -351,10 +456,6 @@ def _execute_link(args):
 def _execute_link_dataset(args):
     """Execute the 'sample link-dataset' subcommand."""
     from crucible.client import CrucibleClient
-    from crucible.cli import setup_logging
-
-    setup_logging(verbose=args.verbose)
-
     try:
         client = CrucibleClient()
         result = client.samples.add_to_dataset(args.sample, args.dataset)

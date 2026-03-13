@@ -229,10 +229,6 @@ Examples:
 def _execute_list(args):
     """Execute the 'project list' subcommand."""
     from crucible.client import CrucibleClient
-    from crucible.cli import setup_logging
-
-    setup_logging(verbose=args.verbose)
-
     try:
         client = CrucibleClient()
         projects = client.projects.list(limit=args.limit)
@@ -262,10 +258,6 @@ def _execute_list(args):
 def _execute_get(args):
     """Execute the 'project get' subcommand."""
     from crucible.client import CrucibleClient
-    from crucible.cli import setup_logging
-
-    setup_logging(verbose=args.verbose)
-
     try:
         client = CrucibleClient()
         project = client.projects.get(args.project_id)
@@ -302,10 +294,6 @@ def _execute_create(args):
     """Execute the 'project create' subcommand."""
     import re
     from crucible.client import CrucibleClient
-    from crucible.cli import setup_logging
-
-    setup_logging(verbose=args.verbose)
-
     # Interactive mode if any required arguments are missing
     project_id = args.project_id
     organization = args.organization
@@ -393,10 +381,6 @@ def _execute_create(args):
 def _execute_get_users(args):
     """Execute the 'project get-users' subcommand."""
     from crucible.client import CrucibleClient
-    from crucible.cli import setup_logging
-
-    setup_logging(verbose=args.verbose)
-
     try:
         client = CrucibleClient()
         users = client.projects.get_users(args.project_id, limit=args.limit)
@@ -433,10 +417,6 @@ def _execute_add_user(args):
     """Execute the 'project add-user' subcommand."""
     import re
     from crucible.client import CrucibleClient
-    from crucible.cli import setup_logging
-
-    setup_logging(verbose=args.verbose)
-
     # Validate ORCID format
     if not re.match(r'^\d{4}-\d{4}-\d{4}-\d{3}[0-9X]$', args.orcid):
         logger.error(f"Invalid ORCID format: {args.orcid}")

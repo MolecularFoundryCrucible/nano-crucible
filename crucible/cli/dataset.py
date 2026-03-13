@@ -54,8 +54,13 @@ def register_subcommand(subparsers):
     _register_list(dataset_subparsers)
     _register_get(dataset_subparsers)
     _register_create(dataset_subparsers)
+    _register_update(dataset_subparsers)
     _register_update_metadata(dataset_subparsers)
     _register_link(dataset_subparsers)
+    _register_download(dataset_subparsers)
+    _register_search(dataset_subparsers)
+    _register_parsers(dataset_subparsers)
+    _register_ingestors(dataset_subparsers)
 
 
 def _register_list(subparsers):
@@ -63,7 +68,15 @@ def _register_list(subparsers):
     parser = subparsers.add_parser(
         'list',
         help='List datasets',
-        description='List datasets in a project'
+        description='List datasets, with optional filters',
+        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+    crucible dataset list -pid my-project
+    crucible dataset list -pid my-project -m XRD
+    crucible dataset list -pid my-project -k silicon --limit 20
+    crucible dataset list --session 2024-01-15-run
+"""
     )
 
     parser.add_argument(
@@ -72,6 +85,43 @@ def _register_list(subparsers):
         default=None,
         metavar='ID',
         help='Crucible project ID (uses config current_project if not specified)'
+    )
+
+    parser.add_argument(
+        '-m', '--measurement',
+        default=None,
+        metavar='TYPE',
+        help='Filter by measurement type (exact match)'
+    )
+
+    parser.add_argument(
+        '-k', '--keyword',
+        default=None,
+        metavar='WORD',
+        help='Filter by keyword (case-insensitive substring match)'
+    )
+
+    parser.add_argument(
+        '--session',
+        default=None,
+        metavar='NAME',
+        help='Filter by session name (exact match)'
+    )
+
+    parser.add_argument(
+        '--data-format',
+        default=None,
+        dest='data_format',
+        metavar='FORMAT',
+        help='Filter by data format (exact match)'
+    )
+
+    parser.add_argument(
+        '--instrument',
+        default=None,
+        dest='instrument_name',
+        metavar='NAME',
+        help='Filter by instrument name (exact match)'
     )
 
     parser.add_argument(
@@ -281,6 +331,19 @@ Examples:
         help='Data format type (optional)'
     )
 
+    # Ingestor
+    from crucible.constants import AVAILABLE_INGESTORS
+    ingestor_arg = parser.add_argument(
+        '--ingestor',
+        dest='ingestor',
+        default='ApiUploadIngestor',
+        metavar='CLASS',
+        help='Server-side ingestor class to use (default: ApiUploadIngestor). '
+             'Run "crucible dataset ingestors" to see all available options.'
+    )
+    if ARGCOMPLETE_AVAILABLE:
+        ingestor_arg.completer = lambda **kwargs: AVAILABLE_INGESTORS
+
     # Dry run flag
     parser.add_argument(
         '--dry-run',
@@ -292,12 +355,31 @@ Examples:
     parser.set_defaults(func=_execute_create)
 
 
-def _register_update_metadata(subparsers):
-    """Register the 'dataset update-metadata' subcommand."""
+def _dataset_updatable_fields():
+    """Return sorted list of fields that can be updated on a dataset (derived from BaseDataset model)."""
+    from ..models import BaseDataset
+    # Exclude server-managed / identifier fields
+    _readonly = {'unique_id', 'owner_user_id', 'size', 'sha256_hash_file_to_upload'}
+    return sorted(set(BaseDataset.model_fields.keys()) - _readonly)
+
+
+def _register_update(subparsers):
+    """Register the 'dataset update' subcommand."""
+    fields = _dataset_updatable_fields()
     parser = subparsers.add_parser(
-        'update-metadata',
-        help='Update scientific metadata',
-        description='Update scientific metadata for a dataset'
+        'update',
+        help='Update dataset fields',
+        description='Update fields of an existing dataset',
+        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        epilog=f"""
+Updatable fields:
+    {', '.join(fields)}
+
+Examples:
+    crucible dataset update DSID --set dataset_name="My Dataset"
+    crucible dataset update DSID --set public=true
+    crucible dataset update DSID --set measurement=XRD --set session_name=run-01
+"""
     )
 
     dataset_id_arg = parser.add_argument(
@@ -305,15 +387,116 @@ def _register_update_metadata(subparsers):
         metavar='DATASET_ID',
         help='Dataset unique ID'
     )
-    # Disable file completion for dataset_id
+    if ARGCOMPLETE_AVAILABLE:
+        dataset_id_arg.completer = argcomplete.completers.SuppressCompleter()
+
+    parser.add_argument(
+        '--set', '-s',
+        action='append',
+        dest='set_fields',
+        metavar='KEY=VALUE',
+        required=True,
+        help='Set a dataset field (repeatable). Values are auto-cast to int, float, bool, or string.'
+    )
+
+    parser.add_argument(
+        '-v', '--verbose',
+        action='store_true',
+        help='Verbose output'
+    )
+
+    parser.set_defaults(func=_execute_update)
+
+
+def _execute_update(args):
+    """Execute the 'dataset update' subcommand."""
+    from crucible.client import CrucibleClient
+    valid_fields = set(_dataset_updatable_fields())
+    updates = {}
+    for field in args.set_fields:
+        if '=' not in field:
+            logger.error(f"Error: --set requires KEY=VALUE format, got: '{field}'")
+            sys.exit(1)
+        key, _, value = field.partition('=')
+        key = key.strip()
+        if key not in valid_fields:
+            logger.error(
+                f"Unknown field '{key}'.\n"
+                f"Valid fields: {', '.join(sorted(valid_fields))}"
+            )
+            sys.exit(1)
+        updates[key] = _cast_value(value)
+
+    try:
+        client = CrucibleClient()
+        result = client.datasets.update(args.dataset_id, **updates)
+
+        logger.info(f"✓ Dataset {args.dataset_id} updated")
+        if args.verbose:
+            logger.debug(f"Updated fields: {list(updates.keys())}")
+            logger.debug(f"Result: {result}")
+
+    except Exception as e:
+        logger.error(f"Error updating dataset: {e}")
+        if args.verbose:
+            import traceback
+            traceback.print_exc()
+        sys.exit(1)
+
+
+def _register_update_metadata(subparsers):
+    """Register the 'dataset update-metadata' subcommand."""
+    parser = subparsers.add_parser(
+        'update-metadata',
+        help='Update scientific metadata',
+        description='Update scientific metadata for a dataset',
+        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+    # Key=value pairs (auto-cast to int/float/bool/str)
+    crucible dataset update-metadata DSID --set temperature=300 --set pressure=1.0
+
+    # Inline JSON string
+    crucible dataset update-metadata DSID --metadata '{"temperature": 300}'
+
+    # From a JSON file
+    crucible dataset update-metadata DSID --metadata metadata.json
+
+    # Mix: load base from file, override one field
+    crucible dataset update-metadata DSID --metadata base.json --set temperature=300
+
+    # Full replace instead of merge
+    crucible dataset update-metadata DSID --set temperature=300 --overwrite
+"""
+    )
+
+    dataset_id_arg = parser.add_argument(
+        'dataset_id',
+        metavar='DATASET_ID',
+        help='Dataset unique ID'
+    )
     if ARGCOMPLETE_AVAILABLE:
         dataset_id_arg.completer = argcomplete.completers.SuppressCompleter()
 
     parser.add_argument(
         '--metadata',
-        required=True,
+        default=None,
         metavar='JSON',
         help='Scientific metadata as JSON string or path to JSON file'
+    )
+
+    parser.add_argument(
+        '--set', '-s',
+        action='append',
+        dest='set_fields',
+        metavar='KEY=VALUE',
+        help='Set a single metadata field (repeatable). Values are auto-cast to int, float, bool, or string.'
+    )
+
+    parser.add_argument(
+        '--overwrite',
+        action='store_true',
+        help='Replace all existing metadata instead of merging'
     )
 
     parser.add_argument(
@@ -356,14 +539,202 @@ def _register_link(subparsers):
     parser.set_defaults(func=_execute_link)
 
 
+def _register_download(subparsers):
+    """Register the 'dataset download' subcommand."""
+    parser = subparsers.add_parser(
+        'download',
+        help='Download dataset files',
+        description='Download files from a Crucible dataset',
+        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+    # Download all files into ./crucible-downloads/<dataset_id>/
+    crucible dataset download DATASET_ID
+
+    # Download to a specific directory
+    crucible dataset download DATASET_ID -o my_data/
+
+    # Download a single file
+    crucible dataset download DATASET_ID -f results.csv
+
+    # Force re-download of files that already exist locally
+    crucible dataset download DATASET_ID --overwrite
+"""
+    )
+
+    dataset_id_arg = parser.add_argument(
+        'dataset_id',
+        metavar='DATASET_ID',
+        help='Dataset unique ID'
+    )
+    if ARGCOMPLETE_AVAILABLE:
+        dataset_id_arg.completer = argcomplete.completers.SuppressCompleter()
+
+    parser.add_argument(
+        '-o', '--output-dir',
+        dest='output_dir',
+        default=None,
+        metavar='DIR',
+        help='Directory to save downloaded files (default: crucible-downloads/DATASET_ID/)'
+    )
+
+    parser.add_argument(
+        '-f', '--file',
+        dest='file_name',
+        default=None,
+        metavar='FILE',
+        help='Download a specific file only (supports regex)'
+    )
+
+    parser.add_argument(
+        '--overwrite',
+        action='store_true',
+        dest='overwrite',
+        help='Re-download and overwrite files that already exist locally'
+    )
+
+    parser.add_argument(
+        '-v', '--verbose',
+        action='store_true',
+        help='Verbose output'
+    )
+
+    parser.set_defaults(func=_execute_download)
+
+
+def _execute_download(args):
+    """Execute the 'dataset download' subcommand."""
+    from crucible.client import CrucibleClient
+    output_dir = args.output_dir or f"crucible-downloads/{args.dataset_id}"
+
+    try:
+        client = CrucibleClient()
+        logger.info(f"Downloading dataset {args.dataset_id} to {output_dir}/")
+
+        downloaded = client.datasets.download(
+            args.dataset_id,
+            file_name=args.file_name,
+            output_dir=output_dir,
+            overwrite_existing=args.overwrite
+        )
+
+        if not downloaded:
+            if args.file_name:
+                logger.info(f"No files matched '{args.file_name}'")
+            else:
+                logger.info("No files to download (all already exist or dataset is empty)")
+        else:
+            logger.info(f"✓ Downloaded {len(downloaded)} file(s):")
+            for path in downloaded:
+                logger.info(f"  {path}")
+
+    except Exception as e:
+        logger.error(f"Error downloading dataset: {e}")
+        if args.verbose:
+            import traceback
+            traceback.print_exc()
+        sys.exit(1)
+
+
+def _register_search(subparsers):
+    """Register the 'dataset search' subcommand."""
+    parser = subparsers.add_parser(
+        'search',
+        help='Search datasets by scientific metadata',
+        description='Full-text search across scientific metadata of all datasets',
+        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+    crucible dataset search "thermal conductivity"
+    crucible dataset search "silicon XRD 300K"
+    crucible dataset search temperature -v
+"""
+    )
+
+    parser.add_argument(
+        'query',
+        metavar='QUERY',
+        help='Search query string'
+    )
+
+    parser.add_argument(
+        '--limit', '-l',
+        type=int,
+        default=DEFAULT_LIMIT,
+        metavar='N',
+        help='Maximum number of results to return (default: 100)'
+    )
+
+    parser.add_argument(
+        '-v', '--verbose',
+        action='store_true',
+        help='Verbose output (show full metadata for each result)'
+    )
+
+    parser.set_defaults(func=_execute_search)
+
+
+def _execute_search(args):
+    """Execute the 'dataset search' subcommand."""
+    from crucible.client import CrucibleClient
+    try:
+        client = CrucibleClient()
+        results = client.datasets.search_scientific_metadata(args.query)
+
+        if args.limit:
+            results = results[:args.limit]
+
+        logger.info(f"\n=== Search results for '{args.query}' ===")
+        logger.info(f"Found {len(results)} result(s)\n")
+
+        for i, r in enumerate(results, 1):
+            mfid = r.get('dataset_mfid', 'N/A')
+            logger.info(f"{i}. {mfid}")
+            if args.verbose:
+                scimd = r.get('scientific_metadata', {})
+                for key, value in scimd.items():
+                    if isinstance(value, dict):
+                        logger.info(f"   {key}: <dict with {len(value)} keys>")
+                    elif isinstance(value, list):
+                        logger.info(f"   {key}: <list with {len(value)} items>")
+                    else:
+                        logger.info(f"   {key}: {value}")
+            logger.info("")
+
+    except Exception as e:
+        logger.error(f"Error searching datasets: {e}")
+        if args.verbose:
+            import traceback
+            traceback.print_exc()
+        sys.exit(1)
+
+
+def _register_parsers(subparsers):
+    """Register the 'dataset parsers' subcommand."""
+    parser = subparsers.add_parser(
+        'parsers',
+        help='List available dataset parsers',
+        description='Show all available dataset parsers, including those installed via third-party packages',
+        epilog="""
+Examples:
+    crucible dataset parsers
+    crucible dataset parsers -v
+"""
+    )
+
+    parser.add_argument(
+        '-v', '--verbose',
+        action='store_true',
+        help='Show additional parser details'
+    )
+
+    parser.set_defaults(func=_execute_parsers)
+
+
 def _execute_list(args):
     """Execute the 'dataset list' subcommand."""
     from crucible.config import config
     from crucible.client import CrucibleClient
-    from crucible.cli import setup_logging
-
-    setup_logging(verbose=args.verbose)
-
     # Get project_id
     project_id = args.project_id
     if project_id is None:
@@ -372,11 +743,27 @@ def _execute_list(args):
             logger.error("Error: Project ID required. Specify with -pid or set current_project in config.")
             sys.exit(1)
 
+    # Build optional filters
+    filters = {}
+    if args.measurement:
+        filters['measurement'] = args.measurement
+    if args.keyword:
+        filters['keyword'] = args.keyword
+    if args.session:
+        filters['session_name'] = args.session
+    if args.data_format:
+        filters['data_format'] = args.data_format
+    if args.instrument_name:
+        filters['instrument_name'] = args.instrument_name
+
     try:
         client = CrucibleClient()
-        datasets = client.datasets.list(project_id=project_id, limit=args.limit)
+        datasets = client.datasets.list(project_id=project_id, limit=args.limit, **filters)
 
-        logger.info(f"\n=== Datasets in project {project_id} ===")
+        header = f"\n=== Datasets in project {project_id} ===" if project_id else "\n=== Datasets ==="
+        logger.info(header)
+        if filters:
+            logger.info(f"Filters: {', '.join(f'{k}={v}' for k, v in filters.items())}")
         logger.info(f"Found {len(datasets)} dataset(s)\n")
 
         if datasets:
@@ -401,10 +788,6 @@ def _execute_list(args):
 def _execute_get(args):
     """Execute the 'dataset get' subcommand."""
     from crucible.client import CrucibleClient
-    from crucible.cli import setup_logging
-
-    setup_logging(verbose=args.verbose)
-
     try:
         client = CrucibleClient()
         dataset = client.datasets.get(args.dataset_id, include_metadata=args.include_metadata)
@@ -443,11 +826,6 @@ def _execute_create(args):
     """Execute the 'dataset create' subcommand."""
     from crucible.parsers import get_parser, BaseParser
     from crucible.config import config
-    from crucible.cli import setup_logging
-
-    # Set up logging
-    setup_logging(verbose=args.verbose)
-
     # Get project_id
     project_id = args.project_id
     project_from_config = False
@@ -517,6 +895,13 @@ def _execute_create(args):
 
     # Determine parser class
     if args.dataset_type is None:
+        from crucible.parsers import get_all_parsers
+        all_parsers = get_all_parsers()
+        non_base = sorted(k for k in all_parsers if k != 'base')
+        if non_base:
+            logger.info(f"Tip: No parser type specified (-t). Using generic upload (BaseParser).")
+            logger.info(f"     Available parsers: {', '.join(non_base)}")
+            logger.info(f"     Run 'crucible dataset parsers' to see all options.\n")
         ParserClass = BaseParser
     else:
         try:
@@ -547,6 +932,11 @@ def _execute_create(args):
             traceback.print_exc()
         sys.exit(1)
 
+    # If a custom ingestor is used and the user didn't explicitly set -m,
+    # clear the parser's default measurement so the server assigns it
+    if args.ingestor != 'ApiUploadIngestor' and args.measurement is None:
+        parser.measurement = None
+
     # Display dataset information
     logger.info("\n=== Dataset Information ===")
     if project_from_config:
@@ -556,7 +946,10 @@ def _execute_create(args):
     logger.info(f"Parser: {ParserClass.__name__}")
     if parser.dataset_name:
         logger.info(f"Name: {parser.dataset_name}")
-    logger.info(f"Measurement: {parser.measurement}")
+    if parser.measurement:
+        logger.info(f"Measurement: {parser.measurement}")
+    else:
+        logger.info(f"Measurement: (assigned by server)")
     if parser.data_format:
         logger.info(f"Data format: {parser.data_format}")
     if parser.session_name:
@@ -597,6 +990,7 @@ def _execute_create(args):
             logger.info(f"Would use locally generated mfid: {dataset_mfid}")
         else:
             logger.info(f"Would use provided mfid: {dataset_mfid}")
+        logger.info(f"Ingestor: {args.ingestor}")
         logger.info("\nTo upload this dataset, run the command again without --dry-run")
     else:
         logger.info("\n=== Uploading to Crucible ===")
@@ -606,9 +1000,11 @@ def _execute_create(args):
             logger.info(f"Using locally generated mfid: {dataset_mfid}")
         else:
             logger.info(f"Using provided mfid: {dataset_mfid}")
+        logger.info(f"Ingestor: {args.ingestor}")
 
         try:
             result = parser.upload_dataset(
+                ingestor=args.ingestor,
                 verbose=args.verbose,
                 wait_for_ingestion_response=True
             )
@@ -631,34 +1027,66 @@ def _execute_create(args):
     logger.info("\nDone!")
 
 
+def _cast_value(value):
+    """Auto-cast a string value to int, float, bool, or string."""
+    if value.lower() == 'true':
+        return True
+    if value.lower() == 'false':
+        return False
+    try:
+        return int(value)
+    except ValueError:
+        pass
+    try:
+        return float(value)
+    except ValueError:
+        pass
+    return value
+
+
 def _execute_update_metadata(args):
     """Execute the 'dataset update-metadata' subcommand."""
     from crucible.client import CrucibleClient
-    from crucible.cli import setup_logging
+    if not args.metadata and not args.set_fields:
+        logger.error("Error: provide at least one of --metadata or --set KEY=VALUE")
+        sys.exit(1)
 
-    setup_logging(verbose=args.verbose)
+    metadata_dict = {}
 
-    # Parse metadata
-    metadata_input = args.metadata
-    if Path(metadata_input).exists():
-        try:
-            with open(metadata_input, 'r') as f:
-                metadata_dict = json.load(f)
-        except json.JSONDecodeError as e:
-            logger.error(f"Error: Invalid JSON in file {metadata_input}: {e}")
-            sys.exit(1)
-    else:
-        try:
-            metadata_dict = json.loads(metadata_input)
-        except json.JSONDecodeError as e:
-            logger.error(f"Error: Invalid JSON in --metadata: {e}")
-            sys.exit(1)
+    # Parse --metadata (JSON string or file)
+    if args.metadata:
+        metadata_path = Path(args.metadata)
+        if metadata_path.exists():
+            try:
+                with open(metadata_path, 'r') as f:
+                    metadata_dict = json.load(f)
+            except json.JSONDecodeError as e:
+                logger.error(f"Error: Invalid JSON in file {metadata_path}: {e}")
+                sys.exit(1)
+        else:
+            try:
+                metadata_dict = json.loads(args.metadata)
+            except json.JSONDecodeError:
+                logger.error(f"Error: '{args.metadata}' is not valid JSON and no such file exists.")
+                sys.exit(1)
+
+    # Parse --set KEY=VALUE pairs (override/extend --metadata)
+    if args.set_fields:
+        for field in args.set_fields:
+            if '=' not in field:
+                logger.error(f"Error: --set requires KEY=VALUE format, got: '{field}'")
+                sys.exit(1)
+            key, _, value = field.partition('=')
+            metadata_dict[key.strip()] = _cast_value(value)
 
     try:
         client = CrucibleClient()
-        result = client.datasets.update_scientific_metadata(args.dataset_id, metadata_dict)
+        result = client.datasets.update_scientific_metadata(
+            args.dataset_id, metadata_dict, overwrite=args.overwrite
+        )
 
-        logger.info(f"✓ Metadata updated for dataset {args.dataset_id}")
+        action = "replaced" if args.overwrite else "updated"
+        logger.info(f"✓ Metadata {action} for dataset {args.dataset_id}")
         if args.verbose:
             logger.debug(f"Result: {result}")
 
@@ -673,10 +1101,6 @@ def _execute_update_metadata(args):
 def _execute_link(args):
     """Execute the 'dataset link' subcommand."""
     from crucible.client import CrucibleClient
-    from crucible.cli import setup_logging
-
-    setup_logging(verbose=args.verbose)
-
     try:
         client = CrucibleClient()
         result = client.datasets.link_parent_child(args.parent, args.child)
@@ -691,3 +1115,82 @@ def _execute_link(args):
             import traceback
             traceback.print_exc()
         sys.exit(1)
+
+
+def _execute_parsers(args):
+    """Execute the 'dataset parsers' subcommand."""
+    from crucible.parsers import PARSER_REGISTRY, get_all_parsers
+    all_parsers = get_all_parsers()
+    builtin_names = set(PARSER_REGISTRY.keys())
+
+    logger.info(f"\n=== Available Dataset Parsers ===\n")
+
+    for name, cls in sorted(all_parsers.items()):
+        source = "built-in" if name in builtin_names else "installed"
+        measurement = getattr(cls, '_measurement', 'N/A')
+        data_format = getattr(cls, '_data_format', None)
+
+        logger.info(f"  {name}  [{source}]")
+        if args.verbose:
+            logger.info(f"    Class:       {cls.__module__}.{cls.__name__}")
+            logger.info(f"    Measurement: {measurement}")
+            if data_format:
+                logger.info(f"    Data format: {data_format}")
+    
+    logger.info("")
+    logger.info(f"Use with: crucible dataset create -i FILE -t TYPE ...")
+    logger.info(f"Additional parsers can be installed via third-party packages.")
+    logger.info(f"  (registered under the 'crucible.parsers' entry-point group)")
+
+
+def _register_ingestors(subparsers):
+    """Register the 'dataset ingestors' subcommand."""
+    parser = subparsers.add_parser(
+        'ingestors',
+        help='List available server-side ingestors',
+        description='Show all known server-side ingestor classes',
+        epilog="""
+Examples:
+    crucible dataset ingestors
+    crucible dataset ingestors --filter scopefoundry
+
+Use the ingestor name with:
+    crucible dataset create -i FILE --ingestor INGESTOR_CLASS
+"""
+    )
+
+    parser.add_argument(
+        '--filter', '-f',
+        dest='filter',
+        default=None,
+        metavar='TEXT',
+        help='Filter ingestors by name (case-insensitive substring match)'
+    )
+
+    parser.add_argument(
+        '-v', '--verbose',
+        action='store_true',
+        help='Verbose output'
+    )
+
+    parser.set_defaults(func=_execute_ingestors)
+
+
+def _execute_ingestors(args):
+    """Execute the 'dataset ingestors' subcommand."""
+    from crucible.constants import AVAILABLE_INGESTORS
+    ingestors = AVAILABLE_INGESTORS
+    if args.filter:
+        ingestors = [i for i in ingestors if args.filter.lower() in i.lower()]
+
+    logger.info(f"\n=== Available Server-Side Ingestors ===\n")
+
+    if not ingestors:
+        logger.info(f"  No ingestors match filter: '{args.filter}'")
+    else:
+        for name in ingestors:
+            logger.info(f"  {name}")
+
+    logger.info(f"")
+    logger.info(f"Use with: crucible dataset create -i FILE --ingestor INGESTOR_CLASS")
+    logger.info(f"Default:  ApiUploadIngestor (generic upload, no server-side parsing)")

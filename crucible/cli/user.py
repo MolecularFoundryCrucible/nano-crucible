@@ -174,10 +174,6 @@ Examples:
 def _execute_get(args):
     """Execute the 'user get' subcommand."""
     from crucible.client import CrucibleClient
-    from crucible.cli import setup_logging
-
-    setup_logging(verbose=args.verbose)
-
     if not args.orcid and not args.email:
         logger.error("Error: Either --orcid or --email must be provided")
         sys.exit(1)
@@ -222,10 +218,6 @@ def _execute_get(args):
 def _execute_create(args):
     """Execute the 'user create' subcommand."""
     from crucible.client import CrucibleClient
-    from crucible.cli import setup_logging
-
-    setup_logging(verbose=args.verbose)
-
     # Interactive mode if required arguments are missing
     orcid = args.orcid
     first_name = args.first_name
@@ -340,10 +332,6 @@ def _execute_create(args):
 def _execute_list(args):
     """Execute the 'user list' subcommand."""
     from crucible.client import CrucibleClient
-    from crucible.cli import setup_logging
-
-    setup_logging(verbose=args.verbose)
-
     try:
         client = CrucibleClient()
         users = client.users.list(limit=args.limit)

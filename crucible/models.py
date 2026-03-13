@@ -5,16 +5,18 @@ Pydantic models for Crucible API request and response objects.
 """
 
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import Optional
 
 
-class Project(BaseModel):
-    project_id: str
-    organization: str
-    project_lead_email: str
-    status: Optional[str] = None
-    title: Optional[str] = None
-    project_lead_name: Optional[str] = None
+class BaseSample(BaseModel):
+    unique_id: Optional[str] = None
+    sample_name: Optional[str] = None
+    sample_type: Optional[str] = None
+    owner_orcid: Optional[str] = None
+    owner_user_id: Optional[int] = None
+    date_created: Optional[str] = None
+    project_id: Optional[str] = None
+    description: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -38,14 +40,14 @@ class BaseDataset(BaseModel):
     sha256_hash_file_to_upload: Optional[str] = None
     source_folder: Optional[str] = None
     json_link: Optional[str] = None
-    
+
     class Config:
-        from_attributes = True  
+        from_attributes = True
 
 
 class Project(BaseModel):
     project_id: str
-    organization: str 
+    organization: str
     project_lead_email: str
     status: Optional[str] = None
     title: Optional[str] = None
