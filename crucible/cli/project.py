@@ -104,14 +104,16 @@ def _register_create(subparsers):
         'create',
         help='Create a new project',
         description='Create a new project in Crucible',
+        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
         epilog="""
 Examples:
     # Interactive mode (prompts for input)
     crucible project create
 
-    # Command-line mode (all arguments provided)
+    # Command-line mode
     crucible project create --project-id my-project -o "LBNL" -e "lead@lbl.gov"
-    crucible project create --project-id alphafold-exp -o "Argonne" -e "researcher@anl.gov"
+    crucible project create --project-id my-project -o "LBNL" -e "lead@lbl.gov" \\
+        --title "Silicon Wafer Study" --lead-name "Jane Doe"
 """
     )
 
@@ -138,6 +140,31 @@ Examples:
         metavar='EMAIL',
         dest='project_lead_email',
         help='Project lead email address. If not provided, will prompt interactively.'
+    )
+
+    parser.add_argument(
+        '--title',
+        required=False,
+        default=None,
+        metavar='TITLE',
+        help='Human-readable project title (optional)'
+    )
+
+    parser.add_argument(
+        '--lead-name',
+        required=False,
+        default=None,
+        metavar='NAME',
+        dest='project_lead_name',
+        help='Project lead full name (optional)'
+    )
+
+    parser.add_argument(
+        '--status',
+        required=False,
+        default=None,
+        metavar='STATUS',
+        help='Project status (optional)'
     )
 
     parser.add_argument(
@@ -298,8 +325,12 @@ def _execute_create(args):
     project_id = args.project_id
     organization = args.organization
     project_lead_email = args.project_lead_email
+    title = args.title
+    project_lead_name = args.project_lead_name
+    status = args.status
 
-    if project_id is None or organization is None or project_lead_email is None:
+    interactive = project_id is None or organization is None or project_lead_email is None
+    if interactive:
         logger.info("\n=== Interactive Project Creation ===")
         logger.info("Please provide the following information:\n")
 
@@ -338,6 +369,20 @@ def _execute_create(args):
             else:
                 logger.error("Project lead email is required.")
 
+    # Optional fields — only prompt in interactive mode
+    if interactive:
+        if title is None:
+            val = input("Project title (optional, press Enter to skip): ").strip()
+            title = val or None
+
+        if project_lead_name is None:
+            val = input("Project lead name (optional, press Enter to skip): ").strip()
+            project_lead_name = val or None
+
+        if status is None:
+            val = input("Status (optional, press Enter to skip): ").strip()
+            status = val or None
+
     try:
         from crucible.models import Project
         client = CrucibleClient()
@@ -358,7 +403,10 @@ def _execute_create(args):
         project = Project(
             project_id=project_id,
             organization=organization,
-            project_lead_email=project_lead_email
+            project_lead_email=project_lead_email,
+            title=title,
+            project_lead_name=project_lead_name,
+            status=status,
         )
         result = client.projects.create(project)
 
@@ -366,6 +414,10 @@ def _execute_create(args):
         logger.info(f"Project ID:   {result.get('project_id', 'N/A')}")
         logger.info(f"Organization: {result.get('organization', 'N/A')}")
         logger.info(f"Lead Email:   {result.get('project_lead_email', 'N/A')}")
+        if result.get('title'):
+            logger.info(f"Title:        {result['title']}")
+        if result.get('project_lead_name'):
+            logger.info(f"Lead Name:    {result['project_lead_name']}")
 
         if args.verbose:
             logger.debug(f"\nFull result: {json.dumps(result, indent=2)}")
