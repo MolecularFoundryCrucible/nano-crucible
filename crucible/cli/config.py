@@ -11,6 +11,38 @@ import os
 import subprocess
 from pathlib import Path
 
+#%%
+
+def get_default_editor():
+    """Get the best available editor for the current platform."""
+    import shutil
+
+    # Check environment variables first (user preference always wins)
+    editor = os.environ.get('EDITOR') or os.environ.get('VISUAL')
+    if editor:
+        return editor
+
+    if sys.platform == 'win32':
+        # Try common Windows editors in order of preference
+        candidates = ['code', 'notepad++', 'notepad']
+        for candidate in candidates:
+            if shutil.which(candidate):
+                return candidate
+        return 'notepad'  # notepad is always available on Windows
+
+    elif sys.platform == 'darwin':
+        candidates = ['code', 'nano', 'vim', 'vi']
+        for candidate in candidates:
+            if shutil.which(candidate):
+                return candidate
+        return 'nano'
+
+    else:  # Linux and other Unix-like
+        candidates = ['code', 'nano', 'vim', 'vi', 'gedit', 'kate']
+        for candidate in candidates:
+            if shutil.which(candidate):
+                return candidate
+        return 'vi'  # vi is POSIX-guaranteed
 
 def register_subcommand(subparsers):
     """Register the config subcommand."""
@@ -352,15 +384,13 @@ def cmd_edit(args):
         print("Create it first with: crucible config init")
         sys.exit(1)
 
-    # Determine editor
-    editor = os.environ.get('EDITOR', os.environ.get('VISUAL', 'nano'))
+    editor = get_default_editor()
 
     print(f"Opening {config_file} with {editor}...")
 
     try:
         subprocess.run([editor, str(config_file)], check=True)
         print("\n✓ Config file updated")
-        # Reload config
         config.reload()
         print("✓ Configuration reloaded")
     except subprocess.CalledProcessError as e:
@@ -368,5 +398,8 @@ def cmd_edit(args):
         sys.exit(1)
     except FileNotFoundError:
         print(f"Editor not found: {editor}", file=sys.stderr)
-        print("Set your editor with: export EDITOR=vim", file=sys.stderr)
+        if sys.platform == 'win32':
+            print("Set your editor with: set EDITOR=notepad", file=sys.stderr)
+        else:
+            print("Set your editor with: export EDITOR=vim", file=sys.stderr)
         sys.exit(1)
