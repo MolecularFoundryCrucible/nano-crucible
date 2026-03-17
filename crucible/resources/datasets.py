@@ -700,3 +700,16 @@ class DatasetOperations(BaseResource):
         """
         result = self._request('post', f"/datasets/{dsid}/carrier_segmentation")
         return result
+
+
+    def request_insitu_aggregation(self, dsid: str) -> Dict:
+        """Request insitu spectroscopy data aggregation for a dataset.
+
+        Args:
+            dsid (str): Dataset unique identifier
+
+        Returns:
+            Dict: Data processing request information
+        """
+        result = self._request('post', f"/datasets/{dsid}/insitu_aggregation")
+        return result
