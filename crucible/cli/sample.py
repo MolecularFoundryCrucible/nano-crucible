@@ -253,13 +253,13 @@ def _execute_update(args):
         result = client.samples.update(args.sample_id, **updates)
 
         logger.info(f"✓ Sample {args.sample_id} updated")
-        if args.verbose:
+        if getattr(args, "debug", False):
             logger.debug(f"Updated fields: {list(updates.keys())}")
             logger.debug(f"Result: {json.dumps(result, indent=2)}")
 
     except Exception as e:
         logger.error(f"Error updating sample: {e}")
-        if args.verbose:
+        if getattr(args, "debug", False):
             import traceback
             traceback.print_exc()
         sys.exit(1)
@@ -423,7 +423,7 @@ def _execute_list(args):
 
     except Exception as e:
         logger.error(f"Error listing samples: {e}")
-        if args.verbose:
+        if getattr(args, "debug", False):
             import traceback
             traceback.print_exc()
         sys.exit(1)
@@ -464,7 +464,7 @@ def _execute_get(args):
 
     except Exception as e:
         logger.error(f"Error retrieving sample: {e}")
-        if args.verbose:
+        if getattr(args, "debug", False):
             import traceback
             traceback.print_exc()
         sys.exit(1)
@@ -494,12 +494,12 @@ def _execute_create(args):
         logger.info(f"Sample ID: {result.get('unique_id', 'N/A')}")
         logger.info(f"Name: {result.get('sample_name', 'N/A')}")
 
-        if args.verbose:
+        if getattr(args, "debug", False):
             logger.debug(f"\nFull result: {json.dumps(result, indent=2)}")
 
     except Exception as e:
         logger.error(f"Error creating sample: {e}")
-        if args.verbose:
+        if getattr(args, "debug", False):
             import traceback
             traceback.print_exc()
         sys.exit(1)
@@ -513,12 +513,12 @@ def _execute_link(args):
         result = client.samples.link(args.parent, args.child)
 
         logger.info(f"✓ Linked sample {args.child} as child of {args.parent}")
-        if args.verbose:
+        if getattr(args, "debug", False):
             logger.debug(f"Result: {result}")
 
     except Exception as e:
         logger.error(f"Error linking samples: {e}")
-        if args.verbose:
+        if getattr(args, "debug", False):
             import traceback
             traceback.print_exc()
         sys.exit(1)
@@ -541,11 +541,11 @@ def _execute_list_parents(args):
             name = s.get('sample_name') or '(unnamed)'
             logger.info(f"  {uid}  {name}")
             if args.verbose:
-                logger.debug(f"    type={s.get('sample_type')}  project={s.get('project_id')}")
+                logger.info(f"    type={s.get('sample_type')}  project={s.get('project_id')}")
 
     except Exception as e:
         logger.error(f"Error listing parent samples: {e}")
-        if args.verbose:
+        if getattr(args, "debug", False):
             import traceback
             traceback.print_exc()
         sys.exit(1)
@@ -568,11 +568,11 @@ def _execute_list_children(args):
             name = s.get('sample_name') or '(unnamed)'
             logger.info(f"  {uid}  {name}")
             if args.verbose:
-                logger.debug(f"    type={s.get('sample_type')}  project={s.get('project_id')}")
+                logger.info(f"    type={s.get('sample_type')}  project={s.get('project_id')}")
 
     except Exception as e:
         logger.error(f"Error listing child samples: {e}")
-        if args.verbose:
+        if getattr(args, "debug", False):
             import traceback
             traceback.print_exc()
         sys.exit(1)
@@ -595,11 +595,11 @@ def _execute_list_datasets(args):
             name = ds.get('dataset_name') or '(unnamed)'
             logger.info(f"  {uid}  {name}")
             if args.verbose:
-                logger.debug(f"    measurement={ds.get('measurement')}  project={ds.get('project_id')}")
+                logger.info(f"    measurement={ds.get('measurement')}  project={ds.get('project_id')}")
 
     except Exception as e:
         logger.error(f"Error listing datasets: {e}")
-        if args.verbose:
+        if getattr(args, "debug", False):
             import traceback
             traceback.print_exc()
         sys.exit(1)
@@ -613,12 +613,12 @@ def _execute_link_dataset(args):
         result = client.samples.add_to_dataset(args.sample, args.dataset)
 
         logger.info(f"✓ Linked dataset {args.dataset} to sample {args.sample}")
-        if args.verbose:
+        if getattr(args, "debug", False):
             logger.debug(f"Result: {result}")
 
     except Exception as e:
         logger.error(f"Error linking dataset to sample: {e}")
-        if args.verbose:
+        if getattr(args, "debug", False):
             import traceback
             traceback.print_exc()
         sys.exit(1)

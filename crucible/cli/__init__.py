@@ -89,6 +89,13 @@ Examples:
         version=f'%(prog)s {__version__}'
     )
 
+    parser.add_argument(
+        '--debug',
+        action='store_true',
+        default=False,
+        help='Enable debug logging (HTTP calls, raw API responses, tracebacks)'
+    )
+
     # Subcommand parsers
     subparsers = parser.add_subparsers(
         title='commands',
@@ -124,7 +131,7 @@ Examples:
     args = parser.parse_args()
 
     # Configure logging once for the entire CLI
-    setup_logging(verbose=getattr(args, 'verbose', False))
+    setup_logging(verbose=getattr(args, 'debug', False))
 
     # If no command specified, show help
     if args.command is None:

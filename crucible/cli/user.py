@@ -208,12 +208,12 @@ def _execute_get(args):
         if user.get('id'):
             logger.info(f"ID: {user['id']}")
 
-        if args.verbose:
+        if getattr(args, "debug", False):
             logger.debug(f"\nFull user data: {json.dumps(user, indent=2)}")
 
     except Exception as e:
         logger.error(f"Error retrieving user: {e}")
-        if args.verbose:
+        if getattr(args, "debug", False):
             import traceback
             traceback.print_exc()
         sys.exit(1)
@@ -322,12 +322,12 @@ def _execute_create(args):
         if result.get('id'):
             logger.info(f"ID: {result['id']}")
 
-        if args.verbose:
+        if getattr(args, "debug", False):
             logger.debug(f"\nFull result: {json.dumps(result, indent=2)}")
 
     except Exception as e:
         logger.error(f"Error creating user: {e}")
-        if args.verbose:
+        if getattr(args, "debug", False):
             import traceback
             traceback.print_exc()
         sys.exit(1)
@@ -373,12 +373,12 @@ def _execute_list(args):
 
             logger.info("")
 
-        if args.verbose:
+        if getattr(args, "debug", False):
             logger.debug(f"\nFull data: {json.dumps(users, indent=2)}")
 
     except Exception as e:
         logger.error(f"Error listing users: {e}")
-        if args.verbose:
+        if getattr(args, "debug", False):
             import traceback
             traceback.print_exc()
         sys.exit(1)
@@ -470,7 +470,7 @@ def _execute_list_datasets(args):
 
     except Exception as e:
         logger.error(f"Error listing user datasets: {e}")
-        if args.verbose:
+        if getattr(args, "debug", False):
             import traceback
             traceback.print_exc()
         sys.exit(1)
@@ -489,7 +489,7 @@ def _execute_check_access(args):
 
     except Exception as e:
         logger.error(f"Error checking access: {e}")
-        if args.verbose:
+        if getattr(args, "debug", False):
             import traceback
             traceback.print_exc()
         sys.exit(1)
@@ -512,7 +512,7 @@ def _execute_get_access_groups(args):
 
     except Exception as e:
         logger.error(f"Error retrieving access groups: {e}")
-        if args.verbose:
+        if getattr(args, "debug", False):
             import traceback
             traceback.print_exc()
         sys.exit(1)
@@ -535,11 +535,11 @@ def _execute_get_projects(args):
             title = p.get('title') or p.get('project_id', '')
             logger.info(f"  {pid}  {title}")
             if args.verbose:
-                logger.debug(f"    org={p.get('organization')}  lead={p.get('project_lead_email')}")
+                logger.info(f"    org={p.get('organization')}  lead={p.get('project_lead_email')}")
 
     except Exception as e:
         logger.error(f"Error retrieving user projects: {e}")
-        if args.verbose:
+        if getattr(args, "debug", False):
             import traceback
             traceback.print_exc()
         sys.exit(1)

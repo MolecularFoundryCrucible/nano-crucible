@@ -126,7 +126,7 @@ def _execute_list(args):
 
     except Exception as e:
         logger.error(f"Error listing instruments: {e}")
-        if args.verbose:
+        if getattr(args, "debug", False):
             import traceback
             traceback.print_exc()
         sys.exit(1)
@@ -158,12 +158,12 @@ def _execute_get(args):
         if instrument.get('owner'):
             logger.info(f"Owner: {instrument['owner']}")
 
-        if args.verbose:
+        if getattr(args, "debug", False):
             logger.debug(f"\nFull instrument data: {json.dumps(instrument, indent=2)}")
 
     except Exception as e:
         logger.error(f"Error retrieving instrument: {e}")
-        if args.verbose:
+        if getattr(args, "debug", False):
             import traceback
             traceback.print_exc()
         sys.exit(1)

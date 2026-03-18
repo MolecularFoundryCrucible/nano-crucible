@@ -276,7 +276,7 @@ def _execute_list(args):
 
     except Exception as e:
         logger.error(f"Error listing projects: {e}")
-        if args.verbose:
+        if getattr(args, "debug", False):
             import traceback
             traceback.print_exc()
         sys.exit(1)
@@ -306,12 +306,12 @@ def _execute_get(args):
         if project.get('status'):
             logger.info(f"Status: {project['status']}")
 
-        if args.verbose:
+        if getattr(args, "debug", False):
             logger.debug(f"\nFull project data: {json.dumps(project, indent=2)}")
 
     except Exception as e:
         logger.error(f"Error retrieving project: {e}")
-        if args.verbose:
+        if getattr(args, "debug", False):
             import traceback
             traceback.print_exc()
         sys.exit(1)
@@ -394,7 +394,7 @@ def _execute_create(args):
             logger.info(f"Project ID:   {existing.get('project_id', 'N/A')}")
             logger.info(f"Organization: {existing.get('organization', 'N/A')}")
             logger.info(f"Lead Email:   {existing.get('project_lead_email', 'N/A')}")
-            if args.verbose:
+            if getattr(args, "debug", False):
                 logger.debug(f"\nFull result: {json.dumps(existing, indent=2)}")
             return
 
@@ -419,12 +419,12 @@ def _execute_create(args):
         if result.get('project_lead_name'):
             logger.info(f"Lead Name:    {result['project_lead_name']}")
 
-        if args.verbose:
+        if getattr(args, "debug", False):
             logger.debug(f"\nFull result: {json.dumps(result, indent=2)}")
 
     except Exception as e:
         logger.error(f"Error creating project: {e}")
-        if args.verbose:
+        if getattr(args, "debug", False):
             import traceback
             traceback.print_exc()
         sys.exit(1)
@@ -459,7 +459,7 @@ def _execute_get_users(args):
 
     except Exception as e:
         logger.error(f"Error listing project users: {e}")
-        if args.verbose:
+        if getattr(args, "debug", False):
             import traceback
             traceback.print_exc()
         sys.exit(1)
@@ -481,12 +481,12 @@ def _execute_add_user(args):
 
         logger.info(f"\n✓ User {args.orcid} added to project {args.project_id} successfully!")
 
-        if args.verbose:
+        if getattr(args, "debug", False):
             logger.debug(f"\nUpdated project users: {json.dumps(result, indent=2)}")
 
     except Exception as e:
         logger.error(f"Error adding user to project: {e}")
-        if args.verbose:
+        if getattr(args, "debug", False):
             import traceback
             traceback.print_exc()
         sys.exit(1)

@@ -437,13 +437,13 @@ def _execute_update(args):
         result = client.datasets.update(args.dataset_id, **updates)
 
         logger.info(f"✓ Dataset {args.dataset_id} updated")
-        if args.verbose:
+        if getattr(args, "debug", False):
             logger.debug(f"Updated fields: {list(updates.keys())}")
             logger.debug(f"Result: {result}")
 
     except Exception as e:
         logger.error(f"Error updating dataset: {e}")
-        if args.verbose:
+        if getattr(args, "debug", False):
             import traceback
             traceback.print_exc()
         sys.exit(1)
@@ -694,7 +694,7 @@ def _execute_download(args):
 
     except Exception as e:
         logger.error(f"Error downloading dataset: {e}")
-        if args.verbose:
+        if getattr(args, "debug", False):
             import traceback
             traceback.print_exc()
         sys.exit(1)
@@ -767,7 +767,7 @@ def _execute_search(args):
 
     except Exception as e:
         logger.error(f"Error searching datasets: {e}")
-        if args.verbose:
+        if getattr(args, "debug", False):
             import traceback
             traceback.print_exc()
         sys.exit(1)
@@ -801,12 +801,12 @@ def _execute_add_keyword(args):
         result = client.datasets.add_keyword(args.dataset_id, args.keyword)
 
         logger.info(f"✓ Keyword '{args.keyword}' added to {args.dataset_id}")
-        if args.verbose:
+        if getattr(args, "debug", False):
             logger.debug(f"Result: {result}")
 
     except Exception as e:
         logger.error(f"Error adding keyword: {e}")
-        if args.verbose:
+        if getattr(args, "debug", False):
             import traceback
             traceback.print_exc()
         sys.exit(1)
@@ -844,7 +844,7 @@ def _execute_get_keywords(args):
 
     except Exception as e:
         logger.error(f"Error retrieving keywords: {e}")
-        if args.verbose:
+        if getattr(args, "debug", False):
             import traceback
             traceback.print_exc()
         sys.exit(1)
@@ -920,7 +920,7 @@ def _execute_list(args):
 
     except Exception as e:
         logger.error(f"Error listing datasets: {e}")
-        if args.verbose:
+        if getattr(args, "debug", False):
             import traceback
             traceback.print_exc()
         sys.exit(1)
@@ -980,7 +980,7 @@ def _execute_get(args):
 
     except Exception as e:
         logger.error(f"Error retrieving dataset: {e}")
-        if args.verbose:
+        if getattr(args, "debug", False):
             import traceback
             traceback.print_exc()
         sys.exit(1)
@@ -1091,7 +1091,7 @@ def _execute_create(args):
         )
     except Exception as e:
         logger.error(f"Error parsing file: {e}")
-        if args.verbose:
+        if getattr(args, "debug", False):
             import traceback
             traceback.print_exc()
         sys.exit(1)
@@ -1169,21 +1169,21 @@ def _execute_create(args):
         try:
             result = parser.upload_dataset(
                 ingestor=args.ingestor,
-                verbose=args.verbose,
+                verbose=getattr(args, 'debug', False),
                 wait_for_ingestion_response=True
             )
 
             logger.info("\n✓ Upload successful!")
             logger.info(f"Dataset ID: {result.get('created_record', {}).get('unique_id', 'N/A')}")
 
-            if result and args.verbose:
+            if result and getattr(args, 'debug', False):
                 logger.debug("\nUpload result details:")
                 for key, value in result.items():
                     logger.debug(f"  {key}: {value}")
 
         except Exception as e:
             logger.error(f"\n✗ Upload failed: {e}")
-            if args.verbose:
+            if getattr(args, "debug", False):
                 import traceback
                 traceback.print_exc()
             sys.exit(1)
@@ -1251,12 +1251,12 @@ def _execute_update_metadata(args):
 
         action = "replaced" if args.overwrite else "updated"
         logger.info(f"✓ Metadata {action} for dataset {args.dataset_id}")
-        if args.verbose:
+        if getattr(args, "debug", False):
             logger.debug(f"Result: {result}")
 
     except Exception as e:
         logger.error(f"Error updating metadata: {e}")
-        if args.verbose:
+        if getattr(args, "debug", False):
             import traceback
             traceback.print_exc()
         sys.exit(1)
@@ -1270,12 +1270,12 @@ def _execute_link(args):
         result = client.datasets.link_parent_child(args.parent, args.child)
 
         logger.info(f"✓ Linked dataset {args.child} as child of {args.parent}")
-        if args.verbose:
+        if getattr(args, "debug", False):
             logger.debug(f"Result: {result}")
 
     except Exception as e:
         logger.error(f"Error linking datasets: {e}")
-        if args.verbose:
+        if getattr(args, "debug", False):
             import traceback
             traceback.print_exc()
         sys.exit(1)
@@ -1298,11 +1298,11 @@ def _execute_list_parents(args):
             name = ds.get('dataset_name') or '(unnamed)'
             logger.info(f"  {uid}  {name}")
             if args.verbose:
-                logger.debug(f"    measurement={ds.get('measurement')}  project={ds.get('project_id')}")
+                logger.info(f"    measurement={ds.get('measurement')}  project={ds.get('project_id')}")
 
     except Exception as e:
         logger.error(f"Error listing parent datasets: {e}")
-        if args.verbose:
+        if getattr(args, "debug", False):
             import traceback
             traceback.print_exc()
         sys.exit(1)
@@ -1325,11 +1325,11 @@ def _execute_list_children(args):
             name = ds.get('dataset_name') or '(unnamed)'
             logger.info(f"  {uid}  {name}")
             if args.verbose:
-                logger.debug(f"    measurement={ds.get('measurement')}  project={ds.get('project_id')}")
+                logger.info(f"    measurement={ds.get('measurement')}  project={ds.get('project_id')}")
 
     except Exception as e:
         logger.error(f"Error listing child datasets: {e}")
-        if args.verbose:
+        if getattr(args, "debug", False):
             import traceback
             traceback.print_exc()
         sys.exit(1)
@@ -1352,11 +1352,11 @@ def _execute_list_samples(args):
             name = s.get('sample_name') or '(unnamed)'
             logger.info(f"  {uid}  {name}")
             if args.verbose:
-                logger.debug(f"    type={s.get('sample_type')}  project={s.get('project_id')}")
+                logger.info(f"    type={s.get('sample_type')}  project={s.get('project_id')}")
 
     except Exception as e:
         logger.error(f"Error listing samples: {e}")
-        if args.verbose:
+        if getattr(args, "debug", False):
             import traceback
             traceback.print_exc()
         sys.exit(1)
