@@ -47,6 +47,7 @@ def register_subcommand(subparsers):
     _register_link(sample_subparsers)
     _register_list_parents(sample_subparsers)
     _register_list_children(sample_subparsers)
+    _register_list_datasets(sample_subparsers)
     _register_link_dataset(sample_subparsers)
 
 
@@ -364,6 +365,25 @@ Examples:
     parser.set_defaults(func=_execute_list_children)
 
 
+def _register_list_datasets(subparsers):
+    """Register the 'sample list-datasets' subcommand."""
+    parser = subparsers.add_parser(
+        'list-datasets',
+        help='List datasets linked to a sample',
+        description='Show all datasets associated with a given sample',
+        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+    crucible sample list-datasets SAMPLE_ID
+"""
+    )
+    parser.add_argument('sample_id', metavar='SAMPLE_ID', help='Sample unique ID')
+    parser.add_argument('--limit', type=int, default=100, metavar='N',
+                        help='Maximum number of results (default: 100)')
+    parser.add_argument('-v', '--verbose', action='store_true', help='Verbose output')
+    parser.set_defaults(func=_execute_list_datasets)
+
+
 def _execute_list(args):
     """Execute the 'sample list' subcommand."""
     from crucible.config import config
@@ -541,6 +561,33 @@ def _execute_list_children(args):
 
     except Exception as e:
         logger.error(f"Error listing child samples: {e}")
+        if args.verbose:
+            import traceback
+            traceback.print_exc()
+        sys.exit(1)
+
+
+def _execute_list_datasets(args):
+    """Execute the 'sample list-datasets' subcommand."""
+    from crucible.client import CrucibleClient
+    try:
+        client = CrucibleClient()
+        datasets = client.datasets.list(sample_id=args.sample_id, limit=args.limit)
+
+        if not datasets:
+            logger.info(f"No datasets linked to {args.sample_id}.")
+            return
+
+        logger.info(f"\n=== Datasets linked to {args.sample_id} ({len(datasets)}) ===\n")
+        for ds in datasets:
+            uid = ds.get('unique_id', 'N/A')
+            name = ds.get('dataset_name') or '(unnamed)'
+            logger.info(f"  {uid}  {name}")
+            if args.verbose:
+                logger.debug(f"    measurement={ds.get('measurement')}  project={ds.get('project_id')}")
+
+    except Exception as e:
+        logger.error(f"Error listing datasets: {e}")
         if args.verbose:
             import traceback
             traceback.print_exc()

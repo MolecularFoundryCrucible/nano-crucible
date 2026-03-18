@@ -59,6 +59,7 @@ def register_subcommand(subparsers):
     _register_link(dataset_subparsers)
     _register_list_parents(dataset_subparsers)
     _register_list_children(dataset_subparsers)
+    _register_list_samples(dataset_subparsers)
     _register_download(dataset_subparsers)
     _register_search(dataset_subparsers)
     _register_add_keyword(dataset_subparsers)
@@ -581,6 +582,25 @@ Examples:
                         help=f'Maximum number of results (default: {DEFAULT_LIMIT})')
     parser.add_argument('-v', '--verbose', action='store_true', help='Verbose output')
     parser.set_defaults(func=_execute_list_children)
+
+
+def _register_list_samples(subparsers):
+    """Register the 'dataset list-samples' subcommand."""
+    parser = subparsers.add_parser(
+        'list-samples',
+        help='List samples linked to a dataset',
+        description='Show all samples associated with a given dataset',
+        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+    crucible dataset list-samples DATASET_ID
+"""
+    )
+    parser.add_argument('dataset_id', metavar='DATASET_ID', help='Dataset unique ID')
+    parser.add_argument('--limit', type=int, default=DEFAULT_LIMIT, metavar='N',
+                        help=f'Maximum number of results (default: {DEFAULT_LIMIT})')
+    parser.add_argument('-v', '--verbose', action='store_true', help='Verbose output')
+    parser.set_defaults(func=_execute_list_samples)
 
 
 def _register_download(subparsers):
@@ -1286,6 +1306,33 @@ def _execute_list_children(args):
 
     except Exception as e:
         logger.error(f"Error listing child datasets: {e}")
+        if args.verbose:
+            import traceback
+            traceback.print_exc()
+        sys.exit(1)
+
+
+def _execute_list_samples(args):
+    """Execute the 'dataset list-samples' subcommand."""
+    from crucible.client import CrucibleClient
+    try:
+        client = CrucibleClient()
+        samples = client.samples.list(dataset_id=args.dataset_id, limit=args.limit)
+
+        if not samples:
+            logger.info(f"No samples linked to {args.dataset_id}.")
+            return
+
+        logger.info(f"\n=== Samples linked to {args.dataset_id} ({len(samples)}) ===\n")
+        for s in samples:
+            uid = s.get('unique_id', 'N/A')
+            name = s.get('sample_name') or '(unnamed)'
+            logger.info(f"  {uid}  {name}")
+            if args.verbose:
+                logger.debug(f"    type={s.get('sample_type')}  project={s.get('project_id')}")
+
+    except Exception as e:
+        logger.error(f"Error listing samples: {e}")
         if args.verbose:
             import traceback
             traceback.print_exc()
