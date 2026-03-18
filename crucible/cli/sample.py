@@ -47,6 +47,7 @@ def register_subcommand(subparsers):
     _register_link(sample_subparsers)
     _register_list_parents(sample_subparsers)
     _register_list_children(sample_subparsers)
+    _register_list_datasets(sample_subparsers)
     _register_link_dataset(sample_subparsers)
 
 
@@ -252,13 +253,13 @@ def _execute_update(args):
         result = client.samples.update(args.sample_id, **updates)
 
         logger.info(f"✓ Sample {args.sample_id} updated")
-        if args.verbose:
+        if getattr(args, "debug", False):
             logger.debug(f"Updated fields: {list(updates.keys())}")
             logger.debug(f"Result: {json.dumps(result, indent=2)}")
 
     except Exception as e:
         logger.error(f"Error updating sample: {e}")
-        if args.verbose:
+        if getattr(args, "debug", False):
             import traceback
             traceback.print_exc()
         sys.exit(1)
@@ -364,6 +365,25 @@ Examples:
     parser.set_defaults(func=_execute_list_children)
 
 
+def _register_list_datasets(subparsers):
+    """Register the 'sample list-datasets' subcommand."""
+    parser = subparsers.add_parser(
+        'list-datasets',
+        help='List datasets linked to a sample',
+        description='Show all datasets associated with a given sample',
+        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+    crucible sample list-datasets SAMPLE_ID
+"""
+    )
+    parser.add_argument('sample_id', metavar='SAMPLE_ID', help='Sample unique ID')
+    parser.add_argument('--limit', type=int, default=100, metavar='N',
+                        help='Maximum number of results (default: 100)')
+    parser.add_argument('-v', '--verbose', action='store_true', help='Verbose output')
+    parser.set_defaults(func=_execute_list_datasets)
+
+
 def _execute_list(args):
     """Execute the 'sample list' subcommand."""
     from crucible.config import config
@@ -403,7 +423,7 @@ def _execute_list(args):
 
     except Exception as e:
         logger.error(f"Error listing samples: {e}")
-        if args.verbose:
+        if getattr(args, "debug", False):
             import traceback
             traceback.print_exc()
         sys.exit(1)
@@ -421,19 +441,30 @@ def _execute_get(args):
             sys.exit(1)
 
         logger.info("\n=== Sample Information ===")
-        logger.info(f"ID: {sample.get('unique_id', 'N/A')}")
+        logger.info(f"ID:          {sample.get('unique_id', 'N/A')}")
         if sample.get('sample_name'):
-            logger.info(f"Name: {sample['sample_name']}")
+            logger.info(f"Name:        {sample['sample_name']}")
+        if sample.get('sample_type'):
+            logger.info(f"Type:        {sample['sample_type']}")
         if sample.get('project_id'):
-            logger.info(f"Project: {sample['project_id']}")
-        if sample.get('creation_time'):
-            logger.info(f"Created: {sample['creation_time']}")
+            logger.info(f"Project:     {sample['project_id']}")
+        if sample.get('date_created'):
+            logger.info(f"Created:     {sample['date_created']}")
+        if sample.get('owner_orcid'):
+            logger.info(f"Owner:       {sample['owner_orcid']}")
         if sample.get('description'):
             logger.info(f"Description: {sample['description']}")
 
+        if args.verbose:
+            datasets = client.datasets.list(sample_id=args.sample_id)
+            if datasets:
+                logger.info(f"\nLinked datasets ({len(datasets)}):")
+                for ds in datasets:
+                    logger.info(f"  {ds.get('unique_id', 'N/A')}  {ds.get('dataset_name') or ''}  {ds.get('measurement') or ''}")
+
     except Exception as e:
         logger.error(f"Error retrieving sample: {e}")
-        if args.verbose:
+        if getattr(args, "debug", False):
             import traceback
             traceback.print_exc()
         sys.exit(1)
@@ -463,12 +494,12 @@ def _execute_create(args):
         logger.info(f"Sample ID: {result.get('unique_id', 'N/A')}")
         logger.info(f"Name: {result.get('sample_name', 'N/A')}")
 
-        if args.verbose:
+        if getattr(args, "debug", False):
             logger.debug(f"\nFull result: {json.dumps(result, indent=2)}")
 
     except Exception as e:
         logger.error(f"Error creating sample: {e}")
-        if args.verbose:
+        if getattr(args, "debug", False):
             import traceback
             traceback.print_exc()
         sys.exit(1)
@@ -482,12 +513,12 @@ def _execute_link(args):
         result = client.samples.link(args.parent, args.child)
 
         logger.info(f"✓ Linked sample {args.child} as child of {args.parent}")
-        if args.verbose:
+        if getattr(args, "debug", False):
             logger.debug(f"Result: {result}")
 
     except Exception as e:
         logger.error(f"Error linking samples: {e}")
-        if args.verbose:
+        if getattr(args, "debug", False):
             import traceback
             traceback.print_exc()
         sys.exit(1)
@@ -510,11 +541,11 @@ def _execute_list_parents(args):
             name = s.get('sample_name') or '(unnamed)'
             logger.info(f"  {uid}  {name}")
             if args.verbose:
-                logger.debug(f"    type={s.get('sample_type')}  project={s.get('project_id')}")
+                logger.info(f"    type={s.get('sample_type')}  project={s.get('project_id')}")
 
     except Exception as e:
         logger.error(f"Error listing parent samples: {e}")
-        if args.verbose:
+        if getattr(args, "debug", False):
             import traceback
             traceback.print_exc()
         sys.exit(1)
@@ -537,11 +568,38 @@ def _execute_list_children(args):
             name = s.get('sample_name') or '(unnamed)'
             logger.info(f"  {uid}  {name}")
             if args.verbose:
-                logger.debug(f"    type={s.get('sample_type')}  project={s.get('project_id')}")
+                logger.info(f"    type={s.get('sample_type')}  project={s.get('project_id')}")
 
     except Exception as e:
         logger.error(f"Error listing child samples: {e}")
-        if args.verbose:
+        if getattr(args, "debug", False):
+            import traceback
+            traceback.print_exc()
+        sys.exit(1)
+
+
+def _execute_list_datasets(args):
+    """Execute the 'sample list-datasets' subcommand."""
+    from crucible.client import CrucibleClient
+    try:
+        client = CrucibleClient()
+        datasets = client.datasets.list(sample_id=args.sample_id, limit=args.limit)
+
+        if not datasets:
+            logger.info(f"No datasets linked to {args.sample_id}.")
+            return
+
+        logger.info(f"\n=== Datasets linked to {args.sample_id} ({len(datasets)}) ===\n")
+        for ds in datasets:
+            uid = ds.get('unique_id', 'N/A')
+            name = ds.get('dataset_name') or '(unnamed)'
+            logger.info(f"  {uid}  {name}")
+            if args.verbose:
+                logger.info(f"    measurement={ds.get('measurement')}  project={ds.get('project_id')}")
+
+    except Exception as e:
+        logger.error(f"Error listing datasets: {e}")
+        if getattr(args, "debug", False):
             import traceback
             traceback.print_exc()
         sys.exit(1)
@@ -555,12 +613,12 @@ def _execute_link_dataset(args):
         result = client.samples.add_to_dataset(args.sample, args.dataset)
 
         logger.info(f"✓ Linked dataset {args.dataset} to sample {args.sample}")
-        if args.verbose:
+        if getattr(args, "debug", False):
             logger.debug(f"Result: {result}")
 
     except Exception as e:
         logger.error(f"Error linking dataset to sample: {e}")
-        if args.verbose:
+        if getattr(args, "debug", False):
             import traceback
             traceback.print_exc()
         sys.exit(1)

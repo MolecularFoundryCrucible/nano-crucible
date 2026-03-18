@@ -59,6 +59,7 @@ def register_subcommand(subparsers):
     _register_link(dataset_subparsers)
     _register_list_parents(dataset_subparsers)
     _register_list_children(dataset_subparsers)
+    _register_list_samples(dataset_subparsers)
     _register_download(dataset_subparsers)
     _register_search(dataset_subparsers)
     _register_add_keyword(dataset_subparsers)
@@ -436,13 +437,13 @@ def _execute_update(args):
         result = client.datasets.update(args.dataset_id, **updates)
 
         logger.info(f"✓ Dataset {args.dataset_id} updated")
-        if args.verbose:
+        if getattr(args, "debug", False):
             logger.debug(f"Updated fields: {list(updates.keys())}")
             logger.debug(f"Result: {result}")
 
     except Exception as e:
         logger.error(f"Error updating dataset: {e}")
-        if args.verbose:
+        if getattr(args, "debug", False):
             import traceback
             traceback.print_exc()
         sys.exit(1)
@@ -583,6 +584,25 @@ Examples:
     parser.set_defaults(func=_execute_list_children)
 
 
+def _register_list_samples(subparsers):
+    """Register the 'dataset list-samples' subcommand."""
+    parser = subparsers.add_parser(
+        'list-samples',
+        help='List samples linked to a dataset',
+        description='Show all samples associated with a given dataset',
+        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+    crucible dataset list-samples DATASET_ID
+"""
+    )
+    parser.add_argument('dataset_id', metavar='DATASET_ID', help='Dataset unique ID')
+    parser.add_argument('--limit', type=int, default=DEFAULT_LIMIT, metavar='N',
+                        help=f'Maximum number of results (default: {DEFAULT_LIMIT})')
+    parser.add_argument('-v', '--verbose', action='store_true', help='Verbose output')
+    parser.set_defaults(func=_execute_list_samples)
+
+
 def _register_download(subparsers):
     """Register the 'dataset download' subcommand."""
     parser = subparsers.add_parser(
@@ -674,7 +694,7 @@ def _execute_download(args):
 
     except Exception as e:
         logger.error(f"Error downloading dataset: {e}")
-        if args.verbose:
+        if getattr(args, "debug", False):
             import traceback
             traceback.print_exc()
         sys.exit(1)
@@ -747,7 +767,7 @@ def _execute_search(args):
 
     except Exception as e:
         logger.error(f"Error searching datasets: {e}")
-        if args.verbose:
+        if getattr(args, "debug", False):
             import traceback
             traceback.print_exc()
         sys.exit(1)
@@ -781,12 +801,12 @@ def _execute_add_keyword(args):
         result = client.datasets.add_keyword(args.dataset_id, args.keyword)
 
         logger.info(f"✓ Keyword '{args.keyword}' added to {args.dataset_id}")
-        if args.verbose:
+        if getattr(args, "debug", False):
             logger.debug(f"Result: {result}")
 
     except Exception as e:
         logger.error(f"Error adding keyword: {e}")
-        if args.verbose:
+        if getattr(args, "debug", False):
             import traceback
             traceback.print_exc()
         sys.exit(1)
@@ -824,7 +844,7 @@ def _execute_get_keywords(args):
 
     except Exception as e:
         logger.error(f"Error retrieving keywords: {e}")
-        if args.verbose:
+        if getattr(args, "debug", False):
             import traceback
             traceback.print_exc()
         sys.exit(1)
@@ -900,7 +920,7 @@ def _execute_list(args):
 
     except Exception as e:
         logger.error(f"Error listing datasets: {e}")
-        if args.verbose:
+        if getattr(args, "debug", False):
             import traceback
             traceback.print_exc()
         sys.exit(1)
@@ -918,26 +938,49 @@ def _execute_get(args):
             sys.exit(1)
 
         logger.info("\n=== Dataset Information ===")
-        logger.info(f"ID: {dataset.get('unique_id', 'N/A')}")
+        logger.info(f"ID:          {dataset.get('unique_id', 'N/A')}")
         if dataset.get('dataset_name'):
-            logger.info(f"Name: {dataset['dataset_name']}")
+            logger.info(f"Name:        {dataset['dataset_name']}")
         if dataset.get('measurement'):
             logger.info(f"Measurement: {dataset['measurement']}")
+        if dataset.get('data_format'):
+            logger.info(f"Format:      {dataset['data_format']}")
         if dataset.get('project_id'):
-            logger.info(f"Project: {dataset['project_id']}")
+            logger.info(f"Project:     {dataset['project_id']}")
+        if dataset.get('instrument_name'):
+            logger.info(f"Instrument:  {dataset['instrument_name']}")
+        if dataset.get('session_name'):
+            logger.info(f"Session:     {dataset['session_name']}")
         if dataset.get('creation_time'):
-            logger.info(f"Created: {dataset['creation_time']}")
+            logger.info(f"Created:     {dataset['creation_time']}")
+        if dataset.get('owner_orcid'):
+            logger.info(f"Owner:       {dataset['owner_orcid']}")
+        if dataset.get('size') is not None:
+            logger.info(f"Size:        {dataset['size']} bytes")
+        if dataset.get('source_folder'):
+            logger.info(f"Source:      {dataset['source_folder']}")
         if dataset.get('public') is not None:
-            logger.info(f"Public: {'Yes' if dataset['public'] else 'No'}")
+            logger.info(f"Public:      {'Yes' if dataset['public'] else 'No'}")
 
         if args.include_metadata and dataset.get('scientific_metadata'):
             logger.info("\n=== Scientific Metadata ===")
-            metadata = dataset['scientific_metadata']
-            logger.info(json.dumps(metadata, indent=2))
+            logger.info(json.dumps(dataset['scientific_metadata'], indent=2))
+
+        if args.verbose:
+            keywords = client.datasets.get_keywords(args.dataset_id)
+            if keywords:
+                words = [kw.get('keyword', kw) if isinstance(kw, dict) else kw for kw in keywords]
+                logger.info(f"\nKeywords:    {', '.join(words)}")
+
+            samples = client.samples.list(dataset_id=args.dataset_id)
+            if samples:
+                logger.info(f"\nLinked samples ({len(samples)}):")
+                for s in samples:
+                    logger.info(f"  {s.get('unique_id', 'N/A')}  {s.get('sample_name') or ''}")
 
     except Exception as e:
         logger.error(f"Error retrieving dataset: {e}")
-        if args.verbose:
+        if getattr(args, "debug", False):
             import traceback
             traceback.print_exc()
         sys.exit(1)
@@ -1048,7 +1091,7 @@ def _execute_create(args):
         )
     except Exception as e:
         logger.error(f"Error parsing file: {e}")
-        if args.verbose:
+        if getattr(args, "debug", False):
             import traceback
             traceback.print_exc()
         sys.exit(1)
@@ -1126,21 +1169,21 @@ def _execute_create(args):
         try:
             result = parser.upload_dataset(
                 ingestor=args.ingestor,
-                verbose=args.verbose,
+                verbose=getattr(args, 'debug', False),
                 wait_for_ingestion_response=True
             )
 
             logger.info("\n✓ Upload successful!")
             logger.info(f"Dataset ID: {result.get('created_record', {}).get('unique_id', 'N/A')}")
 
-            if result and args.verbose:
+            if result and getattr(args, 'debug', False):
                 logger.debug("\nUpload result details:")
                 for key, value in result.items():
                     logger.debug(f"  {key}: {value}")
 
         except Exception as e:
             logger.error(f"\n✗ Upload failed: {e}")
-            if args.verbose:
+            if getattr(args, "debug", False):
                 import traceback
                 traceback.print_exc()
             sys.exit(1)
@@ -1208,12 +1251,12 @@ def _execute_update_metadata(args):
 
         action = "replaced" if args.overwrite else "updated"
         logger.info(f"✓ Metadata {action} for dataset {args.dataset_id}")
-        if args.verbose:
+        if getattr(args, "debug", False):
             logger.debug(f"Result: {result}")
 
     except Exception as e:
         logger.error(f"Error updating metadata: {e}")
-        if args.verbose:
+        if getattr(args, "debug", False):
             import traceback
             traceback.print_exc()
         sys.exit(1)
@@ -1227,12 +1270,12 @@ def _execute_link(args):
         result = client.datasets.link_parent_child(args.parent, args.child)
 
         logger.info(f"✓ Linked dataset {args.child} as child of {args.parent}")
-        if args.verbose:
+        if getattr(args, "debug", False):
             logger.debug(f"Result: {result}")
 
     except Exception as e:
         logger.error(f"Error linking datasets: {e}")
-        if args.verbose:
+        if getattr(args, "debug", False):
             import traceback
             traceback.print_exc()
         sys.exit(1)
@@ -1255,11 +1298,11 @@ def _execute_list_parents(args):
             name = ds.get('dataset_name') or '(unnamed)'
             logger.info(f"  {uid}  {name}")
             if args.verbose:
-                logger.debug(f"    measurement={ds.get('measurement')}  project={ds.get('project_id')}")
+                logger.info(f"    measurement={ds.get('measurement')}  project={ds.get('project_id')}")
 
     except Exception as e:
         logger.error(f"Error listing parent datasets: {e}")
-        if args.verbose:
+        if getattr(args, "debug", False):
             import traceback
             traceback.print_exc()
         sys.exit(1)
@@ -1282,11 +1325,38 @@ def _execute_list_children(args):
             name = ds.get('dataset_name') or '(unnamed)'
             logger.info(f"  {uid}  {name}")
             if args.verbose:
-                logger.debug(f"    measurement={ds.get('measurement')}  project={ds.get('project_id')}")
+                logger.info(f"    measurement={ds.get('measurement')}  project={ds.get('project_id')}")
 
     except Exception as e:
         logger.error(f"Error listing child datasets: {e}")
-        if args.verbose:
+        if getattr(args, "debug", False):
+            import traceback
+            traceback.print_exc()
+        sys.exit(1)
+
+
+def _execute_list_samples(args):
+    """Execute the 'dataset list-samples' subcommand."""
+    from crucible.client import CrucibleClient
+    try:
+        client = CrucibleClient()
+        samples = client.samples.list(dataset_id=args.dataset_id, limit=args.limit)
+
+        if not samples:
+            logger.info(f"No samples linked to {args.dataset_id}.")
+            return
+
+        logger.info(f"\n=== Samples linked to {args.dataset_id} ({len(samples)}) ===\n")
+        for s in samples:
+            uid = s.get('unique_id', 'N/A')
+            name = s.get('sample_name') or '(unnamed)'
+            logger.info(f"  {uid}  {name}")
+            if args.verbose:
+                logger.info(f"    type={s.get('sample_type')}  project={s.get('project_id')}")
+
+    except Exception as e:
+        logger.error(f"Error listing samples: {e}")
+        if getattr(args, "debug", False):
             import traceback
             traceback.print_exc()
         sys.exit(1)

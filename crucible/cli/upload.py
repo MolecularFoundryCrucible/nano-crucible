@@ -320,7 +320,7 @@ def execute(args):
         )
     except Exception as e:
         logger.error(f"Error parsing file: {e}")
-        if args.verbose:
+        if getattr(args, "debug", False):
             import traceback
             traceback.print_exc()
         sys.exit(1)
@@ -391,7 +391,7 @@ def execute(args):
 
         except Exception as e:
             logger.error(f"\n✗ Upload failed: {e}")
-            if args.verbose:
+            if getattr(args, "debug", False):
                 import traceback
                 traceback.print_exc()
             sys.exit(1)
