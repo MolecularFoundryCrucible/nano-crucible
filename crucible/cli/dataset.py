@@ -938,22 +938,45 @@ def _execute_get(args):
             sys.exit(1)
 
         logger.info("\n=== Dataset Information ===")
-        logger.info(f"ID: {dataset.get('unique_id', 'N/A')}")
+        logger.info(f"ID:          {dataset.get('unique_id', 'N/A')}")
         if dataset.get('dataset_name'):
-            logger.info(f"Name: {dataset['dataset_name']}")
+            logger.info(f"Name:        {dataset['dataset_name']}")
         if dataset.get('measurement'):
             logger.info(f"Measurement: {dataset['measurement']}")
+        if dataset.get('data_format'):
+            logger.info(f"Format:      {dataset['data_format']}")
         if dataset.get('project_id'):
-            logger.info(f"Project: {dataset['project_id']}")
+            logger.info(f"Project:     {dataset['project_id']}")
+        if dataset.get('instrument_name'):
+            logger.info(f"Instrument:  {dataset['instrument_name']}")
+        if dataset.get('session_name'):
+            logger.info(f"Session:     {dataset['session_name']}")
         if dataset.get('creation_time'):
-            logger.info(f"Created: {dataset['creation_time']}")
+            logger.info(f"Created:     {dataset['creation_time']}")
+        if dataset.get('owner_orcid'):
+            logger.info(f"Owner:       {dataset['owner_orcid']}")
+        if dataset.get('size') is not None:
+            logger.info(f"Size:        {dataset['size']} bytes")
+        if dataset.get('source_folder'):
+            logger.info(f"Source:      {dataset['source_folder']}")
         if dataset.get('public') is not None:
-            logger.info(f"Public: {'Yes' if dataset['public'] else 'No'}")
+            logger.info(f"Public:      {'Yes' if dataset['public'] else 'No'}")
 
         if args.include_metadata and dataset.get('scientific_metadata'):
             logger.info("\n=== Scientific Metadata ===")
-            metadata = dataset['scientific_metadata']
-            logger.info(json.dumps(metadata, indent=2))
+            logger.info(json.dumps(dataset['scientific_metadata'], indent=2))
+
+        if args.verbose:
+            keywords = client.datasets.get_keywords(args.dataset_id)
+            if keywords:
+                words = [kw.get('keyword', kw) if isinstance(kw, dict) else kw for kw in keywords]
+                logger.info(f"\nKeywords:    {', '.join(words)}")
+
+            samples = client.samples.list(dataset_id=args.dataset_id)
+            if samples:
+                logger.info(f"\nLinked samples ({len(samples)}):")
+                for s in samples:
+                    logger.info(f"  {s.get('unique_id', 'N/A')}  {s.get('sample_name') or ''}")
 
     except Exception as e:
         logger.error(f"Error retrieving dataset: {e}")

@@ -441,15 +441,26 @@ def _execute_get(args):
             sys.exit(1)
 
         logger.info("\n=== Sample Information ===")
-        logger.info(f"ID: {sample.get('unique_id', 'N/A')}")
+        logger.info(f"ID:          {sample.get('unique_id', 'N/A')}")
         if sample.get('sample_name'):
-            logger.info(f"Name: {sample['sample_name']}")
+            logger.info(f"Name:        {sample['sample_name']}")
+        if sample.get('sample_type'):
+            logger.info(f"Type:        {sample['sample_type']}")
         if sample.get('project_id'):
-            logger.info(f"Project: {sample['project_id']}")
-        if sample.get('creation_time'):
-            logger.info(f"Created: {sample['creation_time']}")
+            logger.info(f"Project:     {sample['project_id']}")
+        if sample.get('date_created'):
+            logger.info(f"Created:     {sample['date_created']}")
+        if sample.get('owner_orcid'):
+            logger.info(f"Owner:       {sample['owner_orcid']}")
         if sample.get('description'):
             logger.info(f"Description: {sample['description']}")
+
+        if args.verbose:
+            datasets = client.datasets.list(sample_id=args.sample_id)
+            if datasets:
+                logger.info(f"\nLinked datasets ({len(datasets)}):")
+                for ds in datasets:
+                    logger.info(f"  {ds.get('unique_id', 'N/A')}  {ds.get('dataset_name') or ''}  {ds.get('measurement') or ''}")
 
     except Exception as e:
         logger.error(f"Error retrieving sample: {e}")
