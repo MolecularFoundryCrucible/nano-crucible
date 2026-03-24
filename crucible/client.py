@@ -229,16 +229,56 @@ class CrucibleClient:
         # Mixed: dataset and sample
         elif parent_type == "dataset" and child_type == "sample":
             logger.info(f"Linking sample {child_id} to dataset {parent_id}")
-            return self.samples.add_to_dataset(parent_id, child_id)
+            return self.datasets.add_sample(parent_id, child_id)
 
         elif parent_type == "sample" and child_type == "dataset":
             logger.info(f"Linking sample {parent_id} to dataset {child_id}")
-            return self.samples.add_to_dataset(child_id, parent_id)
+            return self.datasets.add_sample(child_id, parent_id)
 
         else:
             raise ValueError(
                 f"Cannot link resources: parent is {parent_type}, child is {child_type}. "
                 f"Valid combinations: dataset-dataset, sample-sample, or dataset-sample."
+            )
+
+    def unlink(self, id_a: str, id_b: str) -> Dict:
+        """Unlink two resources with automatic type detection.
+
+        Only dataset-sample unlinking is supported by the API.
+        Parent-child relationships (dataset-dataset, sample-sample) cannot
+        be removed via the API.
+
+        Args:
+            id_a (str): First resource unique identifier (dataset or sample)
+            id_b (str): Second resource unique identifier (dataset or sample)
+
+        Returns:
+            Dict: Deletion confirmation
+
+        Raises:
+            ValueError: If the combination is not a dataset-sample pair, or if
+                        the resource types cannot be determined.
+        """
+        type_a = self.get_resource_type(id_a)
+        type_b = self.get_resource_type(id_b)
+
+        if type_a == "dataset" and type_b == "sample":
+            logger.info(f"Unlinking sample {id_b} from dataset {id_a}")
+            return self.datasets.remove_sample(id_a, id_b)
+
+        elif type_a == "sample" and type_b == "dataset":
+            logger.info(f"Unlinking sample {id_a} from dataset {id_b}")
+            return self.datasets.remove_sample(id_b, id_a)
+
+        elif type_a == type_b and type_a in ("dataset", "sample"):
+            raise ValueError(
+                f"Unlinking {type_a}-{type_b} parent-child relationships is not "
+                f"supported by the API. Use the API to manage these directly."
+            )
+        else:
+            raise ValueError(
+                f"Cannot unlink resources: {id_a} is {type_a}, {id_b} is {type_b}. "
+                f"Only dataset-sample unlinking is supported."
             )
     
     #%% PROJECT METHODS (DEPRECATED)

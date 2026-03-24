@@ -131,7 +131,7 @@ Examples:
     # Import subcommands
     from . import (
         dataset, sample, project, instrument, user,  # Resource commands
-        upload, completion, config as config_cmd, open as open_cmd, link  # Utility commands
+        upload, completion, config as config_cmd, open as open_cmd, link, unlink  # Utility commands
     )
 
     # Register resource commands (new structure)
@@ -147,6 +147,7 @@ Examples:
     config_cmd.register_subcommand(subparsers)
     open_cmd.register_subcommand(subparsers)
     link.register_subcommand(subparsers)
+    unlink.register_subcommand(subparsers)
 
     # Enable shell completion if argcomplete is available
     if ARGCOMPLETE_AVAILABLE:

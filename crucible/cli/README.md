@@ -164,6 +164,8 @@ crucible project list-users my-project
 |---------|-------------|
 | `link -p PARENT -c CHILD` | Link two resources (type auto-detected via API) |
 | `link -d DATASET -s SAMPLE` | Link a sample to a dataset |
+| `unlink -p ID -c ID` | Unlink two resources (dataset-sample only, type auto-detected) |
+| `unlink -d DATASET -s SAMPLE` | Unlink a sample from a dataset *(admin)* |
 | `open [MFID]` | Open Graph Explorer in browser (or a specific resource by ID) |
 | `open MFID --print-url` | Print the URL instead of opening |
 
