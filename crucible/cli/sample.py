@@ -255,7 +255,6 @@ def _execute_update(args):
         logger.info(f"✓ Sample {args.sample_id} updated")
         if getattr(args, "debug", False):
             logger.debug(f"Updated fields: {list(updates.keys())}")
-            logger.debug(f"Result: {json.dumps(result, indent=2)}")
 
     except Exception as e:
         logger.error(f"Error updating sample: {e}")
@@ -487,9 +486,6 @@ def _execute_create(args):
         logger.info(f"Sample ID: {result.get('unique_id', 'N/A')}")
         logger.info(f"Name: {result.get('sample_name', 'N/A')}")
 
-        if getattr(args, "debug", False):
-            logger.debug(f"\nFull result: {json.dumps(result, indent=2)}")
-
     except Exception as e:
         logger.error(f"Error creating sample: {e}")
         if getattr(args, "debug", False):
@@ -506,8 +502,6 @@ def _execute_link(args):
         result = client.samples.link(args.parent, args.child)
 
         logger.info(f"✓ Linked sample {args.child} as child of {args.parent}")
-        if getattr(args, "debug", False):
-            logger.debug(f"Result: {result}")
 
     except Exception as e:
         logger.error(f"Error linking samples: {e}")
@@ -607,8 +601,6 @@ def _execute_link_dataset(args):
         result = client.samples.add_to_dataset(sample_id, args.dataset)
 
         logger.info(f"✓ Linked sample {sample_id} to dataset {args.dataset}")
-        if getattr(args, "debug", False):
-            logger.debug(f"Result: {result}")
 
     except Exception as e:
         logger.error(f"Error linking dataset to sample: {e}")

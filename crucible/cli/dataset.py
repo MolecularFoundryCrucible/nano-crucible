@@ -537,8 +537,6 @@ def _execute_add_sample(args):
         result = client.datasets.add_sample(args.dataset_id, args.sample)
 
         logger.info(f"✓ Linked sample {args.sample} to dataset {args.dataset_id}")
-        if getattr(args, "debug", False):
-            logger.debug(f"Result: {result}")
 
     except Exception as e:
         logger.error(f"Error linking sample to dataset: {e}")
@@ -805,8 +803,6 @@ def _execute_add_keyword(args):
         result = client.datasets.add_keyword(args.dataset_id, args.keyword)
 
         logger.info(f"✓ Keyword '{args.keyword}' added to {args.dataset_id}")
-        if getattr(args, "debug", False):
-            logger.debug(f"Result: {result}")
 
     except Exception as e:
         logger.error(f"Error adding keyword: {e}")
@@ -1231,8 +1227,6 @@ def _execute_link(args):
         result = client.datasets.link_parent_child(args.parent, args.child)
 
         logger.info(f"✓ Linked dataset {args.child} as child of {args.parent}")
-        if getattr(args, "debug", False):
-            logger.debug(f"Result: {result}")
 
     except Exception as e:
         logger.error(f"Error linking datasets: {e}")

@@ -208,9 +208,6 @@ def _execute_get(args):
         if user.get('id'):
             logger.info(f"ID: {user['id']}")
 
-        if getattr(args, "debug", False):
-            logger.debug(f"\nFull user data: {json.dumps(user, indent=2)}")
-
     except Exception as e:
         logger.error(f"Error retrieving user: {e}")
         if getattr(args, "debug", False):
@@ -318,9 +315,6 @@ def _execute_create(args):
         if result.get('id'):
             logger.info(f"ID: {result['id']}")
 
-        if getattr(args, "debug", False):
-            logger.debug(f"\nFull result: {json.dumps(result, indent=2)}")
-
     except Exception as e:
         logger.error(f"Error creating user: {e}")
         if getattr(args, "debug", False):
@@ -368,9 +362,6 @@ def _execute_list(args):
                     logger.info(f"   Created: {user['creation_time']}")
 
             logger.info("")
-
-        if getattr(args, "debug", False):
-            logger.debug(f"\nFull data: {json.dumps(users, indent=2)}")
 
     except Exception as e:
         logger.error(f"Error listing users: {e}")

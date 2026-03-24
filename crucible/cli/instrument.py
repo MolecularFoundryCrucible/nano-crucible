@@ -250,9 +250,6 @@ def _execute_create(args):
         if result.get('instrument_type'):
             logger.info(f"Type:     {result['instrument_type']}")
 
-        if getattr(args, 'debug', False):
-            logger.debug(f"\nFull result: {json.dumps(result, indent=2)}")
-
     except Exception as e:
         logger.error(f"Error creating instrument: {e}")
         if getattr(args, 'debug', False):
@@ -317,9 +314,6 @@ def _execute_get(args):
             logger.info(f"Location: {instrument['location']}")
         if instrument.get('owner'):
             logger.info(f"Owner: {instrument['owner']}")
-
-        if getattr(args, "debug", False):
-            logger.debug(f"\nFull instrument data: {json.dumps(instrument, indent=2)}")
 
     except Exception as e:
         logger.error(f"Error retrieving instrument: {e}")

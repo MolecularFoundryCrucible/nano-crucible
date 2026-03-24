@@ -88,7 +88,6 @@ def execute(args):
     try:
         result = config.client.link(parent_id, child_id)
         logger.info("Successfully linked resources")
-        logger.debug(f"Result: {result}")
     except Exception as e:
         logger.error(f"Failed to link resources: {e}")
         sys.exit(1)
