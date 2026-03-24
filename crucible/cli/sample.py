@@ -48,7 +48,7 @@ def register_subcommand(subparsers):
     _register_list_parents(sample_subparsers)
     _register_list_children(sample_subparsers)
     _register_list_datasets(sample_subparsers)
-    _register_link_dataset(sample_subparsers)
+    _register_add_dataset(sample_subparsers)
 
 
 def _register_list(subparsers):
@@ -296,34 +296,21 @@ def _register_link(subparsers):
     parser.set_defaults(func=_execute_link)
 
 
-def _register_link_dataset(subparsers):
-    """Register the 'sample link-dataset' subcommand."""
+def _register_add_dataset(subparsers):
+    """Register the 'sample add-dataset' subcommand."""
+    import argparse
+
+    def _add_args(p):
+        p.add_argument('-s', '--sample', required=True, metavar='SAMPLE_ID', help='Sample ID')
+        p.add_argument('-d', '--dataset', required=True, metavar='DATASET_ID', help='Dataset ID')
+        p.add_argument('-v', '--verbose', action='store_true', help='Verbose output')
+
     parser = subparsers.add_parser(
-        'link-dataset',
+        'add-dataset',
         help='Link a sample to a dataset',
         description='Associate a dataset with a sample'
     )
-
-    parser.add_argument(
-        '-s', '--sample',
-        required=True,
-        metavar='SAMPLE_ID',
-        help='Sample ID'
-    )
-
-    parser.add_argument(
-        '-d', '--dataset',
-        required=True,
-        metavar='DATASET_ID',
-        help='Dataset ID'
-    )
-
-    parser.add_argument(
-        '-v', '--verbose',
-        action='store_true',
-        help='Verbose output'
-    )
-
+    _add_args(parser)
     parser.set_defaults(func=_execute_link_dataset)
 
 

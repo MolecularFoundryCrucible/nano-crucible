@@ -40,8 +40,8 @@ def register_subcommand(subparsers):
     _register_list(user_subparsers)
     _register_list_datasets(user_subparsers)
     _register_check_access(user_subparsers)
-    _register_get_access_groups(user_subparsers)
-    _register_get_projects(user_subparsers)
+    _register_list_access_groups(user_subparsers)
+    _register_list_projects(user_subparsers)
 
 
 def _register_get(subparsers):
@@ -419,38 +419,40 @@ Examples:
     parser.set_defaults(func=_execute_check_access)
 
 
-def _register_get_access_groups(subparsers):
-    """Register the 'user get-access-groups' subcommand."""
+def _register_list_access_groups(subparsers):
+    """Register the 'user list-access-groups' subcommand."""
+    import argparse
     parser = subparsers.add_parser(
-        'get-access-groups',
+        'list-access-groups',
         help='List access groups for a user',
         description="List the access groups a user belongs to",
-        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-    crucible user get-access-groups 0000-0002-1825-0097
+    crucible user list-access-groups 0000-0002-1825-0097
 """
     )
     parser.add_argument('orcid', metavar='ORCID', help='User ORCID identifier')
     parser.add_argument('-v', '--verbose', action='store_true', help='Verbose output')
-    parser.set_defaults(func=_execute_get_access_groups)
+    parser.set_defaults(func=_execute_list_access_groups)
 
 
-def _register_get_projects(subparsers):
-    """Register the 'user get-projects' subcommand."""
+def _register_list_projects(subparsers):
+    """Register the 'user list-projects' subcommand."""
+    import argparse
     parser = subparsers.add_parser(
-        'get-projects',
+        'list-projects',
         help='List projects for a user',
         description='List projects a user is associated with',
-        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-    crucible user get-projects 0000-0002-1825-0097
+    crucible user list-projects 0000-0002-1825-0097
 """
     )
     parser.add_argument('orcid', metavar='ORCID', help='User ORCID identifier')
     parser.add_argument('-v', '--verbose', action='store_true', help='Verbose output')
-    parser.set_defaults(func=_execute_get_projects)
+    parser.set_defaults(func=_execute_list_projects)
 
 
 def _execute_list_datasets(args):
@@ -495,7 +497,7 @@ def _execute_check_access(args):
         sys.exit(1)
 
 
-def _execute_get_access_groups(args):
+def _execute_list_access_groups(args):
     """Execute the 'user get-access-groups' subcommand."""
     from crucible.client import CrucibleClient
     try:
@@ -518,7 +520,7 @@ def _execute_get_access_groups(args):
         sys.exit(1)
 
 
-def _execute_get_projects(args):
+def _execute_list_projects(args):
     """Execute the 'user get-projects' subcommand."""
     from crucible.client import CrucibleClient
     try:

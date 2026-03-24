@@ -55,7 +55,6 @@ def register_subcommand(subparsers):
     _register_get(dataset_subparsers)
     _register_create(dataset_subparsers)
     _register_update(dataset_subparsers)
-    _register_update_metadata(dataset_subparsers)
     _register_link(dataset_subparsers)
     _register_list_parents(dataset_subparsers)
     _register_list_children(dataset_subparsers)
@@ -63,7 +62,7 @@ def register_subcommand(subparsers):
     _register_download(dataset_subparsers)
     _register_search(dataset_subparsers)
     _register_add_keyword(dataset_subparsers)
-    _register_get_keywords(dataset_subparsers)
+    _register_list_keywords(dataset_subparsers)
     _register_parsers(dataset_subparsers)
     _register_ingestors(dataset_subparsers)
 
@@ -371,76 +370,106 @@ def _dataset_updatable_fields():
 
 def _register_update(subparsers):
     """Register the 'dataset update' subcommand."""
+    import argparse
     fields = _dataset_updatable_fields()
+
+    def _add_args(p):
+        did_arg = p.add_argument('dataset_id', metavar='DATASET_ID', help='Dataset unique ID')
+        if ARGCOMPLETE_AVAILABLE:
+            did_arg.completer = argcomplete.completers.SuppressCompleter()
+        p.add_argument('--set', '-s', action='append', dest='set_fields', metavar='KEY=VALUE',
+                       help='Set a dataset field (repeatable). Values are auto-cast to int, float, bool, or string.')
+        p.add_argument('--metadata', default=None, metavar='JSON',
+                       help='Scientific metadata as JSON string or path to JSON file')
+        p.add_argument('--overwrite', action='store_true',
+                       help='Replace all existing scientific metadata instead of merging (only with --metadata)')
+        p.add_argument('-v', '--verbose', action='store_true', help='Verbose output')
+
     parser = subparsers.add_parser(
         'update',
-        help='Update dataset fields',
-        description='Update fields of an existing dataset',
-        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        help='Update dataset fields or scientific metadata',
+        description='Update fields or scientific metadata of an existing dataset',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=f"""
-Updatable fields:
+Updatable fields (use --set):
     {', '.join(fields)}
 
 Examples:
     crucible dataset update DSID --set dataset_name="My Dataset"
     crucible dataset update DSID --set public=true
     crucible dataset update DSID --set measurement=XRD --set session_name=run-01
+    crucible dataset update DSID --metadata '{{"temperature": 300, "pressure": 1.0}}'
+    crucible dataset update DSID --metadata metadata.json
+    crucible dataset update DSID --set measurement=XRD --metadata '{{"temperature": 300}}'
 """
     )
-
-    dataset_id_arg = parser.add_argument(
-        'dataset_id',
-        metavar='DATASET_ID',
-        help='Dataset unique ID'
-    )
-    if ARGCOMPLETE_AVAILABLE:
-        dataset_id_arg.completer = argcomplete.completers.SuppressCompleter()
-
-    parser.add_argument(
-        '--set', '-s',
-        action='append',
-        dest='set_fields',
-        metavar='KEY=VALUE',
-        required=True,
-        help='Set a dataset field (repeatable). Values are auto-cast to int, float, bool, or string.'
-    )
-
-    parser.add_argument(
-        '-v', '--verbose',
-        action='store_true',
-        help='Verbose output'
-    )
-
+    _add_args(parser)
     parser.set_defaults(func=_execute_update)
 
 
 def _execute_update(args):
     """Execute the 'dataset update' subcommand."""
     from crucible.client import CrucibleClient
-    valid_fields = set(_dataset_updatable_fields())
+
+    has_set = bool(getattr(args, 'set_fields', None))
+    has_metadata = bool(getattr(args, 'metadata', None))
+
+    if not has_set and not has_metadata:
+        logger.error("Error: provide at least one of --set KEY=VALUE or --metadata JSON")
+        sys.exit(1)
+
+    # Parse --set for model field updates
     updates = {}
-    for field in args.set_fields:
-        if '=' not in field:
-            logger.error(f"Error: --set requires KEY=VALUE format, got: '{field}'")
-            sys.exit(1)
-        key, _, value = field.partition('=')
-        key = key.strip()
-        if key not in valid_fields:
-            logger.error(
-                f"Unknown field '{key}'.\n"
-                f"Valid fields: {', '.join(sorted(valid_fields))}"
-            )
-            sys.exit(1)
-        updates[key] = _cast_value(value)
+    if has_set:
+        valid_fields = set(_dataset_updatable_fields())
+        for field in args.set_fields:
+            if '=' not in field:
+                logger.error(f"Error: --set requires KEY=VALUE format, got: '{field}'")
+                sys.exit(1)
+            key, _, value = field.partition('=')
+            key = key.strip()
+            if key not in valid_fields:
+                logger.error(
+                    f"Unknown field '{key}'.\n"
+                    f"Valid fields: {', '.join(sorted(valid_fields))}"
+                )
+                sys.exit(1)
+            updates[key] = _cast_value(value)
+
+    # Parse --metadata for scientific metadata
+    metadata_dict = None
+    if has_metadata:
+        metadata_path = Path(args.metadata)
+        if metadata_path.exists():
+            try:
+                with open(metadata_path, 'r') as f:
+                    metadata_dict = json.load(f)
+            except json.JSONDecodeError as e:
+                logger.error(f"Error: Invalid JSON in file {metadata_path}: {e}")
+                sys.exit(1)
+        else:
+            try:
+                metadata_dict = json.loads(args.metadata)
+            except json.JSONDecodeError:
+                logger.error(f"Error: '{args.metadata}' is not valid JSON and no such file exists.")
+                sys.exit(1)
 
     try:
         client = CrucibleClient()
-        result = client.datasets.update(args.dataset_id, **updates)
 
-        logger.info(f"✓ Dataset {args.dataset_id} updated")
-        if getattr(args, "debug", False):
-            logger.debug(f"Updated fields: {list(updates.keys())}")
-            logger.debug(f"Result: {result}")
+        if updates:
+            client.datasets.update(args.dataset_id, **updates)
+            logger.info(f"✓ Dataset {args.dataset_id} fields updated")
+            if getattr(args, "debug", False):
+                logger.debug(f"Updated fields: {list(updates.keys())}")
+
+        if metadata_dict is not None:
+            overwrite = getattr(args, 'overwrite', False)
+            client.datasets.update_scientific_metadata(
+                args.dataset_id, metadata_dict, overwrite=overwrite
+            )
+            action = "replaced" if overwrite else "updated"
+            logger.info(f"✓ Scientific metadata {action} for dataset {args.dataset_id}")
 
     except Exception as e:
         logger.error(f"Error updating dataset: {e}")
@@ -448,70 +477,6 @@ def _execute_update(args):
             import traceback
             traceback.print_exc()
         sys.exit(1)
-
-
-def _register_update_metadata(subparsers):
-    """Register the 'dataset update-metadata' subcommand."""
-    parser = subparsers.add_parser(
-        'update-metadata',
-        help='Update scientific metadata',
-        description='Update scientific metadata for a dataset',
-        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-    # Key=value pairs (auto-cast to int/float/bool/str)
-    crucible dataset update-metadata DSID --set temperature=300 --set pressure=1.0
-
-    # Inline JSON string
-    crucible dataset update-metadata DSID --metadata '{"temperature": 300}'
-
-    # From a JSON file
-    crucible dataset update-metadata DSID --metadata metadata.json
-
-    # Mix: load base from file, override one field
-    crucible dataset update-metadata DSID --metadata base.json --set temperature=300
-
-    # Full replace instead of merge
-    crucible dataset update-metadata DSID --set temperature=300 --overwrite
-"""
-    )
-
-    dataset_id_arg = parser.add_argument(
-        'dataset_id',
-        metavar='DATASET_ID',
-        help='Dataset unique ID'
-    )
-    if ARGCOMPLETE_AVAILABLE:
-        dataset_id_arg.completer = argcomplete.completers.SuppressCompleter()
-
-    parser.add_argument(
-        '--metadata',
-        default=None,
-        metavar='JSON',
-        help='Scientific metadata as JSON string or path to JSON file'
-    )
-
-    parser.add_argument(
-        '--set', '-s',
-        action='append',
-        dest='set_fields',
-        metavar='KEY=VALUE',
-        help='Set a single metadata field (repeatable). Values are auto-cast to int, float, bool, or string.'
-    )
-
-    parser.add_argument(
-        '--overwrite',
-        action='store_true',
-        help='Replace all existing metadata instead of merging'
-    )
-
-    parser.add_argument(
-        '-v', '--verbose',
-        action='store_true',
-        help='Verbose output'
-    )
-
-    parser.set_defaults(func=_execute_update_metadata)
 
 
 def _register_link(subparsers):
@@ -813,19 +778,24 @@ def _execute_add_keyword(args):
         sys.exit(1)
 
 
-def _register_get_keywords(subparsers):
-    """Register the 'dataset get-keywords' subcommand."""
+def _register_list_keywords(subparsers):
+    """Register the 'dataset list-keywords' subcommand."""
+    import argparse
+
+    def _add_args(p):
+        p.add_argument('dataset_id', metavar='DATASET_ID', help='Dataset unique ID')
+        p.add_argument('-v', '--verbose', action='store_true', help='Verbose output')
+
     parser = subparsers.add_parser(
-        'get-keywords',
+        'list-keywords',
         help='List keywords for a dataset',
         description='Show all keywords associated with a dataset',
     )
-    parser.add_argument('dataset_id', metavar='DATASET_ID', help='Dataset unique ID')
-    parser.add_argument('-v', '--verbose', action='store_true', help='Verbose output')
-    parser.set_defaults(func=_execute_get_keywords)
+    _add_args(parser)
+    parser.set_defaults(func=_execute_list_keywords)
 
 
-def _execute_get_keywords(args):
+def _execute_list_keywords(args):
     """Execute the 'dataset get-keywords' subcommand."""
     from crucible.client import CrucibleClient
     try:
@@ -1213,60 +1183,6 @@ def _cast_value(value):
     except ValueError:
         pass
     return value
-
-
-def _execute_update_metadata(args):
-    """Execute the 'dataset update-metadata' subcommand."""
-    from crucible.client import CrucibleClient
-    if not args.metadata and not args.set_fields:
-        logger.error("Error: provide at least one of --metadata or --set KEY=VALUE")
-        sys.exit(1)
-
-    metadata_dict = {}
-
-    # Parse --metadata (JSON string or file)
-    if args.metadata:
-        metadata_path = Path(args.metadata)
-        if metadata_path.exists():
-            try:
-                with open(metadata_path, 'r') as f:
-                    metadata_dict = json.load(f)
-            except json.JSONDecodeError as e:
-                logger.error(f"Error: Invalid JSON in file {metadata_path}: {e}")
-                sys.exit(1)
-        else:
-            try:
-                metadata_dict = json.loads(args.metadata)
-            except json.JSONDecodeError:
-                logger.error(f"Error: '{args.metadata}' is not valid JSON and no such file exists.")
-                sys.exit(1)
-
-    # Parse --set KEY=VALUE pairs (override/extend --metadata)
-    if args.set_fields:
-        for field in args.set_fields:
-            if '=' not in field:
-                logger.error(f"Error: --set requires KEY=VALUE format, got: '{field}'")
-                sys.exit(1)
-            key, _, value = field.partition('=')
-            metadata_dict[key.strip()] = _cast_value(value)
-
-    try:
-        client = CrucibleClient()
-        result = client.datasets.update_scientific_metadata(
-            args.dataset_id, metadata_dict, overwrite=args.overwrite
-        )
-
-        action = "replaced" if args.overwrite else "updated"
-        logger.info(f"✓ Metadata {action} for dataset {args.dataset_id}")
-        if getattr(args, "debug", False):
-            logger.debug(f"Result: {result}")
-
-    except Exception as e:
-        logger.error(f"Error updating metadata: {e}")
-        if getattr(args, "debug", False):
-            import traceback
-            traceback.print_exc()
-        sys.exit(1)
 
 
 def _execute_link(args):

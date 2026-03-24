@@ -16,6 +16,38 @@ import sys
 import logging
 from crucible import __version__
 
+# Deprecated subcommand aliases: (resource, old_name) -> new_name
+_DEPRECATED_SUBCOMMANDS = {
+    ('dataset', 'update-metadata'): 'update',
+    ('dataset', 'get-keywords'):    'list-keywords',
+    ('sample',  'link-dataset'):    'add-dataset',
+    ('user',    'get-access-groups'): 'list-access-groups',
+    ('user',    'get-projects'):    'list-projects',
+    ('project', 'get-users'):       'list-users',
+}
+
+
+def _remap_deprecated(argv):
+    """Remap deprecated subcommand names, warning the user."""
+    args = list(argv)
+    # Find the resource command (first non-flag arg)
+    resource_idx = next((i for i, a in enumerate(args) if not a.startswith('-')), None)
+    if resource_idx is None:
+        return args
+    resource = args[resource_idx]
+    # Find the subcommand (first non-flag arg after resource)
+    sub_idx = next((i for i, a in enumerate(args[resource_idx+1:], resource_idx+1)
+                    if not a.startswith('-')), None)
+    if sub_idx is None:
+        return args
+    key = (resource, args[sub_idx])
+    if key in _DEPRECATED_SUBCOMMANDS:
+        new_name = _DEPRECATED_SUBCOMMANDS[key]
+        print(f"Warning: '{resource} {args[sub_idx]}' is deprecated, "
+              f"use '{resource} {new_name}' instead.", file=sys.stderr)
+        args[sub_idx] = new_name
+    return args
+
 try:
     import argcomplete
     ARGCOMPLETE_AVAILABLE = True
@@ -46,20 +78,6 @@ def main():
         description='Crucible API command-line interface',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-Resource commands:
-    dataset     Dataset operations (list, get, create, update-metadata, link)
-    sample      Sample operations (list, get, create, link, link-dataset)
-    project     Project operations (list, get, create, get-users, add-user)
-    instrument  Instrument operations (list, get)
-    user        User operations (get, create) - requires admin permissions
-
-Utility commands:
-    config      Manage configuration
-    upload      [Legacy] Parse and upload datasets (use 'dataset create' instead)
-    open        Open a resource in Crucible Graph Explorer
-    link        Link resources directly
-    completion  Install shell autocomplete
-
 Examples:
     # Configuration
     crucible config init
@@ -67,19 +85,22 @@ Examples:
     # Dataset operations
     crucible dataset list -pid my-project
     crucible dataset get <dataset-id>
-    crucible dataset create -i input.lmp -t lammps -pid my-project
+    crucible dataset create -i data.csv -pid my-project
+    crucible dataset update <dataset-id> --set measurement=XRD
+    crucible dataset update <dataset-id> --metadata '{"temperature": 300}'
 
     # Sample operations
     crucible sample list -pid my-project
     crucible sample create -n "My Sample" -pid my-project
+    crucible sample update <sample-id> --set sample_type=substrate
 
-    # Project operations
+    # Project / instrument / user operations
     crucible project list
-    crucible project get <project-id>
+    crucible instrument list
+    crucible user get <orcid>
 
-    # Other operations
-    crucible open <mfid>
-    crucible link -p parent_id -c child_id
+    # Debug mode (place before subcommand)
+    crucible --debug dataset list
 """
     )
 
@@ -127,8 +148,11 @@ Examples:
     if ARGCOMPLETE_AVAILABLE:
         argcomplete.autocomplete(parser)
 
+    # Remap deprecated subcommand names before parsing
+    argv = _remap_deprecated(sys.argv[1:])
+
     # Parse arguments
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     # Configure logging once for the entire CLI
     setup_logging(verbose=getattr(args, 'debug', False))

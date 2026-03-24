@@ -43,7 +43,7 @@ def register_subcommand(subparsers):
     _register_list(project_subparsers)
     _register_get(project_subparsers)
     _register_create(project_subparsers)
-    _register_get_users(project_subparsers)
+    _register_list_users(project_subparsers)
     _register_add_user(project_subparsers)
 
 
@@ -176,43 +176,30 @@ Examples:
     parser.set_defaults(func=_execute_create)
 
 
-def _register_get_users(subparsers):
-    """Register the 'project get-users' subcommand."""
+def _register_list_users(subparsers):
+    """Register the 'project list-users' subcommand."""
+    import argparse
+
+    def _add_args(p):
+        pid_arg = p.add_argument('project_id', metavar='PROJECT_ID', help='Project ID')
+        if ARGCOMPLETE_AVAILABLE:
+            pid_arg.completer = argcomplete.completers.SuppressCompleter()
+        p.add_argument('--limit', type=int, default=100, metavar='N',
+                       help='Maximum number of results to return (default: 100)')
+        p.add_argument('-v', '--verbose', action='store_true', help='Verbose output')
+
     parser = subparsers.add_parser(
-        'get-users',
-        help='Get users in a project',
+        'list-users',
+        help='List users in a project',
         description='List all users associated with a project (requires admin permissions)',
         epilog="""
 Examples:
-    crucible project get-users my-project
-    crucible project get-users lammps-test
+    crucible project list-users my-project
+    crucible project list-users lammps-test
 """
     )
-
-    project_id_arg = parser.add_argument(
-        'project_id',
-        metavar='PROJECT_ID',
-        help='Project ID'
-    )
-    # Disable file completion for project_id
-    if ARGCOMPLETE_AVAILABLE:
-        project_id_arg.completer = argcomplete.completers.SuppressCompleter()
-
-    parser.add_argument(
-        '--limit',
-        type=int,
-        default=100,
-        metavar='N',
-        help='Maximum number of results to return (default: 100)'
-    )
-
-    parser.add_argument(
-        '-v', '--verbose',
-        action='store_true',
-        help='Verbose output'
-    )
-
-    parser.set_defaults(func=_execute_get_users)
+    _add_args(parser)
+    parser.set_defaults(func=_execute_list_users)
 
 
 def _register_add_user(subparsers):
@@ -430,7 +417,7 @@ def _execute_create(args):
         sys.exit(1)
 
 
-def _execute_get_users(args):
+def _execute_list_users(args):
     """Execute the 'project get-users' subcommand."""
     from crucible.client import CrucibleClient
     try:
