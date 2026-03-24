@@ -8,7 +8,6 @@ Provides sample-related operations: list, get, create, link, etc.
 
 import sys
 import logging
-import json
 
 logger = logging.getLogger(__name__)
 
