@@ -74,7 +74,10 @@ class CrucibleClient:
         """
         url = f"{self.api_url}/{endpoint.lstrip('/')}"
         kwargs['headers'] = {**kwargs.get('headers', {}), **self.headers}
+        logger.debug(f"{method.upper()} {url}")
         response = requests.request(method, url, timeout=DEFAULT_TIMEOUT, **kwargs)
+        logger.debug(f"Status: {response.status_code}")
+        logger.debug(f"Response: {response.text}")
         response.raise_for_status()
         try:
             if response.content:
