@@ -123,6 +123,7 @@ crucible project list-users my-project
 |---------|-------------|-------------|
 | `instrument list` | `--limit N` | List all instruments |
 | `instrument get NAME` | `--by-id` | Get instrument by name (or by ID with `--by-id`) |
+| `instrument create` | `-n NAME` `--owner OWNER` `--location LOC` `--manufacturer MFR` `--model MODEL` `--type TYPE` `--description TEXT` | Create an instrument (interactive if args omitted) |
 
 ---
 
@@ -132,7 +133,7 @@ crucible project list-users my-project
 |---------|-------------|-------------|
 | `user list` | `--limit N` | List all users |
 | `user get` | `--orcid ORCID` or `--email EMAIL` | Get a user |
-| `user create` | `--orcid` `--first-name` `--last-name` `--email` `--projects` | Create a user (interactive if args omitted) |
+| `user create` | `--orcid` `--first-name` `--last-name` `--email` `--lbl-email` `--projects` | Create a user (interactive if args omitted) |
 | `user list-datasets ORCID` | | List dataset IDs accessible to a user |
 | `user check-access ORCID DATASET_ID` | | Check read/write permissions for a user on a dataset |
 | `user list-access-groups ORCID` | | List access groups a user belongs to |
