@@ -76,3 +76,31 @@ class Project(BaseModel):
     project_lead_name: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class User(BaseModel):
+    id: Optional[int] = None
+    orcid: Optional[str] = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    email: Optional[str] = None
+    lbl_email: Optional[str] = None
+    employee_number: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class Instrument(BaseModel):
+    id: Optional[int] = None
+    unique_id: Optional[str] = None
+    instrument_name: Optional[str] = None
+    manufacturer: Optional[str] = None
+    model: Optional[str] = None
+    owner: Optional[str] = None
+    location: Optional[str] = None
+    description: Optional[str] = None
+    instrument_type: Optional[str] = None
+    other_id: Optional[str] = None
+    other_id_source: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)

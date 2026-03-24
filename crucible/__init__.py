@@ -57,10 +57,11 @@ def setup_logging(verbose=False):
 
 
 from .client import CrucibleClient
-from .models import Dataset, Sample, Project
+from .models import Dataset, Sample, Project, User, Instrument
 from . import config
 
-__all__ = ['CrucibleClient', 'Dataset', 'Sample', 'Project', 'config', 'setup_logging', '__version__', '__author__']
+__all__ = ['CrucibleClient', 'Dataset', 'Sample', 'Project', 'User', 'Instrument',
+           'config', 'setup_logging', '__version__', '__author__']
 
 
 def __getattr__(name: str):
