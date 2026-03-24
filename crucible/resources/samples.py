@@ -236,34 +236,51 @@ class SampleOperations(BaseResource):
 
         return upd_samp
 
-    def add_to_dataset(self, dataset_id: str, sample_id: str) -> Dict:
-        """Link a sample to a dataset.
+    def add_dataset(self, sample_id: str, dataset_id: str) -> Dict:
+        """Link a dataset to this sample.
+
+        Delegates to DatasetOperations.add_sample — single implementation.
 
         Args:
-            dataset_id (str): Dataset ID
-            sample_id (str): Sample ID
+            sample_id (str): Sample unique identifier
+            dataset_id (str): Dataset unique identifier
 
         Returns:
             Dict: Information about the created link
         """
-        new_link = self._request('post', f"/datasets/{dataset_id}/samples/{sample_id}")
-        return new_link
+        return self._client.datasets.add_sample(dataset_id, sample_id)
 
-    def remove_from_dataset(self, dataset_id: str, sample_id: str) -> Dict:
-        """Remove a connection between a sample and a dataset.
+    def remove_dataset(self, sample_id: str, dataset_id: str) -> Dict:
+        """Remove the link between a sample and a dataset.
 
         **Requires admin permissions.**
-        Currently only available in staging API.
 
         Args:
-            dataset_id (str): Dataset ID
-            sample_id (str): Sample ID
+            sample_id (str): Sample unique identifier
+            dataset_id (str): Dataset unique identifier
 
         Returns:
             Dict: Deletion confirmation
         """
-        del_link = self._request('delete', f"/datasets/{dataset_id}/samples/{sample_id}")
-        return del_link
+        return self._client.datasets.remove_sample(dataset_id, sample_id)
+
+    def add_to_dataset(self, dataset_id: str, sample_id: str) -> Dict:
+        """Deprecated: use add_dataset(sample_id, dataset_id) instead."""
+        import warnings
+        warnings.warn(
+            "add_to_dataset() is deprecated; use add_dataset(sample_id, dataset_id) instead.",
+            DeprecationWarning, stacklevel=2,
+        )
+        return self.add_dataset(sample_id, dataset_id)
+
+    def remove_from_dataset(self, dataset_id: str, sample_id: str) -> Dict:
+        """Deprecated: use remove_dataset(sample_id, dataset_id) instead."""
+        import warnings
+        warnings.warn(
+            "remove_from_dataset() is deprecated; use remove_dataset(sample_id, dataset_id) instead.",
+            DeprecationWarning, stacklevel=2,
+        )
+        return self.remove_dataset(sample_id, dataset_id)
 
     def link(self, parent_id: str, child_id: str) -> Dict:
         """Link two samples with a parent-child relationship.

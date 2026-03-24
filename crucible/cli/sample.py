@@ -48,6 +48,7 @@ def register_subcommand(subparsers):
     _register_list_children(sample_subparsers)
     _register_list_datasets(sample_subparsers)
     _register_add_dataset(sample_subparsers)
+    _register_remove_dataset(sample_subparsers)
 
 
 def _register_list(subparsers):
@@ -597,12 +598,44 @@ def _execute_link_dataset(args):
     try:
         client = CrucibleClient()
         sample_id = args.sample_id
-        result = client.samples.add_to_dataset(sample_id, args.dataset)
+        result = client.samples.add_dataset(sample_id, args.dataset)
 
         logger.info(f"✓ Linked sample {sample_id} to dataset {args.dataset}")
 
     except Exception as e:
         logger.error(f"Error linking dataset to sample: {e}")
+        if getattr(args, "debug", False):
+            import traceback
+            traceback.print_exc()
+        sys.exit(1)
+
+
+def _register_remove_dataset(subparsers):
+    """Register the 'sample remove-dataset' subcommand."""
+    parser = subparsers.add_parser(
+        'remove-dataset',
+        help='Unlink a dataset from a sample',
+        description='Remove the association between a sample and a dataset (requires admin)',
+        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+    crucible sample remove-dataset SAMPLE_ID --dataset DATASET_ID
+"""
+    )
+    parser.add_argument('sample_id', metavar='SAMPLE_ID', help='Sample unique ID')
+    parser.add_argument('-d', '--dataset', required=True, metavar='DATASET_ID', help='Dataset ID to unlink')
+    parser.set_defaults(func=_execute_remove_dataset)
+
+
+def _execute_remove_dataset(args):
+    """Execute the 'sample remove-dataset' subcommand."""
+    from crucible.client import CrucibleClient
+    try:
+        client = CrucibleClient()
+        client.samples.remove_dataset(args.sample_id, args.dataset)
+        logger.info(f"✓ Unlinked sample {args.sample_id} from dataset {args.dataset}")
+    except Exception as e:
+        logger.error(f"Error unlinking dataset from sample: {e}")
         if getattr(args, "debug", False):
             import traceback
             traceback.print_exc()

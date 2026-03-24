@@ -49,6 +49,7 @@ crucible --debug dataset list   # debug must precede the subcommand
 | `dataset search QUERY` | `--limit N` `-v` | Search datasets by scientific metadata |
 | `dataset link` | `-p PARENT_ID -c CHILD_ID` | Create a parent-child relationship between two datasets |
 | `dataset add-sample ID` | `-s SAMPLE_ID` | Link a sample to this dataset |
+| `dataset remove-sample ID` | `-s SAMPLE_ID` | Unlink a sample from this dataset *(admin)* |
 | `dataset list-parents ID` | `--limit N` | List parent datasets |
 | `dataset list-children ID` | `--limit N` | List child datasets |
 | `dataset list-samples ID` | `--limit N` `-v` | List samples linked to a dataset |
@@ -86,6 +87,7 @@ crucible dataset search "temperature" --limit 10
 | `sample update ID` | `--set KEY=VALUE` | Update sample fields |
 | `sample link` | `-p PARENT_ID -c CHILD_ID` | Create a parent-child relationship between two samples |
 | `sample add-dataset ID` | `-d DATASET_ID` | Link a dataset to this sample |
+| `sample remove-dataset ID` | `-d DATASET_ID` | Unlink a dataset from this sample *(admin)* |
 | `sample list-parents ID` | `--limit N` | List parent samples |
 | `sample list-children ID` | `--limit N` | List child samples |
 | `sample list-datasets ID` | `--limit N` `-v` | List datasets linked to a sample |

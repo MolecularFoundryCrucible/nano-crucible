@@ -655,6 +655,20 @@ class DatasetOperations(BaseResource):
         """
         return self._request('post', f"/datasets/{dataset_id}/samples/{sample_id}")
 
+    def remove_sample(self, dataset_id: str, sample_id: str) -> Dict:
+        """Remove the link between a dataset and a sample.
+
+        **Requires admin permissions.**
+
+        Args:
+            dataset_id (str): Dataset unique identifier
+            sample_id (str): Sample unique identifier
+
+        Returns:
+            Dict: Deletion confirmation
+        """
+        return self._request('delete', f"/datasets/{dataset_id}/samples/{sample_id}")
+
     def link_parent_child(self, parent_dataset_id: str, child_dataset_id: str) -> Dict:
         """Link a derived dataset to a parent dataset.
 

@@ -57,6 +57,7 @@ def register_subcommand(subparsers):
     _register_update(dataset_subparsers)
     _register_link(dataset_subparsers)
     _register_add_sample(dataset_subparsers)
+    _register_remove_sample(dataset_subparsers)
     _register_list_parents(dataset_subparsers)
     _register_list_children(dataset_subparsers)
     _register_list_samples(dataset_subparsers)
@@ -540,6 +541,38 @@ def _execute_add_sample(args):
 
     except Exception as e:
         logger.error(f"Error linking sample to dataset: {e}")
+        if getattr(args, "debug", False):
+            import traceback
+            traceback.print_exc()
+        sys.exit(1)
+
+
+def _register_remove_sample(subparsers):
+    """Register the 'dataset remove-sample' subcommand."""
+    parser = subparsers.add_parser(
+        'remove-sample',
+        help='Unlink a sample from a dataset',
+        description='Remove the association between a dataset and a sample (requires admin)',
+        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+    crucible dataset remove-sample DATASET_ID --sample SAMPLE_ID
+"""
+    )
+    parser.add_argument('dataset_id', metavar='DATASET_ID', help='Dataset unique ID')
+    parser.add_argument('-s', '--sample', required=True, metavar='SAMPLE_ID', help='Sample ID to unlink')
+    parser.set_defaults(func=_execute_remove_sample)
+
+
+def _execute_remove_sample(args):
+    """Execute the 'dataset remove-sample' subcommand."""
+    from crucible.client import CrucibleClient
+    try:
+        client = CrucibleClient()
+        client.datasets.remove_sample(args.dataset_id, args.sample)
+        logger.info(f"✓ Unlinked sample {args.sample} from dataset {args.dataset_id}")
+    except Exception as e:
+        logger.error(f"Error unlinking sample from dataset: {e}")
         if getattr(args, "debug", False):
             import traceback
             traceback.print_exc()
