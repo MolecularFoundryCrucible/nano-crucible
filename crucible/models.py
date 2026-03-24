@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict
 from typing import Optional
 
 
-class BaseSample(BaseModel):
+class Sample(BaseModel):
     unique_id: Optional[str] = None
     sample_name: Optional[str] = None
     sample_type: Optional[str] = None
@@ -23,7 +23,7 @@ class BaseSample(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-class BaseDataset(BaseModel):
+class Dataset(BaseModel):
     unique_id: Optional[str] = None
     dataset_name: Optional[str] = None
     public: Optional[bool] = False
@@ -45,6 +45,26 @@ class BaseDataset(BaseModel):
     json_link: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+# ---------------------------------------------------------------------------
+# Backward-compatibility aliases (deprecated)
+# ---------------------------------------------------------------------------
+
+def __getattr__(name: str):
+    import warnings
+    _aliases = {
+        'BaseDataset': Dataset,
+        'BaseSample':  Sample,
+    }
+    if name in _aliases:
+        warnings.warn(
+            f"'{name}' is deprecated; use '{_aliases[name].__name__}' instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return _aliases[name]
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 class Project(BaseModel):

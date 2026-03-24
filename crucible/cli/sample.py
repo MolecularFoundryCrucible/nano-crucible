@@ -177,11 +177,11 @@ Examples:
 
 
 def _sample_updatable_fields():
-    """Return sorted list of fields that can be updated on a sample (derived from BaseSample model)."""
-    from ..models import BaseSample
+    """Return sorted list of fields that can be updated on a sample (derived from Sample model)."""
+    from ..models import Sample
     # Exclude server-managed / identifier fields
     _readonly = {'unique_id', 'owner_user_id', 'creation_time', 'modification_time'}
-    return sorted(set(BaseSample.model_fields.keys()) - _readonly)
+    return sorted(set(Sample.model_fields.keys()) - _readonly)
 
 
 def _register_update(subparsers):

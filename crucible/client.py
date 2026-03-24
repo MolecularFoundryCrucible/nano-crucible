@@ -11,7 +11,7 @@ import requests
 import json
 import logging
 from typing import Optional, List, Dict, Any, Union
-from .models import BaseDataset, Project
+from .models import Dataset, Project
 from .constants import DEFAULT_TIMEOUT, DEFAULT_LIMIT
 from .utils.deprecation import _deprecated, _removed
 
@@ -348,7 +348,7 @@ class CrucibleClient:
     
     @_deprecated("client.datasets.create()")
     def create_new_dataset(self,
-                            dataset: BaseDataset,
+                            dataset: Dataset,
                             scientific_metadata: Optional[dict] = {},
                             keywords: List[str] = [],
                             get_user_info_function = None,
@@ -362,7 +362,7 @@ class CrucibleClient:
 
     @_deprecated("client.datasets.create()")
     def create_new_dataset_from_files(self,
-                                     dataset: BaseDataset,
+                                     dataset: Dataset,
                                      files_to_upload: List[str],
                                      scientific_metadata: Optional[dict] = None,
                                      keywords: List[str] = [],

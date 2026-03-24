@@ -86,7 +86,7 @@ class DatasetOperations(BaseResource):
         """Create a new dataset with metadata and optionally upload files.
 
         Args:
-            dataset: BaseDataset object with dataset details
+            dataset: Dataset object with dataset details
             scientific_metadata (dict, optional): Scientific metadata
             keywords (list, optional): Keywords to associate with dataset
             get_user_info_function (callable, optional): Function to get user info
@@ -99,8 +99,6 @@ class DatasetOperations(BaseResource):
             Dict: created_record, scientific_metadata_record, dsid, and optionally
                   uploaded_files and ingestion_request if files_to_upload provided
         """
-        from ..models import BaseDataset
-
         if scientific_metadata is None:
             scientific_metadata = {}
         if keywords is None:
@@ -410,7 +408,7 @@ class DatasetOperations(BaseResource):
             Use :meth:`create` with files_to_upload parameter instead.
 
         Args:
-            dataset: BaseDataset object with dataset details
+            dataset: Dataset object with dataset details
             files_to_upload (List[str]): List of file paths to upload
             scientific_metadata (dict, optional): Scientific metadata
             keywords (list, optional): Keywords to associate with dataset

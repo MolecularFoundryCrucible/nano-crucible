@@ -361,12 +361,12 @@ Examples:
 
 
 def _dataset_updatable_fields():
-    """Return sorted list of fields that can be updated on a dataset (derived from BaseDataset model)."""
-    from ..models import BaseDataset
+    """Return sorted list of fields that can be updated on a dataset (derived from Dataset model)."""
+    from ..models import Dataset
     # Exclude server-managed / identifier fields
     _readonly = {'unique_id', 'owner_user_id', 'size', 'sha256_hash_file_to_upload',
                  'creation_time', 'modification_time'}
-    return sorted(set(BaseDataset.model_fields.keys()) - _readonly)
+    return sorted(set(Dataset.model_fields.keys()) - _readonly)
 
 
 def _register_update(subparsers):
