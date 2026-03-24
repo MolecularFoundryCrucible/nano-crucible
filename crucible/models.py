@@ -7,6 +7,7 @@ Pydantic models for Crucible API request and response objects.
 from pydantic import BaseModel, ConfigDict
 from typing import Optional
 
+#%% Models
 
 class Sample(BaseModel):
     unique_id: Optional[str] = None
@@ -46,27 +47,6 @@ class Dataset(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
-
-# ---------------------------------------------------------------------------
-# Backward-compatibility aliases (deprecated)
-# ---------------------------------------------------------------------------
-
-def __getattr__(name: str):
-    import warnings
-    _aliases = {
-        'BaseDataset': Dataset,
-        'BaseSample':  Sample,
-    }
-    if name in _aliases:
-        warnings.warn(
-            f"'{name}' is deprecated; use '{_aliases[name].__name__}' instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        return _aliases[name]
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-
-
 class Project(BaseModel):
     project_id: str
     organization: str
@@ -104,3 +84,21 @@ class Instrument(BaseModel):
     other_id_source: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+#%% Backward-compatibility aliases (deprecated)
+
+def __getattr__(name: str):
+    import warnings
+    _aliases = {
+        'BaseDataset': Dataset,
+        'BaseSample':  Sample,
+    }
+    if name in _aliases:
+        warnings.warn(
+            f"'{name}' is deprecated; use '{_aliases[name].__name__}' instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return _aliases[name]
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
