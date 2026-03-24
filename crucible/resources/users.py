@@ -72,7 +72,8 @@ class UserOperations(BaseResource):
         """
         params = kwargs
         params['limit'] = limit
-        return self._request('get', '/users', params=params)
+        users = self._request('get', '/users', params=params)
+        return sorted(users, key=lambda u: u.get('id') or 0)
 
     def create(self, user, project_ids=None) -> Dict:
         """Add or update a user in the system (upsert by ORCID).
