@@ -134,7 +134,16 @@ class CrucibleClient:
             raise ValueError(f"Unsupported request_type: {request_type}")
     
     #%% GENERIC METHODS
-    
+
+    def whoami(self) -> Dict:
+        """Return account info for the current API key.
+
+        Returns:
+            Dict: access_group_name (ORCID), access_group_ids, and user_info
+                  with full user profile fields.
+        """
+        return self._request('get', '/account')
+
     def get_resource_type(self, resource_id: str) -> dict:
         """
         Determine the type of a resource.

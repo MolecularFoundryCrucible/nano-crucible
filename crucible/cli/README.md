@@ -162,6 +162,7 @@ crucible project list-users my-project
 
 | Command | Description |
 |---------|-------------|
+| `whoami` | Show current user info for the active API key |
 | `link -p PARENT -c CHILD` | Link two resources (type auto-detected via API) |
 | `link -d DATASET -s SAMPLE` | Link a sample to a dataset |
 | `unlink -p ID -c ID` | Unlink two resources (dataset-sample only, type auto-detected) |
