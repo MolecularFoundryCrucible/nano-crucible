@@ -75,7 +75,10 @@ class UserOperations(BaseResource):
         return self._request('get', '/users', params=params)
 
     def create(self, user, project_ids=None) -> Dict:
-        """Add a new user to the system.
+        """Add or update a user in the system (upsert by ORCID).
+
+        If a user with the given ORCID already exists their record is updated.
+        Project memberships and access groups are always re-applied.
 
         **Requires admin permissions.**
 
@@ -88,7 +91,7 @@ class UserOperations(BaseResource):
             project_ids (list, optional): Project IDs to associate with the user.
 
         Returns:
-            Dict: Created user object
+            Dict: Created or updated user object
 
         Example:
             >>> from crucible.models import User
