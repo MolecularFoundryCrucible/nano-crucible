@@ -1,6 +1,6 @@
 # Crucible CLI Cheat Sheet
 
-The `crucible` CLI provides command-line access to the Crucible data lakehouse. Commands follow the pattern:
+The `crucible CLI` provides command-line access to Crucible. Commands follow the pattern:
 
 ```
 crucible [--debug] <resource> <action> [options]
