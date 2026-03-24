@@ -55,20 +55,24 @@ except ImportError:
     ARGCOMPLETE_AVAILABLE = False
 
 
-def setup_logging(verbose=False):
+def setup_logging(debug=False):
     """
     Configure logging for CLI usage.
 
     Args:
-        verbose (bool): If True, set level to DEBUG; otherwise INFO
+        debug (bool): If True (--debug flag), set level to DEBUG; otherwise INFO
     """
+    level = logging.DEBUG if debug else logging.INFO
     logging.basicConfig(
-        level=logging.DEBUG if verbose else logging.INFO,
+        level=level,
         format='%(message)s',  # Clean output for CLI
         handlers=[
             logging.StreamHandler(sys.stderr)  # Standard for CLI tools
         ]
     )
+    # The crucible package logger has an explicit INFO level set at import time;
+    # override it so --debug reaches crucible.client and other submodules.
+    logging.getLogger('crucible').setLevel(level)
 
 
 def main():
@@ -155,7 +159,7 @@ Examples:
     args = parser.parse_args(argv)
 
     # Configure logging once for the entire CLI
-    setup_logging(verbose=getattr(args, 'debug', False))
+    setup_logging(debug=getattr(args, 'debug', False))
 
     # If no command specified, show help
     if args.command is None:
