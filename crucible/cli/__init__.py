@@ -20,7 +20,7 @@ from crucible import __version__
 _DEPRECATED_SUBCOMMANDS = {
     ('dataset', 'update-metadata'): 'update',
     ('dataset', 'get-keywords'):    'list-keywords',
-    ('sample',  'link-dataset'):    'add-dataset',
+    ('sample',  'link-dataset'):    'add-dataset',   # note: args changed to: SAMPLE_ID -d DATASET_ID
     ('user',    'get-access-groups'): 'list-access-groups',
     ('user',    'get-projects'):    'list-projects',
     ('project', 'get-users'):       'list-users',

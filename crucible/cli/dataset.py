@@ -56,6 +56,7 @@ def register_subcommand(subparsers):
     _register_create(dataset_subparsers)
     _register_update(dataset_subparsers)
     _register_link(dataset_subparsers)
+    _register_add_sample(dataset_subparsers)
     _register_list_parents(dataset_subparsers)
     _register_list_children(dataset_subparsers)
     _register_list_samples(dataset_subparsers)
@@ -508,6 +509,43 @@ def _register_link(subparsers):
     )
 
     parser.set_defaults(func=_execute_link)
+
+
+def _register_add_sample(subparsers):
+    """Register the 'dataset add-sample' subcommand."""
+    parser = subparsers.add_parser(
+        'add-sample',
+        help='Link a sample to a dataset',
+        description='Associate a sample with a dataset',
+        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+    crucible dataset add-sample DATASET_ID --sample SAMPLE_ID
+"""
+    )
+    parser.add_argument('dataset_id', metavar='DATASET_ID', help='Dataset unique ID')
+    parser.add_argument('-s', '--sample', required=True, metavar='SAMPLE_ID', help='Sample ID')
+    parser.add_argument('-v', '--verbose', action='store_true', help='Verbose output')
+    parser.set_defaults(func=_execute_add_sample)
+
+
+def _execute_add_sample(args):
+    """Execute the 'dataset add-sample' subcommand."""
+    from crucible.client import CrucibleClient
+    try:
+        client = CrucibleClient()
+        result = client.datasets.add_sample(args.dataset_id, args.sample)
+
+        logger.info(f"✓ Linked sample {args.sample} to dataset {args.dataset_id}")
+        if getattr(args, "debug", False):
+            logger.debug(f"Result: {result}")
+
+    except Exception as e:
+        logger.error(f"Error linking sample to dataset: {e}")
+        if getattr(args, "debug", False):
+            import traceback
+            traceback.print_exc()
+        sys.exit(1)
 
 
 def _register_list_parents(subparsers):

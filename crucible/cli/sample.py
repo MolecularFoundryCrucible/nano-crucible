@@ -298,19 +298,19 @@ def _register_link(subparsers):
 
 def _register_add_dataset(subparsers):
     """Register the 'sample add-dataset' subcommand."""
-    import argparse
-
-    def _add_args(p):
-        p.add_argument('-s', '--sample', required=True, metavar='SAMPLE_ID', help='Sample ID')
-        p.add_argument('-d', '--dataset', required=True, metavar='DATASET_ID', help='Dataset ID')
-        p.add_argument('-v', '--verbose', action='store_true', help='Verbose output')
-
     parser = subparsers.add_parser(
         'add-dataset',
         help='Link a sample to a dataset',
-        description='Associate a dataset with a sample'
+        description='Associate a dataset with a sample',
+        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+    crucible sample add-dataset SAMPLE_ID --dataset DATASET_ID
+"""
     )
-    _add_args(parser)
+    parser.add_argument('sample_id', metavar='SAMPLE_ID', help='Sample unique ID')
+    parser.add_argument('-d', '--dataset', required=True, metavar='DATASET_ID', help='Dataset ID')
+    parser.add_argument('-v', '--verbose', action='store_true', help='Verbose output')
     parser.set_defaults(func=_execute_link_dataset)
 
 
@@ -599,13 +599,14 @@ def _execute_list_datasets(args):
 
 
 def _execute_link_dataset(args):
-    """Execute the 'sample link-dataset' subcommand."""
+    """Execute the 'sample add-dataset' subcommand."""
     from crucible.client import CrucibleClient
     try:
         client = CrucibleClient()
-        result = client.samples.add_to_dataset(args.sample, args.dataset)
+        sample_id = args.sample_id
+        result = client.samples.add_to_dataset(sample_id, args.dataset)
 
-        logger.info(f"✓ Linked dataset {args.dataset} to sample {args.sample}")
+        logger.info(f"✓ Linked sample {sample_id} to dataset {args.dataset}")
         if getattr(args, "debug", False):
             logger.debug(f"Result: {result}")
 

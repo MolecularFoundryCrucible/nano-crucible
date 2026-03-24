@@ -24,15 +24,11 @@ def register_subcommand(subparsers):
         formatter_class=lambda prog: __import__('argparse').RawDescriptionHelpFormatter(prog, max_help_position=35),
         epilog="""
 Examples:
-    # Link two datasets (auto-detect)
+    # Link two datasets (resource types auto-detected)
     crucible link -p parent_dataset_id -c child_dataset_id
 
-    # Link two samples (auto-detect)
+    # Link two samples (resource types auto-detected)
     crucible link -p parent_sample_id -c child_sample_id
-
-    # Link with explicit type (skip auto-detection)
-    crucible link -p parent_id -c child_id --type dataset
-    crucible link -p parent_id -c child_id --type sample
 
     # Link sample to dataset
     crucible link -d dataset_id -s sample_id
@@ -65,13 +61,6 @@ Examples:
         help='Sample ID (for linking sample to dataset)'
     )
 
-    # Optional type specification to skip auto-detection
-    parser.add_argument(
-        '--type',
-        choices=['dataset', 'sample'],
-        help='Resource type (dataset or sample) to skip auto-detection'
-    )
-
     parser.set_defaults(func=execute)
 
 
@@ -86,22 +75,9 @@ def execute(args):
         child_id = args.sample
         logger.info(f"Linking sample '{child_id}' to dataset '{parent_id}'...")
     elif args.parent and args.child:
-        # Case 2: Generic parent-child flags
+        # Case 2: Generic parent-child flags (auto-detects resource types)
         parent_id = args.parent
         child_id = args.child
-
-        # Auto-detect types if not explicitly provided
-        if not args.type:
-            logger.info("Auto-detecting resource types...")
-            try:
-                parent_type = config.client.get_resource_type(parent_id)
-                child_type = config.client.get_resource_type(child_id)
-                logger.info(f"Detected: parent is {parent_type}, child is {child_type}")
-            except Exception as e:
-                logger.error(f"Failed to detect resource types: {e}")
-                sys.exit(1)
-        else:
-            logger.info(f"Linking {args.type}s: '{parent_id}' (parent) -> '{child_id}' (child)")
     else:
         logger.error("Invalid arguments. Use either:")
         logger.error("  -p/--parent and -c/--child for linking resources")
