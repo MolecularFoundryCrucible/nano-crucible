@@ -230,7 +230,8 @@ def _execute_create(args):
     lbl_email = args.lbl_email
     projects = args.projects
 
-    if orcid is None or first_name is None or last_name is None:
+    interactive = orcid is None or first_name is None or last_name is None
+    if interactive:
         logger.info("\n=== Interactive User Creation ===")
         logger.info("Please provide the following information:\n")
 
@@ -265,48 +266,43 @@ def _execute_create(args):
             else:
                 logger.error("Last name is required.")
 
-    # Prompt for email (optional)
-    if email is None:
-        email_input = input("Email (optional, press Enter to skip): ").strip()
-        if email_input:
-            # Basic email validation
-            if re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', email_input):
-                email = email_input
-            else:
-                logger.warning("Invalid email format. Skipping.")
+    # Optional fields — only prompt in interactive mode
+    if interactive:
+        if email is None:
+            email_input = input("Email (optional, press Enter to skip): ").strip()
+            if email_input:
+                if re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', email_input):
+                    email = email_input
+                else:
+                    logger.warning("Invalid email format. Skipping.")
 
-    # Prompt for LBL email (optional)
-    if lbl_email is None:
-        lbl_email_input = input("LBL Email (optional, press Enter to skip): ").strip()
-        if lbl_email_input:
-            if re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', lbl_email_input):
-                lbl_email = lbl_email_input
-            else:
-                logger.warning("Invalid email format. Skipping.")
+        if lbl_email is None:
+            lbl_email_input = input("LBL Email (optional, press Enter to skip): ").strip()
+            if lbl_email_input:
+                if re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', lbl_email_input):
+                    lbl_email = lbl_email_input
+                else:
+                    logger.warning("Invalid email format. Skipping.")
 
-    # Prompt for projects (optional)
-    if projects is None:
-        projects_input = input("Project IDs (comma-separated, optional, press Enter to skip): ").strip()
-        if projects_input:
-            projects = projects_input
-
-    # Build user_info dict
-    user_info = {
-        "orcid": orcid,
-        "first_name": first_name,
-        "last_name": last_name,
-        "projects": [p.strip() for p in projects.split(',')] if projects else []
-    }
-
-    if email:
-        user_info["email"] = email
-    if lbl_email:
-        user_info["lbl_email"] = lbl_email
+        if projects is None:
+            projects_input = input("Project IDs (comma-separated, optional, press Enter to skip): ").strip()
+            if projects_input:
+                projects = projects_input
 
     try:
+        from crucible.models import User
         logger.info("\n=== Creating User ===")
         client = CrucibleClient()
-        result = client.users.create(user_info)
+
+        user = User(
+            orcid=orcid,
+            first_name=first_name,
+            last_name=last_name,
+            email=email or None,
+            lbl_email=lbl_email or None,
+        )
+        project_ids = [p.strip() for p in projects.split(',')] if projects else []
+        result = client.users.create(user, project_ids=project_ids)
 
         logger.info(f"\n✓ User created successfully!")
         logger.info(f"ORCID: {result.get('orcid', 'N/A')}")

@@ -28,7 +28,7 @@ def register_subcommand(subparsers):
     """
     parser = subparsers.add_parser(
         'instrument',
-        help='Instrument operations (list, get)',
+        help='Instrument operations (list, get, create)',
         description='Manage Crucible instruments',
     )
 
@@ -42,6 +42,7 @@ def register_subcommand(subparsers):
     # Register individual instrument commands
     _register_list(instrument_subparsers)
     _register_get(instrument_subparsers)
+    _register_create(instrument_subparsers)
 
 
 def _register_list(subparsers):
@@ -99,6 +100,165 @@ def _register_get(subparsers):
     )
 
     parser.set_defaults(func=_execute_get)
+
+
+def _register_create(subparsers):
+    """Register the 'instrument create' subcommand."""
+    parser = subparsers.add_parser(
+        'create',
+        help='Create a new instrument',
+        description='Register a new instrument in Crucible (requires admin permissions)',
+        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+    # Interactive mode (prompts for input)
+    crucible instrument create
+
+    # Command-line mode
+    crucible instrument create -n "titan" --owner "mf" --location "Building 67"
+    crucible instrument create -n "titan" --owner "mf" --location "Building 67" \\
+        --manufacturer "FEI" --model "Titan 80-300" --type "TEM"
+"""
+    )
+
+    parser.add_argument(
+        '-n', '--name',
+        dest='instrument_name',
+        metavar='NAME',
+        help='Instrument name. If not provided, will prompt interactively.'
+    )
+    parser.add_argument(
+        '--owner',
+        metavar='OWNER',
+        help='Instrument owner. If not provided, will prompt interactively.'
+    )
+    parser.add_argument(
+        '--location',
+        metavar='LOCATION',
+        help='Instrument location. If not provided, will prompt interactively.'
+    )
+    parser.add_argument(
+        '--manufacturer',
+        metavar='MANUFACTURER',
+        help='Instrument manufacturer (optional)'
+    )
+    parser.add_argument(
+        '--model',
+        metavar='MODEL',
+        help='Instrument model (optional)'
+    )
+    parser.add_argument(
+        '--type',
+        dest='instrument_type',
+        metavar='TYPE',
+        help='Instrument type (optional)'
+    )
+    parser.add_argument(
+        '--description',
+        metavar='TEXT',
+        help='Instrument description (optional)'
+    )
+    parser.add_argument(
+        '-v', '--verbose',
+        action='store_true',
+        help='Verbose output'
+    )
+
+    parser.set_defaults(func=_execute_create)
+
+
+def _execute_create(args):
+    """Execute the 'instrument create' subcommand."""
+    from crucible.client import CrucibleClient
+
+    instrument_name = args.instrument_name
+    owner = args.owner
+    location = args.location
+
+    interactive = instrument_name is None or owner is None or location is None
+    if interactive:
+        logger.info("\n=== Interactive Instrument Creation ===")
+        logger.info("Please provide the following information:\n")
+
+    if instrument_name is None:
+        while True:
+            instrument_name = input("Instrument name: ").strip()
+            if instrument_name:
+                break
+            logger.error("Instrument name is required.")
+
+    if owner is None:
+        while True:
+            owner = input("Owner: ").strip()
+            if owner:
+                break
+            logger.error("Owner is required.")
+
+    if location is None:
+        while True:
+            location = input("Location: ").strip()
+            if location:
+                break
+            logger.error("Location is required.")
+
+    manufacturer = args.manufacturer
+    model = args.model
+    instrument_type = args.instrument_type
+    description = args.description
+
+    if interactive:
+        if manufacturer is None:
+            val = input("Manufacturer (optional, press Enter to skip): ").strip()
+            manufacturer = val or None
+        if model is None:
+            val = input("Model (optional, press Enter to skip): ").strip()
+            model = val or None
+        if instrument_type is None:
+            val = input("Type (optional, press Enter to skip): ").strip()
+            instrument_type = val or None
+        if description is None:
+            val = input("Description (optional, press Enter to skip): ").strip()
+            description = val or None
+
+    try:
+        from crucible.models import Instrument
+        client = CrucibleClient()
+
+        instrument = Instrument(
+            instrument_name=instrument_name,
+            owner=owner,
+            location=location,
+            manufacturer=manufacturer,
+            model=model,
+            instrument_type=instrument_type,
+            description=description,
+        )
+
+        logger.info("\n=== Creating Instrument ===")
+        result = client.instruments.create(instrument)
+
+        logger.info(f"\n✓ Instrument created successfully!")
+        logger.info(f"Name:     {result.get('instrument_name', 'N/A')}")
+        if result.get('unique_id'):
+            logger.info(f"ID:       {result['unique_id']}")
+        logger.info(f"Owner:    {result.get('owner', 'N/A')}")
+        logger.info(f"Location: {result.get('location', 'N/A')}")
+        if result.get('manufacturer'):
+            logger.info(f"Manufacturer: {result['manufacturer']}")
+        if result.get('model'):
+            logger.info(f"Model:    {result['model']}")
+        if result.get('instrument_type'):
+            logger.info(f"Type:     {result['instrument_type']}")
+
+        if getattr(args, 'debug', False):
+            logger.debug(f"\nFull result: {json.dumps(result, indent=2)}")
+
+    except Exception as e:
+        logger.error(f"Error creating instrument: {e}")
+        if getattr(args, 'debug', False):
+            import traceback
+            traceback.print_exc()
+        sys.exit(1)
 
 
 def _execute_list(args):

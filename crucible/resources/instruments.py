@@ -61,6 +61,25 @@ class InstrumentOperations(BaseResource):
         else:
             return None
 
+    def create(self, instrument) -> Dict:
+        """Create a new instrument.
+
+        **Requires admin permissions.**
+
+        Args:
+            instrument: Instrument model or dict with instrument details.
+                        Required fields: instrument_name, owner, location.
+
+        Returns:
+            Dict: Created instrument object
+        """
+        from ..models import Instrument
+        if isinstance(instrument, Instrument):
+            payload = instrument.model_dump(exclude_none=True, exclude={'id', 'unique_id'})
+        else:
+            payload = instrument
+        return self._request('post', '/instruments', json=payload)
+
     def get_or_create(self, instrument_name: str, location: Optional[str] = None,
                      instrument_owner: Optional[str] = None) -> Dict:
         """Get an existing instrument or create a new one if it doesn't exist.
