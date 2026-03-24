@@ -14,7 +14,9 @@ class BaseSample(BaseModel):
     sample_type: Optional[str] = None
     owner_orcid: Optional[str] = None
     owner_user_id: Optional[int] = None
-    date_created: Optional[str] = None
+    creation_time: Optional[str] = None
+    modification_time: Optional[str] = None
+    timestamp: Optional[str] = None
     project_id: Optional[str] = None
     description: Optional[str] = None
 
@@ -33,6 +35,8 @@ class BaseDataset(BaseModel):
     measurement: Optional[str] = None
     session_name: Optional[str] = None
     creation_time: Optional[str] = None
+    modification_time: Optional[str] = None
+    timestamp: Optional[str] = None
     data_format: Optional[str] = None
     file_to_upload: Optional[str] = None
     size: Optional[int] = None

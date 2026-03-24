@@ -180,7 +180,7 @@ def _sample_updatable_fields():
     """Return sorted list of fields that can be updated on a sample (derived from BaseSample model)."""
     from ..models import BaseSample
     # Exclude server-managed / identifier fields
-    _readonly = {'unique_id', 'owner_user_id'}
+    _readonly = {'unique_id', 'owner_user_id', 'creation_time', 'modification_time'}
     return sorted(set(BaseSample.model_fields.keys()) - _readonly)
 
 
@@ -419,6 +419,8 @@ def _execute_list(args):
                     logger.info(f"  Name: {sample['sample_name']}")
                 if sample.get('creation_time'):
                     logger.info(f"  Created: {sample['creation_time']}")
+                if sample.get('timestamp'):
+                    logger.info(f"  Timestamp: {sample['timestamp']}")
                 logger.info("")
 
     except Exception as e:
@@ -448,8 +450,12 @@ def _execute_get(args):
             logger.info(f"Type:        {sample['sample_type']}")
         if sample.get('project_id'):
             logger.info(f"Project:     {sample['project_id']}")
-        if sample.get('date_created'):
-            logger.info(f"Created:     {sample['date_created']}")
+        if sample.get('creation_time'):
+            logger.info(f"Created:     {sample['creation_time']}")
+        if sample.get('modification_time'):
+            logger.info(f"Modified:    {sample['modification_time']}")
+        if sample.get('timestamp'):
+            logger.info(f"Timestamp:   {sample['timestamp']}")
         if sample.get('owner_orcid'):
             logger.info(f"Owner:       {sample['owner_orcid']}")
         if sample.get('description'):

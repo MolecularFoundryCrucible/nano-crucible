@@ -99,7 +99,6 @@ class DatasetOperations(BaseResource):
             Dict: created_record, scientific_metadata_record, dsid, and optionally
                   uploaded_files and ingestion_request if files_to_upload provided
         """
-        from ..utils import get_tz_isoformat
         from ..models import BaseDataset
 
         if scientific_metadata is None:
@@ -123,9 +122,12 @@ class DatasetOperations(BaseResource):
             dataset_details['file_to_upload'] = main_file_cloud
             logger.debug(f'main_file_cloud={main_file_cloud}')
 
-        # add creation time
-        if dataset_details.get('creation_time') is None:
-            dataset_details['creation_time'] = get_tz_isoformat()
+            # auto-set timestamp from file modification time if not provided
+            if dataset_details.get('timestamp') is None:
+                import datetime
+                mtime = os.path.getmtime(main_file)
+                dataset_details['timestamp'] = datetime.datetime.fromtimestamp(
+                    mtime, tz=datetime.timezone.utc).isoformat()
 
         # get owner_id if orcid provided
         owner_orcid = dataset_details.get('owner_orcid')

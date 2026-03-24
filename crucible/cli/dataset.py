@@ -364,7 +364,8 @@ def _dataset_updatable_fields():
     """Return sorted list of fields that can be updated on a dataset (derived from BaseDataset model)."""
     from ..models import BaseDataset
     # Exclude server-managed / identifier fields
-    _readonly = {'unique_id', 'owner_user_id', 'size', 'sha256_hash_file_to_upload'}
+    _readonly = {'unique_id', 'owner_user_id', 'size', 'sha256_hash_file_to_upload',
+                 'creation_time', 'modification_time'}
     return sorted(set(BaseDataset.model_fields.keys()) - _readonly)
 
 
@@ -916,6 +917,8 @@ def _execute_list(args):
                     logger.info(f"  Measurement: {ds['measurement']}")
                 if ds.get('creation_time'):
                     logger.info(f"  Created: {ds['creation_time']}")
+                if ds.get('timestamp'):
+                    logger.info(f"  Timestamp: {ds['timestamp']}")
                 logger.info("")
 
     except Exception as e:
@@ -953,6 +956,10 @@ def _execute_get(args):
             logger.info(f"Session:     {dataset['session_name']}")
         if dataset.get('creation_time'):
             logger.info(f"Created:     {dataset['creation_time']}")
+        if dataset.get('modification_time'):
+            logger.info(f"Modified:    {dataset['modification_time']}")
+        if dataset.get('timestamp'):
+            logger.info(f"Timestamp:   {dataset['timestamp']}")
         if dataset.get('owner_orcid'):
             logger.info(f"Owner:       {dataset['owner_orcid']}")
         if dataset.get('size') is not None:
