@@ -315,8 +315,13 @@ class DatasetOperations(BaseResource):
                   where the key is the filepath of a file in the dataset,
                   and the value is the corresponding signed url.
         """
-        result = self._request('get', f"/datasets/{dsid}/download_links")
-        return result
+        try:
+            return self._request('get', f"/datasets/{dsid}/download_links")
+        except requests.exceptions.HTTPError as e:
+            if e.response is not None and e.response.status_code in (502, 503, 504):
+                logger.warning(f"Could not retrieve download links for {dsid}: {e.response.status_code} {e.response.reason}. The server may be temporarily unavailable.")
+                return {}
+            raise
 
     def download(self, dsid: str, file_name: Optional[str] = None,
                  output_dir: Optional[str] = 'crucible-downloads',
