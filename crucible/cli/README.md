@@ -45,7 +45,7 @@ crucible --debug dataset list   # debug must precede the subcommand
 | `dataset get ID` | `-v` `--include-metadata` | Get dataset details; `-v` shows keywords and linked samples |
 | `dataset create -i FILE` | `-t TYPE` `-pid ID` `-n NAME` `-m TYPE` `--metadata JSON` `-k WORDS` `--session NAME` `--instrument NAME` `--public` `--mfid [ID]` `--dry-run` | Upload file(s) and create a dataset record |
 | `dataset update ID` | `--set KEY=VALUE` `--metadata JSON` `--overwrite` | Update model fields (`--set`) and/or scientific metadata (`--metadata`) |
-| `dataset download ID` | `--output-dir DIR` | Download dataset files |
+| `dataset download ID` | `--output-dir DIR` `--include PATTERN` `--exclude PATTERN` `-f FILE` `--overwrite` | Download dataset files with optional glob filters |
 | `dataset search QUERY` | `--limit N` `-v` | Search datasets by scientific metadata |
 | `dataset link` | `-p PARENT_ID -c CHILD_ID` | Create a parent-child relationship between two datasets |
 | `dataset add-sample ID` | `-s SAMPLE_ID` | Link a sample to this dataset |
