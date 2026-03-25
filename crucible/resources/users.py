@@ -72,37 +72,45 @@ class UserOperations(BaseResource):
         """
         params = kwargs
         params['limit'] = limit
-        return self._request('get', '/users', params=params)
+        users = self._request('get', '/users', params=params)
+        return sorted(users, key=lambda u: u.get('id') or 0)
 
-    def create(self, user_info: Dict) -> Dict:
-        """Add a new user to the system.
+    def create(self, user, project_ids=None) -> Dict:
+        """Add or update a user in the system (upsert by ORCID).
+
+        If a user with the given ORCID already exists their record is updated.
+        Project memberships and access groups are always re-applied.
 
         **Requires admin permissions.**
 
         Args:
-            user_info (Dict): User information including 'projects' key.
-                            Expected keys: first_name, last_name, orcid, email (optional),
-                            lbl_email (optional), projects (list of project IDs)
+            user: User model or dict with user information.
+                  Required fields: first_name, last_name, orcid.
+                  Optional: email, lbl_email, employee_number.
+                  If a dict, may include a 'projects' key (list of project IDs)
+                  as an alternative to the project_ids parameter.
+            project_ids (list, optional): Project IDs to associate with the user.
 
         Returns:
-            Dict: Created user object
+            Dict: Created or updated user object
 
         Example:
-            >>> user_info = {
-            ...     "first_name": "Jane",
-            ...     "last_name": "Doe",
-            ...     "orcid": "0000-0000-0000-0000",
-            ...     "email": "jane@example.com",
-            ...     "projects": ["project1", "project2"]
-            ... }
-            >>> new_user = client.users.create(user_info)
+            >>> from crucible.models import User
+            >>> user = User(first_name="Jane", last_name="Doe", orcid="0000-0000-0000-0000")
+            >>> new_user = client.users.create(user, project_ids=["project1"])
         """
-        user_projects = user_info.pop("projects")
+        from ..models import User
+        if isinstance(user, User):
+            user_info = user.model_dump(exclude_none=True, exclude={'id'})
+            user_projects = project_ids or []
+        else:
+            # backward compat: dict with optional 'projects' key
+            user_info = dict(user)
+            user_projects = user_info.pop("projects", project_ids or [])
 
-        new_user = self._request('post', "/users",
-                                json={"user_info": user_info,
-                                      "project_ids": user_projects})
-        return new_user
+        return self._request('post', "/users",
+                             json={"user_info": user_info,
+                                   "project_ids": user_projects})
 
     def list_datasets(self, orcid: str) -> List[str]:
         """List dataset IDs accessible to a user.

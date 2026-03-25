@@ -61,46 +61,54 @@ class InstrumentOperations(BaseResource):
         else:
             return None
 
-    def get_or_create(self, instrument_name: str, location: Optional[str] = None,
-                     instrument_owner: Optional[str] = None) -> Dict:
-        """Get an existing instrument or create a new one if it doesn't exist.
+    def create(self, instrument) -> Dict:
+        """Create a new instrument, returning the existing one if it already exists.
 
-        **Requires admin permissions for instrument creation.**
+        **Requires admin permissions.**
 
         Args:
-            instrument_name (str): Name of the instrument
-            location (str, optional): Location where instrument was created
-            instrument_owner (str, optional): Owner of the instrument
+            instrument: Instrument model or dict with instrument details.
+                        Required fields: instrument_name, owner, location.
 
         Returns:
-            Dict: Instrument information (existing or newly created)
-
-        Raises:
-            ValueError: If instrument doesn't exist and location/owner not provided
-
-        Example:
-            >>> # Get existing instrument
-            >>> inst = client.instruments.get_or_create("TEM-2100")
-
-            >>> # Create new instrument if it doesn't exist
-            >>> inst = client.instruments.get_or_create(
-            ...     "New-Microscope",
-            ...     location="Building 67",
-            ...     instrument_owner="Lab Manager"
-            ... )
+            Dict: Created (or existing) instrument object
         """
-        found_inst = self.get(instrument_name)
-
-        if found_inst:
-            return found_inst
-        elif any([location is None, instrument_owner is None]):
-            raise ValueError('Instrument does not exist, please provide location and owner')
+        import warnings
+        from ..models import Instrument
+        if isinstance(instrument, Instrument):
+            payload = instrument.model_dump(exclude_none=True, exclude={'id', 'unique_id'})
         else:
-            new_instrum = {
-                "instrument_name": instrument_name,
-                "location": location,
-                "owner": instrument_owner
-            }
-            logger.debug(f"Creating new instrument: {new_instrum}")
-            instrument = self._request('post', '/instruments', json=new_instrum)
-            return instrument
+            payload = dict(instrument)
+
+        instrument_name = payload.get('instrument_name')
+        if instrument_name:
+            existing = self.get(instrument_name=instrument_name)
+            if existing:
+                warnings.warn(
+                    f"Instrument '{instrument_name}' already exists; returning existing record.",
+                    UserWarning, stacklevel=2,
+                )
+                return existing
+
+        return self._request('post', '/instruments', json=payload)
+
+    def get_or_create(self, instrument_name: str, location: Optional[str] = None,
+                     instrument_owner: Optional[str] = None) -> Dict:
+        """Deprecated: use create() instead.
+
+        .. deprecated::
+            Use :meth:`create` with an :class:`~crucible.models.Instrument` model.
+            ``create()`` now checks for an existing instrument before posting.
+        """
+        import warnings
+        warnings.warn(
+            "get_or_create() is deprecated; use create() instead — "
+            "it now checks for an existing instrument automatically.",
+            DeprecationWarning, stacklevel=2,
+        )
+        from ..models import Instrument
+        return self.create(Instrument(
+            instrument_name=instrument_name,
+            location=location,
+            owner=instrument_owner,
+        ))

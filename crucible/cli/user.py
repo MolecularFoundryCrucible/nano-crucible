@@ -40,8 +40,8 @@ def register_subcommand(subparsers):
     _register_list(user_subparsers)
     _register_list_datasets(user_subparsers)
     _register_check_access(user_subparsers)
-    _register_get_access_groups(user_subparsers)
-    _register_get_projects(user_subparsers)
+    _register_list_access_groups(user_subparsers)
+    _register_list_projects(user_subparsers)
 
 
 def _register_get(subparsers):
@@ -208,9 +208,6 @@ def _execute_get(args):
         if user.get('id'):
             logger.info(f"ID: {user['id']}")
 
-        if getattr(args, "debug", False):
-            logger.debug(f"\nFull user data: {json.dumps(user, indent=2)}")
-
     except Exception as e:
         logger.error(f"Error retrieving user: {e}")
         if getattr(args, "debug", False):
@@ -230,7 +227,8 @@ def _execute_create(args):
     lbl_email = args.lbl_email
     projects = args.projects
 
-    if orcid is None or first_name is None or last_name is None:
+    interactive = orcid is None or first_name is None or last_name is None
+    if interactive:
         logger.info("\n=== Interactive User Creation ===")
         logger.info("Please provide the following information:\n")
 
@@ -265,48 +263,43 @@ def _execute_create(args):
             else:
                 logger.error("Last name is required.")
 
-    # Prompt for email (optional)
-    if email is None:
-        email_input = input("Email (optional, press Enter to skip): ").strip()
-        if email_input:
-            # Basic email validation
-            if re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', email_input):
-                email = email_input
-            else:
-                logger.warning("Invalid email format. Skipping.")
+    # Optional fields — only prompt in interactive mode
+    if interactive:
+        if email is None:
+            email_input = input("Email (optional, press Enter to skip): ").strip()
+            if email_input:
+                if re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', email_input):
+                    email = email_input
+                else:
+                    logger.warning("Invalid email format. Skipping.")
 
-    # Prompt for LBL email (optional)
-    if lbl_email is None:
-        lbl_email_input = input("LBL Email (optional, press Enter to skip): ").strip()
-        if lbl_email_input:
-            if re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', lbl_email_input):
-                lbl_email = lbl_email_input
-            else:
-                logger.warning("Invalid email format. Skipping.")
+        if lbl_email is None:
+            lbl_email_input = input("LBL Email (optional, press Enter to skip): ").strip()
+            if lbl_email_input:
+                if re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', lbl_email_input):
+                    lbl_email = lbl_email_input
+                else:
+                    logger.warning("Invalid email format. Skipping.")
 
-    # Prompt for projects (optional)
-    if projects is None:
-        projects_input = input("Project IDs (comma-separated, optional, press Enter to skip): ").strip()
-        if projects_input:
-            projects = projects_input
-
-    # Build user_info dict
-    user_info = {
-        "orcid": orcid,
-        "first_name": first_name,
-        "last_name": last_name,
-        "projects": [p.strip() for p in projects.split(',')] if projects else []
-    }
-
-    if email:
-        user_info["email"] = email
-    if lbl_email:
-        user_info["lbl_email"] = lbl_email
+        if projects is None:
+            projects_input = input("Project IDs (comma-separated, optional, press Enter to skip): ").strip()
+            if projects_input:
+                projects = projects_input
 
     try:
+        from crucible.models import User
         logger.info("\n=== Creating User ===")
         client = CrucibleClient()
-        result = client.users.create(user_info)
+
+        user = User(
+            orcid=orcid,
+            first_name=first_name,
+            last_name=last_name,
+            email=email or None,
+            lbl_email=lbl_email or None,
+        )
+        project_ids = [p.strip() for p in projects.split(',')] if projects else []
+        result = client.users.create(user, project_ids=project_ids)
 
         logger.info(f"\n✓ User created successfully!")
         logger.info(f"ORCID: {result.get('orcid', 'N/A')}")
@@ -321,9 +314,6 @@ def _execute_create(args):
             logger.info(f"Email: {result['email']}")
         if result.get('id'):
             logger.info(f"ID: {result['id']}")
-
-        if getattr(args, "debug", False):
-            logger.debug(f"\nFull result: {json.dumps(result, indent=2)}")
 
     except Exception as e:
         logger.error(f"Error creating user: {e}")
@@ -373,9 +363,6 @@ def _execute_list(args):
 
             logger.info("")
 
-        if getattr(args, "debug", False):
-            logger.debug(f"\nFull data: {json.dumps(users, indent=2)}")
-
     except Exception as e:
         logger.error(f"Error listing users: {e}")
         if getattr(args, "debug", False):
@@ -419,38 +406,40 @@ Examples:
     parser.set_defaults(func=_execute_check_access)
 
 
-def _register_get_access_groups(subparsers):
-    """Register the 'user get-access-groups' subcommand."""
+def _register_list_access_groups(subparsers):
+    """Register the 'user list-access-groups' subcommand."""
+    import argparse
     parser = subparsers.add_parser(
-        'get-access-groups',
+        'list-access-groups',
         help='List access groups for a user',
         description="List the access groups a user belongs to",
-        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-    crucible user get-access-groups 0000-0002-1825-0097
+    crucible user list-access-groups 0000-0002-1825-0097
 """
     )
     parser.add_argument('orcid', metavar='ORCID', help='User ORCID identifier')
     parser.add_argument('-v', '--verbose', action='store_true', help='Verbose output')
-    parser.set_defaults(func=_execute_get_access_groups)
+    parser.set_defaults(func=_execute_list_access_groups)
 
 
-def _register_get_projects(subparsers):
-    """Register the 'user get-projects' subcommand."""
+def _register_list_projects(subparsers):
+    """Register the 'user list-projects' subcommand."""
+    import argparse
     parser = subparsers.add_parser(
-        'get-projects',
+        'list-projects',
         help='List projects for a user',
         description='List projects a user is associated with',
-        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-    crucible user get-projects 0000-0002-1825-0097
+    crucible user list-projects 0000-0002-1825-0097
 """
     )
     parser.add_argument('orcid', metavar='ORCID', help='User ORCID identifier')
     parser.add_argument('-v', '--verbose', action='store_true', help='Verbose output')
-    parser.set_defaults(func=_execute_get_projects)
+    parser.set_defaults(func=_execute_list_projects)
 
 
 def _execute_list_datasets(args):
@@ -495,7 +484,7 @@ def _execute_check_access(args):
         sys.exit(1)
 
 
-def _execute_get_access_groups(args):
+def _execute_list_access_groups(args):
     """Execute the 'user get-access-groups' subcommand."""
     from crucible.client import CrucibleClient
     try:
@@ -518,7 +507,7 @@ def _execute_get_access_groups(args):
         sys.exit(1)
 
 
-def _execute_get_projects(args):
+def _execute_list_projects(args):
     """Execute the 'user get-projects' subcommand."""
     from crucible.client import CrucibleClient
     try:

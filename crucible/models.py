@@ -7,21 +7,24 @@ Pydantic models for Crucible API request and response objects.
 from pydantic import BaseModel, ConfigDict
 from typing import Optional
 
+#%% Models
 
-class BaseSample(BaseModel):
+class Sample(BaseModel):
     unique_id: Optional[str] = None
     sample_name: Optional[str] = None
     sample_type: Optional[str] = None
     owner_orcid: Optional[str] = None
     owner_user_id: Optional[int] = None
-    date_created: Optional[str] = None
+    creation_time: Optional[str] = None
+    modification_time: Optional[str] = None
+    timestamp: Optional[str] = None
     project_id: Optional[str] = None
     description: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 
 
-class BaseDataset(BaseModel):
+class Dataset(BaseModel):
     unique_id: Optional[str] = None
     dataset_name: Optional[str] = None
     public: Optional[bool] = False
@@ -33,6 +36,8 @@ class BaseDataset(BaseModel):
     measurement: Optional[str] = None
     session_name: Optional[str] = None
     creation_time: Optional[str] = None
+    modification_time: Optional[str] = None
+    timestamp: Optional[str] = None
     data_format: Optional[str] = None
     file_to_upload: Optional[str] = None
     size: Optional[int] = None
@@ -41,7 +46,6 @@ class BaseDataset(BaseModel):
     json_link: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
-
 
 class Project(BaseModel):
     project_id: str
@@ -52,3 +56,49 @@ class Project(BaseModel):
     project_lead_name: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class User(BaseModel):
+    id: Optional[int] = None
+    orcid: Optional[str] = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    email: Optional[str] = None
+    lbl_email: Optional[str] = None
+    employee_number: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class Instrument(BaseModel):
+    id: Optional[int] = None
+    unique_id: Optional[str] = None
+    instrument_name: Optional[str] = None
+    manufacturer: Optional[str] = None
+    model: Optional[str] = None
+    owner: Optional[str] = None
+    location: Optional[str] = None
+    description: Optional[str] = None
+    instrument_type: Optional[str] = None
+    other_id: Optional[str] = None
+    other_id_source: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+#%% Backward-compatibility aliases (deprecated)
+
+def __getattr__(name: str):
+    import warnings
+    _aliases = {
+        'BaseDataset': Dataset,
+        'BaseSample':  Sample,
+    }
+    if name in _aliases:
+        warnings.warn(
+            f"'{name}' is deprecated; use '{_aliases[name].__name__}' instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return _aliases[name]
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

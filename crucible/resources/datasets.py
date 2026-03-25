@@ -86,7 +86,7 @@ class DatasetOperations(BaseResource):
         """Create a new dataset with metadata and optionally upload files.
 
         Args:
-            dataset: BaseDataset object with dataset details
+            dataset: Dataset object with dataset details
             scientific_metadata (dict, optional): Scientific metadata
             keywords (list, optional): Keywords to associate with dataset
             get_user_info_function (callable, optional): Function to get user info
@@ -99,9 +99,6 @@ class DatasetOperations(BaseResource):
             Dict: created_record, scientific_metadata_record, dsid, and optionally
                   uploaded_files and ingestion_request if files_to_upload provided
         """
-        from ..utils import get_tz_isoformat
-        from ..models import BaseDataset
-
         if scientific_metadata is None:
             scientific_metadata = {}
         if keywords is None:
@@ -123,9 +120,12 @@ class DatasetOperations(BaseResource):
             dataset_details['file_to_upload'] = main_file_cloud
             logger.debug(f'main_file_cloud={main_file_cloud}')
 
-        # add creation time
-        if dataset_details.get('creation_time') is None:
-            dataset_details['creation_time'] = get_tz_isoformat()
+            # auto-set timestamp from file modification time if not provided
+            if dataset_details.get('timestamp') is None:
+                import datetime
+                mtime = os.path.getmtime(main_file)
+                dataset_details['timestamp'] = datetime.datetime.fromtimestamp(
+                    mtime, tz=datetime.timezone.utc).isoformat()
 
         # get owner_id if orcid provided
         owner_orcid = dataset_details.get('owner_orcid')
@@ -408,7 +408,7 @@ class DatasetOperations(BaseResource):
             Use :meth:`create` with files_to_upload parameter instead.
 
         Args:
-            dataset: BaseDataset object with dataset details
+            dataset: Dataset object with dataset details
             files_to_upload (List[str]): List of file paths to upload
             scientific_metadata (dict, optional): Scientific metadata
             keywords (list, optional): Keywords to associate with dataset
@@ -643,6 +643,32 @@ class DatasetOperations(BaseResource):
         return response
 
     # Dataset Linking Methods
+    def add_sample(self, dataset_id: str, sample_id: str) -> Dict:
+        """Link a sample to a dataset.
+
+        Args:
+            dataset_id (str): Dataset unique identifier
+            sample_id (str): Sample unique identifier
+
+        Returns:
+            Dict: Information about the created link
+        """
+        return self._request('post', f"/datasets/{dataset_id}/samples/{sample_id}")
+
+    def remove_sample(self, dataset_id: str, sample_id: str) -> Dict:
+        """Remove the link between a dataset and a sample.
+
+        **Requires admin permissions.**
+
+        Args:
+            dataset_id (str): Dataset unique identifier
+            sample_id (str): Sample unique identifier
+
+        Returns:
+            Dict: Deletion confirmation
+        """
+        return self._request('delete', f"/datasets/{dataset_id}/samples/{sample_id}")
+
     def link_parent_child(self, parent_dataset_id: str, child_dataset_id: str) -> Dict:
         """Link a derived dataset to a parent dataset.
 

@@ -11,7 +11,7 @@ import requests
 import json
 import logging
 from typing import Optional, List, Dict, Any, Union
-from .models import BaseDataset, Project
+from .models import Dataset, Project
 from .constants import DEFAULT_TIMEOUT, DEFAULT_LIMIT
 from .utils.deprecation import _deprecated, _removed
 
@@ -74,7 +74,10 @@ class CrucibleClient:
         """
         url = f"{self.api_url}/{endpoint.lstrip('/')}"
         kwargs['headers'] = {**kwargs.get('headers', {}), **self.headers}
+        logger.debug(f"{method.upper()} {url}")
         response = requests.request(method, url, timeout=DEFAULT_TIMEOUT, **kwargs)
+        logger.debug(f"Status: {response.status_code}")
+        logger.debug(f"Response: {response.text}")
         response.raise_for_status()
         try:
             if response.content:
@@ -131,7 +134,16 @@ class CrucibleClient:
             raise ValueError(f"Unsupported request_type: {request_type}")
     
     #%% GENERIC METHODS
-    
+
+    def whoami(self) -> Dict:
+        """Return account info for the current API key.
+
+        Returns:
+            Dict: access_group_name (ORCID), access_group_ids, and user_info
+                  with full user profile fields.
+        """
+        return self._request('get', '/account')
+
     def get_resource_type(self, resource_id: str) -> dict:
         """
         Determine the type of a resource.
@@ -226,16 +238,56 @@ class CrucibleClient:
         # Mixed: dataset and sample
         elif parent_type == "dataset" and child_type == "sample":
             logger.info(f"Linking sample {child_id} to dataset {parent_id}")
-            return self.samples.add_to_dataset(parent_id, child_id)
+            return self.datasets.add_sample(parent_id, child_id)
 
         elif parent_type == "sample" and child_type == "dataset":
             logger.info(f"Linking sample {parent_id} to dataset {child_id}")
-            return self.samples.add_to_dataset(child_id, parent_id)
+            return self.datasets.add_sample(child_id, parent_id)
 
         else:
             raise ValueError(
                 f"Cannot link resources: parent is {parent_type}, child is {child_type}. "
                 f"Valid combinations: dataset-dataset, sample-sample, or dataset-sample."
+            )
+
+    def unlink(self, id_a: str, id_b: str) -> Dict:
+        """Unlink two resources with automatic type detection.
+
+        Only dataset-sample unlinking is supported by the API.
+        Parent-child relationships (dataset-dataset, sample-sample) cannot
+        be removed via the API.
+
+        Args:
+            id_a (str): First resource unique identifier (dataset or sample)
+            id_b (str): Second resource unique identifier (dataset or sample)
+
+        Returns:
+            Dict: Deletion confirmation
+
+        Raises:
+            ValueError: If the combination is not a dataset-sample pair, or if
+                        the resource types cannot be determined.
+        """
+        type_a = self.get_resource_type(id_a)
+        type_b = self.get_resource_type(id_b)
+
+        if type_a == "dataset" and type_b == "sample":
+            logger.info(f"Unlinking sample {id_b} from dataset {id_a}")
+            return self.datasets.remove_sample(id_a, id_b)
+
+        elif type_a == "sample" and type_b == "dataset":
+            logger.info(f"Unlinking sample {id_a} from dataset {id_b}")
+            return self.datasets.remove_sample(id_b, id_a)
+
+        elif type_a == type_b and type_a in ("dataset", "sample"):
+            raise ValueError(
+                f"Unlinking {type_a}-{type_b} parent-child relationships is not "
+                f"supported by the API. Use the API to manage these directly."
+            )
+        else:
+            raise ValueError(
+                f"Cannot unlink resources: {id_a} is {type_a}, {id_b} is {type_b}. "
+                f"Only dataset-sample unlinking is supported."
             )
     
     #%% PROJECT METHODS (DEPRECATED)
@@ -348,7 +400,7 @@ class CrucibleClient:
     
     @_deprecated("client.datasets.create()")
     def create_new_dataset(self,
-                            dataset: BaseDataset,
+                            dataset: Dataset,
                             scientific_metadata: Optional[dict] = {},
                             keywords: List[str] = [],
                             get_user_info_function = None,
@@ -362,7 +414,7 @@ class CrucibleClient:
 
     @_deprecated("client.datasets.create()")
     def create_new_dataset_from_files(self,
-                                     dataset: BaseDataset,
+                                     dataset: Dataset,
                                      files_to_upload: List[str],
                                      scientific_metadata: Optional[dict] = None,
                                      keywords: List[str] = [],

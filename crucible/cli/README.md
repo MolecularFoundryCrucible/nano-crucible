@@ -1,546 +1,186 @@
-# Crucible CLI
+# Crucible CLI Cheat Sheet
 
-Command-line interface for managing datasets, samples, projects, and instruments in Crucible.
+The `crucible CLI` provides command-line access to Crucible. Commands follow the pattern:
 
-## Quick Start
+```
+crucible [--debug] <resource> <action> [options]
+```
 
-### 1. Configure API Access
+Use `crucible <resource> <action> --help` for full option details on any command.
 
-First-time setup:
+---
+
+## Setup
 
 ```bash
-crucible config init
+crucible config init          # First-time interactive setup (API key, URL, project)
+crucible completion bash       # Install shell tab-completion (bash/zsh/fish)
 ```
 
-This will prompt you for:
-- **API Key** (required) - Get it from https://crucible.lbl.gov/api/v1/user_apikey (includes user authentication)
-- **API URL** (optional) - Defaults to https://crucible.lbl.gov/api/v1
-- **Cache Directory** (optional) - Where to cache downloaded data
-- **Graph Explorer URL** (optional) - For opening datasets in browser
-- **Default Project** (optional) - Project to use when `-pid` not specified
-
-### 2. Basic Operations
-
-**List projects**:
-```bash
-crucible project list
-```
-
-**List datasets in a project**:
-```bash
-crucible dataset list -pid my-project
-```
-
-**Create and upload a dataset** (generic upload):
-```bash
-crucible dataset create -i mydata.csv -pid my-project
-```
-
-**Create and upload a LAMMPS dataset**:
-```bash
-crucible dataset create -i input.lmp -t lammps -pid my-project
-```
-
-**With metadata and keywords**:
-```bash
-crucible dataset create -i input.lmp -t lammps -pid my-project \
-    -n "Water MD Simulation" \
-    --metadata '{"temperature": 300, "pressure": 1.0}' \
-    --keywords "validation,benchmark"
-```
-
-## Command Structure
-
-The CLI is organized by resource type, similar to the Python client API:
-
-```
-crucible <resource> <action> [options]
-```
-
-### Resource Commands
-
-- **dataset** - Dataset operations (list, get, create, update-metadata, link)
-- **sample** - Sample operations (list, get, create, link, link-dataset)
-- **project** - Project operations (list, get, create, get-users, add-user)
-- **instrument** - Instrument operations (list, get)
-- **user** - User operations (get, create) - requires admin permissions
-
-### Utility Commands
-
-- **config** - Manage configuration
-- **upload** - [Legacy] Upload datasets (use `dataset create` instead)
-- **open** - Open resources in Graph Explorer
-- **link** - Link resources directly
-- **completion** - Install shell autocomplete
-
-## Dataset Commands
-
-### List Datasets
-
-List all datasets in a project:
-```bash
-crucible dataset list -pid my-project
-crucible dataset list -pid my-project --limit 50
-```
-
-### Get Dataset
-
-Get detailed information about a specific dataset:
-```bash
-crucible dataset get <dataset-id>
-crucible dataset get <dataset-id> --include-metadata
-```
-
-### Create Dataset
-
-Create and upload a new dataset:
-
-#### Basic Syntax
-
-```bash
-crucible dataset create -i <files> -t <type> -pid <project> [options]
-```
-
-#### Required Arguments
-
-- `-i, --input FILE [FILE ...]` - Input file(s) to upload
-
-#### Common Options
-
-- `-t, --type TYPE` - Dataset type (lammps, matensemble, base, etc.) - if not specified, uploads without parsing
-- `-pid, --project-id ID` - Crucible project ID (uses config default if not specified)
-- `-n, --name NAME` - Human-readable dataset name
-- `--dry-run` - Show what would be uploaded without actually uploading
-- `-v, --verbose` - Show detailed output
-
-#### Advanced Options
-
-**Metadata & Keywords:**
-- `--metadata JSON` - Scientific metadata as JSON string or path to JSON file
-- `-k, --keywords WORDS` - Comma-separated keywords
-- `-m, --measurement TYPE` - Measurement type (for generic uploads)
-
-**Dataset Properties:**
-- `--session NAME` - Session name for grouping related datasets
-- `--public` - Make dataset public (default: private)
-- `--instrument NAME` - Instrument name
-- `--data-format FORMAT` - Data format type
-
-**Identifiers:**
-- `--mfid [ID]` - Unique dataset ID
-  - Omitted: Server assigns mfid (default)
-  - `--mfid` (no value): Generate locally with mfid package
-  - `--mfid <value>`: Use specific mfid (e.g., for re-uploading)
-
-#### Examples
-
-**Preview before uploading** (dry run):
-```bash
-crucible dataset create -i data.csv -pid my-project --dry-run
-```
-
-**Basic upload with server-assigned mfid** (default):
-```bash
-crucible dataset create -i data.csv -pid my-project
-```
-
-**Upload with locally generated mfid**:
-```bash
-crucible dataset create -i data.csv -pid my-project --mfid
-```
-
-**Upload with explicit mfid** (e.g., re-upload):
-```bash
-crucible dataset create -i data.csv -pid my-project --mfid 0tcxz5xs5xr6q0002vmzmp3beg
-```
-
-**LAMMPS simulation**:
-```bash
-crucible dataset create -i input.lmp -t lammps -pid my-project
-```
-
-**With metadata and keywords**:
-```bash
-crucible dataset create -i input.lmp -t lammps -pid my-project \
-    --metadata '{"experiment_id": "EXP-001", "run_number": 5}' \
-    --keywords "production,validated"
-```
-
-**Metadata from file**:
-```bash
-# metadata.json contains: {"sample": "Au-nanoparticles", "size_nm": 10, ...}
-crucible dataset create -i data.csv -pid my-project --metadata metadata.json
-```
-
-**Complete example with all options**:
-```bash
-crucible dataset create -i input.lmp -t lammps -pid my-project \
-    -n "Water MD at 300K" \
-    --session "2024-Q1-water-study" \
-    --metadata '{"temperature": 300, "ensemble": "NVT"}' \
-    --keywords "water,molecular-dynamics,validation" \
-    --instrument "NERSC-Perlmutter" \
-    --public
-```
-
-### Update Dataset Metadata
-
-Update scientific metadata for an existing dataset:
-```bash
-crucible dataset update-metadata <dataset-id> --metadata '{"temperature": 300}'
-crucible dataset update-metadata <dataset-id> --metadata metadata.json
-```
-
-### Link Datasets
-
-Create parent-child relationships between datasets:
-```bash
-crucible dataset link -p <parent-id> -c <child-id>
-```
-
-## Sample Commands
-
-### List Samples
-
-```bash
-crucible sample list -pid my-project
-```
-
-### Get Sample
-
-```bash
-crucible sample get <sample-id>
-```
-
-### Create Sample
-
-```bash
-crucible sample create -n "Silicon Wafer A" -pid my-project
-crucible sample create -n "Sample 001" -pid my-project --description "Test sample"
-```
-
-### Link Samples
-
-Create parent-child relationships:
-```bash
-crucible sample link -p <parent-sample-id> -c <child-sample-id>
-```
-
-### Link Sample to Dataset
-
-Associate a dataset with a sample:
-```bash
-crucible sample link-dataset -s <sample-id> -d <dataset-id>
-```
-
-## Project Commands
-
-### List Projects
-
-```bash
-crucible project list
-```
-
-### Get Project
-
-```bash
-crucible project get <project-id>
-```
-
-### Create Project
-
-**Interactive mode** (prompts for input):
-```bash
-crucible project create
-```
-
-**Command-line mode** (provide all arguments):
-```bash
-crucible project create --project-id my-project -o "LBNL" -e "lead@lbl.gov"
-crucible project create --project-id alphafold-exp -o "Argonne" -e "researcher@anl.gov"
-```
-
-### Get Project Users
-
-List all users in a project (requires admin permissions):
-```bash
-crucible project get-users my-project
-```
-
-### Add User to Project
-
-Add a user to a project by ORCID (requires admin permissions):
-```bash
-crucible project add-user my-project --orcid 0000-0002-1825-0097
-```
-
-## Instrument Commands
-
-### List Instruments
-
-```bash
-crucible instrument list
-```
-
-### Get Instrument
-
-```bash
-crucible instrument get <instrument-name>
-crucible instrument get <instrument-id> --by-id
-```
-
-## User Commands
-
-**Note:** User operations require admin permissions.
-
-### Get User
-
-```bash
-crucible user get --orcid 0000-0002-1825-0097
-crucible user get --email user@example.com
-```
-
-### Create User
-
-**Interactive mode** (prompts for input):
-```bash
-crucible user create
-```
-
-**Command-line mode** (provide all arguments):
-```bash
-crucible user create --orcid 0000-0002-1825-0097 \
-    --first-name "Jane" --last-name "Doe" \
-    --email "jane@example.com" \
-    --projects project1,project2
-```
-
-## Available Parsers
-
-Check current parsers:
-```bash
-crucible dataset create --help
-```
-
-Currently available:
-- **base** - Generic upload, no parsing
-- **lammps** - LAMMPS molecular dynamics simulations
-- **matensemble** - MatEnsemble format files
-
-## Configuration Management
-
-### View Configuration
-
-```bash
-crucible config show
-```
-
-### Get a Value
-
-```bash
-crucible config get api_key
-crucible config get current_project
-```
-
-### Set a Value
-
+Set a default project to avoid typing `-pid` on every command:
 ```bash
 crucible config set current_project my-project
-crucible config set graph_explorer_url https://custom-url.com
 ```
 
-### Edit Config File
+---
+
+## Global Flags
+
+| Flag | Effect |
+|------|--------|
+| `--debug` | Enable debug logging: HTTP calls, raw responses, tracebacks. Must come **before** the resource. |
+| `--version` | Print version and exit. |
 
 ```bash
-crucible config edit
+crucible --debug dataset list   # debug must precede the subcommand
 ```
 
-### Config File Location
+---
+
+## Dataset
+
+| Command | Key options | Description |
+|---------|-------------|-------------|
+| `dataset list` | `-pid ID` `-m TYPE` `-k WORD` `--session NAME` `--limit N` `-v` | List datasets, with optional filters |
+| `dataset get ID` | `-v` `--include-metadata` | Get dataset details; `-v` shows keywords and linked samples |
+| `dataset create -i FILE` | `-t TYPE` `-pid ID` `-n NAME` `-m TYPE` `--metadata JSON` `-k WORDS` `--session NAME` `--instrument NAME` `--public` `--mfid [ID]` `--dry-run` | Upload file(s) and create a dataset record |
+| `dataset update ID` | `--set KEY=VALUE` `--metadata JSON` `--overwrite` | Update model fields (`--set`) and/or scientific metadata (`--metadata`) |
+| `dataset download ID` | `--output-dir DIR` | Download dataset files |
+| `dataset search QUERY` | `--limit N` `-v` | Search datasets by scientific metadata |
+| `dataset link` | `-p PARENT_ID -c CHILD_ID` | Create a parent-child relationship between two datasets |
+| `dataset add-sample ID` | `-s SAMPLE_ID` | Link a sample to this dataset |
+| `dataset remove-sample ID` | `-s SAMPLE_ID` | Unlink a sample from this dataset *(admin)* |
+| `dataset list-parents ID` | `--limit N` | List parent datasets |
+| `dataset list-children ID` | `--limit N` | List child datasets |
+| `dataset list-samples ID` | `--limit N` `-v` | List samples linked to a dataset |
+| `dataset add-keyword ID WORD` | | Add a keyword tag |
+| `dataset list-keywords ID` | `-v` | List keywords (with usage counts with `-v`) |
+| `dataset parsers` | | List available client-side parsers |
+| `dataset ingestors` | | List available server-side ingestors |
+
+**Updatable fields** (via `--set`): `dataset_name`, `measurement`, `data_format`, `session_name`, `instrument_name`, `instrument_id`, `project_id`, `owner_orcid`, `source_folder`, `file_to_upload`, `json_link`, `public`, `timestamp`
 
 ```bash
-crucible config path
+# Upload a file (server assigns ID)
+crucible dataset create -i data.csv -pid my-project
+
+# Upload with a LAMMPS parser, metadata, and keywords
+crucible dataset create -i run.lmp -t lammps -pid my-project \
+    --metadata '{"temperature": 300}' --keywords "NVT,water"
+
+# Update a field and scientific metadata in one command
+crucible dataset update DSID --set measurement=XRD --metadata '{"pressure": 1.5}'
+
+# Search scientific metadata
+crucible dataset search "temperature" --limit 10
 ```
 
-## Link Command
+---
 
-For direct resource linking (datasets or samples):
-```bash
-crucible link -p <parent-id> -c <child-id>
-```
+## Sample
 
-This command works with both datasets and samples. For resource-specific linking, use:
-- `crucible dataset link` for datasets
-- `crucible sample link` for samples
+| Command | Key options | Description |
+|---------|-------------|-------------|
+| `sample list` | `-pid ID` `--limit N` `-v` | List samples, with optional filters |
+| `sample get ID` | `-v` | Get sample details; `-v` shows linked datasets |
+| `sample create` | `-n NAME` `-pid ID` `--type TYPE` `--description TEXT` | Create a new sample |
+| `sample update ID` | `--set KEY=VALUE` | Update sample fields |
+| `sample link` | `-p PARENT_ID -c CHILD_ID` | Create a parent-child relationship between two samples |
+| `sample add-dataset ID` | `-d DATASET_ID` | Link a dataset to this sample |
+| `sample remove-dataset ID` | `-d DATASET_ID` | Unlink a dataset from this sample *(admin)* |
+| `sample list-parents ID` | `--limit N` | List parent samples |
+| `sample list-children ID` | `--limit N` | List child samples |
+| `sample list-datasets ID` | `--limit N` `-v` | List datasets linked to a sample |
 
-## Other Commands
-
-### Legacy Upload Command
-
-The `crucible upload` command is maintained for backward compatibility:
-```bash
-crucible upload -i data.csv -pid my-project -u
-```
-
-**Note:** This command requires the `-u` flag to actually upload. The new `crucible dataset create` command uploads by default and is recommended for new workflows.
-
-### Open in Browser
-
-Open a dataset in Graph Explorer:
-```bash
-# Open Graph Explorer home
-crucible open
-
-# Open project page
-crucible open -pid my-project
-
-# Open specific dataset
-crucible open <mfid> -pid my-project
-
-# Print URL instead of opening
-crucible open <mfid> -pid my-project --print-url
-```
-
-### Shell Autocomplete
-
-Install autocomplete for your shell:
-```bash
-# Bash
-crucible completion bash
-
-# Zsh
-crucible completion zsh
-
-# Fish
-crucible completion fish
-```
-
-## Output
-
-### Normal Output (INFO level)
-
-Shows essential information:
-```
-=== Dataset Information ===
-Project: my-project
-Parser: LAMMPSParser
-Name: Water MD Simulation
-Measurement: LAMMPS
-Data format: LAMMPS
-Public: No
-
-Files to upload (2):
-  - input.lmp
-  - data.lmp
-
-Keywords (5): LAMMPS, molecular dynamics, H, O, water
-
-Scientific Metadata (8 fields):
-  elements: ['H', 'O']
-  natoms: 648
-  volume: 1000.5
-  ...
-
-=== Uploading to Crucible ===
-Waiting for ingest request to complete...
-Request completed with status: completed
-
-✓ Upload successful!
-Dataset ID: abc123xyz
-```
-
-### Verbose Output (DEBUG level)
-
-Add `-v` for detailed debugging information:
-```bash
-crucible upload -i input.lmp -t lammps -pid my-project -u -v
-```
-
-Shows API requests, file operations, and detailed progress.
-
-## Tips
-
-1. **Set a default project** to avoid typing `-pid` every time:
-   ```bash
-   crucible config set current_project my-project
-   crucible dataset create -i data.csv  # Uses default project
-   ```
-
-2. **List resources** to find IDs:
-   ```bash
-   crucible project list
-   crucible dataset list -pid my-project
-   crucible sample list -pid my-project
-   ```
-
-3. **Use JSON files** for complex metadata:
-   ```bash
-   # Create metadata.json with your metadata
-   crucible dataset create -i data.csv -pid my-project --metadata metadata.json
-   ```
-
-4. **Combine user and parser metadata** - Parser-extracted metadata merges with your custom metadata:
-   ```bash
-   # LAMMPS parser extracts atoms, volume, etc.
-   # Your metadata adds experiment-specific info
-   crucible dataset create -i input.lmp -t lammps -pid my-project \
-       --metadata '{"experiment_id": "EXP-001"}'
-   ```
-
-5. **Use resource-specific commands** for better organization:
-   ```bash
-   # Instead of generic link command
-   crucible dataset link -p parent-id -c child-id
-   crucible sample link-dataset -s sample-id -d dataset-id
-   ```
-
-## Getting Help
+**Updatable fields** (via `--set`): `sample_name`, `sample_type`, `description`, `project_id`, `owner_orcid`, `timestamp`
 
 ```bash
-# General help
-crucible --help
-
-# Resource command help
-crucible dataset --help
-crucible sample --help
-crucible project --help
-crucible instrument --help
-
-# Specific operation help
-crucible dataset create --help
-crucible sample list --help
-crucible project get --help
-
-# Config command help
-crucible config --help
+crucible sample create -n "Silicon Wafer A" -pid my-project --type substrate
+crucible sample update SAMPLE_ID --set description="Annealed at 900C"
+crucible sample add-dataset SAMPLE_ID --dataset DATASET_ID
 ```
 
-## Troubleshooting
+---
 
-**"API key not found"**
-- Run `crucible config init` to set up your API key
+## Project
 
-**"Project ID required"**
-- Specify `-pid project-id` or set default: `crucible config set current_project project-id`
+| Command | Key options | Description |
+|---------|-------------|-------------|
+| `project list` | `--limit N` | List all accessible projects |
+| `project get ID` | `-v` | Get project details |
+| `project create` | `--project-id ID` `-o ORG` `-e EMAIL` `--title TEXT` `--lead-name NAME` `--status STATUS` | Create a project (interactive if args omitted) |
+| `project list-users ID` | `--limit N` | List users in a project *(admin)* |
+| `project add-user ID` | `--orcid ORCID` | Add a user to a project *(admin)* |
 
-**"Input file not found"**
-- Check file path is correct and file exists
+```bash
+crucible project create --project-id my-project -o "LBNL" -e "lead@lbl.gov"
+crucible project list-users my-project
+```
 
-**"Unknown dataset type"**
-- Run `crucible dataset create --help` to see available parser types
-- Use `-t base` or omit `-t` for generic upload
+---
 
-**"mfid package not installed"**
-- Install mfid: `pip install mfid`
-- Or provide explicit mfid: `--mfid your-unique-id`
+## Instrument
 
-**"Dataset/Sample/Project not found"**
-- Use list commands to find available resources:
-  - `crucible project list`
-  - `crucible dataset list -pid my-project`
-  - `crucible sample list -pid my-project`
+| Command | Key options | Description |
+|---------|-------------|-------------|
+| `instrument list` | `--limit N` | List all instruments |
+| `instrument get NAME` | `--by-id` | Get instrument by name (or by ID with `--by-id`) |
+| `instrument create` | `-n NAME` `--owner OWNER` `--location LOC` `--manufacturer MFR` `--model MODEL` `--type TYPE` `--description TEXT` | Create an instrument (interactive if args omitted) |
 
-## Documentation
+---
 
-- **Parser Development**: See `../parsers/README.md` for creating custom parsers
-- **Configuration**: Stored in `~/.config/nano-crucible/config.ini`
-- **Cache**: Stored in `~/.cache/nano-crucible/`
+## User *(admin)*
+
+| Command | Key options | Description |
+|---------|-------------|-------------|
+| `user list` | `--limit N` | List all users |
+| `user get` | `--orcid ORCID` or `--email EMAIL` | Get a user |
+| `user create` | `--orcid` `--first-name` `--last-name` `--email` `--lbl-email` `--projects` | Create a user (interactive if args omitted) |
+| `user list-datasets ORCID` | | List dataset IDs accessible to a user |
+| `user check-access ORCID DATASET_ID` | | Check read/write permissions for a user on a dataset |
+| `user list-access-groups ORCID` | | List access groups a user belongs to |
+| `user list-projects ORCID` | `-v` | List projects a user is associated with |
+
+---
+
+## Config
+
+| Command | Description |
+|---------|-------------|
+| `config init` | Interactive setup wizard |
+| `config show` | Print current configuration |
+| `config get KEY` | Print a single config value |
+| `config set KEY VALUE` | Set a config value |
+| `config path` | Show config file path |
+| `config edit` | Open config file in editor |
+
+**Config keys:** `api_key`, `api_url`, `cache_dir`, `graph_explorer_url`, `current_project`
+
+---
+
+## Linking & Utilities
+
+| Command | Description |
+|---------|-------------|
+| `whoami` | Show current user info for the active API key |
+| `link -p PARENT -c CHILD` | Link two resources (type auto-detected via API) |
+| `link -d DATASET -s SAMPLE` | Link a sample to a dataset |
+| `unlink -p ID -c ID` | Unlink two resources (dataset-sample only, type auto-detected) |
+| `unlink -d DATASET -s SAMPLE` | Unlink a sample from a dataset *(admin)* |
+| `open [MFID]` | Open Graph Explorer in browser (or a specific resource by ID) |
+| `open MFID --print-url` | Print the URL instead of opening |
+
+---
+
+## Deprecated aliases
+
+These still work but print a warning — use the new names:
+
+| Old | New |
+|-----|-----|
+| `dataset update-metadata` | `dataset update --metadata` |
+| `dataset get-keywords` | `dataset list-keywords` |
+| `sample link-dataset` | `sample add-dataset` |
+| `user get-access-groups` | `user list-access-groups` |
+| `user get-projects` | `user list-projects` |
+| `project get-users` | `project list-users` |

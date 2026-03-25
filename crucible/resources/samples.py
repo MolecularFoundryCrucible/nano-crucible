@@ -87,12 +87,13 @@ class SampleOperations(BaseResource):
         return result
 
     def create(self, unique_id: Optional[str] = None, sample_name: Optional[str] = None,
-               description: Optional[str] = None, date_created: Optional[str] = None,
+               description: Optional[str] = None, timestamp: Optional[str] = None,
                owner_orcid: Optional[str] = None, owner_user_id: Optional[int] = None,
                project_id: Optional[str] = None, sample_type: Optional[str] = None,
                parents: List[Dict] = [], children: List[Dict] = [],
-               # deprecated aliases
-               creation_date: Optional[str] = None, owner_id: Optional[int] = None) -> Dict:
+               # deprecated aliases (creation_time/modification_time are server-assigned)
+               date_created: Optional[str] = None, creation_date: Optional[str] = None,
+               owner_id: Optional[int] = None) -> Dict:
         """Add a new sample with optional parent-child relationships.
 
         Args:
@@ -100,7 +101,7 @@ class SampleOperations(BaseResource):
             sample_name (str, optional): Human-readable sample name
             sample_type (str, optional): Category of sample (for filtering)
             description (str, optional): Sample description
-            date_created (str, optional): Sample creation date
+            timestamp (str, optional): User-defined timestamp
             owner_orcid (str, optional): Owner's ORCID
             owner_user_id (int, optional): Owner's user ID
             project_id (str, optional): Project ID (Name)
@@ -114,13 +115,18 @@ class SampleOperations(BaseResource):
             Exception: If neither unique_id nor sample_name is provided
         """
         import warnings
-        if creation_date is not None:
+        if date_created is not None:
             warnings.warn(
-                "Parameter 'creation_date' is deprecated; use 'date_created' instead.",
+                "Parameter 'date_created' is deprecated and ignored; "
+                "creation_time is now assigned server-side.",
                 DeprecationWarning, stacklevel=2
             )
-            if date_created is None:
-                date_created = creation_date
+        if creation_date is not None:
+            warnings.warn(
+                "Parameter 'creation_date' is deprecated and ignored; "
+                "creation_time is now assigned server-side.",
+                DeprecationWarning, stacklevel=2
+            )
         if owner_id is not None:
             warnings.warn(
                 "Parameter 'owner_id' is deprecated; use 'owner_user_id' instead.",
@@ -137,7 +143,7 @@ class SampleOperations(BaseResource):
             "owner_user_id": owner_user_id,
             "description": description,
             "project_id": project_id,
-            "date_created": date_created
+            "timestamp": timestamp,
         }
 
         if unique_id is None and sample_name is None:
@@ -158,12 +164,13 @@ class SampleOperations(BaseResource):
         return new_samp
 
     def update(self, unique_id: str, sample_name: Optional[str] = None,
-               description: Optional[str] = None, date_created: Optional[str] = None,
+               description: Optional[str] = None, timestamp: Optional[str] = None,
                owner_orcid: Optional[str] = None, owner_user_id: Optional[int] = None,
                project_id: Optional[str] = None, sample_type: Optional[str] = None,
                parents: List[Dict] = [], children: List[Dict] = [],
-               # deprecated aliases
-               creation_date: Optional[str] = None, owner_id: Optional[int] = None) -> Dict:
+               # deprecated aliases (creation_time/modification_time are server-assigned)
+               date_created: Optional[str] = None, creation_date: Optional[str] = None,
+               owner_id: Optional[int] = None) -> Dict:
         """Update an existing sample.
 
         Args:
@@ -171,7 +178,7 @@ class SampleOperations(BaseResource):
             sample_name (str, optional): Human-readable sample name
             sample_type (str, optional): Category of sample (for filtering)
             description (str, optional): Sample description
-            date_created (str, optional): Sample creation date
+            timestamp (str, optional): User-defined timestamp
             owner_orcid (str, optional): Owner's ORCID
             owner_user_id (int, optional): Owner's user ID
             project_id (str, optional): Project ID (Name)
@@ -182,13 +189,18 @@ class SampleOperations(BaseResource):
             Dict: Updated sample object
         """
         import warnings
-        if creation_date is not None:
+        if date_created is not None:
             warnings.warn(
-                "Parameter 'creation_date' is deprecated; use 'date_created' instead.",
+                "Parameter 'date_created' is deprecated and ignored; "
+                "creation_time is now assigned server-side.",
                 DeprecationWarning, stacklevel=2
             )
-            if date_created is None:
-                date_created = creation_date
+        if creation_date is not None:
+            warnings.warn(
+                "Parameter 'creation_date' is deprecated and ignored; "
+                "creation_time is now assigned server-side.",
+                DeprecationWarning, stacklevel=2
+            )
         if owner_id is not None:
             warnings.warn(
                 "Parameter 'owner_id' is deprecated; use 'owner_user_id' instead.",
@@ -205,7 +217,7 @@ class SampleOperations(BaseResource):
             "sample_type": sample_type,
             "description": description,
             "project_id": project_id,
-            "date_created": date_created
+            "timestamp": timestamp,
         }
 
         sample_info = {k: v for k, v in sample_info.items() if v is not None}
@@ -224,34 +236,51 @@ class SampleOperations(BaseResource):
 
         return upd_samp
 
-    def add_to_dataset(self, dataset_id: str, sample_id: str) -> Dict:
-        """Link a sample to a dataset.
+    def add_dataset(self, sample_id: str, dataset_id: str) -> Dict:
+        """Link a dataset to this sample.
+
+        Delegates to DatasetOperations.add_sample — single implementation.
 
         Args:
-            dataset_id (str): Dataset ID
-            sample_id (str): Sample ID
+            sample_id (str): Sample unique identifier
+            dataset_id (str): Dataset unique identifier
 
         Returns:
             Dict: Information about the created link
         """
-        new_link = self._request('post', f"/datasets/{dataset_id}/samples/{sample_id}")
-        return new_link
+        return self._client.datasets.add_sample(dataset_id, sample_id)
 
-    def remove_from_dataset(self, dataset_id: str, sample_id: str) -> Dict:
-        """Remove a connection between a sample and a dataset.
+    def remove_dataset(self, sample_id: str, dataset_id: str) -> Dict:
+        """Remove the link between a sample and a dataset.
 
         **Requires admin permissions.**
-        Currently only available in staging API.
 
         Args:
-            dataset_id (str): Dataset ID
-            sample_id (str): Sample ID
+            sample_id (str): Sample unique identifier
+            dataset_id (str): Dataset unique identifier
 
         Returns:
             Dict: Deletion confirmation
         """
-        del_link = self._request('delete', f"/datasets/{dataset_id}/samples/{sample_id}")
-        return del_link
+        return self._client.datasets.remove_sample(dataset_id, sample_id)
+
+    def add_to_dataset(self, dataset_id: str, sample_id: str) -> Dict:
+        """Deprecated: use add_dataset(sample_id, dataset_id) instead."""
+        import warnings
+        warnings.warn(
+            "add_to_dataset() is deprecated; use add_dataset(sample_id, dataset_id) instead.",
+            DeprecationWarning, stacklevel=2,
+        )
+        return self.add_dataset(sample_id, dataset_id)
+
+    def remove_from_dataset(self, dataset_id: str, sample_id: str) -> Dict:
+        """Deprecated: use remove_dataset(sample_id, dataset_id) instead."""
+        import warnings
+        warnings.warn(
+            "remove_from_dataset() is deprecated; use remove_dataset(sample_id, dataset_id) instead.",
+            DeprecationWarning, stacklevel=2,
+        )
+        return self.remove_dataset(sample_id, dataset_id)
 
     def link(self, parent_id: str, child_id: str) -> Dict:
         """Link two samples with a parent-child relationship.

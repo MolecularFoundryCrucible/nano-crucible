@@ -86,10 +86,15 @@ class ProjectOperations(BaseResource):
         
         # obtain project id
         project_id = project_details.get("project_id")
-        
-        # try to return project
+
+        # check if project already exists
         proj = self.get(project_id)
         if proj is not None:
+            import warnings
+            warnings.warn(
+                f"Project '{project_id}' already exists; returning existing record.",
+                UserWarning, stacklevel=2,
+            )
             return proj
 
         if project_details:
@@ -130,38 +135,17 @@ class ProjectOperations(BaseResource):
 
     def get_or_create(self, project_id: str, get_project_info_function=_build_project_from_args,
                      **kwargs) -> Dict:
-        """Get an existing project or create a new one if it doesn't exist.
+        """Deprecated: use create() instead.
 
-        **Requires admin permissions for project creation.**
-
-        Args:
-            project_id (str): ID of the Crucible project
-            get_project_info_function (callable): Function to retrieve project info if not found
-            **kwargs: Additional arguments to pass to get_project_info_function.
-                     If relying on the default, provide: organization, project_lead_email
-
-        Returns:
-            Dict: Project information (existing or newly created)
-
-        Raises:
-            ValueError: If project info cannot be found or created
-
-        Example:
-            >>> # Using default builder
-            >>> project = client.projects.get_or_create(
-            ...     "my-project",
-            ...     organization="My Lab",
-            ...     project_lead_email="lead@example.com"
-            ... )
+        .. deprecated::
+            Use :meth:`create` with a :class:`~crucible.models.Project` model.
+            ``create()`` now checks for an existing project before posting.
         """
-        proj = self.get(project_id)
-        if proj is not None:
-            return proj
-
+        import warnings
+        warnings.warn(
+            "get_or_create() is deprecated; use create() instead — "
+            "it now checks for an existing project automatically.",
+            DeprecationWarning, stacklevel=2,
+        )
         project_info = get_project_info_function(project_id=project_id, **kwargs)
-
-        if project_info:
-            proj = self.create(project_info)
-            return proj
-        else:
-            raise ValueError(f"Project info for {project_id} not found in database or using the provided get_project_info_function")
+        return self.create(project_info)
