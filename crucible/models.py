@@ -4,7 +4,7 @@
 Pydantic models for Crucible API request and response objects.
 """
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, AliasChoices
 from typing import Optional
 
 #%% Models
@@ -15,13 +15,19 @@ class Sample(BaseModel):
     sample_type: Optional[str] = None
     owner_orcid: Optional[str] = None
     owner_user_id: Optional[int] = None
+    # timestamp: user-settable date; accepts legacy 'date_created' from the API
+    # until the server-side rename is complete
+    timestamp: Optional[str] = Field(
+        default=None,
+        validation_alias=AliasChoices("timestamp", "date_created")
+    )
+    # server-assigned; backfilled on existing records, present on new ones
     creation_time: Optional[str] = None
     modification_time: Optional[str] = None
-    timestamp: Optional[str] = None
     project_id: Optional[str] = None
     description: Optional[str] = None
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
 
 class Dataset(BaseModel):
@@ -35,9 +41,15 @@ class Dataset(BaseModel):
     instrument_name: Optional[str] = None
     measurement: Optional[str] = None
     session_name: Optional[str] = None
+    # timestamp: user-settable date; accepts legacy 'creation_time' from the API
+    # until the server-side rename is complete
+    timestamp: Optional[str] = Field(
+        default=None,
+        validation_alias=AliasChoices("timestamp", "creation_time")
+    )
+    # server-assigned; backfilled on existing records, present on new ones
     creation_time: Optional[str] = None
     modification_time: Optional[str] = None
-    timestamp: Optional[str] = None
     data_format: Optional[str] = None
     file_to_upload: Optional[str] = None
     size: Optional[int] = None
@@ -45,7 +57,7 @@ class Dataset(BaseModel):
     source_folder: Optional[str] = None
     json_link: Optional[str] = None
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
 class Project(BaseModel):
     project_id: str
