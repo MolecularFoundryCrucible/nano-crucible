@@ -158,6 +158,23 @@ crucible project list-users my-project
 
 ---
 
+## Cache
+
+| Command | Key options | Description |
+|---------|-------------|-------------|
+| `cache show` | `--top N` | Show cache path, total size, and top-N largest datasets |
+| `cache clear` | `-y` `--older-than DAYS` `--dataset ID` | Delete cached files (all, by age, or a single dataset) |
+
+```bash
+crucible cache show                        # full breakdown
+crucible cache show --top 20               # show 20 largest datasets
+crucible cache clear --older-than 30       # remove entries not accessed in 30+ days
+crucible cache clear --dataset DATASET_ID  # remove a single dataset
+crucible cache clear -y                    # wipe entire cache without prompt
+```
+
+---
+
 ## Linking & Utilities
 
 | Command | Description |
