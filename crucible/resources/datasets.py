@@ -711,5 +711,5 @@ class DatasetOperations(BaseResource):
         Returns:
             Dict: Data processing request information
         """
-        result = self._request('post', f"/datasets/{dsid}/insitu_aggregation")
+        result = self._request('post', f"/datasets/{dsid}/insitu_spec_aggregation")
         return result
