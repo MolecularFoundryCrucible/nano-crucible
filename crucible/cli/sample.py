@@ -333,9 +333,9 @@ def _execute_edit(args):
         return
 
     try:
-        result = client.samples.update(args.sample_id, **changes)
-        logger.info(f"✓ Sample updated ({', '.join(changes.keys())})")
-        _show_sample(result, client, verbose=getattr(args, 'verbose', False))
+        client.samples.update(args.sample_id, **changes)
+        logger.info(f"✓ Sample updated")
+        term.diff(original, changes)
     except Exception as e:
         logger.error(f"Error updating sample: {e}")
         if getattr(args, 'debug', False):

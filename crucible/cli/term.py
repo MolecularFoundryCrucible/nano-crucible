@@ -133,6 +133,36 @@ def fmt_size(size) -> str | None:
     return f"{n:.1f} PB"
 
 
+# ── Diff display ───────────────────────────────────────────────────────────────
+
+def diff(original: dict, updated: dict) -> None:
+    """
+    Print a before/after diff for changed fields.
+
+      field_name    old value  →  new value
+
+    Only fields that differ between *original* and *updated* are shown.
+    None / empty values are rendered as ``—``.
+    """
+    changes = {k: (original.get(k), updated[k]) for k in updated if updated[k] != original.get(k)}
+    if not changes:
+        return
+
+    MAX_VAL = 60
+
+    def _v(val):
+        s = str(val) if val not in (None, '') else '—'
+        return s if len(s) <= MAX_VAL else s[:MAX_VAL - 1] + '…'
+
+    key_w = max(len(k) for k in changes)
+    old_w = max(len(_v(v[0])) for v in changes.values())
+
+    for key, (old, new) in changes.items():
+        old_s = _v(old)
+        new_s = _v(new)
+        print(f"  {key:<{key_w}}  {dim(old_s.ljust(old_w))}  →  {new_s}")
+
+
 # ── Editor launcher ────────────────────────────────────────────────────────────
 
 # GUI editors that fork into the background by default.

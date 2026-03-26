@@ -676,10 +676,11 @@ def _execute_edit(args):
                 args.dataset_id, edited_meta, overwrite=True
             )
 
-        changed = list(field_changes.keys()) + (['scientific_metadata'] if meta_changed else [])
-        logger.info(f"✓ Dataset updated ({', '.join(changed)})")
-        result = client.datasets.get(args.dataset_id, include_metadata=meta_changed)
-        _show_dataset(result, client, verbose=getattr(args, 'verbose', False))
+        logger.info("✓ Dataset updated")
+        diff_updated = dict(field_changes)
+        if meta_changed:
+            diff_updated['scientific_metadata'] = edited_meta
+        term.diff(original, diff_updated)
     except Exception as e:
         logger.error(f"Error updating dataset: {e}")
         if getattr(args, 'debug', False):
