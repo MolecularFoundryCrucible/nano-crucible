@@ -160,7 +160,7 @@ def diff(original: dict, updated: dict) -> None:
     for key, (old, new) in changes.items():
         old_s = _v(old)
         new_s = _v(new)
-        print(f"  {key:<{key_w}}  {dim(old_s.ljust(old_w))}  →  {new_s}")
+        print(f"  {key:<{key_w}}  {dim(old_s.ljust(old_w))}  ->  {new_s}")
 
 
 # ── Editor launcher ────────────────────────────────────────────────────────────
