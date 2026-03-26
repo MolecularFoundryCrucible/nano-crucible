@@ -11,6 +11,8 @@ from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
 
+from . import term
+
 
 def register_subcommand(subparsers):
     parser = subparsers.add_parser(
@@ -90,22 +92,27 @@ def _execute_show(args):
     cache_dir = config.cache_dir
     datasets_dir = os.path.join(cache_dir, 'datasets')
 
-    logger.info(f"Cache location : {cache_dir}")
-    logger.info(f"Total size     : {_human(_dir_size(cache_dir))}")
+    W = 12
+    def _p(label, value):
+        print(f"  {label:<{W}}{value}")
 
-    # per-subdirectory breakdown
+    term.header("Cache")
+    _p("Location", cache_dir)
+    _p("Total size", _human(_dir_size(cache_dir)))
+
     try:
         entries = sorted(os.scandir(cache_dir), key=lambda e: e.name)
     except OSError:
         return
-    logger.info("\nBreakdown:")
+
+    term.subheader("Breakdown")
     for entry in entries:
         if entry.is_dir():
-            logger.info(f"  {entry.name}/  {_human(_dir_size(entry.path))}")
+            print(f"  {entry.name}/  {_human(_dir_size(entry.path))}")
 
-    # top-N largest datasets
     if not os.path.isdir(datasets_dir):
         return
+
     dataset_entries = []
     for entry in os.scandir(datasets_dir):
         if entry.is_dir():
@@ -114,10 +121,11 @@ def _execute_show(args):
 
     n = min(args.top, len(dataset_entries))
     if n:
-        logger.info(f"\nTop {n} largest cached datasets:")
-        for dsid, size in dataset_entries[:n]:
-            logger.info(f"  {dsid}  {_human(size)}")
-    logger.info(f"\n{len(dataset_entries)} dataset(s) cached in total.")
+        term.subheader(f"Top {n} Largest Cached Datasets")
+        rows = [(dsid, _human(size)) for dsid, size in dataset_entries[:n]]
+        term.table(rows, ['MFID', 'Size'], max_widths=[30, 10])
+
+    print(f"\n  {term.dim(f'{len(dataset_entries)} dataset(s) cached in total.')}")
 
 
 # ── clear ────────────────────────────────────────────────────────────────────

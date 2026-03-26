@@ -12,6 +12,8 @@ import json
 
 logger = logging.getLogger(__name__)
 
+from . import term
+
 try:
     import argcomplete
     ARGCOMPLETE_AVAILABLE = True
@@ -192,6 +194,7 @@ def _register_list_users(subparsers):
         'list-users',
         help='List users in a project',
         description='List all users associated with a project (requires admin permissions)',
+        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
         epilog="""
 Examples:
     crucible project list-users my-project
@@ -208,6 +211,7 @@ def _register_add_user(subparsers):
         'add-user',
         help='Add a user to a project',
         description='Add a user to a project by ORCID (requires admin permissions)',
+        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
         epilog="""
 Examples:
     crucible project add-user my-project --orcid 0000-0002-1825-0097
@@ -247,19 +251,21 @@ def _execute_list(args):
         client = CrucibleClient()
         projects = client.projects.list(limit=args.limit)
 
-        logger.info(f"\n=== Projects ===")
-        logger.info(f"Found {len(projects)} project(s)\n")
-
-        if projects:
-            for project in projects:
-                logger.info(f"ID: {project.get('project_id', 'N/A')}")
-                if project.get('organization'):
-                    logger.info(f"  Organization: {project['organization']}")
-                if project.get('title'):
-                    logger.info(f"  Title: {project['title']}")
-                if project.get('project_lead_email'):
-                    logger.info(f"  Lead: {project['project_lead_email']}")
-                logger.info("")
+        term.header(f"Projects ({len(projects)})")
+        if not projects:
+            print(f"  {term.dim('No projects found.')}")
+        else:
+            rows = [
+                (
+                    p.get('project_id') or '—',
+                    p.get('title') or '—',
+                    p.get('organization') or '—',
+                    p.get('project_lead_email') or '—',
+                )
+                for p in projects
+            ]
+            term.table(rows, ['ID', 'Title', 'Organization', 'Lead Email'],
+                       max_widths=[20, 30, 20, 30])
 
     except Exception as e:
         logger.error(f"Error listing projects: {e}")
@@ -267,6 +273,23 @@ def _execute_list(args):
             import traceback
             traceback.print_exc()
         sys.exit(1)
+
+
+def _show_project(project):
+    """Display project fields."""
+    W = 14
+
+    def _p(label, value):
+        print(f"  {label:<{W}}{value if value not in (None, '') else '—'}")
+
+    term.header("Project")
+    pid = project.get('project_id')
+    _p("ID",           term.cyan(pid) if pid else None)
+    _p("Title",        project.get('title'))
+    _p("Organization", project.get('organization'))
+    _p("Lead",         project.get('project_lead_name'))
+    _p("Lead Email",   project.get('project_lead_email'))
+    _p("Status",       project.get('status'))
 
 
 def _execute_get(args):
@@ -280,18 +303,7 @@ def _execute_get(args):
             logger.error(f"Project not found: {args.project_id}")
             sys.exit(1)
 
-        logger.info("\n=== Project Information ===")
-        logger.info(f"ID: {project.get('project_id', 'N/A')}")
-        if project.get('organization'):
-            logger.info(f"Organization: {project['organization']}")
-        if project.get('title'):
-            logger.info(f"Title: {project['title']}")
-        if project.get('project_lead_email'):
-            logger.info(f"Lead Email: {project['project_lead_email']}")
-        if project.get('project_lead_name'):
-            logger.info(f"Lead Name: {project['project_lead_name']}")
-        if project.get('status'):
-            logger.info(f"Status: {project['status']}")
+        _show_project(project)
 
     except Exception as e:
         logger.error(f"Error retrieving project: {e}")
@@ -315,8 +327,8 @@ def _execute_create(args):
 
     interactive = project_id is None or organization is None or project_lead_email is None
     if interactive:
-        logger.info("\n=== Interactive Project Creation ===")
-        logger.info("Please provide the following information:\n")
+        term.header("Create Project")
+        print("")
 
     # Prompt for project_id
     if project_id is None:
@@ -374,14 +386,11 @@ def _execute_create(args):
         # Check if project already exists
         existing = client.projects.get(project_id)
         if existing is not None:
-            logger.info(f"\n⚠ Project '{project_id}' already exists.")
-            logger.info(f"Project ID:   {existing.get('project_id', 'N/A')}")
-            logger.info(f"Organization: {existing.get('organization', 'N/A')}")
-            logger.info(f"Lead Email:   {existing.get('project_lead_email', 'N/A')}")
+            logger.warning(f"Project '{project_id}' already exists.")
+            _show_project(existing)
             return
 
         # Build Project model and create
-        logger.info("\n=== Creating Project ===")
         project = Project(
             project_id=project_id,
             organization=organization,
@@ -392,14 +401,8 @@ def _execute_create(args):
         )
         result = client.projects.create(project)
 
-        logger.info(f"\n✓ Project created successfully!")
-        logger.info(f"Project ID:   {result.get('project_id', 'N/A')}")
-        logger.info(f"Organization: {result.get('organization', 'N/A')}")
-        logger.info(f"Lead Email:   {result.get('project_lead_email', 'N/A')}")
-        if result.get('title'):
-            logger.info(f"Title:        {result['title']}")
-        if result.get('project_lead_name'):
-            logger.info(f"Lead Name:    {result['project_lead_name']}")
+        logger.info("✓ Project created")
+        _show_project(result)
 
     except Exception as e:
         logger.error(f"Error creating project: {e}")
@@ -416,25 +419,18 @@ def _execute_list_users(args):
         client = CrucibleClient()
         users = client.projects.get_users(args.project_id, limit=args.limit)
 
-        logger.info(f"\n=== Users in project {args.project_id} ===")
-        logger.info(f"Found {len(users)} user(s)\n")
-
-        if users:
-            for user in users:
-                if user.get('orcid'):
-                    logger.info(f"ORCID: {user['orcid']}")
-                if user.get('first_name') or user.get('last_name'):
-                    name_parts = []
-                    if user.get('first_name'):
-                        name_parts.append(user['first_name'])
-                    if user.get('last_name'):
-                        name_parts.append(user['last_name'])
-                    logger.info(f"  Name: {' '.join(name_parts)}")
-                if user.get('email'):
-                    logger.info(f"  Email: {user['email']}")
-                if user.get('lbl_email'):
-                    logger.info(f"  LBL Email: {user['lbl_email']}")
-                logger.info("")
+        term.header(f"Users · {args.project_id} ({len(users)})")
+        if not users:
+            print(f"  {term.dim('No users found.')}")
+        else:
+            rows = []
+            for u in users:
+                name_parts = [u.get('first_name') or '', u.get('last_name') or '']
+                name  = ' '.join(p for p in name_parts if p) or '—'
+                orcid = u.get('orcid') or '—'
+                email = u.get('email') or u.get('lbl_email') or '—'
+                rows.append((name, orcid, email))
+            term.table(rows, ['Name', 'ORCID', 'Email'], max_widths=[25, 19, 35])
 
     except Exception as e:
         logger.error(f"Error listing project users: {e}")

@@ -11,6 +11,8 @@ import os
 import subprocess
 from pathlib import Path
 
+from . import term
+
 #%%
 
 def get_default_editor():
@@ -161,8 +163,9 @@ def cmd_init(args):
     """Interactive configuration wizard."""
     from crucible.config import create_config_file, config
 
-    print("=== Crucible Configuration Setup ===\n")
-    print("This wizard will help you configure nano-crucible.\n")
+    term.header("Crucible Configuration Setup")
+    print("")
+    print("  This wizard will help you configure nano-crucible.\n")
 
     # Check if config exists
     config_file = config.config_file_path
@@ -230,61 +233,43 @@ def cmd_show(args):
     """Show current configuration."""
     from crucible.config import config
 
-    print("=== Crucible Configuration ===\n")
-    print(f"Config file: {config.config_file_path}")
-    print(f"Exists: {config.config_file_path.exists()}\n")
+    W = 20
+    def _p(label, value):
+        print(f"  {label:<{W}}{value if value not in (None, '') else '—'}")
 
-    # Show each config value
-    print("Current settings:")
+    term.header("Configuration")
 
-    # API Key (hidden by default)
+    cfg_path = config.config_file_path
+    exists = cfg_path.exists()
+    _p("Config file", cfg_path)
+    _p("Exists",      "Yes" if exists else "No")
+    print("")
+
     try:
         api_key = config.api_key
-        if args.secrets:
-            print(f"  api_key     : {api_key}")
-        else:
-            print(f"  api_key     : {'*' * len(api_key)} (use --secrets to show)")
+        masked = f"{'*' * 8}…{api_key[-4:]}" if not args.secrets else api_key
+        _p("api_key",            masked)
     except ValueError:
-        print(f"  api_key     : <not set>")
+        _p("api_key",            None)
 
-    # API URL
-    api_url = config.api_url
-    print(f"  api_url     : {api_url}")
+    _p("api_url",             config.api_url)
+    _p("cache_dir",           config.cache_dir)
+    _p("graph_explorer_url",  config.graph_explorer_url)
+    _p("current_project",     config.current_project)
 
-    # Cache Dir
-    cache_dir = config.cache_dir
-    print(f"  cache_dir   : {cache_dir}")
-
-    # Graph Explorer URL
-    graph_explorer_url = config.graph_explorer_url
-    print(f"  graph_explorer_url : {graph_explorer_url}")
-
-    # Current Project
-    current_project = config.current_project
-    if current_project:
-        print(f"  current_project    : {current_project}")
-    else:
-        print(f"  current_project    : <not set>")
-
-    # Show environment variable overrides
-    print("\nEnvironment variable overrides:")
     env_overrides = {
-        'CRUCIBLE_API_KEY': os.environ.get('CRUCIBLE_API_KEY'),
-        'CRUCIBLE_API_URL': os.environ.get('CRUCIBLE_API_URL'),
-        'CRUCIBLE_CACHE_DIR': os.environ.get('CRUCIBLE_CACHE_DIR'),
+        'CRUCIBLE_API_KEY':            os.environ.get('CRUCIBLE_API_KEY'),
+        'CRUCIBLE_API_URL':            os.environ.get('CRUCIBLE_API_URL'),
+        'CRUCIBLE_CACHE_DIR':          os.environ.get('CRUCIBLE_CACHE_DIR'),
         'CRUCIBLE_GRAPH_EXPLORER_URL': os.environ.get('CRUCIBLE_GRAPH_EXPLORER_URL'),
-        'CRUCIBLE_CURRENT_PROJECT': os.environ.get('CRUCIBLE_CURRENT_PROJECT'),
+        'CRUCIBLE_CURRENT_PROJECT':    os.environ.get('CRUCIBLE_CURRENT_PROJECT'),
     }
-    has_overrides = False
-    for key, value in env_overrides.items():
-        if value is not None:
-            has_overrides = True
-            if 'API_KEY' in key and not args.secrets:
-                print(f"  {key} : {'*' * len(value)}")
-            else:
-                print(f"  {key} : {value}")
-    if not has_overrides:
-        print("  (none)")
+    active = {k: v for k, v in env_overrides.items() if v is not None}
+    if active:
+        term.subheader("Environment Overrides")
+        for key, value in active.items():
+            display = f"{'*' * 8}…{value[-4:]}" if 'API_KEY' in key and not args.secrets else value
+            print(f"  {key}  {display}")
 
 
 def cmd_get(args):

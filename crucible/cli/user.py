@@ -13,6 +13,8 @@ import re
 
 logger = logging.getLogger(__name__)
 
+from . import term
+
 
 def register_subcommand(subparsers):
     """
@@ -50,6 +52,7 @@ def _register_get(subparsers):
         'get',
         help='Get user by ORCID or email',
         description='Retrieve user information (requires admin permissions)',
+        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
         epilog="""
 Examples:
     crucible user get --orcid 0000-0002-1825-0097
@@ -84,6 +87,7 @@ def _register_create(subparsers):
         'create',
         help='Create a new user',
         description='Add a new user to Crucible (requires admin permissions)',
+        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
         epilog="""
 Examples:
     # Interactive mode (prompts for input)
@@ -151,6 +155,7 @@ def _register_list(subparsers):
         'list',
         help='List all users',
         description='List all users in the system (requires admin permissions)',
+        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
         epilog="""
 Examples:
     crucible user list
@@ -175,6 +180,25 @@ Examples:
     parser.set_defaults(func=_execute_list)
 
 
+def _show_user(user):
+    """Display user fields."""
+    W = 16
+
+    def _p(label, value):
+        print(f"  {label:<{W}}{value if value not in (None, '') else '—'}")
+
+    name_parts = [user.get('first_name') or '', user.get('last_name') or '']
+    full_name = ' '.join(p for p in name_parts if p) or None
+
+    term.header("User")
+    _p("Name",            full_name)
+    _p("ORCID",           term.orcid_link(user.get('orcid')))
+    _p("Email",           user.get('email'))
+    _p("LBL Email",       user.get('lbl_email'))
+    _p("Employee Number", user.get('employee_number'))
+    _p("ID",              user.get('id'))
+
+
 def _execute_get(args):
     """Execute the 'user get' subcommand."""
     from crucible.client import CrucibleClient
@@ -191,22 +215,7 @@ def _execute_get(args):
             logger.error(f"User not found: {identifier}")
             sys.exit(1)
 
-        logger.info("\n=== User Information ===")
-        if user.get('orcid'):
-            logger.info(f"ORCID: {user['orcid']}")
-        if user.get('first_name') or user.get('last_name'):
-            name_parts = []
-            if user.get('first_name'):
-                name_parts.append(user['first_name'])
-            if user.get('last_name'):
-                name_parts.append(user['last_name'])
-            logger.info(f"Name: {' '.join(name_parts)}")
-        if user.get('email'):
-            logger.info(f"Email: {user['email']}")
-        if user.get('lbl_email'):
-            logger.info(f"LBL Email: {user['lbl_email']}")
-        if user.get('id'):
-            logger.info(f"ID: {user['id']}")
+        _show_user(user)
 
     except Exception as e:
         logger.error(f"Error retrieving user: {e}")
@@ -229,8 +238,8 @@ def _execute_create(args):
 
     interactive = orcid is None or first_name is None or last_name is None
     if interactive:
-        logger.info("\n=== Interactive User Creation ===")
-        logger.info("Please provide the following information:\n")
+        term.header("Create User")
+        print("")
 
     # Prompt for ORCID
     if orcid is None:
@@ -288,7 +297,6 @@ def _execute_create(args):
 
     try:
         from crucible.models import User
-        logger.info("\n=== Creating User ===")
         client = CrucibleClient()
 
         user = User(
@@ -301,19 +309,8 @@ def _execute_create(args):
         project_ids = [p.strip() for p in projects.split(',')] if projects else []
         result = client.users.create(user, project_ids=project_ids)
 
-        logger.info(f"\n✓ User created successfully!")
-        logger.info(f"ORCID: {result.get('orcid', 'N/A')}")
-        if result.get('first_name') or result.get('last_name'):
-            name_parts = []
-            if result.get('first_name'):
-                name_parts.append(result['first_name'])
-            if result.get('last_name'):
-                name_parts.append(result['last_name'])
-            logger.info(f"Name: {' '.join(name_parts)}")
-        if result.get('email'):
-            logger.info(f"Email: {result['email']}")
-        if result.get('id'):
-            logger.info(f"ID: {result['id']}")
+        logger.info("✓ User created")
+        _show_user(result)
 
     except Exception as e:
         logger.error(f"Error creating user: {e}")
@@ -330,38 +327,20 @@ def _execute_list(args):
         client = CrucibleClient()
         users = client.users.list(limit=args.limit)
 
+        term.header(f"Users ({len(users)})")
+
         if not users:
-            logger.info("No users found.")
+            print(f"  {term.dim('No users found.')}")
             return
 
-        logger.info(f"\n=== Users ({len(users)}) ===\n")
-
-        for i, user in enumerate(users, 1):
-            # Format name
-            name_parts = []
-            if user.get('first_name'):
-                name_parts.append(user['first_name'])
-            if user.get('last_name'):
-                name_parts.append(user['last_name'])
-            name = ' '.join(name_parts) if name_parts else 'N/A'
-
-            # Format ORCID
-            orcid = user.get('orcid', 'N/A')
-
-            # Format email
-            email = user.get('email') or user.get('lbl_email', 'N/A')
-
-            logger.info(f"{i}. {name}")
-            logger.info(f"   ORCID: {orcid}")
-            logger.info(f"   Email: {email}")
-
-            if args.verbose:
-                if user.get('id'):
-                    logger.info(f"   ID: {user['id']}")
-                if user.get('creation_time'):
-                    logger.info(f"   Created: {user['creation_time']}")
-
-            logger.info("")
+        rows = []
+        for user in users:
+            name_parts = [user.get('first_name') or '', user.get('last_name') or '']
+            name  = ' '.join(p for p in name_parts if p) or '—'
+            orcid = user.get('orcid') or '—'
+            email = user.get('email') or user.get('lbl_email') or '—'
+            rows.append((name, orcid, email))
+        term.table(rows, ['Name', 'ORCID', 'Email'], max_widths=[25, 19, 35])
 
     except Exception as e:
         logger.error(f"Error listing users: {e}")
@@ -449,13 +428,12 @@ def _execute_list_datasets(args):
         client = CrucibleClient()
         dataset_ids = client.users.list_datasets(args.orcid)
 
+        term.header(f"Datasets · {args.orcid} ({len(dataset_ids)})")
         if not dataset_ids:
-            logger.info(f"No datasets found for user {args.orcid}.")
+            print(f"  {term.dim('No datasets found.')}")
             return
-
-        logger.info(f"\n=== Datasets accessible to {args.orcid} ({len(dataset_ids)}) ===\n")
         for dsid in dataset_ids:
-            logger.info(f"  {dsid}")
+            print(f"  {term.cyan(dsid)}")
 
     except Exception as e:
         logger.error(f"Error listing user datasets: {e}")
@@ -472,9 +450,13 @@ def _execute_check_access(args):
         client = CrucibleClient()
         perms = client.users.check_dataset_access(args.orcid, args.dataset_id)
 
-        logger.info(f"\n=== Access for {args.orcid} on {args.dataset_id} ===\n")
-        logger.info(f"  Read:  {'yes' if perms.get('read') else 'no'}")
-        logger.info(f"  Write: {'yes' if perms.get('write') else 'no'}")
+        W = 8
+        def _p(label, value):
+            print(f"  {label:<{W}}{value}")
+
+        term.header(f"Access · {args.dataset_id}")
+        _p("Read",  "yes" if perms.get('read')  else "no")
+        _p("Write", "yes" if perms.get('write') else "no")
 
     except Exception as e:
         logger.error(f"Error checking access: {e}")
@@ -491,13 +473,12 @@ def _execute_list_access_groups(args):
         client = CrucibleClient()
         groups = client.users.list_access_groups(args.orcid)
 
+        term.header(f"Access Groups · {args.orcid} ({len(groups)})")
         if not groups:
-            logger.info(f"No access groups found for user {args.orcid}.")
+            print(f"  {term.dim('No access groups found.')}")
             return
-
-        logger.info(f"\n=== Access Groups for {args.orcid} ({len(groups)}) ===\n")
         for g in groups:
-            logger.info(f"  {g}")
+            print(f"  {g}")
 
     except Exception as e:
         logger.error(f"Error retrieving access groups: {e}")
@@ -514,17 +495,20 @@ def _execute_list_projects(args):
         client = CrucibleClient()
         projects = client.users.get_projects(args.orcid)
 
+        term.header(f"Projects · {args.orcid} ({len(projects)})")
         if not projects:
-            logger.info(f"No projects found for user {args.orcid}.")
+            print(f"  {term.dim('No projects found.')}")
             return
 
-        logger.info(f"\n=== Projects for {args.orcid} ({len(projects)}) ===\n")
-        for p in projects:
-            pid = p.get('project_id', 'N/A')
-            title = p.get('title') or p.get('project_id', '')
-            logger.info(f"  {pid}  {title}")
-            if args.verbose:
-                logger.info(f"    org={p.get('organization')}  lead={p.get('project_lead_email')}")
+        rows = [
+            (
+                p.get('project_id') or '—',
+                p.get('title') or '—',
+                p.get('organization') or '—',
+            )
+            for p in projects
+        ]
+        term.table(rows, ['ID', 'Title', 'Organization'], max_widths=[20, 30, 20])
 
     except Exception as e:
         logger.error(f"Error retrieving user projects: {e}")

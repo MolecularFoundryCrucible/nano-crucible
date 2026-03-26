@@ -11,6 +11,8 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+from . import term
+
 try:
     import argcomplete
     ARGCOMPLETE_AVAILABLE = True
@@ -126,7 +128,13 @@ def _register_get(subparsers):
     parser.add_argument(
         '-v', '--verbose',
         action='store_true',
-        help='Verbose output'
+        help='Show all sample fields'
+    )
+
+    parser.add_argument(
+        '--graph',
+        action='store_true',
+        help='Also show linked datasets, parents, and children'
     )
 
     parser.set_defaults(func=_execute_get)
@@ -138,6 +146,7 @@ def _register_create(subparsers):
         'create',
         help='Create a new sample',
         description='Create a new sample in Crucible',
+        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
         epilog="""
 Examples:
     crucible sample create -n "Silicon Wafer A" -pid my-project
@@ -392,22 +401,23 @@ def _execute_list(args):
         client = CrucibleClient()
         samples = client.samples.list(project_id=project_id, limit=args.limit, **filters)
 
-        header = f"\n=== Samples in project {project_id} ===" if project_id else "\n=== Samples ==="
-        logger.info(header)
+        title = f"Samples · {project_id} ({len(samples)})" if project_id else f"Samples ({len(samples)})"
+        term.header(title)
         if filters:
             logger.info(f"Filters: {', '.join(f'{k}={v}' for k, v in filters.items())}")
-        logger.info(f"Found {len(samples)} sample(s)\n")
 
-        if samples:
-            for sample in samples:
-                logger.info(f"ID: {sample.get('unique_id', 'N/A')}")
-                if sample.get('sample_name'):
-                    logger.info(f"  Name: {sample['sample_name']}")
-                if sample.get('creation_time'):
-                    logger.info(f"  Created: {sample['creation_time']}")
-                if sample.get('timestamp'):
-                    logger.info(f"  Timestamp: {sample['timestamp']}")
-                logger.info("")
+        if not samples:
+            print(f"  {term.dim('No samples found.')}")
+        else:
+            rows = [
+                (
+                    s.get('sample_name') or '(unnamed)',
+                    s.get('unique_id') or '—',
+                    s.get('sample_type') or '—',
+                )
+                for s in samples
+            ]
+            term.table(rows, ['Name', 'MFID', 'Type'], max_widths=[35, 26, 20])
 
     except Exception as e:
         logger.error(f"Error listing samples: {e}")
@@ -417,43 +427,85 @@ def _execute_list(args):
         sys.exit(1)
 
 
+def _show_sample(sample, client, verbose=False, graph=False):
+    """Display sample fields. Extracted for reuse by top-level 'crucible get'."""
+    W = 14
+
+    def _p(label, value):
+        print(f"  {label:<{W}}{value if value not in (None, '') else '—'}")
+
+    try:
+        from crucible.config import config
+        _base = config.graph_explorer_url.rstrip('/')
+    except Exception:
+        _base = None
+
+    def _ds_link(r):
+        u, p = r.get('unique_id'), r.get('project_id')
+        return term.mfid_link(u, f"{_base}/{p}/dataset/{u}" if _base and u and p else None)
+
+    def _s_link(r):
+        u, p = r.get('unique_id'), r.get('project_id')
+        return term.mfid_link(u, f"{_base}/{p}/sample-graph/{u}" if _base and u and p else None)
+
+    term.header("Sample")
+
+    _p("Name",        sample.get('sample_name') or '(unnamed)')
+    _p("MFID",        _s_link(sample))
+    _p("Type",        sample.get('sample_type'))
+    _p("Project",     sample.get('project_id'))
+    _p("Timestamp",   term.fmt_ts(sample.get('timestamp')))
+    _p("Description", sample.get('description'))
+
+    if verbose or graph:
+        term.subheader("Ownership")
+        _p("Owner ORCID", term.orcid_link(sample.get('owner_orcid')))
+        _p("Owner ID",    sample.get('owner_user_id'))
+
+        term.subheader("Timing")
+        _p("Created",  term.fmt_ts(sample.get('creation_time')))
+        _p("Modified", term.fmt_ts(sample.get('modification_time')))
+
+    if graph:
+        sid = sample.get('unique_id')
+
+        datasets = client.datasets.list(sample_id=sid)
+        term.subheader(f"Linked Datasets ({len(datasets)})")
+        for ds in datasets:
+            name = ds.get('dataset_name') or '(unnamed)'
+            meas = ds.get('measurement') or ''
+            suffix = f"  {meas}" if meas else ''
+            print(f"  {_ds_link(ds)}  {name}{suffix}")
+        if not datasets:
+            print(f"  {term.dim('(none)')}")
+
+        parents = client.samples.list_parents(sid)
+        term.subheader(f"Parents ({len(parents)})")
+        for p in parents:
+            print(f"  {_s_link(p)}  {p.get('sample_name') or '(unnamed)'}")
+        if not parents:
+            print(f"  {term.dim('(none)')}")
+
+        children = client.samples.list_children(sid)
+        term.subheader(f"Children ({len(children)})")
+        for c in children:
+            print(f"  {_s_link(c)}  {c.get('sample_name') or '(unnamed)'}")
+        if not children:
+            print(f"  {term.dim('(none)')}")
+
+
 def _execute_get(args):
     """Execute the 'sample get' subcommand."""
     from crucible.client import CrucibleClient
     try:
         client = CrucibleClient()
         sample = client.samples.get(args.sample_id)
-
         if sample is None:
             logger.error(f"Sample not found: {args.sample_id}")
             sys.exit(1)
-
-        logger.info("\n=== Sample Information ===")
-        logger.info(f"ID:          {sample.get('unique_id', 'N/A')}")
-        if sample.get('sample_name'):
-            logger.info(f"Name:        {sample['sample_name']}")
-        if sample.get('sample_type'):
-            logger.info(f"Type:        {sample['sample_type']}")
-        if sample.get('project_id'):
-            logger.info(f"Project:     {sample['project_id']}")
-        if sample.get('creation_time'):
-            logger.info(f"Created:     {sample['creation_time']}")
-        if sample.get('modification_time'):
-            logger.info(f"Modified:    {sample['modification_time']}")
-        if sample.get('timestamp'):
-            logger.info(f"Timestamp:   {sample['timestamp']}")
-        if sample.get('owner_orcid'):
-            logger.info(f"Owner:       {sample['owner_orcid']}")
-        if sample.get('description'):
-            logger.info(f"Description: {sample['description']}")
-
-        if args.verbose:
-            datasets = client.datasets.list(sample_id=args.sample_id)
-            if datasets:
-                logger.info(f"\nLinked datasets ({len(datasets)}):")
-                for ds in datasets:
-                    logger.info(f"  {ds.get('unique_id', 'N/A')}  {ds.get('dataset_name') or ''}  {ds.get('measurement') or ''}")
-
+        _show_sample(sample, client,
+                     verbose=getattr(args, 'verbose', False),
+                     graph=getattr(args, 'graph', False))
     except Exception as e:
         logger.error(f"Error retrieving sample: {e}")
         if getattr(args, "debug", False):
@@ -482,9 +534,8 @@ def _execute_create(args):
             description=args.description
         )
 
-        logger.info(f"✓ Sample created successfully!")
-        logger.info(f"Sample ID: {result.get('unique_id', 'N/A')}")
-        logger.info(f"Name: {result.get('sample_name', 'N/A')}")
+        logger.info("✓ Sample created")
+        _show_sample(result, client)
 
     except Exception as e:
         logger.error(f"Error creating sample: {e}")
@@ -517,19 +568,13 @@ def _execute_list_parents(args):
     try:
         client = CrucibleClient()
         parents = client.samples.list_parents(args.sample_id, limit=args.limit)
-
+        term.header(f"Parent Samples · {args.sample_id} ({len(parents)})")
         if not parents:
-            logger.info("No parent samples found.")
+            print(f"  {term.dim('No parent samples found.')}")
             return
-
-        logger.info(f"\n=== Parent Samples of {args.sample_id} ({len(parents)}) ===\n")
-        for s in parents:
-            uid = s.get('unique_id', 'N/A')
-            name = s.get('sample_name') or '(unnamed)'
-            logger.info(f"  {uid}  {name}")
-            if args.verbose:
-                logger.info(f"    type={s.get('sample_type')}  project={s.get('project_id')}")
-
+        rows = [(s.get('sample_name') or '(unnamed)', s.get('unique_id') or '—',
+                 s.get('sample_type') or '—') for s in parents]
+        term.table(rows, ['Name', 'MFID', 'Type'], max_widths=[35, 26, 20])
     except Exception as e:
         logger.error(f"Error listing parent samples: {e}")
         if getattr(args, "debug", False):
@@ -544,19 +589,13 @@ def _execute_list_children(args):
     try:
         client = CrucibleClient()
         children = client.samples.list_children(args.sample_id, limit=args.limit)
-
+        term.header(f"Child Samples · {args.sample_id} ({len(children)})")
         if not children:
-            logger.info("No child samples found.")
+            print(f"  {term.dim('No child samples found.')}")
             return
-
-        logger.info(f"\n=== Child Samples of {args.sample_id} ({len(children)}) ===\n")
-        for s in children:
-            uid = s.get('unique_id', 'N/A')
-            name = s.get('sample_name') or '(unnamed)'
-            logger.info(f"  {uid}  {name}")
-            if args.verbose:
-                logger.info(f"    type={s.get('sample_type')}  project={s.get('project_id')}")
-
+        rows = [(s.get('sample_name') or '(unnamed)', s.get('unique_id') or '—',
+                 s.get('sample_type') or '—') for s in children]
+        term.table(rows, ['Name', 'MFID', 'Type'], max_widths=[35, 26, 20])
     except Exception as e:
         logger.error(f"Error listing child samples: {e}")
         if getattr(args, "debug", False):
@@ -571,19 +610,13 @@ def _execute_list_datasets(args):
     try:
         client = CrucibleClient()
         datasets = client.datasets.list(sample_id=args.sample_id, limit=args.limit)
-
+        term.header(f"Datasets · {args.sample_id} ({len(datasets)})")
         if not datasets:
-            logger.info(f"No datasets linked to {args.sample_id}.")
+            print(f"  {term.dim('No datasets linked.')}")
             return
-
-        logger.info(f"\n=== Datasets linked to {args.sample_id} ({len(datasets)}) ===\n")
-        for ds in datasets:
-            uid = ds.get('unique_id', 'N/A')
-            name = ds.get('dataset_name') or '(unnamed)'
-            logger.info(f"  {uid}  {name}")
-            if args.verbose:
-                logger.info(f"    measurement={ds.get('measurement')}  project={ds.get('project_id')}")
-
+        rows = [(ds.get('dataset_name') or '(unnamed)', ds.get('unique_id') or '—',
+                 ds.get('measurement') or '—') for ds in datasets]
+        term.table(rows, ['Name', 'MFID', 'Measurement'], max_widths=[35, 26, 15])
     except Exception as e:
         logger.error(f"Error listing datasets: {e}")
         if getattr(args, "debug", False):
