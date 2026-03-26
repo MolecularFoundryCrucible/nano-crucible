@@ -48,18 +48,18 @@ class CrucibleClient:
 
         self.api_url = api_url.rstrip('/')
         self.api_key = api_key
-        self.headers = {"Authorization": f"Bearer {api_key}"}
 
         # Session with automatic retry on transient server/network errors
         retry = Retry(
-            total=3,
-            backoff_factor=1,            # waits 1s, 2s, 4s between retries
-            status_forcelist={429, 502, 503, 504},
-            allowed_methods=False,       # retry all HTTP methods, including POST
-            raise_on_status=False,       # let raise_for_status() handle final failure
+            total            = 3,
+            backoff_factor   = 1,            # waits 1s, 2s, 4s between retries
+            status_forcelist = {429, 502, 503, 504},
+            allowed_methods  = False,        # retry all HTTP methods, including POST
+            raise_on_status  = False,        # let raise_for_status() handle final failure
         )
         adapter = HTTPAdapter(max_retries=retry)
         self._session = requests.Session()
+        self._session.headers.update({"Authorization": f"Bearer {api_key}"})
         self._session.mount("https://", adapter)
         self._session.mount("http://", adapter)
 
@@ -88,7 +88,6 @@ class CrucibleClient:
             requests.exceptions.Timeout: For timeout errors
         """
         url = f"{self.api_url}/{endpoint.lstrip('/')}"
-        kwargs['headers'] = {**kwargs.get('headers', {}), **self.headers}
         logger.debug(f"{method.upper()} {url}")
         response = self._session.request(method, url, timeout=DEFAULT_TIMEOUT, **kwargs)
         logger.debug(f"Status: {response.status_code}")
@@ -318,6 +317,61 @@ class CrucibleClient:
                 f"Only dataset-sample unlinking is supported."
             )
     
+    def download(self, resource_id: str, output_dir: str = 'crucible-downloads',
+                 no_files: bool = False, no_record: bool = False,
+                 overwrite_existing: bool = True,
+                 include: Optional[List[str]] = None,
+                 exclude: Optional[List[str]] = None) -> List[str]:
+        """Download a resource record and, for datasets, its files.
+
+        Args:
+            resource_id (str): Sample or dataset unique identifier
+            output_dir (str): Directory to save files (default: 'crucible-downloads')
+            no_files (bool): Skip file download, save record JSON only
+            no_record (bool): Skip saving record.json
+            overwrite_existing (bool): Overwrite existing files (default: True)
+            include (list, optional): Glob patterns — only download matching files
+            exclude (list, optional): Glob patterns — skip matching files
+
+        Returns:
+            List[str]: Paths of all downloaded files (record.json + data files)
+        """
+        import os
+
+        resource_type = self.get_resource_type(resource_id)
+        if resource_type == 'dataset':
+            record = self.datasets.get(resource_id, include_metadata=True)
+        elif resource_type == 'sample':
+            record = self.samples.get(resource_id)
+        else:
+            raise ValueError(f"Cannot download resource of type: {resource_type}")
+
+        try:
+            os.makedirs(output_dir, exist_ok=True)
+        except (OSError, PermissionError) as e:
+            raise OSError(f"Cannot create output directory '{output_dir}'.") from e
+
+        downloaded = []
+
+        if not no_record:
+            record_dir = os.path.join(output_dir, resource_id)
+            os.makedirs(record_dir, exist_ok=True)
+            json_path = os.path.join(record_dir, 'record.json')
+            with open(json_path, 'w') as f:
+                json.dump(record, f, indent=2)
+            logger.info(f"Saved record to {json_path}")
+            downloaded.append(json_path)
+
+        if resource_type == 'dataset' and not no_files:
+            files = self.datasets._fetch_files(resource_id, output_dir=output_dir,
+                                               overwrite_existing=overwrite_existing,
+                                               include=include, exclude=exclude)
+            downloaded.extend(files)
+            if files:
+                logger.info(f"Downloaded {len(files)} file(s) to {output_dir}")
+
+        return downloaded
+
     #%% PROJECT METHODS (DEPRECATED)
 
     @_deprecated("client.projects.create()")

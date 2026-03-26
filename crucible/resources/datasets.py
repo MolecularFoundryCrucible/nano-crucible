@@ -323,42 +323,16 @@ class DatasetOperations(BaseResource):
                 return {}
             raise
 
-    def download(self, dsid: str, file_name: Optional[str] = None,
-                 output_dir: Optional[str] = 'crucible-downloads',
-                 overwrite_existing: bool = True,
-                 include: Optional[List[str]] = None,
-                 exclude: Optional[List[str]] = None) -> List[str]:
-        """Download dataset files.
+    def _fetch_files(self, dsid: str, output_dir: str,
+                     overwrite_existing: bool = True,
+                     include: Optional[List[str]] = None,
+                     exclude: Optional[List[str]] = None) -> List[str]:
+        """Download files for a dataset into output_dir. Returns list of downloaded paths."""
+        import tempfile
 
-        Args:
-            dsid (str): Dataset unique identifier
-            file_name (str, optional): File to download; supports regex fullmatch
-            output_dir (str, optional): Directory to save files (default: 'crucible-downloads/')
-            overwrite_existing (bool): Overwrite existing files (default: True)
-            include (list, optional): Glob patterns — only download matching files
-            exclude (list, optional): Glob patterns — skip matching files
-
-        Returns:
-            List[str]: List of downloaded file paths
-        """
-        # make sure the output directory is a directory not a file
-        try:
-            os.makedirs(output_dir, exist_ok=True)
-        except (OSError, PermissionError) as e:
-            logger.error(f"Failed to create output directory '{output_dir}': {e}")
-            raise OSError(f"Cannot create output directory '{output_dir}'. Please specify a valid directory path.") from e
-
-        # generate the signed urls
         download_urls = self.get_download_links(dsid)
 
-        # subset by regex file_name (existing behaviour)
-        if file_name is None:
-            files = download_urls
-        else:
-            file_regex = fr"({file_name})"
-            files = {k: v for k, v in download_urls.items() if re.fullmatch(file_regex, k)}
-
-        # apply glob include/exclude filters
+        files = download_urls
         if include:
             files = {k: v for k, v in files.items()
                      if any(fnmatch.fnmatch(k, p) for p in include)}
@@ -368,27 +342,66 @@ class DatasetOperations(BaseResource):
 
         downloads = []
         for fname, signed_url in files.items():
-            # set the local download location
             download_path = os.path.join(output_dir, fname)
-
-            # check if the file exists and should be skipped
             if overwrite_existing is False and os.path.exists(download_path):
+                downloads.append(download_path)
                 continue
-
-            # if there are subdirectories make them now
             os.makedirs(os.path.dirname(download_path), exist_ok=True)
-
-            # get the content (use session for retry/connection-pooling benefits)
             response = self._client._session.get(signed_url, stream=True)
-
-            # write to file
-            with open(download_path, 'wb') as f:
-                for chunk in response.iter_content(chunk_size=8192):
-                    f.write(chunk)
-
+            response.raise_for_status()
+            # Write to a temp file in the same directory, then atomically rename
+            # to avoid leaving corrupt files if the download is interrupted.
+            tmp_fd, tmp_path = tempfile.mkstemp(dir=os.path.dirname(download_path))
+            try:
+                with os.fdopen(tmp_fd, 'wb') as f:
+                    for chunk in response.iter_content(chunk_size=1024 * 1024):
+                        f.write(chunk)
+                os.replace(tmp_path, download_path)
+            except Exception:
+                os.unlink(tmp_path)
+                raise
             downloads.append(download_path)
 
         return downloads
+
+    def download(self, dsid: str, file_name: Optional[str] = None,
+                 output_dir: Optional[str] = 'crucible-downloads',
+                 overwrite_existing: bool = True,
+                 no_record: bool = False,
+                 include: Optional[List[str]] = None,
+                 exclude: Optional[List[str]] = None) -> List[str]:
+        """Download dataset files.
+
+        Args:
+            dsid (str): Dataset unique identifier
+            file_name (str, optional): Deprecated. Use include=['pattern'] with glob syntax.
+            output_dir (str, optional): Directory to save files (default: 'crucible-downloads/')
+            overwrite_existing (bool): Overwrite existing files (default: True)
+            include (list, optional): Glob patterns — only download matching files
+            exclude (list, optional): Glob patterns — skip matching files
+
+        Returns:
+            List[str]: List of downloaded file paths (including record.json)
+        """
+        if file_name is not None:
+            import warnings
+            warnings.warn(
+                "The 'file_name' parameter is deprecated. Use include=['pattern'] with glob "
+                "syntax instead (e.g. include=['*.h5']). Note: file_name used regex fullmatch; "
+                "glob syntax differs.",
+                DeprecationWarning, stacklevel=2,
+            )
+            # Apply regex filter now to produce an explicit filename list,
+            # then pass as include so client.download() doesn't need to know about regex.
+            download_urls = self.get_download_links(dsid)
+            file_regex = fr"({file_name})"
+            matched = [k for k in download_urls if re.fullmatch(file_regex, k)]
+            include = matched  # exact names are valid glob literals
+
+        return self._client.download(dsid, output_dir=output_dir, no_files=False,
+                                     no_record=no_record,
+                                     overwrite_existing=overwrite_existing,
+                                     include=include, exclude=exclude)
 
     def request_ingestion(self, dsid: str, file_to_upload: Optional[str] = None,
                          ingestion_class: Optional[str] = None,
@@ -644,7 +657,6 @@ class DatasetOperations(BaseResource):
         Returns:
             requests.Response: HTTP response from the update request
         """
-        import requests
         from ..utils import get_tz_isoformat
 
         if status == "complete":
@@ -656,9 +668,7 @@ class DatasetOperations(BaseResource):
             patch_json = {"id": reqid,
                         "status": status}
 
-        url = f"{self._client.api_url}/datasets/{dsid}/ingest/{reqid}"
-        response = requests.request("patch", url, json=patch_json, headers=self._client.headers)
-        return response
+        return self._request('patch', f'/datasets/{dsid}/ingest/{reqid}', json=patch_json)
 
     # Dataset Linking Methods
     def add_sample(self, dataset_id: str, sample_id: str) -> Dict:
