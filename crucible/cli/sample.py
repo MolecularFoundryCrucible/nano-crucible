@@ -334,7 +334,7 @@ def _execute_edit(args):
 
     try:
         client.samples.update(args.sample_id, **changes)
-        logger.info(f"✓ Sample updated")
+        term.header("Changes")
         term.diff(original, changes)
     except Exception as e:
         logger.error(f"Error updating sample: {e}")

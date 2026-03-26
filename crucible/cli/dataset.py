@@ -676,10 +676,10 @@ def _execute_edit(args):
                 args.dataset_id, edited_meta, overwrite=True
             )
 
-        logger.info("✓ Dataset updated")
         diff_updated = dict(field_changes)
         if meta_changed:
             diff_updated['scientific_metadata'] = edited_meta
+        term.header("Changes")
         term.diff(original, diff_updated)
     except Exception as e:
         logger.error(f"Error updating dataset: {e}")
