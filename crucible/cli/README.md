@@ -1,10 +1,12 @@
 # Crucible CLI Cheat Sheet
 
-The `crucible CLI` provides command-line access to Crucible. Commands follow the pattern:
+The `crucible CLI` provides command-line access to Crucible. Resource commands follow the pattern:
 
 ```
 crucible [--debug] <resource> <action> [options]
 ```
+
+Utility commands (`download`, `link`, `unlink`, `open`, `whoami`, `cache`) operate directly on IDs without a sub-action and auto-detect the resource type where relevant.
 
 Use `crucible <resource> <action> --help` for full option details on any command.
 
@@ -45,7 +47,7 @@ crucible --debug dataset list   # debug must precede the subcommand
 | `dataset get ID` | `-v` `--include-metadata` | Get dataset details; `-v` shows keywords and linked samples |
 | `dataset create -i FILE` | `-t TYPE` `-pid ID` `-n NAME` `-m TYPE` `--metadata JSON` `-k WORDS` `--session NAME` `--instrument NAME` `--public` `--mfid [ID]` `--dry-run` | Upload file(s) and create a dataset record |
 | `dataset update ID` | `--set KEY=VALUE` `--metadata JSON` `--overwrite` | Update model fields (`--set`) and/or scientific metadata (`--metadata`) |
-| `dataset download ID` | `--output-dir DIR` `--include PATTERN` `--exclude PATTERN` `-f FILE` `--overwrite` | Download dataset files with optional glob filters |
+| `dataset download ID` | `--output-dir DIR` `--include PATTERN` `--exclude PATTERN` `-f FILE` `--overwrite` | Download dataset files with optional glob filters (delegates to `crucible download`) |
 | `dataset search QUERY` | `--limit N` `-v` | Search datasets by scientific metadata |
 | `dataset link` | `-p PARENT_ID -c CHILD_ID` | Create a parent-child relationship between two datasets |
 | `dataset add-sample ID` | `-s SAMPLE_ID` | Link a sample to this dataset |
@@ -171,6 +173,35 @@ crucible cache show --top 20               # show 20 largest datasets
 crucible cache clear --older-than 30       # remove entries not accessed in 30+ days
 crucible cache clear --dataset DATASET_ID  # remove a single dataset
 crucible cache clear -y                    # wipe entire cache without prompt
+```
+
+---
+
+## Download
+
+Download any resource by ID — auto-detects whether it is a sample or dataset.
+Always saves the API record as `record.json`. For datasets, also downloads associated files unless `--no-files` is given.
+
+| Command | Key options | Description |
+|---------|-------------|-------------|
+| `download ID` | `-o DIR` `--no-files` `--no-record` `--no-overwrite` `--include PATTERN` `--exclude PATTERN` | Download a sample or dataset |
+
+```bash
+crucible download mf-abc123                          # record.json + all files → crucible-downloads/
+crucible download mf-abc123 --no-files               # record.json only, skip data files
+crucible download mf-abc123 --no-record              # data files only, skip record.json
+crucible download mf-abc123 --include "*.h5"         # only .h5 files
+crucible download mf-abc123 -o my-dir                # custom output directory
+crucible download mf-abc123 --exclude "*.log" "*.tmp"
+```
+
+Output structure (default `crucible-downloads/`):
+```
+crucible-downloads/
+  <mfid>/
+    record.json            ← API record + scientific metadata (one per resource, no overwrites)
+  <mfid>/file1.h5          ← dataset files at their server-side paths (already include mfid)
+  <mfid>/subdir/file2.dat
 ```
 
 ---
