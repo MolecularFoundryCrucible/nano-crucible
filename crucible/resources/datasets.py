@@ -8,6 +8,7 @@ Provides organized access to dataset-related API endpoints.
 
 import os
 import re
+import fnmatch
 import logging
 import subprocess
 import requests
@@ -86,7 +87,7 @@ class DatasetOperations(BaseResource):
         """Create a new dataset with metadata and optionally upload files.
 
         Args:
-            dataset: BaseDataset object with dataset details
+            dataset: Dataset object with dataset details
             scientific_metadata (dict, optional): Scientific metadata
             keywords (list, optional): Keywords to associate with dataset
             get_user_info_function (callable, optional): Function to get user info
@@ -99,9 +100,6 @@ class DatasetOperations(BaseResource):
             Dict: created_record, scientific_metadata_record, dsid, and optionally
                   uploaded_files and ingestion_request if files_to_upload provided
         """
-        from ..utils import get_tz_isoformat
-        from ..models import BaseDataset
-
         if scientific_metadata is None:
             scientific_metadata = {}
         if keywords is None:
@@ -123,9 +121,12 @@ class DatasetOperations(BaseResource):
             dataset_details['file_to_upload'] = main_file_cloud
             logger.debug(f'main_file_cloud={main_file_cloud}')
 
-        # add creation time
-        if dataset_details.get('creation_time') is None:
-            dataset_details['creation_time'] = get_tz_isoformat()
+            # auto-set timestamp from file modification time if not provided
+            if dataset_details.get('timestamp') is None:
+                import datetime
+                mtime = os.path.getmtime(main_file)
+                dataset_details['timestamp'] = datetime.datetime.fromtimestamp(
+                    mtime, tz=datetime.timezone.utc).isoformat()
 
         # get owner_id if orcid provided
         owner_orcid = dataset_details.get('owner_orcid')
@@ -314,63 +315,93 @@ class DatasetOperations(BaseResource):
                   where the key is the filepath of a file in the dataset,
                   and the value is the corresponding signed url.
         """
-        result = self._request('get', f"/datasets/{dsid}/download_links")
-        return result
+        try:
+            return self._request('get', f"/datasets/{dsid}/download_links")
+        except requests.exceptions.HTTPError as e:
+            if e.response is not None and e.response.status_code in (502, 503, 504):
+                logger.warning(f"Could not retrieve download links for {dsid}: {e.response.status_code} {e.response.reason}. The server may be temporarily unavailable.")
+                return {}
+            raise
+
+    def _fetch_files(self, dsid: str, output_dir: str,
+                     overwrite_existing: bool = True,
+                     include: Optional[List[str]] = None,
+                     exclude: Optional[List[str]] = None) -> List[str]:
+        """Download files for a dataset into output_dir. Returns list of downloaded paths."""
+        import tempfile
+
+        download_urls = self.get_download_links(dsid)
+
+        files = download_urls
+        if include:
+            files = {k: v for k, v in files.items()
+                     if any(fnmatch.fnmatch(k, p) for p in include)}
+        if exclude:
+            files = {k: v for k, v in files.items()
+                     if not any(fnmatch.fnmatch(k, p) for p in exclude)}
+
+        downloads = []
+        for fname, signed_url in files.items():
+            download_path = os.path.join(output_dir, fname)
+            if overwrite_existing is False and os.path.exists(download_path):
+                downloads.append(download_path)
+                continue
+            os.makedirs(os.path.dirname(download_path), exist_ok=True)
+            response = self._client._session.get(signed_url, stream=True)
+            response.raise_for_status()
+            # Write to a temp file in the same directory, then atomically rename
+            # to avoid leaving corrupt files if the download is interrupted.
+            tmp_fd, tmp_path = tempfile.mkstemp(dir=os.path.dirname(download_path))
+            try:
+                with os.fdopen(tmp_fd, 'wb') as f:
+                    for chunk in response.iter_content(chunk_size=1024 * 1024):
+                        f.write(chunk)
+                os.replace(tmp_path, download_path)
+            except Exception:
+                os.unlink(tmp_path)
+                raise
+            downloads.append(download_path)
+
+        return downloads
 
     def download(self, dsid: str, file_name: Optional[str] = None,
                  output_dir: Optional[str] = 'crucible-downloads',
-                 overwrite_existing: bool = True) -> List[str]:
+                 overwrite_existing: bool = True,
+                 no_record: bool = False,
+                 include: Optional[List[str]] = None,
+                 exclude: Optional[List[str]] = None) -> List[str]:
         """Download dataset files.
 
         Args:
             dsid (str): Dataset unique identifier
-            file_name (str, optional): File to download (If not provided, downloads all files)
+            file_name (str, optional): Deprecated. Use include=['pattern'] with glob syntax.
             output_dir (str, optional): Directory to save files (default: 'crucible-downloads/')
             overwrite_existing (bool): Overwrite existing files (default: True)
+            include (list, optional): Glob patterns — only download matching files
+            exclude (list, optional): Glob patterns — skip matching files
 
         Returns:
-            List[str]: List of downloaded file paths
+            List[str]: List of downloaded file paths (including record.json)
         """
-        # make sure the output directory is a directory not a file
-        try:
-            os.makedirs(output_dir, exist_ok=True)
-        except (OSError, PermissionError) as e:
-            logger.error(f"Failed to create output directory '{output_dir}': {e}")
-            raise OSError(f"Cannot create output directory '{output_dir}'. Please specify a valid directory path.") from e
-
-        # generate the signed urls
-        download_urls = self.get_download_links(dsid)
-
-        # subset the urls to the file specified or all files if not specified
-        if file_name is None:
-            files = download_urls
-        else:
+        if file_name is not None:
+            import warnings
+            warnings.warn(
+                "The 'file_name' parameter is deprecated. Use include=['pattern'] with glob "
+                "syntax instead (e.g. include=['*.h5']). Note: file_name used regex fullmatch; "
+                "glob syntax differs.",
+                DeprecationWarning, stacklevel=2,
+            )
+            # Apply regex filter now to produce an explicit filename list,
+            # then pass as include so client.download() doesn't need to know about regex.
+            download_urls = self.get_download_links(dsid)
             file_regex = fr"({file_name})"
-            files = {k: v for k, v in download_urls.items() if re.fullmatch(file_regex, k)}
+            matched = [k for k in download_urls if re.fullmatch(file_regex, k)]
+            include = matched  # exact names are valid glob literals
 
-        downloads = []
-        for fname, signed_url in files.items():
-            # set the local download location
-            download_path = os.path.join(output_dir, fname)
-
-            # check if the file exists and should be skipped
-            if overwrite_existing is False and os.path.exists(download_path):
-                continue
-
-            # if there are subdirectories make them now
-            os.makedirs(os.path.dirname(download_path), exist_ok=True)
-
-            # get the content
-            response = requests.get(signed_url, stream=True)
-
-            # write to file
-            with open(download_path, 'wb') as f:
-                for chunk in response.iter_content(chunk_size=8192):
-                    f.write(chunk)
-
-            downloads.append(download_path)
-
-        return downloads
+        return self._client.download(dsid, output_dir=output_dir, no_files=False,
+                                     no_record=no_record,
+                                     overwrite_existing=overwrite_existing,
+                                     include=include, exclude=exclude)
 
     def request_ingestion(self, dsid: str, file_to_upload: Optional[str] = None,
                          ingestion_class: Optional[str] = None,
@@ -408,7 +439,7 @@ class DatasetOperations(BaseResource):
             Use :meth:`create` with files_to_upload parameter instead.
 
         Args:
-            dataset: BaseDataset object with dataset details
+            dataset: Dataset object with dataset details
             files_to_upload (List[str]): List of file paths to upload
             scientific_metadata (dict, optional): Scientific metadata
             keywords (list, optional): Keywords to associate with dataset
@@ -626,7 +657,6 @@ class DatasetOperations(BaseResource):
         Returns:
             requests.Response: HTTP response from the update request
         """
-        import requests
         from ..utils import get_tz_isoformat
 
         if status == "complete":
@@ -638,11 +668,35 @@ class DatasetOperations(BaseResource):
             patch_json = {"id": reqid,
                         "status": status}
 
-        url = f"{self._client.api_url}/datasets/{dsid}/ingest/{reqid}"
-        response = requests.request("patch", url, json=patch_json, headers=self._client.headers)
-        return response
+        return self._request('patch', f'/datasets/{dsid}/ingest/{reqid}', json=patch_json)
 
     # Dataset Linking Methods
+    def add_sample(self, dataset_id: str, sample_id: str) -> Dict:
+        """Link a sample to a dataset.
+
+        Args:
+            dataset_id (str): Dataset unique identifier
+            sample_id (str): Sample unique identifier
+
+        Returns:
+            Dict: Information about the created link
+        """
+        return self._request('post', f"/datasets/{dataset_id}/samples/{sample_id}")
+
+    def remove_sample(self, dataset_id: str, sample_id: str) -> Dict:
+        """Remove the link between a dataset and a sample.
+
+        **Requires admin permissions.**
+
+        Args:
+            dataset_id (str): Dataset unique identifier
+            sample_id (str): Sample unique identifier
+
+        Returns:
+            Dict: Deletion confirmation
+        """
+        return self._request('delete', f"/datasets/{dataset_id}/samples/{sample_id}")
+
     def link_parent_child(self, parent_dataset_id: str, child_dataset_id: str) -> Dict:
         """Link a derived dataset to a parent dataset.
 

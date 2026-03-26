@@ -10,8 +10,10 @@ import time
 import requests
 import json
 import logging
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 from typing import Optional, List, Dict, Any, Union
-from .models import BaseDataset, Project
+from .models import Dataset, Project
 from .constants import DEFAULT_TIMEOUT, DEFAULT_LIMIT
 from .utils.deprecation import _deprecated, _removed
 
@@ -46,7 +48,20 @@ class CrucibleClient:
 
         self.api_url = api_url.rstrip('/')
         self.api_key = api_key
-        self.headers = {"Authorization": f"Bearer {api_key}"}
+
+        # Session with automatic retry on transient server/network errors
+        retry = Retry(
+            total            = 3,
+            backoff_factor   = 1,            # waits 1s, 2s, 4s between retries
+            status_forcelist = {429, 502, 503, 504},
+            allowed_methods  = False,        # retry all HTTP methods, including POST
+            raise_on_status  = False,        # let raise_for_status() handle final failure
+        )
+        adapter = HTTPAdapter(max_retries=retry)
+        self._session = requests.Session()
+        self._session.headers.update({"Authorization": f"Bearer {api_key}"})
+        self._session.mount("https://", adapter)
+        self._session.mount("http://", adapter)
 
         # Initialize resource operations
         from .resources import DatasetOperations, SampleOperations, ProjectOperations, UserOperations, InstrumentOperations
@@ -73,9 +88,24 @@ class CrucibleClient:
             requests.exceptions.Timeout: For timeout errors
         """
         url = f"{self.api_url}/{endpoint.lstrip('/')}"
-        kwargs['headers'] = {**kwargs.get('headers', {}), **self.headers}
-        response = requests.request(method, url, timeout=DEFAULT_TIMEOUT, **kwargs)
-        response.raise_for_status()
+        logger.debug(f"{method.upper()} {url}")
+        response = self._session.request(method, url, timeout=DEFAULT_TIMEOUT, **kwargs)
+        logger.debug(f"Status: {response.status_code}")
+        logger.debug(f"Response: {response.text}")
+        if not response.ok:
+            # Try to surface the server's error detail from the response body
+            detail = None
+            try:
+                body = response.json()
+                detail = body.get("detail") or body.get("message") or body.get("error")
+            except (json.JSONDecodeError, ValueError, AttributeError):
+                pass
+            if detail:
+                raise requests.exceptions.HTTPError(
+                    f"{response.status_code} {response.reason}: {detail}",
+                    response=response,
+                )
+            response.raise_for_status()
         try:
             if response.content:
                 return response.json()
@@ -131,7 +161,16 @@ class CrucibleClient:
             raise ValueError(f"Unsupported request_type: {request_type}")
     
     #%% GENERIC METHODS
-    
+
+    def whoami(self) -> Dict:
+        """Return account info for the current API key.
+
+        Returns:
+            Dict: access_group_name (ORCID), access_group_ids, and user_info
+                  with full user profile fields.
+        """
+        return self._request('get', '/account')
+
     def get_resource_type(self, resource_id: str) -> dict:
         """
         Determine the type of a resource.
@@ -226,18 +265,113 @@ class CrucibleClient:
         # Mixed: dataset and sample
         elif parent_type == "dataset" and child_type == "sample":
             logger.info(f"Linking sample {child_id} to dataset {parent_id}")
-            return self.samples.add_to_dataset(parent_id, child_id)
+            return self.datasets.add_sample(parent_id, child_id)
 
         elif parent_type == "sample" and child_type == "dataset":
             logger.info(f"Linking sample {parent_id} to dataset {child_id}")
-            return self.samples.add_to_dataset(child_id, parent_id)
+            return self.datasets.add_sample(child_id, parent_id)
 
         else:
             raise ValueError(
                 f"Cannot link resources: parent is {parent_type}, child is {child_type}. "
                 f"Valid combinations: dataset-dataset, sample-sample, or dataset-sample."
             )
+
+    def unlink(self, id_a: str, id_b: str) -> Dict:
+        """Unlink two resources with automatic type detection.
+
+        Only dataset-sample unlinking is supported by the API.
+        Parent-child relationships (dataset-dataset, sample-sample) cannot
+        be removed via the API.
+
+        Args:
+            id_a (str): First resource unique identifier (dataset or sample)
+            id_b (str): Second resource unique identifier (dataset or sample)
+
+        Returns:
+            Dict: Deletion confirmation
+
+        Raises:
+            ValueError: If the combination is not a dataset-sample pair, or if
+                        the resource types cannot be determined.
+        """
+        type_a = self.get_resource_type(id_a)
+        type_b = self.get_resource_type(id_b)
+
+        if type_a == "dataset" and type_b == "sample":
+            logger.info(f"Unlinking sample {id_b} from dataset {id_a}")
+            return self.datasets.remove_sample(id_a, id_b)
+
+        elif type_a == "sample" and type_b == "dataset":
+            logger.info(f"Unlinking sample {id_a} from dataset {id_b}")
+            return self.datasets.remove_sample(id_b, id_a)
+
+        elif type_a == type_b and type_a in ("dataset", "sample"):
+            raise ValueError(
+                f"Unlinking {type_a}-{type_b} parent-child relationships is not "
+                f"supported by the API. Use the API to manage these directly."
+            )
+        else:
+            raise ValueError(
+                f"Cannot unlink resources: {id_a} is {type_a}, {id_b} is {type_b}. "
+                f"Only dataset-sample unlinking is supported."
+            )
     
+    def download(self, resource_id: str, output_dir: str = 'crucible-downloads',
+                 no_files: bool = False, no_record: bool = False,
+                 overwrite_existing: bool = True,
+                 include: Optional[List[str]] = None,
+                 exclude: Optional[List[str]] = None) -> List[str]:
+        """Download a resource record and, for datasets, its files.
+
+        Args:
+            resource_id (str): Sample or dataset unique identifier
+            output_dir (str): Directory to save files (default: 'crucible-downloads')
+            no_files (bool): Skip file download, save record JSON only
+            no_record (bool): Skip saving record.json
+            overwrite_existing (bool): Overwrite existing files (default: True)
+            include (list, optional): Glob patterns — only download matching files
+            exclude (list, optional): Glob patterns — skip matching files
+
+        Returns:
+            List[str]: Paths of all downloaded files (record.json + data files)
+        """
+        import os
+
+        resource_type = self.get_resource_type(resource_id)
+        if resource_type == 'dataset':
+            record = self.datasets.get(resource_id, include_metadata=True)
+        elif resource_type == 'sample':
+            record = self.samples.get(resource_id)
+        else:
+            raise ValueError(f"Cannot download resource of type: {resource_type}")
+
+        try:
+            os.makedirs(output_dir, exist_ok=True)
+        except (OSError, PermissionError) as e:
+            raise OSError(f"Cannot create output directory '{output_dir}'.") from e
+
+        downloaded = []
+
+        if not no_record:
+            record_dir = os.path.join(output_dir, resource_id)
+            os.makedirs(record_dir, exist_ok=True)
+            json_path = os.path.join(record_dir, 'record.json')
+            with open(json_path, 'w') as f:
+                json.dump(record, f, indent=2)
+            logger.info(f"Saved record to {json_path}")
+            downloaded.append(json_path)
+
+        if resource_type == 'dataset' and not no_files:
+            files = self.datasets._fetch_files(resource_id, output_dir=output_dir,
+                                               overwrite_existing=overwrite_existing,
+                                               include=include, exclude=exclude)
+            downloaded.extend(files)
+            if files:
+                logger.info(f"Downloaded {len(files)} file(s) to {output_dir}")
+
+        return downloaded
+
     #%% PROJECT METHODS (DEPRECATED)
 
     @_deprecated("client.projects.create()")
@@ -348,7 +482,7 @@ class CrucibleClient:
     
     @_deprecated("client.datasets.create()")
     def create_new_dataset(self,
-                            dataset: BaseDataset,
+                            dataset: Dataset,
                             scientific_metadata: Optional[dict] = {},
                             keywords: List[str] = [],
                             get_user_info_function = None,
@@ -362,7 +496,7 @@ class CrucibleClient:
 
     @_deprecated("client.datasets.create()")
     def create_new_dataset_from_files(self,
-                                     dataset: BaseDataset,
+                                     dataset: Dataset,
                                      files_to_upload: List[str],
                                      scientific_metadata: Optional[dict] = None,
                                      keywords: List[str] = [],

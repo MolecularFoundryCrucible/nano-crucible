@@ -11,7 +11,7 @@ import json
 import logging
 import socket
 from pathlib import Path
-from crucible import BaseDataset
+from crucible import Dataset
 
 logger = logging.getLogger(__name__)
 
@@ -234,10 +234,10 @@ class BaseParser:
         Uses instance variables for all dataset properties.
 
         Returns:
-            BaseDataset: Crucible dataset object
+            Dataset: Crucible dataset object
         """
 
-        crucible_dataset = BaseDataset(
+        crucible_dataset = Dataset(
             unique_id      = self.mfid,
             measurement    = self.measurement,
             project_id     = self.project_id,

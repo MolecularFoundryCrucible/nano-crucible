@@ -35,7 +35,7 @@ dependencies = [
     "requests>=2.25.0",
     "pytz>=2021.1",
     "ipywidgets",
-    "pydantic",
+    "pydantic>=2.0",
     "python-dotenv",
     "argcomplete>=2.0.0",
     "platformdirs>=2.5.0",

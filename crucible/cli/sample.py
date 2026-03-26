@@ -8,7 +8,6 @@ Provides sample-related operations: list, get, create, link, etc.
 
 import sys
 import logging
-import json
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +47,8 @@ def register_subcommand(subparsers):
     _register_list_parents(sample_subparsers)
     _register_list_children(sample_subparsers)
     _register_list_datasets(sample_subparsers)
-    _register_link_dataset(sample_subparsers)
+    _register_add_dataset(sample_subparsers)
+    _register_remove_dataset(sample_subparsers)
 
 
 def _register_list(subparsers):
@@ -177,11 +177,11 @@ Examples:
 
 
 def _sample_updatable_fields():
-    """Return sorted list of fields that can be updated on a sample (derived from BaseSample model)."""
-    from ..models import BaseSample
+    """Return sorted list of fields that can be updated on a sample (derived from Sample model)."""
+    from ..models import Sample
     # Exclude server-managed / identifier fields
-    _readonly = {'unique_id', 'owner_user_id'}
-    return sorted(set(BaseSample.model_fields.keys()) - _readonly)
+    _readonly = {'unique_id', 'owner_user_id', 'creation_time', 'modification_time'}
+    return sorted(set(Sample.model_fields.keys()) - _readonly)
 
 
 def _register_update(subparsers):
@@ -255,7 +255,6 @@ def _execute_update(args):
         logger.info(f"✓ Sample {args.sample_id} updated")
         if getattr(args, "debug", False):
             logger.debug(f"Updated fields: {list(updates.keys())}")
-            logger.debug(f"Result: {json.dumps(result, indent=2)}")
 
     except Exception as e:
         logger.error(f"Error updating sample: {e}")
@@ -296,34 +295,21 @@ def _register_link(subparsers):
     parser.set_defaults(func=_execute_link)
 
 
-def _register_link_dataset(subparsers):
-    """Register the 'sample link-dataset' subcommand."""
+def _register_add_dataset(subparsers):
+    """Register the 'sample add-dataset' subcommand."""
     parser = subparsers.add_parser(
-        'link-dataset',
+        'add-dataset',
         help='Link a sample to a dataset',
-        description='Associate a dataset with a sample'
+        description='Associate a dataset with a sample',
+        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+    crucible sample add-dataset SAMPLE_ID --dataset DATASET_ID
+"""
     )
-
-    parser.add_argument(
-        '-s', '--sample',
-        required=True,
-        metavar='SAMPLE_ID',
-        help='Sample ID'
-    )
-
-    parser.add_argument(
-        '-d', '--dataset',
-        required=True,
-        metavar='DATASET_ID',
-        help='Dataset ID'
-    )
-
-    parser.add_argument(
-        '-v', '--verbose',
-        action='store_true',
-        help='Verbose output'
-    )
-
+    parser.add_argument('sample_id', metavar='SAMPLE_ID', help='Sample unique ID')
+    parser.add_argument('-d', '--dataset', required=True, metavar='DATASET_ID', help='Dataset ID')
+    parser.add_argument('-v', '--verbose', action='store_true', help='Verbose output')
     parser.set_defaults(func=_execute_link_dataset)
 
 
@@ -419,6 +405,8 @@ def _execute_list(args):
                     logger.info(f"  Name: {sample['sample_name']}")
                 if sample.get('creation_time'):
                     logger.info(f"  Created: {sample['creation_time']}")
+                if sample.get('timestamp'):
+                    logger.info(f"  Timestamp: {sample['timestamp']}")
                 logger.info("")
 
     except Exception as e:
@@ -448,8 +436,12 @@ def _execute_get(args):
             logger.info(f"Type:        {sample['sample_type']}")
         if sample.get('project_id'):
             logger.info(f"Project:     {sample['project_id']}")
-        if sample.get('date_created'):
-            logger.info(f"Created:     {sample['date_created']}")
+        if sample.get('creation_time'):
+            logger.info(f"Created:     {sample['creation_time']}")
+        if sample.get('modification_time'):
+            logger.info(f"Modified:    {sample['modification_time']}")
+        if sample.get('timestamp'):
+            logger.info(f"Timestamp:   {sample['timestamp']}")
         if sample.get('owner_orcid'):
             logger.info(f"Owner:       {sample['owner_orcid']}")
         if sample.get('description'):
@@ -494,9 +486,6 @@ def _execute_create(args):
         logger.info(f"Sample ID: {result.get('unique_id', 'N/A')}")
         logger.info(f"Name: {result.get('sample_name', 'N/A')}")
 
-        if getattr(args, "debug", False):
-            logger.debug(f"\nFull result: {json.dumps(result, indent=2)}")
-
     except Exception as e:
         logger.error(f"Error creating sample: {e}")
         if getattr(args, "debug", False):
@@ -513,8 +502,6 @@ def _execute_link(args):
         result = client.samples.link(args.parent, args.child)
 
         logger.info(f"✓ Linked sample {args.child} as child of {args.parent}")
-        if getattr(args, "debug", False):
-            logger.debug(f"Result: {result}")
 
     except Exception as e:
         logger.error(f"Error linking samples: {e}")
@@ -606,18 +593,49 @@ def _execute_list_datasets(args):
 
 
 def _execute_link_dataset(args):
-    """Execute the 'sample link-dataset' subcommand."""
+    """Execute the 'sample add-dataset' subcommand."""
     from crucible.client import CrucibleClient
     try:
         client = CrucibleClient()
-        result = client.samples.add_to_dataset(args.sample, args.dataset)
+        sample_id = args.sample_id
+        result = client.samples.add_dataset(sample_id, args.dataset)
 
-        logger.info(f"✓ Linked dataset {args.dataset} to sample {args.sample}")
-        if getattr(args, "debug", False):
-            logger.debug(f"Result: {result}")
+        logger.info(f"✓ Linked sample {sample_id} to dataset {args.dataset}")
 
     except Exception as e:
         logger.error(f"Error linking dataset to sample: {e}")
+        if getattr(args, "debug", False):
+            import traceback
+            traceback.print_exc()
+        sys.exit(1)
+
+
+def _register_remove_dataset(subparsers):
+    """Register the 'sample remove-dataset' subcommand."""
+    parser = subparsers.add_parser(
+        'remove-dataset',
+        help='Unlink a dataset from a sample',
+        description='Remove the association between a sample and a dataset (requires admin)',
+        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+    crucible sample remove-dataset SAMPLE_ID --dataset DATASET_ID
+"""
+    )
+    parser.add_argument('sample_id', metavar='SAMPLE_ID', help='Sample unique ID')
+    parser.add_argument('-d', '--dataset', required=True, metavar='DATASET_ID', help='Dataset ID to unlink')
+    parser.set_defaults(func=_execute_remove_dataset)
+
+
+def _execute_remove_dataset(args):
+    """Execute the 'sample remove-dataset' subcommand."""
+    from crucible.client import CrucibleClient
+    try:
+        client = CrucibleClient()
+        client.samples.remove_dataset(args.sample_id, args.dataset)
+        logger.info(f"✓ Unlinked sample {args.sample_id} from dataset {args.dataset}")
+    except Exception as e:
+        logger.error(f"Error unlinking dataset from sample: {e}")
         if getattr(args, "debug", False):
             import traceback
             traceback.print_exc()
