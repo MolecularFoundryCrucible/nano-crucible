@@ -342,8 +342,8 @@ class DatasetOperations(BaseResource):
             # if there are subdirectories make them now
             os.makedirs(os.path.dirname(download_path), exist_ok=True)
 
-            # get the content
-            response = requests.get(signed_url, stream=True)
+            # get the content (use session for retry/connection-pooling benefits)
+            response = self._client._session.get(signed_url, stream=True)
 
             # write to file
             with open(download_path, 'wb') as f:
