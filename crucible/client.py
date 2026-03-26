@@ -10,6 +10,8 @@ import time
 import requests
 import json
 import logging
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 from typing import Optional, List, Dict, Any, Union
 from .models import Dataset, Project
 from .constants import DEFAULT_TIMEOUT, DEFAULT_LIMIT
@@ -48,6 +50,19 @@ class CrucibleClient:
         self.api_key = api_key
         self.headers = {"Authorization": f"Bearer {api_key}"}
 
+        # Session with automatic retry on transient server/network errors
+        retry = Retry(
+            total=3,
+            backoff_factor=1,            # waits 1s, 2s, 4s between retries
+            status_forcelist={429, 502, 503, 504},
+            allowed_methods=False,       # retry all HTTP methods, including POST
+            raise_on_status=False,       # let raise_for_status() handle final failure
+        )
+        adapter = HTTPAdapter(max_retries=retry)
+        self._session = requests.Session()
+        self._session.mount("https://", adapter)
+        self._session.mount("http://", adapter)
+
         # Initialize resource operations
         from .resources import DatasetOperations, SampleOperations, ProjectOperations, UserOperations, InstrumentOperations
         self.datasets = DatasetOperations(self)
@@ -75,10 +90,23 @@ class CrucibleClient:
         url = f"{self.api_url}/{endpoint.lstrip('/')}"
         kwargs['headers'] = {**kwargs.get('headers', {}), **self.headers}
         logger.debug(f"{method.upper()} {url}")
-        response = requests.request(method, url, timeout=DEFAULT_TIMEOUT, **kwargs)
+        response = self._session.request(method, url, timeout=DEFAULT_TIMEOUT, **kwargs)
         logger.debug(f"Status: {response.status_code}")
         logger.debug(f"Response: {response.text}")
-        response.raise_for_status()
+        if not response.ok:
+            # Try to surface the server's error detail from the response body
+            detail = None
+            try:
+                body = response.json()
+                detail = body.get("detail") or body.get("message") or body.get("error")
+            except (json.JSONDecodeError, ValueError, AttributeError):
+                pass
+            if detail:
+                raise requests.exceptions.HTTPError(
+                    f"{response.status_code} {response.reason}: {detail}",
+                    response=response,
+                )
+            response.raise_for_status()
         try:
             if response.content:
                 return response.json()

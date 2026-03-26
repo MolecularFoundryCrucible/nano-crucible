@@ -5,7 +5,7 @@ Package-wide constants for the Crucible API client.
 """
 
 # API request defaults
-DEFAULT_TIMEOUT = 10  # seconds
+DEFAULT_TIMEOUT = (5, 30)  # (connect timeout, read timeout) in seconds
 DEFAULT_LIMIT = 100   # maximum results to return
 
 AVAILABLE_INGESTORS = [

@@ -656,6 +656,18 @@ Examples:
     # Download a single file
     crucible dataset download DATASET_ID -f results.csv
 
+    # Only download CSV files
+    crucible dataset download DATASET_ID --include "*.csv"
+
+    # Download everything except raw files
+    crucible dataset download DATASET_ID --exclude "*.raw"
+
+    # Include multiple patterns
+    crucible dataset download DATASET_ID --include "*.csv" --include "*.json"
+
+    # Combine include and exclude
+    crucible dataset download DATASET_ID --include "data/*" --exclude "*.tmp"
+
     # Force re-download of files that already exist locally
     crucible dataset download DATASET_ID --overwrite
 """
@@ -683,6 +695,20 @@ Examples:
         default=None,
         metavar='FILE',
         help='Download a specific file only (supports regex)'
+    )
+
+    parser.add_argument(
+        '--include',
+        action='append',
+        metavar='PATTERN',
+        help='Only download files matching this glob pattern (repeatable)'
+    )
+
+    parser.add_argument(
+        '--exclude',
+        action='append',
+        metavar='PATTERN',
+        help='Skip files matching this glob pattern (repeatable)'
     )
 
     parser.add_argument(
@@ -714,7 +740,9 @@ def _execute_download(args):
             args.dataset_id,
             file_name=args.file_name,
             output_dir=output_dir,
-            overwrite_existing=args.overwrite
+            overwrite_existing=args.overwrite,
+            include=args.include,
+            exclude=args.exclude,
         )
 
         if not downloaded:

@@ -45,7 +45,7 @@ crucible --debug dataset list   # debug must precede the subcommand
 | `dataset get ID` | `-v` `--include-metadata` | Get dataset details; `-v` shows keywords and linked samples |
 | `dataset create -i FILE` | `-t TYPE` `-pid ID` `-n NAME` `-m TYPE` `--metadata JSON` `-k WORDS` `--session NAME` `--instrument NAME` `--public` `--mfid [ID]` `--dry-run` | Upload file(s) and create a dataset record |
 | `dataset update ID` | `--set KEY=VALUE` `--metadata JSON` `--overwrite` | Update model fields (`--set`) and/or scientific metadata (`--metadata`) |
-| `dataset download ID` | `--output-dir DIR` | Download dataset files |
+| `dataset download ID` | `--output-dir DIR` `--include PATTERN` `--exclude PATTERN` `-f FILE` `--overwrite` | Download dataset files with optional glob filters |
 | `dataset search QUERY` | `--limit N` `-v` | Search datasets by scientific metadata |
 | `dataset link` | `-p PARENT_ID -c CHILD_ID` | Create a parent-child relationship between two datasets |
 | `dataset add-sample ID` | `-s SAMPLE_ID` | Link a sample to this dataset |
@@ -155,6 +155,23 @@ crucible project list-users my-project
 | `config edit` | Open config file in editor |
 
 **Config keys:** `api_key`, `api_url`, `cache_dir`, `graph_explorer_url`, `current_project`
+
+---
+
+## Cache
+
+| Command | Key options | Description |
+|---------|-------------|-------------|
+| `cache show` | `--top N` | Show cache path, total size, and top-N largest datasets |
+| `cache clear` | `-y` `--older-than DAYS` `--dataset ID` | Delete cached files (all, by age, or a single dataset) |
+
+```bash
+crucible cache show                        # full breakdown
+crucible cache show --top 20               # show 20 largest datasets
+crucible cache clear --older-than 30       # remove entries not accessed in 30+ days
+crucible cache clear --dataset DATASET_ID  # remove a single dataset
+crucible cache clear -y                    # wipe entire cache without prompt
+```
 
 ---
 

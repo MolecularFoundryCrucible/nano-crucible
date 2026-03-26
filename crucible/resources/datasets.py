@@ -8,6 +8,7 @@ Provides organized access to dataset-related API endpoints.
 
 import os
 import re
+import fnmatch
 import logging
 import subprocess
 import requests
@@ -314,19 +315,28 @@ class DatasetOperations(BaseResource):
                   where the key is the filepath of a file in the dataset,
                   and the value is the corresponding signed url.
         """
-        result = self._request('get', f"/datasets/{dsid}/download_links")
-        return result
+        try:
+            return self._request('get', f"/datasets/{dsid}/download_links")
+        except requests.exceptions.HTTPError as e:
+            if e.response is not None and e.response.status_code in (502, 503, 504):
+                logger.warning(f"Could not retrieve download links for {dsid}: {e.response.status_code} {e.response.reason}. The server may be temporarily unavailable.")
+                return {}
+            raise
 
     def download(self, dsid: str, file_name: Optional[str] = None,
                  output_dir: Optional[str] = 'crucible-downloads',
-                 overwrite_existing: bool = True) -> List[str]:
+                 overwrite_existing: bool = True,
+                 include: Optional[List[str]] = None,
+                 exclude: Optional[List[str]] = None) -> List[str]:
         """Download dataset files.
 
         Args:
             dsid (str): Dataset unique identifier
-            file_name (str, optional): File to download (If not provided, downloads all files)
+            file_name (str, optional): File to download; supports regex fullmatch
             output_dir (str, optional): Directory to save files (default: 'crucible-downloads/')
             overwrite_existing (bool): Overwrite existing files (default: True)
+            include (list, optional): Glob patterns — only download matching files
+            exclude (list, optional): Glob patterns — skip matching files
 
         Returns:
             List[str]: List of downloaded file paths
@@ -341,12 +351,20 @@ class DatasetOperations(BaseResource):
         # generate the signed urls
         download_urls = self.get_download_links(dsid)
 
-        # subset the urls to the file specified or all files if not specified
+        # subset by regex file_name (existing behaviour)
         if file_name is None:
             files = download_urls
         else:
             file_regex = fr"({file_name})"
             files = {k: v for k, v in download_urls.items() if re.fullmatch(file_regex, k)}
+
+        # apply glob include/exclude filters
+        if include:
+            files = {k: v for k, v in files.items()
+                     if any(fnmatch.fnmatch(k, p) for p in include)}
+        if exclude:
+            files = {k: v for k, v in files.items()
+                     if not any(fnmatch.fnmatch(k, p) for p in exclude)}
 
         downloads = []
         for fname, signed_url in files.items():
@@ -360,8 +378,8 @@ class DatasetOperations(BaseResource):
             # if there are subdirectories make them now
             os.makedirs(os.path.dirname(download_path), exist_ok=True)
 
-            # get the content
-            response = requests.get(signed_url, stream=True)
+            # get the content (use session for retry/connection-pooling benefits)
+            response = self._client._session.get(signed_url, stream=True)
 
             # write to file
             with open(download_path, 'wb') as f:
