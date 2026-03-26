@@ -165,6 +165,7 @@ def register_subcommand(subparsers):
     _register_get(dataset_subparsers)
     _register_create(dataset_subparsers)
     _register_update(dataset_subparsers)
+    _register_edit(dataset_subparsers)
     _register_link(dataset_subparsers)
     _register_add_sample(dataset_subparsers)
     _register_remove_sample(dataset_subparsers)
@@ -592,6 +593,96 @@ def _execute_update(args):
     except Exception as e:
         logger.error(f"Error updating dataset: {e}")
         if getattr(args, "debug", False):
+            import traceback
+            traceback.print_exc()
+        sys.exit(1)
+
+
+def _register_edit(subparsers):
+    """Register the 'dataset edit' subcommand."""
+    parser = subparsers.add_parser(
+        'edit',
+        help='Edit dataset fields interactively',
+        description='Open dataset fields in $EDITOR and update on save. Scientific metadata is included as a top-level key.',
+        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+    crucible dataset edit DATASET_ID
+    EDITOR=vim crucible dataset edit DATASET_ID
+"""
+    )
+    did_arg = parser.add_argument(
+        'dataset_id',
+        metavar='DATASET_ID',
+        help='Dataset unique ID'
+    )
+    if ARGCOMPLETE_AVAILABLE:
+        did_arg.completer = argcomplete.completers.SuppressCompleter()
+    parser.add_argument('-v', '--verbose', action='store_true', help='Verbose output')
+    parser.set_defaults(func=_execute_edit)
+
+
+def _execute_edit(args):
+    """Execute the 'dataset edit' subcommand."""
+    from crucible.client import CrucibleClient
+
+    try:
+        client = CrucibleClient()
+        dataset = client.datasets.get(args.dataset_id, include_metadata=True)
+    except Exception as e:
+        logger.error(f"Error fetching dataset: {e}")
+        sys.exit(1)
+
+    if dataset is None:
+        logger.error(f"Dataset not found: {args.dataset_id}")
+        sys.exit(1)
+
+    valid_fields = set(_dataset_updatable_fields())
+    original_fields = {k: dataset.get(k) for k in sorted(valid_fields)}
+    original_meta = dataset.get('scientific_metadata') or {}
+
+    original = dict(original_fields)
+    original['scientific_metadata'] = original_meta
+
+    try:
+        edited = term.open_editor_json(original)
+    except (RuntimeError, ValueError) as e:
+        logger.error(str(e))
+        sys.exit(1)
+
+    if edited is None:
+        logger.info("No changes.")
+        return
+
+    # Diff regular fields
+    field_changes = {
+        k: v for k, v in edited.items()
+        if k in valid_fields and v != original_fields.get(k)
+    }
+
+    # Diff scientific metadata
+    edited_meta = edited.get('scientific_metadata')
+    meta_changed = isinstance(edited_meta, dict) and edited_meta != original_meta
+
+    if not field_changes and not meta_changed:
+        logger.info("No changes.")
+        return
+
+    try:
+        if field_changes:
+            client.datasets.update(args.dataset_id, **field_changes)
+        if meta_changed:
+            client.datasets.update_scientific_metadata(
+                args.dataset_id, edited_meta, overwrite=True
+            )
+
+        changed = list(field_changes.keys()) + (['scientific_metadata'] if meta_changed else [])
+        logger.info(f"✓ Dataset updated ({', '.join(changed)})")
+        result = client.datasets.get(args.dataset_id, include_metadata=meta_changed)
+        _show_dataset(result, client, verbose=getattr(args, 'verbose', False))
+    except Exception as e:
+        logger.error(f"Error updating dataset: {e}")
+        if getattr(args, 'debug', False):
             import traceback
             traceback.print_exc()
         sys.exit(1)

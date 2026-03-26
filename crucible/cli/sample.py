@@ -45,6 +45,7 @@ def register_subcommand(subparsers):
     _register_get(sample_subparsers)
     _register_create(sample_subparsers)
     _register_update(sample_subparsers)
+    _register_edit(sample_subparsers)
     _register_link(sample_subparsers)
     _register_list_parents(sample_subparsers)
     _register_list_children(sample_subparsers)
@@ -268,6 +269,76 @@ def _execute_update(args):
     except Exception as e:
         logger.error(f"Error updating sample: {e}")
         if getattr(args, "debug", False):
+            import traceback
+            traceback.print_exc()
+        sys.exit(1)
+
+
+def _register_edit(subparsers):
+    """Register the 'sample edit' subcommand."""
+    parser = subparsers.add_parser(
+        'edit',
+        help='Edit sample fields interactively',
+        description='Open sample fields in $EDITOR and update on save',
+        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+    crucible sample edit SAMPLE_ID
+    EDITOR=vim crucible sample edit SAMPLE_ID
+"""
+    )
+    sample_id_arg = parser.add_argument(
+        'sample_id',
+        metavar='SAMPLE_ID',
+        help='Sample unique ID'
+    )
+    if ARGCOMPLETE_AVAILABLE:
+        sample_id_arg.completer = argcomplete.completers.SuppressCompleter()
+    parser.add_argument('-v', '--verbose', action='store_true', help='Verbose output')
+    parser.set_defaults(func=_execute_edit)
+
+
+def _execute_edit(args):
+    """Execute the 'sample edit' subcommand."""
+    from crucible.client import CrucibleClient
+
+    try:
+        client = CrucibleClient()
+        sample = client.samples.get(args.sample_id)
+    except Exception as e:
+        logger.error(f"Error fetching sample: {e}")
+        sys.exit(1)
+
+    if sample is None:
+        logger.error(f"Sample not found: {args.sample_id}")
+        sys.exit(1)
+
+    valid_fields = set(_sample_updatable_fields())
+    original = {k: sample.get(k) for k in sorted(valid_fields)}
+
+    try:
+        edited = term.open_editor_json(original)
+    except (RuntimeError, ValueError) as e:
+        logger.error(str(e))
+        sys.exit(1)
+
+    if edited is None:
+        logger.info("No changes.")
+        return
+
+    changes = {k: v for k, v in edited.items() if k in valid_fields and v != original.get(k)}
+
+    if not changes:
+        logger.info("No changes.")
+        return
+
+    try:
+        result = client.samples.update(args.sample_id, **changes)
+        logger.info(f"✓ Sample updated ({', '.join(changes.keys())})")
+        _show_sample(result, client, verbose=getattr(args, 'verbose', False))
+    except Exception as e:
+        logger.error(f"Error updating sample: {e}")
+        if getattr(args, 'debug', False):
             import traceback
             traceback.print_exc()
         sys.exit(1)

@@ -18,9 +18,10 @@ from . import term
 def get_default_editor():
     """Get the best available editor for the current platform."""
     import shutil
+    from crucible.config import config as _cfg
 
-    # Check environment variables first (user preference always wins)
-    editor = os.environ.get('EDITOR') or os.environ.get('VISUAL')
+    # Priority: crucible config > $VISUAL > $EDITOR > platform defaults
+    editor = _cfg.editor or os.environ.get('VISUAL') or os.environ.get('EDITOR')
     if editor:
         return editor
 
@@ -80,6 +81,7 @@ Configuration keys:
     cache_dir           Directory for caching downloaded data
     graph_explorer_url  Crucible Graph Explorer URL (optional)
     current_project     Default project ID (optional)
+    editor              Preferred editor for interactive edit commands (optional)
 
 Priority order (highest to lowest):
     1. Environment variables (CRUCIBLE_API_KEY, CRUCIBLE_API_URL, etc.)
@@ -120,7 +122,7 @@ Priority order (highest to lowest):
     )
     get_parser.add_argument(
         'key',
-        choices=['api_key', 'api_url', 'cache_dir', 'graph_explorer_url', 'current_project'],
+        choices=['api_key', 'api_url', 'cache_dir', 'graph_explorer_url', 'current_project', 'editor'],
         help='Configuration key to retrieve'
     )
     get_parser.set_defaults(func=cmd_get)
@@ -132,7 +134,7 @@ Priority order (highest to lowest):
     )
     set_parser.add_argument(
         'key',
-        choices=['api_key', 'api_url', 'cache_dir', 'graph_explorer_url', 'current_project'],
+        choices=['api_key', 'api_url', 'cache_dir', 'graph_explorer_url', 'current_project', 'editor'],
         help='Configuration key to set'
     )
     set_parser.add_argument(
@@ -256,6 +258,7 @@ def cmd_show(args):
     _p("cache_dir",           config.cache_dir)
     _p("graph_explorer_url",  config.graph_explorer_url)
     _p("current_project",     config.current_project)
+    _p("editor",              config.editor)
 
     env_overrides = {
         'CRUCIBLE_API_KEY':            os.environ.get('CRUCIBLE_API_KEY'),
@@ -263,6 +266,7 @@ def cmd_show(args):
         'CRUCIBLE_CACHE_DIR':          os.environ.get('CRUCIBLE_CACHE_DIR'),
         'CRUCIBLE_GRAPH_EXPLORER_URL': os.environ.get('CRUCIBLE_GRAPH_EXPLORER_URL'),
         'CRUCIBLE_CURRENT_PROJECT':    os.environ.get('CRUCIBLE_CURRENT_PROJECT'),
+        'CRUCIBLE_EDITOR':             os.environ.get('CRUCIBLE_EDITOR'),
     }
     active = {k: v for k, v in env_overrides.items() if v is not None}
     if active:
@@ -289,6 +293,8 @@ def cmd_get(args):
             value = config.graph_explorer_url
         elif key == 'current_project':
             value = config.current_project
+        elif key == 'editor':
+            value = config.editor
         else:
             print(f"Error: Unknown config key: {key}", file=sys.stderr)
             sys.exit(1)
@@ -370,11 +376,15 @@ def cmd_edit(args):
         sys.exit(1)
 
     editor = get_default_editor()
+    parts = editor.split()
+    editor_bin = os.path.basename(parts[0])
+    extra = [f for f in term._GUI_EDITOR_WAIT_FLAGS.get(editor_bin, []) if f not in parts]
+    cmd = parts + extra
 
-    print(f"Opening {config_file} with {editor}...")
+    print(f"Opening {config_file} with {' '.join(cmd)}...")
 
     try:
-        subprocess.run([editor, str(config_file)], check=True)
+        subprocess.run(cmd + [str(config_file)], check=True)
         print("\n✓ Config file updated")
         config.reload()
         print("✓ Configuration reloaded")
@@ -383,8 +393,5 @@ def cmd_edit(args):
         sys.exit(1)
     except FileNotFoundError:
         print(f"Editor not found: {editor}", file=sys.stderr)
-        if sys.platform == 'win32':
-            print("Set your editor with: set EDITOR=notepad", file=sys.stderr)
-        else:
-            print("Set your editor with: export EDITOR=vim", file=sys.stderr)
+        print("Set your editor with: crucible config set editor vim", file=sys.stderr)
         sys.exit(1)

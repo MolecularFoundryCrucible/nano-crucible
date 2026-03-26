@@ -32,6 +32,7 @@ class Config:
         'cache_dir': {'env': 'CRUCIBLE_CACHE_DIR', 'ini': 'cache_dir'},
         'graph_explorer_url': {'env': 'CRUCIBLE_GRAPH_EXPLORER_URL', 'ini': 'graph_explorer_url'},
         'current_project': {'env': 'CRUCIBLE_CURRENT_PROJECT', 'ini': 'current_project'},
+        'editor': {'env': 'CRUCIBLE_EDITOR', 'ini': 'editor'},
     }
 
     def __init__(self):
@@ -145,6 +146,19 @@ class Config:
             str or None: The current project ID if configured, None otherwise
         """
         return self._data.get('current_project')
+
+    @property
+    def editor(self):
+        """
+        Get the preferred editor for interactive editing commands.
+
+        Priority: CRUCIBLE_EDITOR env var > config file > None.
+        When None, open_editor_json falls back to $VISUAL, $EDITOR, then nano.
+
+        Returns:
+            str or None: Editor command (e.g. "code --wait", "gvim -f") or None
+        """
+        return self._data.get('editor')
 
     @property
     def client(self):
@@ -278,7 +292,8 @@ def get_client():
 
 
 def create_config_file(api_key, api_url=None, cache_dir=None,
-                       graph_explorer_url=None, current_project=None, **kwargs):
+                       graph_explorer_url=None, current_project=None,
+                       editor=None, **kwargs):
     """
     Create a configuration file with the given API key and optional settings.
 
@@ -332,6 +347,14 @@ def create_config_file(api_key, api_url=None, cache_dir=None,
             f.write(f"current_project = {current_project}\n\n")
         else:
             f.write(f"# current_project = \n\n")
+
+        f.write("# Preferred editor for 'crucible dataset edit' / 'crucible sample edit'\n")
+        f.write("# GUI editors are given their wait/foreground flag automatically (gvim, code, subl, …)\n")
+        f.write("# but you can be explicit: editor = gvim -f\n")
+        if editor is not None:
+            f.write(f"editor = {editor}\n\n")
+        else:
+            f.write(f"# editor = \n\n")
 
         # Add any additional kwargs
         for key, value in kwargs.items():
