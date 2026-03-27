@@ -12,8 +12,8 @@ import re
 import sys
 from datetime import datetime, timezone
 
-# Strips ANSI SGR sequences (\033[...m) and OSC 8 hyperlinks (\033]8;...\\)
-_ANSI_RE = re.compile(r'\033(?:\[[0-9;]*m|\][^\033]*\033\\)')
+# Strips ANSI SGR sequences (\033[...m) and OSC 8 hyperlinks (\033]8;...\007)
+_ANSI_RE = re.compile(r'\033(?:\[[0-9;]*m|\][^\007\033]*(?:\007|\033\\))')
 
 def _dlen(s: str) -> int:
     """Visible display length of *s*, ignoring ANSI/OSC escape sequences."""
@@ -45,7 +45,7 @@ def orcid_link(orcid: str) -> str | None:
     url = f"https://orcid.org/{orcid}"
     colored = cyan(orcid)
     if _tty():
-        return f"\033]8;;{url}\033\\{colored}\033]8;;\033\\"
+        return f"\033]8;;{url}\007{colored}\033]8;;\007"
     return colored
 
 
@@ -62,7 +62,7 @@ def mfid_link(uid: str, url: str | None = None) -> str | None:
         return None
     colored = cyan(uid)
     if url and _tty():
-        return f"\033]8;;{url}\033\\{colored}\033]8;;\033\\"
+        return f"\033]8;;{url}\007{colored}\033]8;;\007"
     return colored
 
 def dim(s: str) -> str:
