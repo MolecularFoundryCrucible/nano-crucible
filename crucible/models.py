@@ -41,11 +41,10 @@ class Dataset(BaseModel):
     instrument_name: Optional[str] = None
     measurement: Optional[str] = None
     session_name: Optional[str] = None
-    # timestamp: user-settable date; accepts legacy 'creation_time' from the API
-    # until the server-side rename is complete
+    # timestamp: user-settable date; accepts legacy 'creation_date' from the API
     timestamp: Optional[str] = Field(
         default=None,
-        validation_alias=AliasChoices("timestamp", "creation_time")
+        validation_alias=AliasChoices("timestamp", "creation_date")
     )
     # server-assigned; backfilled on existing records, present on new ones
     creation_time: Optional[str] = None

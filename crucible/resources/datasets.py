@@ -60,7 +60,7 @@ class DatasetOperations(BaseResource):
             include_metadata (bool): Include scientific metadata in results
             **kwargs: Query parameters for filtering. Supported fields include:
                         keyword, unique_id, public, dataset_name, file_to_upload, owner_orcid,
-                        project_id, instrument_name, source_folder, creation_time,
+                        project_id, instrument_name, source_folder, timestamp,
                         size, data_format, measurement, session_name, sha256_hash_file_to_upload
 
             Note:   Filters expect exact matches (case sensitive) except for keywords.
