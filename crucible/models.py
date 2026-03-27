@@ -27,7 +27,7 @@ class Sample(BaseModel):
     project_id: Optional[str] = None
     description: Optional[str] = None
 
-    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True, extra='allow')
 
 
 class Dataset(BaseModel):
@@ -54,9 +54,8 @@ class Dataset(BaseModel):
     size: Optional[int] = None
     sha256_hash_file_to_upload: Optional[str] = None
     source_folder: Optional[str] = None
-    json_link: Optional[str] = None
 
-    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True, extra='allow')
 
 class Project(BaseModel):
     project_id: str

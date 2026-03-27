@@ -31,6 +31,16 @@ class DatasetOperations(BaseResource):
     Access via: client.datasets.get(), client.datasets.list(), etc.
     """
 
+    @staticmethod
+    def _parse(raw: Dict) -> Dict:
+        """Validate a raw API response dict through the Dataset Pydantic model.
+
+        Normalises field aliases (e.g. creation_date → timestamp) and preserves
+        any extra fields returned by the server (keywords, scientific_metadata, …).
+        """
+        from ..models import Dataset
+        return Dataset.model_validate(raw).model_dump()
+
     def get(self, dsid: str, include_metadata: bool = False) -> Dict:
         """Get dataset details, optionally including scientific metadata.
 
@@ -41,8 +51,11 @@ class DatasetOperations(BaseResource):
         Returns:
             Dict: Dataset object with optional metadata
         """
-        dataset = self._request('get', f'/datasets/{dsid}')
-        if dataset and include_metadata:
+        raw = self._request('get', f'/datasets/{dsid}')
+        if raw is None:
+            return None
+        dataset = self._parse(raw)
+        if include_metadata:
             try:
                 metadata = self._request('get', f'/datasets/{dsid}/scientific_metadata')
                 dataset['scientific_metadata'] = metadata or {}
@@ -76,7 +89,7 @@ class DatasetOperations(BaseResource):
             result = self._request('get', f'/samples/{sample_id}/datasets', params=params)
         else:
             result = self._request('get', '/datasets', params=params)
-        return result
+        return [self._parse(d) for d in result] if result else []
 
     def create(self, dataset, scientific_metadata: Optional[Dict] = None,
                keywords: Optional[List[str]] = None,

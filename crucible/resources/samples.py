@@ -20,6 +20,16 @@ class SampleOperations(BaseResource):
     Access via: client.samples.get(), client.samples.list(), etc.
     """
 
+    @staticmethod
+    def _parse(raw: Dict) -> Dict:
+        """Validate a raw API response dict through the Sample Pydantic model.
+
+        Normalises field aliases (e.g. date_created → timestamp) and preserves
+        any extra fields returned by the server (datasets, keywords, …).
+        """
+        from ..models import Sample
+        return Sample.model_validate(raw).model_dump()
+
     def get(self, sample_id: str) -> Dict:
         """Get sample information by ID.
 
@@ -29,7 +39,8 @@ class SampleOperations(BaseResource):
         Returns:
             Dict: Sample information with associated datasets
         """
-        return self._request('get', f"/samples/{sample_id}")
+        raw = self._request('get', f"/samples/{sample_id}")
+        return self._parse(raw) if raw is not None else None
 
     def list(self, dataset_id: Optional[str] = None, parent_id: Optional[str] = None,
              limit: int = DEFAULT_LIMIT, **kwargs) -> List[Dict]:
@@ -52,7 +63,7 @@ class SampleOperations(BaseResource):
             result = self._request('get', f"/samples/{parent_id}/children", params=params)
         else:
             result = self._request('get', f"/samples", params=params)
-        return result
+        return [self._parse(s) for s in result] if result else []
 
     def list_parents(self, sample_id: str, limit: int = DEFAULT_LIMIT, **kwargs) -> List[Dict]:
         """List the parents of a given sample with optional filtering.
