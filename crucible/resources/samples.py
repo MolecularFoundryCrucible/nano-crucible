@@ -282,6 +282,18 @@ class SampleOperations(BaseResource):
         )
         return self.remove_dataset(sample_id, dataset_id)
 
+    def remove_child(self, parent_id: str, child_id: str) -> Dict:
+        """Remove the parent-child link between two samples.
+
+        Args:
+            parent_id (str): Unique sample identifier of parent sample
+            child_id (str): Unique sample identifier of child sample
+
+        Returns:
+            Dict: Deletion confirmation
+        """
+        return self._request('delete', f"/samples/{parent_id}/children/{child_id}")
+
     def link(self, parent_id: str, child_id: str) -> Dict:
         """Link two samples with a parent-child relationship.
 

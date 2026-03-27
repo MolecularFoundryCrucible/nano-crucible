@@ -697,6 +697,18 @@ class DatasetOperations(BaseResource):
         """
         return self._request('delete', f"/datasets/{dataset_id}/samples/{sample_id}")
 
+    def remove_child(self, parent_dataset_id: str, child_dataset_id: str) -> Dict:
+        """Remove the parent-child link between two datasets.
+
+        Args:
+            parent_dataset_id (str): The unique ID of the parent dataset
+            child_dataset_id (str): The unique ID of the child dataset
+
+        Returns:
+            Dict: Deletion confirmation
+        """
+        return self._request('delete', f"/datasets/{parent_dataset_id}/children/{child_dataset_id}")
+
     def link_parent_child(self, parent_dataset_id: str, child_dataset_id: str) -> Dict:
         """Link a derived dataset to a parent dataset.
 

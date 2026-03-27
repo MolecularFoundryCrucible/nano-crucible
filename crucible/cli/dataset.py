@@ -169,6 +169,7 @@ def register_subcommand(subparsers):
     _register_link(dataset_subparsers)
     _register_add_sample(dataset_subparsers)
     _register_remove_sample(dataset_subparsers)
+    _register_remove_child(dataset_subparsers)
     _register_list_parents(dataset_subparsers)
     _register_list_children(dataset_subparsers)
     _register_list_samples(dataset_subparsers)
@@ -807,6 +808,38 @@ def _execute_remove_sample(args):
         logger.info(f"✓ Unlinked sample {args.sample} from dataset {args.dataset_id}")
     except Exception as e:
         logger.error(f"Error unlinking sample from dataset: {e}")
+        if getattr(args, "debug", False):
+            import traceback
+            traceback.print_exc()
+        sys.exit(1)
+
+
+def _register_remove_child(subparsers):
+    """Register the 'dataset remove-child' subcommand."""
+    parser = subparsers.add_parser(
+        'remove-child',
+        help='Unlink a child dataset from a parent dataset',
+        description='Remove the parent-child relationship between two datasets (requires admin)',
+        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+    crucible dataset remove-child PARENT_ID --child CHILD_ID
+"""
+    )
+    parser.add_argument('parent_id', metavar='PARENT_ID', help='Parent dataset unique ID')
+    parser.add_argument('-c', '--child', required=True, metavar='CHILD_ID', help='Child dataset ID to unlink')
+    parser.set_defaults(func=_execute_remove_child)
+
+
+def _execute_remove_child(args):
+    """Execute the 'dataset remove-child' subcommand."""
+    from crucible.client import CrucibleClient
+    try:
+        client = CrucibleClient()
+        client.datasets.remove_child(args.parent_id, args.child)
+        logger.info(f"✓ Unlinked child dataset {args.child} from parent dataset {args.parent_id}")
+    except Exception as e:
+        logger.error(f"Error unlinking child dataset: {e}")
         if getattr(args, "debug", False):
             import traceback
             traceback.print_exc()

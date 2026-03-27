@@ -307,15 +307,17 @@ class CrucibleClient:
             logger.info(f"Unlinking sample {id_a} from dataset {id_b}")
             return self.datasets.remove_sample(id_b, id_a)
 
-        elif type_a == type_b and type_a in ("dataset", "sample"):
-            raise ValueError(
-                f"Unlinking {type_a}-{type_b} parent-child relationships is not "
-                f"supported by the API. Use the API to manage these directly."
-            )
+        elif type_a == "dataset" and type_b == "dataset":
+            logger.info(f"Unlinking child dataset {id_b} from parent dataset {id_a}")
+            return self.datasets.remove_child(id_a, id_b)
+
+        elif type_a == "sample" and type_b == "sample":
+            logger.info(f"Unlinking child sample {id_b} from parent sample {id_a}")
+            return self.samples.remove_child(id_a, id_b)
+
         else:
             raise ValueError(
-                f"Cannot unlink resources: {id_a} is {type_a}, {id_b} is {type_b}. "
-                f"Only dataset-sample unlinking is supported."
+                f"Cannot unlink resources: {id_a} is {type_a}, {id_b} is {type_b}."
             )
     
     def download(self, resource_id: str, output_dir: str = 'crucible-downloads',

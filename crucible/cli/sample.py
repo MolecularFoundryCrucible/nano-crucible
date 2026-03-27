@@ -54,6 +54,7 @@ def register_subcommand(subparsers):
     _register_list_datasets(sample_subparsers)
     _register_add_dataset(sample_subparsers)
     _register_remove_dataset(sample_subparsers)
+    _register_remove_child(sample_subparsers)
 
 
 def _register_list(subparsers):
@@ -837,6 +838,38 @@ def _execute_link_dataset(args):
 
     except Exception as e:
         logger.error(f"Error linking dataset to sample: {e}")
+        if getattr(args, "debug", False):
+            import traceback
+            traceback.print_exc()
+        sys.exit(1)
+
+
+def _register_remove_child(subparsers):
+    """Register the 'sample remove-child' subcommand."""
+    parser = subparsers.add_parser(
+        'remove-child',
+        help='Unlink a child sample from a parent sample',
+        description='Remove the parent-child relationship between two samples (requires admin)',
+        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+    crucible sample remove-child PARENT_ID --child CHILD_ID
+"""
+    )
+    parser.add_argument('parent_id', metavar='PARENT_ID', help='Parent sample unique ID')
+    parser.add_argument('-c', '--child', required=True, metavar='CHILD_ID', help='Child sample ID to unlink')
+    parser.set_defaults(func=_execute_remove_child)
+
+
+def _execute_remove_child(args):
+    """Execute the 'sample remove-child' subcommand."""
+    from crucible.client import CrucibleClient
+    try:
+        client = CrucibleClient()
+        client.samples.remove_child(args.parent_id, args.child)
+        logger.info(f"✓ Unlinked child sample {args.child} from parent sample {args.parent_id}")
+    except Exception as e:
+        logger.error(f"Error unlinking child sample: {e}")
         if getattr(args, "debug", False):
             import traceback
             traceback.print_exc()
