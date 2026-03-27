@@ -493,14 +493,22 @@ def _execute_list(args):
         if not samples:
             print(f"  {term.dim('No samples found.')}")
         else:
-            rows = [
-                (
+            try:
+                from crucible.config import config as _cfg
+                _base = _cfg.graph_explorer_url.rstrip('/')
+            except Exception:
+                _base = None
+
+            rows = []
+            for s in samples:
+                uid = s.get('unique_id') or ''
+                pid = s.get('project_id') or project_id
+                url = f"{_base}/{pid}/sample-graph/{uid}" if _base and uid and pid else None
+                rows.append((
                     s.get('sample_name') or '(unnamed)',
-                    s.get('unique_id') or '—',
+                    term.mfid_link(uid, url) if uid else '—',
                     s.get('sample_type') or '—',
-                )
-                for s in samples
-            ]
+                ))
             term.table(rows, ['Name', 'MFID', 'Type'], max_widths=[35, 26, 20])
 
     except Exception as e:

@@ -1183,15 +1183,23 @@ def _execute_list(args):
         if not datasets:
             print(f"  {term.dim('No datasets found.')}")
         else:
-            rows = [
-                (
+            try:
+                from crucible.config import config as _cfg
+                _base = _cfg.graph_explorer_url.rstrip('/')
+            except Exception:
+                _base = None
+
+            rows = []
+            for ds in datasets:
+                uid = ds.get('unique_id') or ''
+                pid = ds.get('project_id') or project_id
+                url = f"{_base}/{pid}/dataset/{uid}" if _base and uid and pid else None
+                rows.append((
                     ds.get('dataset_name') or '(unnamed)',
-                    ds.get('unique_id') or '—',
+                    term.mfid_link(uid, url) if uid else '—',
                     ds.get('measurement') or '—',
                     ds.get('session_name') or '—',
-                )
-                for ds in datasets
-            ]
+                ))
             term.table(rows, ['Name', 'MFID', 'Measurement', 'Session'],
                        max_widths=[35, 26, 15, 20])
 

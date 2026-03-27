@@ -8,8 +8,16 @@ human-readable sizes, and compact table rendering.  All color/style functions
 are no-ops when stdout is not a TTY (e.g. when piping or redirecting).
 """
 
+import re
 import sys
 from datetime import datetime, timezone
+
+# Strips ANSI SGR sequences (\033[...m) and OSC 8 hyperlinks (\033]8;...\\)
+_ANSI_RE = re.compile(r'\033(?:\[[0-9;]*m|\][^\033]*\033\\)')
+
+def _dlen(s: str) -> int:
+    """Visible display length of *s*, ignoring ANSI/OSC escape sequences."""
+    return len(_ANSI_RE.sub('', s))
 
 
 # ── TTY detection ──────────────────────────────────────────────────────────────
@@ -257,7 +265,7 @@ def table(rows: list, headers: list, max_widths: list | None = None) -> None:
     widths = [len(h) for h in headers]
     for row in rows:
         for i, cell in enumerate(row):
-            widths[i] = max(widths[i], len(str(cell) if cell is not None else '—'))
+            widths[i] = max(widths[i], _dlen(str(cell) if cell is not None else '—'))
     if max_widths:
         widths = [min(w, m) for w, m in zip(widths, max_widths)]
 
@@ -268,7 +276,12 @@ def table(rows: list, headers: list, max_widths: list | None = None) -> None:
         parts = []
         for i, cell in enumerate(row):
             s = str(cell) if cell is not None else '—'
-            if len(s) > widths[i]:
-                s = s[:widths[i] - 1] + '…'
-            parts.append(s.ljust(widths[i]))
+            dw = _dlen(s)
+            if dw > widths[i]:
+                # Only truncate plain strings — don't cut inside escape sequences
+                if dw == len(s):
+                    s = s[:widths[i] - 1] + '…'
+                else:
+                    s = _ANSI_RE.sub('', s)[:widths[i] - 1] + '…'
+            parts.append(s + ' ' * (widths[i] - _dlen(s)))
         print("  " + "  ".join(parts).rstrip())
