@@ -65,6 +65,7 @@ def _register_list(subparsers):
 Examples:
     crucible sample list -pid my-project
     crucible sample list -pid my-project --type wafer
+    crucible sample list -pid my-project --group-by type
     crucible sample list -pid my-project --include "Silicon*" "Wafer*"
     crucible sample list -pid my-project --exclude "*test*" "*dummy*"
 """
@@ -91,6 +92,15 @@ Examples:
         dest='sample_type',
         metavar='TYPE',
         help='Filter by sample type (exact match)'
+    )
+
+    parser.add_argument(
+        '--group-by',
+        dest='group_by',
+        default=None,
+        choices=['type', 'project'],
+        metavar='FIELD',
+        help='Group results by field: type, project'
     )
 
     parser.add_argument(
@@ -527,17 +537,33 @@ def _execute_list(args):
             except Exception:
                 _base = None
 
-            rows = []
-            for s in samples:
+            _GROUP_FIELD = {'type': 'sample_type', 'project': 'project_id'}
+            group_by = _GROUP_FIELD.get(getattr(args, 'group_by', None))
+
+            def _make_row(s):
                 uid = s.get('unique_id') or ''
                 pid = s.get('project_id') or project_id
                 url = f"{_base}/{pid}/sample-graph/{uid}" if _base and uid and pid else None
-                rows.append((
+                return (
                     s.get('sample_name') or '(unnamed)',
                     term.mfid_link(uid, url) if uid else '—',
                     s.get('sample_type') or '—',
-                ))
-            term.table(rows, ['Name', 'MFID', 'Type'], max_widths=[35, 26, 20])
+                )
+
+            if not group_by:
+                term.table([_make_row(s) for s in samples],
+                           ['Name', 'MFID', 'Type'], max_widths=[35, 26, 20])
+            else:
+                from collections import defaultdict
+                groups = defaultdict(list)
+                for s in samples:
+                    groups[s.get(group_by) or None].append(s)
+                keys = sorted(k for k in groups if k) + ([None] if None in groups else [])
+                for key in keys:
+                    label = key or '(none)'
+                    term.subheader(f"{label} ({len(groups[key])})")
+                    term.table([_make_row(s) for s in groups[key]],
+                               ['Name', 'MFID', 'Type'], max_widths=[35, 26, 20])
 
     except Exception as e:
         logger.error(f"Error listing samples: {e}")
