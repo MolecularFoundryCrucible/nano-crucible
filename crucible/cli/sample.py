@@ -150,16 +150,21 @@ def _register_create(subparsers):
         formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
         epilog="""
 Examples:
+    # Interactive mode (prompts for input)
+    crucible sample create
+
+    # Command-line mode
     crucible sample create -n "Silicon Wafer A" -pid my-project
-    crucible sample create -n "Sample 001" -pid my-project --description "Test sample"
+    crucible sample create -n "Sample 001" -pid my-project --description "Test sample" -t substrate
 """
     )
 
     parser.add_argument(
         '-n', '--name',
-        required=True,
+        required=False,
+        default=None,
         metavar='NAME',
-        help='Sample name'
+        help='Sample name. If not provided, will prompt interactively.'
     )
 
     parser.add_argument(
@@ -175,6 +180,14 @@ Examples:
         default=None,
         metavar='TEXT',
         help='Sample description (optional)'
+    )
+
+    parser.add_argument(
+        '-t', '--sample-type',
+        dest='sample_type',
+        default=None,
+        metavar='TYPE',
+        help='Sample type/category (optional)'
     )
 
     parser.add_argument(
@@ -589,20 +602,47 @@ def _execute_create(args):
     """Execute the 'sample create' subcommand."""
     from crucible.config import config
     from crucible.client import CrucibleClient
-    # Get project_id
-    project_id = args.project_id
+
+    name        = args.name
+    project_id  = args.project_id or config.current_project
+    description = args.description
+    sample_type = args.sample_type
+
+    interactive = name is None or project_id is None
+    if interactive:
+        term.header("Create Sample")
+        print("")
+
+    if name is None:
+        while True:
+            name = input("Sample name: ").strip()
+            if name:
+                break
+            logger.error("Sample name is required.")
+
     if project_id is None:
-        project_id = config.current_project
-        if project_id is None:
-            logger.error("Error: Project ID required. Specify with -pid or set current_project in config.")
-            sys.exit(1)
+        while True:
+            project_id = input("Project ID: ").strip()
+            if project_id:
+                break
+            logger.error("Project ID is required.")
+
+    if interactive:
+        if sample_type is None:
+            val = input("Sample type (optional, press Enter to skip): ").strip()
+            sample_type = val or None
+
+        if description is None:
+            val = input("Description (optional, press Enter to skip): ").strip()
+            description = val or None
 
     try:
         client = CrucibleClient()
         result = client.samples.create(
-            sample_name=args.name,
+            sample_name=name,
             project_id=project_id,
-            description=args.description
+            description=description,
+            sample_type=sample_type,
         )
 
         logger.info("✓ Sample created")
