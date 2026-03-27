@@ -219,6 +219,14 @@ Examples:
     )
 
     parser.add_argument(
+        '--timestamp',
+        dest='timestamp',
+        default=None,
+        metavar='DATE',
+        help="User-defined timestamp (flexible: 'today', '2024-01-15', '2024-01-15 10:30', ISO 8601, etc.)"
+    )
+
+    parser.add_argument(
         '-v', '--verbose',
         action='store_true',
         help='Verbose output'
@@ -674,10 +682,19 @@ def _execute_create(args):
     from crucible.config import config
     from crucible.client import CrucibleClient
 
+    from ..utils import parse_timestamp
+
     name        = args.name
     project_id  = args.project_id   # never auto-fill from config here
     description = args.description
     sample_type = args.sample_type
+    timestamp   = None
+    if args.timestamp:
+        try:
+            timestamp = parse_timestamp(args.timestamp)
+        except ValueError as e:
+            logger.error(str(e))
+            sys.exit(1)
 
     interactive = name is None or project_id is None
     if interactive:
@@ -727,12 +744,24 @@ def _execute_create(args):
             val = input("Description (optional, press Enter to skip): ").strip()
             description = val or None
 
+        if timestamp is None:
+            while True:
+                val = input("Timestamp (optional — 'today', '2024-01-15', '2024-01-15 10:30', press Enter to skip): ").strip()
+                if not val:
+                    break
+                try:
+                    timestamp = parse_timestamp(val)
+                    break
+                except ValueError:
+                    logger.error(f"Cannot parse date: {val!r}. Try 'today', '2024-01-15', or '2024-01-15 10:30'.")
+
     try:
         result = client.samples.create(
             sample_name=name,
             project_id=project_id,
             description=description,
             sample_type=sample_type,
+            timestamp=timestamp,
         )
 
         logger.info("✓ Sample created")

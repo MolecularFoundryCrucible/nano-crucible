@@ -482,6 +482,15 @@ Examples:
         help='Data format type (optional)'
     )
 
+    # Timestamp
+    parser.add_argument(
+        '--timestamp',
+        dest='timestamp',
+        default=None,
+        metavar='DATE',
+        help="User-defined timestamp (flexible: 'today', '2024-01-15', '2024-01-15 10:30', ISO 8601, etc.)"
+    )
+
     # Ingestor
     from crucible.constants import AVAILABLE_INGESTORS
     ingestor_arg = parser.add_argument(
@@ -1479,6 +1488,16 @@ def _execute_create(args):
     if args.keywords:
         keywords_list = [k.strip() for k in args.keywords.split(',')]
 
+    # Parse timestamp
+    from crucible.utils import parse_timestamp as _parse_ts
+    timestamp = None
+    if args.timestamp:
+        try:
+            timestamp = _parse_ts(args.timestamp)
+        except ValueError as e:
+            logger.error(str(e))
+            sys.exit(1)
+
     # Handle mfid: None (server assigns), True (generate locally), or explicit value
     dataset_mfid = args.mfid
     if dataset_mfid is True:
@@ -1525,7 +1544,8 @@ def _execute_create(args):
             session_name=args.session_name,
             public=args.public,
             instrument_name=args.instrument_name,
-            data_format=args.data_format
+            data_format=args.data_format,
+            timestamp=timestamp,
         )
     except Exception as e:
         logger.error(f"Error parsing file: {e}")
@@ -1552,6 +1572,7 @@ def _execute_create(args):
     _p("Measurement", parser.measurement or term.dim("(server assigns)"))
     _p("Data format", parser.data_format)
     _p("Session",     parser.session_name)
+    _p("Timestamp",   parser.timestamp)
     _p("Public",      "yes" if parser.public else "no")
     _p("Instrument",  parser.instrument_name)
     _p("MFID",        dataset_mfid or term.dim("(server assigns)"))
