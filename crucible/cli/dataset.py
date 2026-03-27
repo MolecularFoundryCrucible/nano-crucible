@@ -247,10 +247,10 @@ Examples:
     parser.add_argument(
         '--group-by',
         dest='group_by',
-        default='measurement',
+        default=None,
         choices=['measurement', 'session', 'format', 'instrument'],
         metavar='FIELD',
-        help='Group results by field: measurement, session, format, instrument (default: measurement)'
+        help='Group results by field: measurement, session, format, instrument (default from config, fallback: measurement)'
     )
 
     parser.add_argument(
@@ -1234,7 +1234,8 @@ def _execute_list(args):
                 'format':      'data_format',
                 'instrument':  'instrument_name',
             }
-            group_by = _GROUP_FIELD.get(getattr(args, 'group_by', None))
+            group_by_key = args.group_by or config.dataset_group_by or 'measurement'
+            group_by = _GROUP_FIELD.get(group_by_key)
 
             def _make_row(ds):
                 uid = ds.get('unique_id') or ''

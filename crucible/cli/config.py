@@ -82,6 +82,8 @@ Configuration keys:
     graph_explorer_url  Crucible Graph Explorer URL (optional)
     current_project     Default project ID (optional)
     editor              Preferred editor for interactive edit commands (optional)
+    sample_group_by     Default group-by for 'sample list' (type, project)
+    dataset_group_by    Default group-by for 'dataset list' (measurement, session, format, instrument)
 
 Priority order (highest to lowest):
     1. Environment variables (CRUCIBLE_API_KEY, CRUCIBLE_API_URL, etc.)
@@ -122,7 +124,8 @@ Priority order (highest to lowest):
     )
     get_parser.add_argument(
         'key',
-        choices=['api_key', 'api_url', 'cache_dir', 'graph_explorer_url', 'current_project', 'editor'],
+        choices=['api_key', 'api_url', 'cache_dir', 'graph_explorer_url', 'current_project',
+                 'editor', 'sample_group_by', 'dataset_group_by'],
         help='Configuration key to retrieve'
     )
     get_parser.set_defaults(func=cmd_get)
@@ -134,7 +137,8 @@ Priority order (highest to lowest):
     )
     set_parser.add_argument(
         'key',
-        choices=['api_key', 'api_url', 'cache_dir', 'graph_explorer_url', 'current_project', 'editor'],
+        choices=['api_key', 'api_url', 'cache_dir', 'graph_explorer_url', 'current_project',
+                 'editor', 'sample_group_by', 'dataset_group_by'],
         help='Configuration key to set'
     )
     set_parser.add_argument(
@@ -259,6 +263,8 @@ def cmd_show(args):
     _p("graph_explorer_url",  config.graph_explorer_url)
     _p("current_project",     config.current_project)
     _p("editor",              config.editor)
+    _p("sample_group_by",    config.sample_group_by)
+    _p("dataset_group_by",   config.dataset_group_by)
 
     env_overrides = {
         'CRUCIBLE_API_KEY':            os.environ.get('CRUCIBLE_API_KEY'),
@@ -295,6 +301,10 @@ def cmd_get(args):
             value = config.current_project
         elif key == 'editor':
             value = config.editor
+        elif key == 'sample_group_by':
+            value = config.sample_group_by
+        elif key == 'dataset_group_by':
+            value = config.dataset_group_by
         else:
             print(f"Error: Unknown config key: {key}", file=sys.stderr)
             sys.exit(1)

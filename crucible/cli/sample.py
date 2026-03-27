@@ -97,10 +97,10 @@ Examples:
     parser.add_argument(
         '--group-by',
         dest='group_by',
-        default='type',
+        default=None,
         choices=['type', 'project'],
         metavar='FIELD',
-        help='Group results by field: type, project (default: type)'
+        help='Group results by field: type, project (default from config, fallback: type)'
     )
 
     parser.add_argument(
@@ -538,7 +538,8 @@ def _execute_list(args):
                 _base = None
 
             _GROUP_FIELD = {'type': 'sample_type', 'project': 'project_id'}
-            group_by = _GROUP_FIELD.get(getattr(args, 'group_by', None))
+            group_by_key = args.group_by or config.sample_group_by or 'type'
+            group_by = _GROUP_FIELD.get(group_by_key)
 
             def _make_row(s):
                 uid = s.get('unique_id') or ''

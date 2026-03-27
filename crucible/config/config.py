@@ -33,6 +33,8 @@ class Config:
         'graph_explorer_url': {'env': 'CRUCIBLE_GRAPH_EXPLORER_URL', 'ini': 'graph_explorer_url'},
         'current_project': {'env': 'CRUCIBLE_CURRENT_PROJECT', 'ini': 'current_project'},
         'editor': {'env': 'CRUCIBLE_EDITOR', 'ini': 'editor'},
+        'sample_group_by': {'env': 'CRUCIBLE_SAMPLE_GROUP_BY', 'ini': 'sample_group_by'},
+        'dataset_group_by': {'env': 'CRUCIBLE_DATASET_GROUP_BY', 'ini': 'dataset_group_by'},
     }
 
     def __init__(self):
@@ -159,6 +161,16 @@ class Config:
             str or None: Editor command (e.g. "code --wait", "gvim -f") or None
         """
         return self._data.get('editor')
+
+    @property
+    def sample_group_by(self):
+        """Default group-by field for 'crucible sample list' (e.g. 'type', 'project')."""
+        return self._data.get('sample_group_by')
+
+    @property
+    def dataset_group_by(self):
+        """Default group-by field for 'crucible dataset list' (e.g. 'measurement', 'session')."""
+        return self._data.get('dataset_group_by')
 
     @property
     def client(self):
@@ -347,6 +359,12 @@ def create_config_file(api_key, api_url=None, cache_dir=None,
             f.write(f"current_project = {current_project}\n\n")
         else:
             f.write(f"# current_project = \n\n")
+
+        f.write("# Default group-by for 'crucible sample list' (type, project)\n")
+        f.write("# sample_group_by = type\n\n")
+
+        f.write("# Default group-by for 'crucible dataset list' (measurement, session, format, instrument)\n")
+        f.write("# dataset_group_by = measurement\n\n")
 
         f.write("# Preferred editor for 'crucible dataset edit' / 'crucible sample edit'\n")
         f.write("# GUI editors are given their wait/foreground flag automatically (gvim, code, subl, …)\n")
