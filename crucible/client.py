@@ -14,7 +14,7 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 from typing import Optional, List, Dict, Any, Union
 from .models import Dataset, Project
-from .constants import DEFAULT_TIMEOUT, DEFAULT_LIMIT
+from .constants import DEFAULT_LIMIT
 from .utils.deprecation import _deprecated, _removed
 
 logger = logging.getLogger(__name__)
@@ -34,12 +34,12 @@ class CrucibleClient:
             ValueError: If api_url or api_key not provided and not found in config
         """
         # Load from config if not provided
-        if api_url is None or api_key is None:
-            from .config import config
-            if api_url is None:
-                api_url = config.api_url
-            if api_key is None:
-                api_key = config.api_key
+        from .config import config as _config
+        self._config = _config
+        if api_url is None:
+            api_url = _config.api_url
+        if api_key is None:
+            api_key = _config.api_key
 
         if not api_url:
             raise ValueError("api_url is required. Provide it directly or run 'crucible config init'")
@@ -89,7 +89,8 @@ class CrucibleClient:
         """
         url = f"{self.api_url}/{endpoint.lstrip('/')}"
         logger.debug(f"{method.upper()} {url}")
-        response = self._session.request(method, url, timeout=DEFAULT_TIMEOUT, **kwargs)
+        timeout = (self._config.connect_timeout, self._config.read_timeout)
+        response = self._session.request(method, url, timeout=timeout, **kwargs)
         logger.debug(f"Status: {response.status_code}")
         logger.debug(f"Response: {response.text}")
         if not response.ok:

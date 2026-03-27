@@ -8,10 +8,13 @@ Manages API keys, URLs, cache directories, and ORCID IDs.
 
 import sys
 import os
+import logging
 import subprocess
 from pathlib import Path
 
 from . import term
+
+logger = logging.getLogger(__name__)
 
 #%%
 
@@ -67,7 +70,7 @@ Examples:
 
     # Set a value
     crucible config set api_key YOUR_API_KEY
-    crucible config set api_url https://crucible.lbl.gov/api
+    crucible config set read_timeout 120
 
     # Show config file location
     crucible config path
@@ -75,18 +78,28 @@ Examples:
     # Edit config file directly
     crucible config edit
 
-Configuration keys:
-    api_key             Crucible API authentication key (required, includes user info)
+Configuration keys (by section):
+  [crucible]  -- API connection
+    api_key             Crucible API authentication key (required)
     api_url             Crucible API endpoint URL
-    cache_dir           Directory for caching downloaded data
     graph_explorer_url  Crucible Graph Explorer URL (optional)
     current_project     Default project ID (optional)
-    editor              Preferred editor for interactive edit commands (optional)
+
+  [cache]
+    cache_dir           Directory for caching downloaded data
+
+  [display]  -- UI preferences
+    editor              Preferred editor for interactive edit commands
     sample_group_by     Default group-by for 'sample list' (type, project)
     dataset_group_by    Default group-by for 'dataset list' (measurement, session, format, instrument)
 
+  [network]  -- timeouts and pagination
+    connect_timeout     TCP connect timeout in seconds (default 5)
+    read_timeout        HTTP read timeout per request in seconds (default 30)
+    default_limit       Maximum results for list/search commands (default 100)
+
 Priority order (highest to lowest):
-    1. Environment variables (CRUCIBLE_API_KEY, CRUCIBLE_API_URL, etc.)
+    1. Environment variables (CRUCIBLE_API_KEY, CRUCIBLE_READ_TIMEOUT, etc.)
     2. Config file (~/.config/nano-crucible/config.ini)
     3. Defaults
 """
@@ -124,8 +137,10 @@ Priority order (highest to lowest):
     )
     get_parser.add_argument(
         'key',
-        choices=['api_key', 'api_url', 'cache_dir', 'graph_explorer_url', 'current_project',
-                 'editor', 'sample_group_by', 'dataset_group_by'],
+        choices=['api_key', 'api_url', 'graph_explorer_url', 'current_project',
+                 'cache_dir',
+                 'editor', 'sample_group_by', 'dataset_group_by',
+                 'connect_timeout', 'read_timeout', 'default_limit'],
         help='Configuration key to retrieve'
     )
     get_parser.set_defaults(func=cmd_get)
@@ -137,8 +152,10 @@ Priority order (highest to lowest):
     )
     set_parser.add_argument(
         'key',
-        choices=['api_key', 'api_url', 'cache_dir', 'graph_explorer_url', 'current_project',
-                 'editor', 'sample_group_by', 'dataset_group_by'],
+        choices=['api_key', 'api_url', 'graph_explorer_url', 'current_project',
+                 'cache_dir',
+                 'editor', 'sample_group_by', 'dataset_group_by',
+                 'connect_timeout', 'read_timeout', 'default_limit'],
         help='Configuration key to set'
     )
     set_parser.add_argument(
@@ -231,7 +248,7 @@ def cmd_init(args):
         print("\nYou can now use crucible commands!")
         print("Example: crucible upload -i input.lmp -t lammps -pid my-project")
     except Exception as e:
-        print(f"\n✗ Error creating configuration: {e}", file=sys.stderr)
+        logger.error(f"Error creating configuration: {e}")
         sys.exit(1)
 
 
@@ -239,7 +256,7 @@ def cmd_show(args):
     """Show current configuration."""
     from crucible.config import config
 
-    W = 20
+    W = 22
     def _p(label, value):
         print(f"  {label:<{W}}{value if value not in (None, '') else '—'}")
 
@@ -249,37 +266,46 @@ def cmd_show(args):
     exists = cfg_path.exists()
     _p("Config file", cfg_path)
     _p("Exists",      "Yes" if exists else "No")
-    print("")
 
+    # [crucible] — API connection
+    term.subheader("[crucible]  API connection")
     try:
         api_key = config.api_key
         masked = f"{'*' * 8}…{api_key[-4:]}" if not args.secrets else api_key
-        _p("api_key",            masked)
+        _p("api_key",           masked)
     except ValueError:
-        _p("api_key",            None)
+        _p("api_key",           None)
+    _p("api_url",              config.api_url)
+    _p("graph_explorer_url",   config.graph_explorer_url)
+    _p("current_project",      config.current_project)
 
-    _p("api_url",             config.api_url)
-    _p("cache_dir",           config.cache_dir)
-    _p("graph_explorer_url",  config.graph_explorer_url)
-    _p("current_project",     config.current_project)
-    _p("editor",              config.editor)
-    _p("sample_group_by",    config.sample_group_by)
-    _p("dataset_group_by",   config.dataset_group_by)
+    # [cache]
+    term.subheader("[cache]")
+    _p("cache_dir",            config.cache_dir)
 
+    # [display] — UI preferences
+    term.subheader("[display]  UI preferences")
+    _p("editor",               config.editor)
+    _p("sample_group_by",      config.sample_group_by)
+    _p("dataset_group_by",     config.dataset_group_by)
+
+    # [network] — timeouts and pagination
+    term.subheader("[network]  timeouts / pagination")
+    _p("connect_timeout",      config.connect_timeout)
+    _p("read_timeout",         config.read_timeout)
+    _p("default_limit",        config.default_limit)
+
+    from crucible.config.config import Config
     env_overrides = {
-        'CRUCIBLE_API_KEY':            os.environ.get('CRUCIBLE_API_KEY'),
-        'CRUCIBLE_API_URL':            os.environ.get('CRUCIBLE_API_URL'),
-        'CRUCIBLE_CACHE_DIR':          os.environ.get('CRUCIBLE_CACHE_DIR'),
-        'CRUCIBLE_GRAPH_EXPLORER_URL': os.environ.get('CRUCIBLE_GRAPH_EXPLORER_URL'),
-        'CRUCIBLE_CURRENT_PROJECT':    os.environ.get('CRUCIBLE_CURRENT_PROJECT'),
-        'CRUCIBLE_EDITOR':             os.environ.get('CRUCIBLE_EDITOR'),
+        mapping['env']: os.environ.get(mapping['env'])
+        for mapping in Config._CONFIG_MAP.values()
     }
     active = {k: v for k, v in env_overrides.items() if v is not None}
     if active:
-        term.subheader("Environment Overrides")
-        for key, value in active.items():
-            display = f"{'*' * 8}…{value[-4:]}" if 'API_KEY' in key and not args.secrets else value
-            print(f"  {key}  {display}")
+        term.subheader("Environment overrides")
+        for env_key, value in active.items():
+            display = f"{'*' * 8}…{value[-4:]}" if 'API_KEY' in env_key and not args.secrets else value
+            print(f"  {env_key}  {display}")
 
 
 def cmd_get(args):
@@ -305,8 +331,14 @@ def cmd_get(args):
             value = config.sample_group_by
         elif key == 'dataset_group_by':
             value = config.dataset_group_by
+        elif key == 'connect_timeout':
+            value = config.connect_timeout
+        elif key == 'read_timeout':
+            value = config.read_timeout
+        elif key == 'default_limit':
+            value = config.default_limit
         else:
-            print(f"Error: Unknown config key: {key}", file=sys.stderr)
+            logger.error(f"Unknown config key: {key}")
             sys.exit(1)
 
         if value is None:
@@ -315,7 +347,7 @@ def cmd_get(args):
             print(value)
 
     except ValueError as e:
-        print(f"Error: {e}", file=sys.stderr)
+        logger.error(f"{e}")
         sys.exit(1)
 
 
@@ -323,9 +355,15 @@ def cmd_set(args):
     """Set a configuration value, preserving comments."""
     import configparser
     from crucible.config import config
+    from crucible.config.config import Config
 
     key = args.key
     value = args.value
+
+    # Determine the correct INI section for this key
+    mapping = Config._CONFIG_MAP[key]
+    section  = mapping['section']
+    ini_key  = mapping['ini']
 
     # Load or create config file
     config_file = config.config_file_path
@@ -339,15 +377,18 @@ def cmd_set(args):
     if config_file.exists():
         parser.read(config_file)
 
-    # Ensure crucible section exists
+    # Ensure the target section exists (and also [crucible] for legacy compat)
     if 'crucible' not in parser:
         parser['crucible'] = {}
+    if section not in parser:
+        parser[section] = {}
 
-    # Map CLI key to INI key
-    ini_key = key  # They're the same in our case
+    # If this key exists in the legacy [crucible] section under a different
+    # section now, remove it there to avoid duplicate resolution confusion.
+    if section != 'crucible' and 'crucible' in parser and ini_key in parser['crucible']:
+        del parser['crucible'][ini_key]
 
-    # Set the value
-    parser['crucible'][ini_key] = value
+    parser[section][ini_key] = value
 
     # Write back (comments preserved!)
     with open(config_file, 'w') as f:
@@ -356,7 +397,7 @@ def cmd_set(args):
     # Reload config
     config.reload()
 
-    print(f"✓ Set {key} = {value}")
+    print(f"✓ Set {key} = {value}  (in [{section}])")
     print(f"✓ Saved to {config_file}")
 
 
@@ -399,9 +440,9 @@ def cmd_edit(args):
         config.reload()
         print("✓ Configuration reloaded")
     except subprocess.CalledProcessError as e:
-        print(f"Error editing file: {e}", file=sys.stderr)
+        logger.error(f"Error editing file: {e}")
         sys.exit(1)
     except FileNotFoundError:
-        print(f"Editor not found: {editor}", file=sys.stderr)
-        print("Set your editor with: crucible config set editor vim", file=sys.stderr)
+        logger.error(f"Editor not found: {editor}")
+        logger.error("Set your editor with: crucible config set editor vim")
         sys.exit(1)

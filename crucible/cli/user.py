@@ -14,6 +14,7 @@ import re
 logger = logging.getLogger(__name__)
 
 from . import term
+from ..config import config as _config
 
 
 def register_subcommand(subparsers):
@@ -166,9 +167,9 @@ Examples:
     parser.add_argument(
         '--limit',
         type=int,
-        default=100,
+        default=_config.default_limit,
         metavar='N',
-        help='Maximum number of users to return (default: 100)'
+        help=f'Maximum number of users to return (default: {_config.default_limit})'
     )
 
     parser.add_argument(

@@ -13,6 +13,7 @@ import json
 logger = logging.getLogger(__name__)
 
 from . import term
+from ..config import config as _config
 
 try:
     import argcomplete
@@ -60,9 +61,9 @@ def _register_list(subparsers):
     parser.add_argument(
         '--limit',
         type=int,
-        default=100,
+        default=_config.default_limit,
         metavar='N',
-        help='Maximum number of results to return (default: 100)'
+        help=f'Maximum number of results to return (default: {_config.default_limit})'
     )
 
     parser.add_argument(
@@ -186,8 +187,8 @@ def _register_list_users(subparsers):
         pid_arg = p.add_argument('project_id', metavar='PROJECT_ID', help='Project ID')
         if ARGCOMPLETE_AVAILABLE:
             pid_arg.completer = argcomplete.completers.SuppressCompleter()
-        p.add_argument('--limit', type=int, default=100, metavar='N',
-                       help='Maximum number of results to return (default: 100)')
+        p.add_argument('--limit', type=int, default=_config.default_limit, metavar='N',
+                       help=f'Maximum number of results to return (default: {_config.default_limit})')
         p.add_argument('-v', '--verbose', action='store_true', help='Verbose output')
 
     parser = subparsers.add_parser(

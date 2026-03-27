@@ -12,6 +12,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 from . import term
+from ..config import config as _config
 
 try:
     import argcomplete
@@ -57,9 +58,9 @@ def _register_list(subparsers):
     parser.add_argument(
         '--limit',
         type=int,
-        default=100,
+        default=_config.default_limit,
         metavar='N',
-        help='Maximum number of results to return (default: 100)'
+        help=f'Maximum number of results to return (default: {_config.default_limit})'
     )
 
     parser.add_argument(

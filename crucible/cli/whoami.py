@@ -22,7 +22,7 @@ def register_subcommand(subparsers):
     parser.add_argument(
         '-v', '--verbose',
         action='store_true',
-        help='Show access group IDs'
+        help='Show all fields including employee number and access group IDs'
     )
     parser.set_defaults(func=execute)
 
@@ -34,7 +34,7 @@ def execute(args):
         info = config.client.whoami()
         user = info.get('user_info', {})
 
-        W = 14
+        W = 16
         def _p(label, value):
             print(f"  {label:<{W}}{value if value not in (None, '') else '—'}")
 
@@ -43,20 +43,32 @@ def execute(args):
         first = user.get('first_name', '')
         last  = user.get('last_name', '')
         name  = f"{first} {last}".strip() or None
-        _p("Name",         name)
-        _p("ORCID",        term.orcid_link(user.get('orcid')))
-        _p("Access Group", info.get('access_group_name'))
-        _p("Email",        user.get('email'))
+        _p("Name",  name)
+        _p("ORCID", term.orcid_link(user.get('orcid')))
+        _p("Email", user.get('email'))
         lbl = user.get('lbl_email')
         if lbl and lbl != user.get('email'):
-            _p("LBL Email",    lbl)
-        _p("ID",           user.get('id'))
+            _p("LBL Email", lbl)
 
         if getattr(args, 'verbose', False):
+            _p("ID",              user.get('id'))
+            _p("Employee number", user.get('employee_number'))
+
+            # Dump any remaining user_info fields not already shown
+            _known = {'first_name', 'last_name', 'orcid', 'email', 'lbl_email',
+                      'id', 'employee_number'}
+            extras = {k: v for k, v in user.items() if k not in _known and v not in (None, '')}
+            for key, val in extras.items():
+                _p(key.replace('_', ' ').title(), val)
+
             ids = info.get('access_group_ids', [])
-            term.subheader(f"Access Group IDs ({len(ids)})")
-            for gid in ids:
-                print(f"  {gid}")
+            if ids:
+                import textwrap
+                ids_str = ", ".join(str(x) for x in ids)
+                lines = textwrap.wrap(ids_str, width=60)
+                term.subheader(f"Access groups ({len(ids)})")
+                for line in lines:
+                    print(f"  {line}")
 
     except Exception as e:
         logger.error(f"Error retrieving account info: {e}")

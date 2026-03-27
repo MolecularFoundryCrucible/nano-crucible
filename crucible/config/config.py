@@ -25,16 +25,25 @@ class Config:
     providing a clean interface for accessing settings.
     """
 
-    # Mapping of config keys to their environment variable names and INI keys
+    # Mapping of config keys to their environment variable names, INI keys, and INI section.
+    # Keys are read from their designated section first; if not found there, the legacy
+    # flat [crucible] section is checked so that old config files keep working.
     _CONFIG_MAP = {
-        'api_key': {'env': 'CRUCIBLE_API_KEY', 'ini': 'api_key'},
-        'api_url': {'env': 'CRUCIBLE_API_URL', 'ini': 'api_url'},
-        'cache_dir': {'env': 'CRUCIBLE_CACHE_DIR', 'ini': 'cache_dir'},
-        'graph_explorer_url': {'env': 'CRUCIBLE_GRAPH_EXPLORER_URL', 'ini': 'graph_explorer_url'},
-        'current_project': {'env': 'CRUCIBLE_CURRENT_PROJECT', 'ini': 'current_project'},
-        'editor': {'env': 'CRUCIBLE_EDITOR', 'ini': 'editor'},
-        'sample_group_by': {'env': 'CRUCIBLE_SAMPLE_GROUP_BY', 'ini': 'sample_group_by'},
-        'dataset_group_by': {'env': 'CRUCIBLE_DATASET_GROUP_BY', 'ini': 'dataset_group_by'},
+        # [crucible] – API connection
+        'api_key':            {'env': 'CRUCIBLE_API_KEY',            'ini': 'api_key',            'section': 'crucible'},
+        'api_url':            {'env': 'CRUCIBLE_API_URL',            'ini': 'api_url',            'section': 'crucible'},
+        'graph_explorer_url': {'env': 'CRUCIBLE_GRAPH_EXPLORER_URL', 'ini': 'graph_explorer_url', 'section': 'crucible'},
+        'current_project':    {'env': 'CRUCIBLE_CURRENT_PROJECT',    'ini': 'current_project',    'section': 'crucible'},
+        # [cache]
+        'cache_dir':          {'env': 'CRUCIBLE_CACHE_DIR',          'ini': 'cache_dir',          'section': 'cache'},
+        # [display] – UI preferences
+        'editor':             {'env': 'CRUCIBLE_EDITOR',             'ini': 'editor',             'section': 'display'},
+        'sample_group_by':    {'env': 'CRUCIBLE_SAMPLE_GROUP_BY',    'ini': 'sample_group_by',    'section': 'display'},
+        'dataset_group_by':   {'env': 'CRUCIBLE_DATASET_GROUP_BY',   'ini': 'dataset_group_by',   'section': 'display'},
+        # [network] – timeouts and pagination
+        'connect_timeout':    {'env': 'CRUCIBLE_CONNECT_TIMEOUT',    'ini': 'connect_timeout',    'section': 'network'},
+        'read_timeout':       {'env': 'CRUCIBLE_READ_TIMEOUT',       'ini': 'read_timeout',       'section': 'network'},
+        'default_limit':      {'env': 'CRUCIBLE_DEFAULT_LIMIT',      'ini': 'default_limit',      'section': 'network'},
     }
 
     def __init__(self):
@@ -57,12 +66,23 @@ class Config:
             parser = configparser.ConfigParser()
             parser.read(config_file)
 
-            if "crucible" in parser:
-                for key, mapping in self._CONFIG_MAP.items():
-                    # Only load from file if not already set from environment
-                    if key not in self._data and mapping['ini'] in parser["crucible"]:
-                        value = parser["crucible"][mapping['ini']].strip('"').strip("'")
-                        self._data[key] = value
+            for key, mapping in self._CONFIG_MAP.items():
+                if key in self._data:
+                    continue  # already set by env var
+
+                ini_key = mapping['ini']
+                section  = mapping['section']
+
+                # Try the designated section first, then fall back to the legacy
+                # flat [crucible] section so old config files keep working.
+                value = None
+                for sec in (section, 'crucible'):
+                    if sec in parser and ini_key in parser[sec]:
+                        value = parser[sec][ini_key].strip('"').strip("'")
+                        break
+
+                if value is not None:
+                    self._data[key] = value
 
         return
 
@@ -173,6 +193,33 @@ class Config:
         return self._data.get('dataset_group_by')
 
     @property
+    def connect_timeout(self) -> int:
+        """TCP connect timeout in seconds (default 5)."""
+        raw = self._data.get('connect_timeout')
+        try:
+            return int(raw)
+        except (TypeError, ValueError):
+            return 5
+
+    @property
+    def read_timeout(self) -> int:
+        """HTTP read timeout in seconds (default 30)."""
+        raw = self._data.get('read_timeout')
+        try:
+            return int(raw)
+        except (TypeError, ValueError):
+            return 30
+
+    @property
+    def default_limit(self) -> int:
+        """Default maximum results per list/search request (default 100)."""
+        raw = self._data.get('default_limit')
+        try:
+            return int(raw)
+        except (TypeError, ValueError):
+            return 100
+
+    @property
     def client(self):
         """
         Get a configured CrucibleClient instance.
@@ -245,21 +292,6 @@ def get_cache_dir():
     return config.cache_dir
 
 
-def get_orcid_id():
-    """
-    Get the user's ORCID ID from configuration.
-
-    Priority order:
-    1. ORCID_ID environment variable
-    2. orcid_id from ~/.config/nano-crucible/config.ini
-    3. None if not configured
-
-    Returns:
-        str or None: The ORCID ID if configured, None otherwise
-    """
-    return config.orcid_id
-
-
 def get_graph_explorer_url():
     """
     Get the Crucible Graph Explorer URL from configuration.
@@ -305,18 +337,30 @@ def get_client():
 
 def create_config_file(api_key, api_url=None, cache_dir=None,
                        graph_explorer_url=None, current_project=None,
-                       editor=None, **kwargs):
+                       editor=None, connect_timeout=None, read_timeout=None,
+                       default_limit=None, **kwargs):
     """
     Create a configuration file with the given API key and optional settings.
 
+    The file uses four INI sections:
+      [crucible]  – API connection settings
+      [cache]     – cache directory
+      [display]   – UI preferences (editor, group-by defaults)
+      [network]   – request timeouts
+
+    Old single-section [crucible] files are still read correctly — the loader
+    falls back to [crucible] for any key not found in its designated section.
+
     Args:
-        api_key (str): The API key to store (user info derived from this)
-        api_url (str, optional): Custom API URL. Defaults to https://crucible.lbl.gov/api/v1
-        cache_dir (str, optional): Custom cache directory path. If not provided,
-                                   defaults to platform-specific cache directory
+        api_key (str): The API key to store
+        api_url (str, optional): Custom API URL
+        cache_dir (str, optional): Custom cache directory path
         graph_explorer_url (str, optional): Graph Explorer URL
         current_project (str, optional): Default project ID
-        **kwargs: Additional configuration values to store
+        editor (str, optional): Preferred editor command
+        connect_timeout (int, optional): TCP connect timeout in seconds
+        read_timeout (int, optional): HTTP read timeout in seconds
+        **kwargs: Additional key=value pairs written to [crucible]
 
     Returns:
         Path: Path to the created config file
@@ -325,58 +369,74 @@ def create_config_file(api_key, api_url=None, cache_dir=None,
     config_dir.mkdir(parents=True, exist_ok=True)
     config_file = config_dir / "config.ini"
 
-    # Get default values
-    default_api_url = 'https://crucible.lbl.gov/api/v1'
-    default_cache_dir = str(user_cache_dir("nano-crucible"))
-    default_graph_explorer_url = 'https://crucible-graph-explorer-776258882599.us-central1.run.app'
+    default_api_url             = 'https://crucible.lbl.gov/api/v1'
+    default_cache_dir           = str(user_cache_dir("nano-crucible"))
+    default_graph_explorer_url  = 'https://crucible-graph-explorer-776258882599.us-central1.run.app'
 
-    # Manually write the config file with comments for clarity
     with open(config_file, 'w') as f:
+
+        # ── [crucible] ───────────────────────────────────────────────────────
         f.write("[crucible]\n")
         f.write("# Crucible API authentication key (required)\n")
         f.write(f"api_key = {api_key}\n\n")
 
         f.write("# Crucible API endpoint URL\n")
-        if api_url is not None:
-            f.write(f"api_url = {api_url}\n\n")
-        else:
-            f.write(f"api_url = {default_api_url}\n\n")
-
-        f.write("# Directory for caching downloaded data\n")
-        if cache_dir is not None:
-            f.write(f"cache_dir = {cache_dir}\n\n")
-        else:
-            f.write(f"cache_dir = {default_cache_dir}\n\n")
+        f.write(f"api_url = {api_url or default_api_url}\n\n")
 
         f.write("# Crucible Graph Explorer URL\n")
-        if graph_explorer_url is not None:
-            f.write(f"graph_explorer_url = {graph_explorer_url}\n\n")
-        else:
-            f.write(f"graph_explorer_url = {default_graph_explorer_url}\n\n")
+        f.write(f"graph_explorer_url = {graph_explorer_url or default_graph_explorer_url}\n\n")
 
-        f.write("# Default project ID (optional)\n")
+        f.write("# Default project ID (leave commented out to prompt each time)\n")
         if current_project is not None:
-            f.write(f"current_project = {current_project}\n\n")
+            f.write(f"current_project = {current_project}\n")
         else:
-            f.write(f"# current_project = \n\n")
+            f.write("# current_project =\n")
 
-        f.write("# Default group-by for 'crucible sample list' (type, project)\n")
-        f.write("# sample_group_by = type\n\n")
-
-        f.write("# Default group-by for 'crucible dataset list' (measurement, session, format, instrument)\n")
-        f.write("# dataset_group_by = measurement\n\n")
-
-        f.write("# Preferred editor for 'crucible dataset edit' / 'crucible sample edit'\n")
-        f.write("# GUI editors are given their wait/foreground flag automatically (gvim, code, subl, …)\n")
-        f.write("# but you can be explicit: editor = gvim -f\n")
-        if editor is not None:
-            f.write(f"editor = {editor}\n\n")
-        else:
-            f.write(f"# editor = \n\n")
-
-        # Add any additional kwargs
         for key, value in kwargs.items():
             f.write(f"{key} = {value}\n")
+
+        # ── [cache] ──────────────────────────────────────────────────────────
+        f.write("\n[cache]\n")
+        f.write("# Directory for caching downloaded data\n")
+        f.write(f"cache_dir = {cache_dir or default_cache_dir}\n")
+
+        # ── [display] ────────────────────────────────────────────────────────
+        f.write("\n[display]\n")
+        f.write("# Preferred editor for 'crucible dataset edit' / 'crucible sample edit'\n")
+        f.write("# GUI editors receive their wait/foreground flag automatically (gvim, code, subl, …)\n")
+        f.write("# but you can be explicit:  editor = gvim -f\n")
+        if editor is not None:
+            f.write(f"editor = {editor}\n")
+        else:
+            f.write("# editor =\n")
+        f.write("\n")
+
+        f.write("# Default group-by for 'crucible sample list'  (type, project)\n")
+        f.write("# sample_group_by = type\n\n")
+
+        f.write("# Default group-by for 'crucible dataset list'  (measurement, session, format, instrument)\n")
+        f.write("# dataset_group_by = measurement\n")
+
+        # ── [network] ────────────────────────────────────────────────────────
+        f.write("\n[network]\n")
+        f.write("# TCP connect timeout in seconds\n")
+        if connect_timeout is not None:
+            f.write(f"connect_timeout = {connect_timeout}\n")
+        else:
+            f.write("# connect_timeout = 5\n")
+        f.write("\n")
+        f.write("# HTTP read timeout per request in seconds\n")
+        f.write("# Increase this when uploading large files over slow connections\n")
+        if read_timeout is not None:
+            f.write(f"read_timeout = {read_timeout}\n")
+        else:
+            f.write("# read_timeout = 30\n")
+        f.write("\n")
+        f.write("# Maximum number of results returned by list/search commands\n")
+        if default_limit is not None:
+            f.write(f"default_limit = {default_limit}\n")
+        else:
+            f.write("# default_limit = 100\n")
 
     logger.info(f"Created config file: {config_file}")
 

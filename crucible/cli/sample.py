@@ -19,6 +19,8 @@ try:
 except ImportError:
     ARGCOMPLETE_AVAILABLE = False
 
+from ..config import config as _config
+
 
 def register_subcommand(subparsers):
     """
@@ -120,9 +122,9 @@ Examples:
     parser.add_argument(
         '--limit',
         type=int,
-        default=100,
+        default=_config.default_limit,
         metavar='N',
-        help='Maximum number of results to return (default: 100)'
+        help=f'Maximum number of results to return (default: {_config.default_limit})'
     )
 
     parser.add_argument(
@@ -336,19 +338,11 @@ Examples:
     parser.set_defaults(func=_execute_edit)
 
 
-def _execute_edit(args):
-    """Execute the 'sample edit' subcommand."""
-    from crucible.client import CrucibleClient
-
-    try:
-        client = CrucibleClient()
-        sample = client.samples.get(args.sample_id)
-    except Exception as e:
-        logger.error(f"Error fetching sample: {e}")
-        sys.exit(1)
-
+def _edit_sample(sid, client, debug=False):
+    """Core edit logic for a sample — shared with the top-level 'crucible edit' command."""
+    sample = client.samples.get(sid)
     if sample is None:
-        logger.error(f"Sample not found: {args.sample_id}")
+        logger.error(f"Sample not found: {sid}")
         sys.exit(1)
 
     valid_fields = set(_sample_updatable_fields())
@@ -371,15 +365,26 @@ def _execute_edit(args):
         return
 
     try:
-        client.samples.update(args.sample_id, **changes)
+        client.samples.update(sid, **changes)
         term.header("Changes")
         term.diff(original, changes)
     except Exception as e:
         logger.error(f"Error updating sample: {e}")
-        if getattr(args, 'debug', False):
+        if debug:
             import traceback
             traceback.print_exc()
         sys.exit(1)
+
+
+def _execute_edit(args):
+    """Execute the 'sample edit' subcommand."""
+    from crucible.client import CrucibleClient
+    try:
+        client = CrucibleClient()
+    except Exception as e:
+        logger.error(f"Error connecting: {e}")
+        sys.exit(1)
+    _edit_sample(args.sample_id, client, debug=getattr(args, 'debug', False))
 
 
 def _register_link(subparsers):
@@ -444,8 +449,8 @@ Examples:
 """
     )
     parser.add_argument('sample_id', metavar='SAMPLE_ID', help='Sample unique ID')
-    parser.add_argument('--limit', type=int, default=100, metavar='N',
-                        help='Maximum number of results (default: 100)')
+    parser.add_argument('--limit', type=int, default=_config.default_limit, metavar='N',
+                        help=f'Maximum number of results (default: {_config.default_limit})')
     parser.add_argument('-v', '--verbose', action='store_true', help='Verbose output')
     parser.set_defaults(func=_execute_list_parents)
 
@@ -463,8 +468,8 @@ Examples:
 """
     )
     parser.add_argument('sample_id', metavar='SAMPLE_ID', help='Sample unique ID')
-    parser.add_argument('--limit', type=int, default=100, metavar='N',
-                        help='Maximum number of results (default: 100)')
+    parser.add_argument('--limit', type=int, default=_config.default_limit, metavar='N',
+                        help=f'Maximum number of results (default: {_config.default_limit})')
     parser.add_argument('-v', '--verbose', action='store_true', help='Verbose output')
     parser.set_defaults(func=_execute_list_children)
 
@@ -482,8 +487,8 @@ Examples:
 """
     )
     parser.add_argument('sample_id', metavar='SAMPLE_ID', help='Sample unique ID')
-    parser.add_argument('--limit', type=int, default=100, metavar='N',
-                        help='Maximum number of results (default: 100)')
+    parser.add_argument('--limit', type=int, default=_config.default_limit, metavar='N',
+                        help=f'Maximum number of results (default: {_config.default_limit})')
     parser.add_argument('-v', '--verbose', action='store_true', help='Verbose output')
     parser.set_defaults(func=_execute_list_datasets)
 
@@ -669,7 +674,7 @@ def _execute_create(args):
     from crucible.client import CrucibleClient
 
     name        = args.name
-    project_id  = args.project_id or config.current_project
+    project_id  = args.project_id   # never auto-fill from config here
     description = args.description
     sample_type = args.sample_type
 
@@ -677,6 +682,12 @@ def _execute_create(args):
     if interactive:
         term.header("Create Sample")
         print("")
+
+    try:
+        client = CrucibleClient()
+    except Exception as e:
+        logger.error(f"Error connecting: {e}")
+        sys.exit(1)
 
     if name is None:
         while True:
@@ -686,11 +697,25 @@ def _execute_create(args):
             logger.error("Sample name is required.")
 
     if project_id is None:
+        default_proj = config.current_project
+        prompt = f"Project ID [{default_proj}]: " if default_proj else "Project ID: "
         while True:
-            project_id = input("Project ID: ").strip()
-            if project_id:
-                break
-            logger.error("Project ID is required.")
+            val = input(prompt).strip()
+            project_id = val or default_proj
+            if not project_id:
+                logger.error("Project ID is required.")
+                continue
+            if client.projects.get(project_id) is None:
+                logger.error(f"Project '{project_id}' not found.")
+                project_id = None
+                default_proj = None
+                prompt = "Project ID: "
+                continue
+            break
+    else:
+        if client.projects.get(project_id) is None:
+            logger.error(f"Project '{project_id}' not found.")
+            sys.exit(1)
 
     if interactive:
         if sample_type is None:
@@ -702,7 +727,6 @@ def _execute_create(args):
             description = val or None
 
     try:
-        client = CrucibleClient()
         result = client.samples.create(
             sample_name=name,
             project_id=project_id,

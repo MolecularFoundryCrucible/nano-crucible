@@ -136,7 +136,7 @@ except ImportError:
     ARGCOMPLETE_AVAILABLE = False
 
 #internal modules
-from ..constants import DEFAULT_LIMIT
+from ..config import config as _config
 
 #%%
 
@@ -173,6 +173,7 @@ def register_subcommand(subparsers):
     _register_list_children(dataset_subparsers)
     _register_list_samples(dataset_subparsers)
     _register_download(dataset_subparsers)
+    _register_add_file(dataset_subparsers)
     _register_search(dataset_subparsers)
     _register_add_keyword(dataset_subparsers)
     _register_list_keywords(dataset_subparsers)
@@ -270,7 +271,7 @@ Examples:
     parser.add_argument(
         '--limit', '-l',
         type=int,
-        default=DEFAULT_LIMIT,
+        default=_config.default_limit,
         metavar='N',
         help='Maximum number of results to return (default: 100)'
     )
@@ -648,19 +649,11 @@ Examples:
     parser.set_defaults(func=_execute_edit)
 
 
-def _execute_edit(args):
-    """Execute the 'dataset edit' subcommand."""
-    from crucible.client import CrucibleClient
-
-    try:
-        client = CrucibleClient()
-        dataset = client.datasets.get(args.dataset_id, include_metadata=True)
-    except Exception as e:
-        logger.error(f"Error fetching dataset: {e}")
-        sys.exit(1)
-
+def _edit_dataset(dsid, client, debug=False):
+    """Core edit logic for a dataset — shared with the top-level 'crucible edit' command."""
+    dataset = client.datasets.get(dsid, include_metadata=True)
     if dataset is None:
-        logger.error(f"Dataset not found: {args.dataset_id}")
+        logger.error(f"Dataset not found: {dsid}")
         sys.exit(1)
 
     valid_fields = set(_dataset_updatable_fields())
@@ -680,13 +673,11 @@ def _execute_edit(args):
         logger.info("No changes.")
         return
 
-    # Diff regular fields
     field_changes = {
         k: v for k, v in edited.items()
         if k in valid_fields and v != original_fields.get(k)
     }
 
-    # Diff scientific metadata
     edited_meta = edited.get('scientific_metadata')
     meta_changed = isinstance(edited_meta, dict) and edited_meta != original_meta
 
@@ -696,11 +687,9 @@ def _execute_edit(args):
 
     try:
         if field_changes:
-            client.datasets.update(args.dataset_id, **field_changes)
+            client.datasets.update(dsid, **field_changes)
         if meta_changed:
-            client.datasets.update_scientific_metadata(
-                args.dataset_id, edited_meta, overwrite=True
-            )
+            client.datasets.update_scientific_metadata(dsid, edited_meta, overwrite=True)
 
         diff_updated = dict(field_changes)
         if meta_changed:
@@ -709,10 +698,21 @@ def _execute_edit(args):
         term.diff(original, diff_updated)
     except Exception as e:
         logger.error(f"Error updating dataset: {e}")
-        if getattr(args, 'debug', False):
+        if debug:
             import traceback
             traceback.print_exc()
         sys.exit(1)
+
+
+def _execute_edit(args):
+    """Execute the 'dataset edit' subcommand."""
+    from crucible.client import CrucibleClient
+    try:
+        client = CrucibleClient()
+    except Exception as e:
+        logger.error(f"Error connecting: {e}")
+        sys.exit(1)
+    _edit_dataset(args.dataset_id, client, debug=getattr(args, 'debug', False))
 
 
 def _register_link(subparsers):
@@ -827,8 +827,8 @@ Examples:
 """
     )
     parser.add_argument('dataset_id', metavar='DATASET_ID', help='Dataset unique ID')
-    parser.add_argument('--limit', type=int, default=DEFAULT_LIMIT, metavar='N',
-                        help=f'Maximum number of results (default: {DEFAULT_LIMIT})')
+    parser.add_argument('--limit', type=int, default=_config.default_limit, metavar='N',
+                        help=f'Maximum number of results (default: {_config.default_limit})')
     parser.add_argument('-v', '--verbose', action='store_true', help='Verbose output')
     parser.set_defaults(func=_execute_list_parents)
 
@@ -847,8 +847,8 @@ Examples:
 """
     )
     parser.add_argument('dataset_id', metavar='DATASET_ID', help='Dataset unique ID')
-    parser.add_argument('--limit', type=int, default=DEFAULT_LIMIT, metavar='N',
-                        help=f'Maximum number of results (default: {DEFAULT_LIMIT})')
+    parser.add_argument('--limit', type=int, default=_config.default_limit, metavar='N',
+                        help=f'Maximum number of results (default: {_config.default_limit})')
     parser.add_argument('-v', '--verbose', action='store_true', help='Verbose output')
     parser.set_defaults(func=_execute_list_children)
 
@@ -866,8 +866,8 @@ Examples:
 """
     )
     parser.add_argument('dataset_id', metavar='DATASET_ID', help='Dataset unique ID')
-    parser.add_argument('--limit', type=int, default=DEFAULT_LIMIT, metavar='N',
-                        help=f'Maximum number of results (default: {DEFAULT_LIMIT})')
+    parser.add_argument('--limit', type=int, default=_config.default_limit, metavar='N',
+                        help=f'Maximum number of results (default: {_config.default_limit})')
     parser.add_argument('-v', '--verbose', action='store_true', help='Verbose output')
     parser.set_defaults(func=_execute_list_samples)
 
@@ -997,6 +997,90 @@ def _execute_download(args):
         sys.exit(1)
 
 
+def _register_add_file(subparsers):
+    """Register the 'dataset add-file' subcommand."""
+    parser = subparsers.add_parser(
+        'add-file',
+        help='Upload file(s) to an existing dataset',
+        description='Upload one or more files to an existing dataset without re-creating it',
+        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+    # Add a single file
+    crucible dataset add-file DATASET_ID -i results.csv
+
+    # Add multiple files
+    crucible dataset add-file DATASET_ID -i file1.dat file2.dat
+
+    # Add files matching a glob pattern
+    crucible dataset add-file DATASET_ID -i *.csv
+"""
+    )
+
+    dataset_id_arg = parser.add_argument(
+        'dataset_id',
+        metavar='DATASET_ID',
+        help='Dataset unique ID'
+    )
+    if ARGCOMPLETE_AVAILABLE:
+        dataset_id_arg.completer = argcomplete.completers.SuppressCompleter()
+
+    parser.add_argument(
+        '-i', '--input',
+        nargs='+',
+        required=True,
+        metavar='FILE',
+        help='File(s) to upload (supports glob patterns like *.csv)'
+    )
+    parser.set_defaults(func=_execute_add_file)
+
+
+def _execute_add_file(args):
+    """Execute the 'dataset add-file' subcommand."""
+    import glob as _glob
+    from crucible.client import CrucibleClient
+
+    dsid = args.dataset_id
+
+    # Expand glob patterns
+    expanded = []
+    for pattern in args.input:
+        matches = sorted(_glob.glob(pattern))
+        if matches:
+            expanded.extend(matches)
+        else:
+            expanded.append(pattern)  # keep as-is; validation below will catch missing files
+
+    # Validate all files exist before starting any uploads
+    files = []
+    for f in expanded:
+        p = Path(f)
+        if not p.exists():
+            logger.error(f"File not found: {f}")
+            sys.exit(1)
+        files.append(p)
+
+    try:
+        client = CrucibleClient()
+
+        term.header(f"Add Files  {dsid}")
+        rows = []
+        for fpath in files:
+            print(f"  Uploading {fpath.name} ...", flush=True)
+            client.datasets.upload_file(dsid, str(fpath))
+            rows.append((fpath.name, term.fmt_size(fpath.stat().st_size), '✓'))
+
+        print()
+        term.table(rows, ['File', 'Size', ''])
+
+    except Exception as e:
+        logger.error(f"Error uploading file(s): {e}")
+        if getattr(args, 'debug', False):
+            import traceback
+            traceback.print_exc()
+        sys.exit(1)
+
+
 def _register_search(subparsers):
     """Register the 'dataset search' subcommand."""
     parser = subparsers.add_parser(
@@ -1021,7 +1105,7 @@ Examples:
     parser.add_argument(
         '--limit', '-l',
         type=int,
-        default=DEFAULT_LIMIT,
+        default=_config.default_limit,
         metavar='N',
         help='Maximum number of results to return (default: 100)'
     )
@@ -1308,8 +1392,18 @@ def _execute_create(args):
         project_id = config.current_project
         project_from_config = True
         if project_id is None:
-            logger.error("Error: Project ID required. Specify with -pid or set current_project in config.")
+            logger.error("Project ID required. Specify with -pid or set current_project in config.")
             sys.exit(1)
+
+    # Validate the project exists before doing any expensive work
+    from crucible.client import CrucibleClient as _CC
+    try:
+        if _CC().projects.get(project_id) is None:
+            logger.error(f"Project '{project_id}' not found.")
+            sys.exit(1)
+    except Exception as e:
+        logger.error(f"Error validating project: {e}")
+        sys.exit(1)
 
     # Expand wildcards in input files
     import glob
