@@ -9,6 +9,8 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+from . import term
+
 
 def register_subcommand(subparsers):
     """Register the whoami subcommand."""
@@ -20,7 +22,7 @@ def register_subcommand(subparsers):
     parser.add_argument(
         '-v', '--verbose',
         action='store_true',
-        help='Show access group IDs'
+        help='Show all fields including employee number and access group IDs'
     )
     parser.set_defaults(func=execute)
 
@@ -30,32 +32,43 @@ def execute(args):
     from crucible.config import config
     try:
         info = config.client.whoami()
-
         user = info.get('user_info', {})
-        access_group = info.get('access_group_name', 'N/A')
 
-        logger.info("\n=== Current User ===")
+        W = 16
+        def _p(label, value):
+            print(f"  {label:<{W}}{value if value not in (None, '') else '—'}")
+
+        term.header("Whoami")
 
         first = user.get('first_name', '')
-        last = user.get('last_name', '')
-        if first or last:
-            logger.info(f"Name:       {first} {last}".strip())
-
-        if user.get('orcid'):
-            logger.info(f"ORCID:      {user['orcid']}")
-        elif access_group:
-            logger.info(f"Access group: {access_group}")
-
-        if user.get('email'):
-            logger.info(f"Email:      {user['email']}")
-        if user.get('lbl_email') and user.get('lbl_email') != user.get('email'):
-            logger.info(f"LBL Email:  {user['lbl_email']}")
-        if user.get('id'):
-            logger.info(f"ID:         {user['id']}")
+        last  = user.get('last_name', '')
+        name  = f"{first} {last}".strip() or None
+        _p("Name",  name)
+        _p("ORCID", term.orcid_link(user.get('orcid')))
+        _p("Email", user.get('email'))
+        lbl = user.get('lbl_email')
+        if lbl and lbl != user.get('email'):
+            _p("LBL Email", lbl)
 
         if getattr(args, 'verbose', False):
+            _p("ID",              user.get('id'))
+            _p("Employee number", user.get('employee_number'))
+
+            # Dump any remaining user_info fields not already shown
+            _known = {'first_name', 'last_name', 'orcid', 'email', 'lbl_email',
+                      'id', 'employee_number'}
+            extras = {k: v for k, v in user.items() if k not in _known and v not in (None, '')}
+            for key, val in extras.items():
+                _p(key.replace('_', ' ').title(), val)
+
             ids = info.get('access_group_ids', [])
-            logger.info(f"Access groups: {len(ids)} ({ids})")
+            if ids:
+                import textwrap
+                ids_str = ", ".join(str(x) for x in ids)
+                lines = textwrap.wrap(ids_str, width=60)
+                term.subheader(f"Access groups ({len(ids)})")
+                for line in lines:
+                    print(f"  {line}")
 
     except Exception as e:
         logger.error(f"Error retrieving account info: {e}")
