@@ -183,7 +183,7 @@ class CrucibleClient:
             str: resource_type
         """
         response = self._request('get', f"/idtype/{resource_id}")
-        return response['object_type']
+        return response.get('resource_type') or response['object_type']
 
     def get(self, resource_id: str, resource_type: str = None,
             include_metadata: bool = False) -> Dict:
