@@ -323,15 +323,15 @@ Once registered, your parser is automatically available in the CLI:
 
 ```bash
 # Upload XRD data
-crucible upload -i sample.xrd -t xrd -pid my-project -u
+crucible dataset create -i sample.xrd -t xrd -pid my-project
 
 # Add user metadata/keywords
-crucible upload -i sample.xrd -t xrd -pid my-project -u \
+crucible dataset create -i sample.xrd -t xrd -pid my-project \
     --metadata '{"sample_id": "XRD-001"}' \
     --keywords "validated,published"
 
 # Make it public
-crucible upload -i sample.xrd -t xrd -pid my-project -u --public
+crucible dataset create -i sample.xrd -t xrd -pid my-project --public
 ```
 
 ## Available Parsers
@@ -353,4 +353,4 @@ for community-developed parsers under active development.
 
 - **BaseParser API**: See `base.py` for full API documentation
 - **LAMMPS Example**: See `lammps.py` for a complete implementation
-- **Upload CLI**: See `cli/upload.py` for CLI integration
+- **Upload CLI**: See `cli/dataset.py` (`dataset create` command) for CLI integration

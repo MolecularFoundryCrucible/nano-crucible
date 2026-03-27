@@ -91,13 +91,13 @@ client = CrucibleClient(
 
 ```python
 from crucible import CrucibleClient
-from crucible.models import BaseDataset
+from crucible.models import Dataset
 
 # Initialize client
 client = CrucibleClient()
 
 # Create a dataset
-dataset = BaseDataset(
+dataset = Dataset(
     dataset_name="My Experiment",
     measurement="XRD",
     project_id="my-project",
@@ -136,7 +136,7 @@ crucible dataset get DATASET_ID
 crucible sample create -n "Sample A" -pid my-project
 
 # Link sample to dataset
-crucible sample add-to-dataset SAMPLE_ID DATASET_ID
+crucible sample add-dataset SAMPLE_ID -d DATASET_ID
 
 # Open a resource in your browser
 crucible open DATASET_ID

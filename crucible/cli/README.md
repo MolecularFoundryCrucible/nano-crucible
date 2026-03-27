@@ -45,7 +45,7 @@ crucible --debug dataset list   # debug must precede the subcommand
 |---------|-------------|-------------|
 | `dataset list` | `-pid ID` `-m TYPE` `-k WORD` `--session NAME` `--limit N` `-v` | List datasets, with optional filters |
 | `dataset get ID` | `-v` `--include-metadata` | Get dataset details; `-v` shows keywords and linked samples |
-| `dataset create -i FILE` | `-t TYPE` `-pid ID` `-n NAME` `-m TYPE` `--metadata JSON` `-k WORDS` `--session NAME` `--instrument NAME` `--public` `--mfid [ID]` `--dry-run` | Upload file(s) and create a dataset record |
+| `dataset create -i FILE` | `-t TYPE` `-pid ID` `-n NAME` `-m TYPE` `--timestamp DATE` `--metadata JSON` `-k WORDS` `--session NAME` `--instrument NAME` `--public` `--mfid [ID]` `--dry-run` | Upload file(s) and create a dataset record |
 | `dataset update ID` | `--set KEY=VALUE` `--metadata JSON` `--overwrite` | Update model fields (`--set`) and/or scientific metadata (`--metadata`) |
 | `dataset download ID` | `--output-dir DIR` `--include PATTERN` `--exclude PATTERN` `-f FILE` `--overwrite` | Download dataset files with optional glob filters (delegates to `crucible download`) |
 | `dataset search QUERY` | `--limit N` `-v` | Search datasets by scientific metadata |
@@ -60,7 +60,7 @@ crucible --debug dataset list   # debug must precede the subcommand
 | `dataset parsers` | | List available client-side parsers |
 | `dataset ingestors` | | List available server-side ingestors |
 
-**Updatable fields** (via `--set`): `dataset_name`, `measurement`, `data_format`, `session_name`, `instrument_name`, `instrument_id`, `project_id`, `owner_orcid`, `source_folder`, `file_to_upload`, `json_link`, `public`, `timestamp`
+**Updatable fields** (via `--set`): `dataset_name`, `measurement`, `data_format`, `session_name`, `instrument_name`, `instrument_id`, `project_id`, `owner_orcid`, `source_folder`, `file_to_upload`, `public`, `timestamp`
 
 ```bash
 # Upload a file (server assigns ID)
@@ -85,7 +85,7 @@ crucible dataset search "temperature" --limit 10
 |---------|-------------|-------------|
 | `sample list` | `-pid ID` `--limit N` `-v` | List samples, with optional filters |
 | `sample get ID` | `-v` | Get sample details; `-v` shows linked datasets |
-| `sample create` | `-n NAME` `-pid ID` `--type TYPE` `--description TEXT` | Create a new sample |
+| `sample create` | `-n NAME` `-pid ID` `--type TYPE` `--description TEXT` `--timestamp DATE` | Create a new sample |
 | `sample update ID` | `--set KEY=VALUE` | Update sample fields |
 | `sample link` | `-p PARENT_ID -c CHILD_ID` | Create a parent-child relationship between two samples |
 | `sample add-dataset ID` | `-d DATASET_ID` | Link a dataset to this sample |
