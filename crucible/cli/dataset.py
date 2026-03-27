@@ -247,10 +247,10 @@ Examples:
     parser.add_argument(
         '--group-by',
         dest='group_by',
-        default=None,
+        default='measurement',
         choices=['measurement', 'session', 'format', 'instrument'],
         metavar='FIELD',
-        help='Group results by field: measurement, session, format, instrument'
+        help='Group results by field: measurement, session, format, instrument (default: measurement)'
     )
 
     parser.add_argument(
@@ -1247,8 +1247,10 @@ def _execute_list(args):
                     ds.get('session_name') or '—',
                 )
 
+            _by_name = lambda ds: (ds.get('dataset_name') or '').lower()
+
             if not group_by:
-                term.table([_make_row(ds) for ds in datasets],
+                term.table([_make_row(ds) for ds in sorted(datasets, key=_by_name)],
                            ['Name', 'MFID', 'Measurement', 'Session'],
                            max_widths=[35, 26, 15, 20])
             else:
@@ -1260,7 +1262,7 @@ def _execute_list(args):
                 for key in keys:
                     label = key or '(none)'
                     term.subheader(f"{label} ({len(groups[key])})")
-                    term.table([_make_row(ds) for ds in groups[key]],
+                    term.table([_make_row(ds) for ds in sorted(groups[key], key=_by_name)],
                                ['Name', 'MFID', 'Measurement', 'Session'],
                                max_widths=[35, 26, 15, 20])
 

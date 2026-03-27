@@ -97,10 +97,10 @@ Examples:
     parser.add_argument(
         '--group-by',
         dest='group_by',
-        default=None,
+        default='type',
         choices=['type', 'project'],
         metavar='FIELD',
-        help='Group results by field: type, project'
+        help='Group results by field: type, project (default: type)'
     )
 
     parser.add_argument(
@@ -550,8 +550,10 @@ def _execute_list(args):
                     s.get('sample_type') or '—',
                 )
 
+            _by_name = lambda s: (s.get('sample_name') or '').lower()
+
             if not group_by:
-                term.table([_make_row(s) for s in samples],
+                term.table([_make_row(s) for s in sorted(samples, key=_by_name)],
                            ['Name', 'MFID', 'Type'], max_widths=[35, 26, 20])
             else:
                 from collections import defaultdict
@@ -562,7 +564,7 @@ def _execute_list(args):
                 for key in keys:
                     label = key or '(none)'
                     term.subheader(f"{label} ({len(groups[key])})")
-                    term.table([_make_row(s) for s in groups[key]],
+                    term.table([_make_row(s) for s in sorted(groups[key], key=_by_name)],
                                ['Name', 'MFID', 'Type'], max_widths=[35, 26, 20])
 
     except Exception as e:
