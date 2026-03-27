@@ -193,6 +193,8 @@ Examples:
     crucible dataset list -pid my-project -m XRD
     crucible dataset list -pid my-project -k silicon --limit 20
     crucible dataset list --session 2024-01-15-run
+    crucible dataset list -pid my-project --include "run-*" "*XRD*"
+    crucible dataset list -pid my-project --exclude "*test*"
 """
     )
 
@@ -239,6 +241,20 @@ Examples:
         dest='instrument_name',
         metavar='NAME',
         help='Filter by instrument name (exact match)'
+    )
+
+    parser.add_argument(
+        '--include',
+        nargs='+',
+        metavar='PATTERN',
+        help='Only show datasets whose name matches any glob pattern (e.g. "run-*", "*XRD*")'
+    )
+
+    parser.add_argument(
+        '--exclude',
+        nargs='+',
+        metavar='PATTERN',
+        help='Exclude datasets whose name matches any glob pattern'
     )
 
     parser.add_argument(
@@ -1172,8 +1188,21 @@ def _execute_list(args):
         filters['instrument_name'] = args.instrument_name
 
     try:
+        import fnmatch
         client = CrucibleClient()
         datasets = client.datasets.list(project_id=project_id, limit=args.limit, **filters)
+
+        # Client-side glob filtering on name
+        if getattr(args, 'include', None):
+            datasets = [ds for ds in datasets if any(
+                fnmatch.fnmatch((ds.get('dataset_name') or '').lower(), p.lower())
+                for p in args.include
+            )]
+        if getattr(args, 'exclude', None):
+            datasets = [ds for ds in datasets if not any(
+                fnmatch.fnmatch((ds.get('dataset_name') or '').lower(), p.lower())
+                for p in args.exclude
+            )]
 
         title = f"Datasets · {project_id} ({len(datasets)})" if project_id else f"Datasets ({len(datasets)})"
         term.header(title)

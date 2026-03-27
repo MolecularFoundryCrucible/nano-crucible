@@ -64,8 +64,9 @@ def _register_list(subparsers):
         epilog="""
 Examples:
     crucible sample list -pid my-project
-    crucible sample list -pid my-project -n "Silicon*"
     crucible sample list -pid my-project --type wafer
+    crucible sample list -pid my-project --include "Silicon*" "Wafer*"
+    crucible sample list -pid my-project --exclude "*test*" "*dummy*"
 """
     )
 
@@ -90,6 +91,20 @@ Examples:
         dest='sample_type',
         metavar='TYPE',
         help='Filter by sample type (exact match)'
+    )
+
+    parser.add_argument(
+        '--include',
+        nargs='+',
+        metavar='PATTERN',
+        help='Only show samples whose name matches any glob pattern (e.g. "Silicon*", "wafer-??")'
+    )
+
+    parser.add_argument(
+        '--exclude',
+        nargs='+',
+        metavar='PATTERN',
+        help='Exclude samples whose name matches any glob pattern'
     )
 
     parser.add_argument(
@@ -482,8 +497,21 @@ def _execute_list(args):
         filters['sample_type'] = args.sample_type
 
     try:
+        import fnmatch
         client = CrucibleClient()
         samples = client.samples.list(project_id=project_id, limit=args.limit, **filters)
+
+        # Client-side glob filtering on name
+        if getattr(args, 'include', None):
+            samples = [s for s in samples if any(
+                fnmatch.fnmatch((s.get('sample_name') or '').lower(), p.lower())
+                for p in args.include
+            )]
+        if getattr(args, 'exclude', None):
+            samples = [s for s in samples if not any(
+                fnmatch.fnmatch((s.get('sample_name') or '').lower(), p.lower())
+                for p in args.exclude
+            )]
 
         title = f"Samples · {project_id} ({len(samples)})" if project_id else f"Samples ({len(samples)})"
         term.header(title)
