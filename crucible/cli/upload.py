@@ -218,11 +218,7 @@ def execute(args):
     import json
     from crucible.parsers import get_parser, BaseParser
     from crucible.config import config
-    from crucible.cli import setup_logging
-
     # Set up logging based on verbose flag
-    setup_logging(verbose=args.verbose)
-
     # Get project_id - use flag if provided, otherwise fall back to config
     project_id = args.project_id
     project_from_config = False
@@ -324,7 +320,7 @@ def execute(args):
         )
     except Exception as e:
         logger.error(f"Error parsing file: {e}")
-        if args.verbose:
+        if getattr(args, "debug", False):
             import traceback
             traceback.print_exc()
         sys.exit(1)
@@ -395,7 +391,7 @@ def execute(args):
 
         except Exception as e:
             logger.error(f"\n✗ Upload failed: {e}")
-            if args.verbose:
+            if getattr(args, "debug", False):
                 import traceback
                 traceback.print_exc()
             sys.exit(1)

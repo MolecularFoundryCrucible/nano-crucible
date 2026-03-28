@@ -6,7 +6,7 @@ nano-crucible: National Archive for NSRC Observations - Crucible
 Python client library for the Crucible API - the Molecular Foundry data lakehouse.
 """
 
-__version__ = "2.0.2"
+__version__ = "2.1.0"
 __author__ = "mkywall"
 
 import logging
@@ -57,7 +57,24 @@ def setup_logging(verbose=False):
 
 
 from .client import CrucibleClient
-from .models import BaseDataset, Project
+from .models import Dataset, Sample, Project, User, Instrument
 from . import config
 
-__all__ = ['CrucibleClient', 'BaseDataset', 'Project', 'config', 'setup_logging', '__version__', '__author__']
+__all__ = ['CrucibleClient', 'Dataset', 'Sample', 'Project', 'User', 'Instrument',
+           'config', 'setup_logging', '__version__', '__author__']
+
+
+def __getattr__(name: str):
+    import warnings
+    _aliases = {
+        'BaseDataset': Dataset,
+        'BaseSample':  Sample,
+    }
+    if name in _aliases:
+        warnings.warn(
+            f"'{name}' is deprecated; use '{_aliases[name].__name__}' instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return _aliases[name]
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

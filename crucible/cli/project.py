@@ -12,6 +12,9 @@ import json
 
 logger = logging.getLogger(__name__)
 
+from . import term
+from ..config import config as _config
+
 try:
     import argcomplete
     ARGCOMPLETE_AVAILABLE = True
@@ -43,7 +46,7 @@ def register_subcommand(subparsers):
     _register_list(project_subparsers)
     _register_get(project_subparsers)
     _register_create(project_subparsers)
-    _register_get_users(project_subparsers)
+    _register_list_users(project_subparsers)
     _register_add_user(project_subparsers)
 
 
@@ -58,9 +61,9 @@ def _register_list(subparsers):
     parser.add_argument(
         '--limit',
         type=int,
-        default=100,
+        default=_config.default_limit,
         metavar='N',
-        help='Maximum number of results to return (default: 100)'
+        help=f'Maximum number of results to return (default: {_config.default_limit})'
     )
 
     parser.add_argument(
@@ -104,14 +107,16 @@ def _register_create(subparsers):
         'create',
         help='Create a new project',
         description='Create a new project in Crucible',
+        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
         epilog="""
 Examples:
     # Interactive mode (prompts for input)
     crucible project create
 
-    # Command-line mode (all arguments provided)
+    # Command-line mode
     crucible project create --project-id my-project -o "LBNL" -e "lead@lbl.gov"
-    crucible project create --project-id alphafold-exp -o "Argonne" -e "researcher@anl.gov"
+    crucible project create --project-id my-project -o "LBNL" -e "lead@lbl.gov" \\
+        --title "Silicon Wafer Study" --lead-name "Jane Doe"
 """
     )
 
@@ -141,6 +146,31 @@ Examples:
     )
 
     parser.add_argument(
+        '--title',
+        required=False,
+        default=None,
+        metavar='TITLE',
+        help='Human-readable project title (optional)'
+    )
+
+    parser.add_argument(
+        '--lead-name',
+        required=False,
+        default=None,
+        metavar='NAME',
+        dest='project_lead_name',
+        help='Project lead full name (optional)'
+    )
+
+    parser.add_argument(
+        '--status',
+        required=False,
+        default=None,
+        metavar='STATUS',
+        help='Project status (optional)'
+    )
+
+    parser.add_argument(
         '-v', '--verbose',
         action='store_true',
         help='Verbose output'
@@ -149,43 +179,31 @@ Examples:
     parser.set_defaults(func=_execute_create)
 
 
-def _register_get_users(subparsers):
-    """Register the 'project get-users' subcommand."""
+def _register_list_users(subparsers):
+    """Register the 'project list-users' subcommand."""
+    import argparse
+
+    def _add_args(p):
+        pid_arg = p.add_argument('project_id', metavar='PROJECT_ID', help='Project ID')
+        if ARGCOMPLETE_AVAILABLE:
+            pid_arg.completer = argcomplete.completers.SuppressCompleter()
+        p.add_argument('--limit', type=int, default=_config.default_limit, metavar='N',
+                       help=f'Maximum number of results to return (default: {_config.default_limit})')
+        p.add_argument('-v', '--verbose', action='store_true', help='Verbose output')
+
     parser = subparsers.add_parser(
-        'get-users',
-        help='Get users in a project',
+        'list-users',
+        help='List users in a project',
         description='List all users associated with a project (requires admin permissions)',
+        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-    crucible project get-users my-project
-    crucible project get-users lammps-test
+    crucible project list-users my-project
+    crucible project list-users lammps-test
 """
     )
-
-    project_id_arg = parser.add_argument(
-        'project_id',
-        metavar='PROJECT_ID',
-        help='Project ID'
-    )
-    # Disable file completion for project_id
-    if ARGCOMPLETE_AVAILABLE:
-        project_id_arg.completer = argcomplete.completers.SuppressCompleter()
-
-    parser.add_argument(
-        '--limit',
-        type=int,
-        default=100,
-        metavar='N',
-        help='Maximum number of results to return (default: 100)'
-    )
-
-    parser.add_argument(
-        '-v', '--verbose',
-        action='store_true',
-        help='Verbose output'
-    )
-
-    parser.set_defaults(func=_execute_get_users)
+    _add_args(parser)
+    parser.set_defaults(func=_execute_list_users)
 
 
 def _register_add_user(subparsers):
@@ -194,6 +212,7 @@ def _register_add_user(subparsers):
         'add-user',
         help='Add a user to a project',
         description='Add a user to a project by ORCID (requires admin permissions)',
+        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
         epilog="""
 Examples:
     crucible project add-user my-project --orcid 0000-0002-1825-0097
@@ -229,43 +248,54 @@ Examples:
 def _execute_list(args):
     """Execute the 'project list' subcommand."""
     from crucible.client import CrucibleClient
-    from crucible.cli import setup_logging
-
-    setup_logging(verbose=args.verbose)
-
     try:
         client = CrucibleClient()
         projects = client.projects.list(limit=args.limit)
 
-        logger.info(f"\n=== Projects ===")
-        logger.info(f"Found {len(projects)} project(s)\n")
-
-        if projects:
-            for project in projects:
-                logger.info(f"ID: {project.get('project_id', 'N/A')}")
-                if project.get('organization'):
-                    logger.info(f"  Organization: {project['organization']}")
-                if project.get('title'):
-                    logger.info(f"  Title: {project['title']}")
-                if project.get('project_lead_email'):
-                    logger.info(f"  Lead: {project['project_lead_email']}")
-                logger.info("")
+        term.header(f"Projects ({len(projects)})")
+        if not projects:
+            print(f"  {term.dim('No projects found.')}")
+        else:
+            rows = [
+                (
+                    p.get('project_id') or '—',
+                    p.get('title') or '—',
+                    p.get('organization') or '—',
+                    p.get('project_lead_email') or '—',
+                )
+                for p in projects
+            ]
+            term.table(rows, ['ID', 'Title', 'Organization', 'Lead Email'],
+                       max_widths=[20, 30, 20, 30])
 
     except Exception as e:
         logger.error(f"Error listing projects: {e}")
-        if args.verbose:
+        if getattr(args, "debug", False):
             import traceback
             traceback.print_exc()
         sys.exit(1)
 
 
+def _show_project(project):
+    """Display project fields."""
+    W = 14
+
+    def _p(label, value):
+        print(f"  {label:<{W}}{value if value not in (None, '') else '—'}")
+
+    term.header("Project")
+    pid = project.get('project_id')
+    _p("ID",           term.cyan(pid) if pid else None)
+    _p("Title",        project.get('title'))
+    _p("Organization", project.get('organization'))
+    _p("Lead",         project.get('project_lead_name'))
+    _p("Lead Email",   project.get('project_lead_email'))
+    _p("Status",       project.get('status'))
+
+
 def _execute_get(args):
     """Execute the 'project get' subcommand."""
     from crucible.client import CrucibleClient
-    from crucible.cli import setup_logging
-
-    setup_logging(verbose=args.verbose)
-
     try:
         client = CrucibleClient()
         project = client.projects.get(args.project_id)
@@ -274,25 +304,11 @@ def _execute_get(args):
             logger.error(f"Project not found: {args.project_id}")
             sys.exit(1)
 
-        logger.info("\n=== Project Information ===")
-        logger.info(f"ID: {project.get('project_id', 'N/A')}")
-        if project.get('organization'):
-            logger.info(f"Organization: {project['organization']}")
-        if project.get('title'):
-            logger.info(f"Title: {project['title']}")
-        if project.get('project_lead_email'):
-            logger.info(f"Lead Email: {project['project_lead_email']}")
-        if project.get('project_lead_name'):
-            logger.info(f"Lead Name: {project['project_lead_name']}")
-        if project.get('status'):
-            logger.info(f"Status: {project['status']}")
-
-        if args.verbose:
-            logger.debug(f"\nFull project data: {json.dumps(project, indent=2)}")
+        _show_project(project)
 
     except Exception as e:
         logger.error(f"Error retrieving project: {e}")
-        if args.verbose:
+        if getattr(args, "debug", False):
             import traceback
             traceback.print_exc()
         sys.exit(1)
@@ -302,18 +318,18 @@ def _execute_create(args):
     """Execute the 'project create' subcommand."""
     import re
     from crucible.client import CrucibleClient
-    from crucible.cli import setup_logging
-
-    setup_logging(verbose=args.verbose)
-
     # Interactive mode if any required arguments are missing
     project_id = args.project_id
     organization = args.organization
     project_lead_email = args.project_lead_email
+    title = args.title
+    project_lead_name = args.project_lead_name
+    status = args.status
 
-    if project_id is None or organization is None or project_lead_email is None:
-        logger.info("\n=== Interactive Project Creation ===")
-        logger.info("Please provide the following information:\n")
+    interactive = project_id is None or organization is None or project_lead_email is None
+    if interactive:
+        term.header("Create Project")
+        print("")
 
     # Prompt for project_id
     if project_id is None:
@@ -350,6 +366,20 @@ def _execute_create(args):
             else:
                 logger.error("Project lead email is required.")
 
+    # Optional fields — only prompt in interactive mode
+    if interactive:
+        if title is None:
+            val = input("Project title (optional, press Enter to skip): ").strip()
+            title = val or None
+
+        if project_lead_name is None:
+            val = input("Project lead name (optional, press Enter to skip): ").strip()
+            project_lead_name = val or None
+
+        if status is None:
+            val = input("Status (optional, press Enter to skip): ").strip()
+            status = val or None
+
     try:
         from crucible.models import Project
         client = CrucibleClient()
@@ -357,73 +387,55 @@ def _execute_create(args):
         # Check if project already exists
         existing = client.projects.get(project_id)
         if existing is not None:
-            logger.info(f"\n⚠ Project '{project_id}' already exists.")
-            logger.info(f"Project ID:   {existing.get('project_id', 'N/A')}")
-            logger.info(f"Organization: {existing.get('organization', 'N/A')}")
-            logger.info(f"Lead Email:   {existing.get('project_lead_email', 'N/A')}")
-            if args.verbose:
-                logger.debug(f"\nFull result: {json.dumps(existing, indent=2)}")
+            logger.warning(f"Project '{project_id}' already exists.")
+            _show_project(existing)
             return
 
         # Build Project model and create
-        logger.info("\n=== Creating Project ===")
         project = Project(
             project_id=project_id,
             organization=organization,
-            project_lead_email=project_lead_email
+            project_lead_email=project_lead_email,
+            title=title,
+            project_lead_name=project_lead_name,
+            status=status,
         )
         result = client.projects.create(project)
 
-        logger.info(f"\n✓ Project created successfully!")
-        logger.info(f"Project ID:   {result.get('project_id', 'N/A')}")
-        logger.info(f"Organization: {result.get('organization', 'N/A')}")
-        logger.info(f"Lead Email:   {result.get('project_lead_email', 'N/A')}")
-
-        if args.verbose:
-            logger.debug(f"\nFull result: {json.dumps(result, indent=2)}")
+        logger.info("✓ Project created")
+        _show_project(result)
 
     except Exception as e:
         logger.error(f"Error creating project: {e}")
-        if args.verbose:
+        if getattr(args, "debug", False):
             import traceback
             traceback.print_exc()
         sys.exit(1)
 
 
-def _execute_get_users(args):
+def _execute_list_users(args):
     """Execute the 'project get-users' subcommand."""
     from crucible.client import CrucibleClient
-    from crucible.cli import setup_logging
-
-    setup_logging(verbose=args.verbose)
-
     try:
         client = CrucibleClient()
         users = client.projects.get_users(args.project_id, limit=args.limit)
 
-        logger.info(f"\n=== Users in project {args.project_id} ===")
-        logger.info(f"Found {len(users)} user(s)\n")
-
-        if users:
-            for user in users:
-                if user.get('orcid'):
-                    logger.info(f"ORCID: {user['orcid']}")
-                if user.get('first_name') or user.get('last_name'):
-                    name_parts = []
-                    if user.get('first_name'):
-                        name_parts.append(user['first_name'])
-                    if user.get('last_name'):
-                        name_parts.append(user['last_name'])
-                    logger.info(f"  Name: {' '.join(name_parts)}")
-                if user.get('email'):
-                    logger.info(f"  Email: {user['email']}")
-                if user.get('lbl_email'):
-                    logger.info(f"  LBL Email: {user['lbl_email']}")
-                logger.info("")
+        term.header(f"Users · {args.project_id} ({len(users)})")
+        if not users:
+            print(f"  {term.dim('No users found.')}")
+        else:
+            rows = []
+            for u in users:
+                name_parts = [u.get('first_name') or '', u.get('last_name') or '']
+                name  = ' '.join(p for p in name_parts if p) or '—'
+                orcid = u.get('orcid') or '—'
+                email = u.get('email') or u.get('lbl_email') or '—'
+                rows.append((name, orcid, email))
+            term.table(rows, ['Name', 'ORCID', 'Email'], max_widths=[25, 19, 35])
 
     except Exception as e:
         logger.error(f"Error listing project users: {e}")
-        if args.verbose:
+        if getattr(args, "debug", False):
             import traceback
             traceback.print_exc()
         sys.exit(1)
@@ -433,10 +445,6 @@ def _execute_add_user(args):
     """Execute the 'project add-user' subcommand."""
     import re
     from crucible.client import CrucibleClient
-    from crucible.cli import setup_logging
-
-    setup_logging(verbose=args.verbose)
-
     # Validate ORCID format
     if not re.match(r'^\d{4}-\d{4}-\d{4}-\d{3}[0-9X]$', args.orcid):
         logger.error(f"Invalid ORCID format: {args.orcid}")
@@ -449,12 +457,9 @@ def _execute_add_user(args):
 
         logger.info(f"\n✓ User {args.orcid} added to project {args.project_id} successfully!")
 
-        if args.verbose:
-            logger.debug(f"\nUpdated project users: {json.dumps(result, indent=2)}")
-
     except Exception as e:
         logger.error(f"Error adding user to project: {e}")
-        if args.verbose:
+        if getattr(args, "debug", False):
             import traceback
             traceback.print_exc()
         sys.exit(1)

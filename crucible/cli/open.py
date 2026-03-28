@@ -53,7 +53,6 @@ Examples:
 def execute(args):
     """Execute the open command."""
     from crucible.config import config
-
     mfid = args.mfid
 
     # Get graph explorer URL from config

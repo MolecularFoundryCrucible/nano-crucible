@@ -4,9 +4,7 @@
 Package-wide constants for the Crucible API client.
 """
 
-# API request defaults
-DEFAULT_TIMEOUT = 10  # seconds
-DEFAULT_LIMIT = 100   # maximum results to return
+DEFAULT_LIMIT = 100   # maximum results to return per API request
 
 AVAILABLE_INGESTORS = [
     'ApiUploadIngestor',
