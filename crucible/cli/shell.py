@@ -122,6 +122,23 @@ def _dispatch(parser, line):
     return True
 
 
+def _fetch_user_label():
+    """Fetch current user info once at startup. Returns a display string."""
+    try:
+        from crucible.config import config
+        info = config.client.whoami()
+        user = info.get('user_info', {})
+        first = user.get('first_name', '')
+        last  = user.get('last_name', '')
+        name  = f"{first} {last}".strip()
+        email = user.get('lbl_email') or user.get('email') or ''
+        if name and email:
+            return f"{name} ({email})"
+        return name or email or '?'
+    except Exception:
+        return '?'
+
+
 def _run_prompt_toolkit(parser):
     from prompt_toolkit         import PromptSession
     from prompt_toolkit.history import FileHistory
@@ -133,14 +150,16 @@ def _run_prompt_toolkit(parser):
     history_path = os.path.join(user_data_dir('crucible'), 'shell_history')
     os.makedirs(os.path.dirname(history_path), exist_ok=True)
 
-    # Show current project in the bottom toolbar
+    # Fetch user info once — toolbar is called on every keypress
+    user_label = _fetch_user_label()
+
     def _toolbar():
         try:
             from crucible.config import config
             proj = config.current_project or '(no project set)'
         except Exception:
             proj = '?'
-        return f' project: {proj} '
+        return f' project: {proj}   |   {user_label} '
 
     session = PromptSession(
         history=FileHistory(history_path),
