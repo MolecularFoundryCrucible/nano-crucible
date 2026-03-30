@@ -47,6 +47,9 @@ dependencies = [
 parsers = [
     "ase>=3.22.0",
 ]
+shell = [
+    "prompt_toolkit>=3.0",
+]
 dev = [
     "pytest>=6.0",
     "black>=21.0",
@@ -55,6 +58,7 @@ dev = [
 ]
 all = [
     "ase>=3.22.0",
+    "prompt_toolkit>=3.0",
 ]
 
 [project.scripts]

@@ -167,10 +167,11 @@ Examples:
     # Configure logging once for the entire CLI
     setup_logging(debug=getattr(args, 'debug', False))
 
-    # If no command specified, show help
+    # If no command specified, start interactive shell
     if args.command is None:
-        parser.print_help()
-        sys.exit(1)
+        from .shell import run as _run_shell
+        _run_shell(parser)
+        return
 
     # Execute the command
     # Each subcommand module should have added a 'func' attribute via set_defaults()
