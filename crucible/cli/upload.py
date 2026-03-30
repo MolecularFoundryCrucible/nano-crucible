@@ -36,8 +36,8 @@ def register_subcommand(subparsers):
 
     parser = subparsers.add_parser(
         'upload',
-        help='[Legacy] Parse and upload datasets (use "dataset create" instead)',
-        description='Parse dataset files and upload them to Crucible\n\nNOTE: This command is kept for backward compatibility. Use "crucible dataset create" instead.',
+        help='[Deprecated] Use "crucible dataset create" instead',
+        description='DEPRECATED: This command will be removed in a future release.\nUse "crucible dataset create -i FILE ..." instead.',
         formatter_class=lambda prog: __import__('argparse').RawDescriptionHelpFormatter(prog, max_help_position=35),
         epilog="""
 Examples:
@@ -215,6 +215,13 @@ def execute(args):
     Args:
         args: Parsed command-line arguments from argparse
     """
+    import warnings
+    warnings.warn(
+        "'crucible upload' is deprecated; use 'crucible dataset create' instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    logger.warning("'crucible upload' is deprecated — use 'crucible dataset create -i FILE ...' instead.")
     import json
     from crucible.parsers import get_parser, BaseParser
     from crucible.config import config
