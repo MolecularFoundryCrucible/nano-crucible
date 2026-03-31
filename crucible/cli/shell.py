@@ -7,7 +7,11 @@ Starts when `crucible` is invoked with no arguments.
 Uses prompt_toolkit if available, falls back to readline + input().
 """
 
+import sys
+import time
 import shlex
+import itertools
+import threading
 import logging
 
 logger = logging.getLogger(__name__)
@@ -292,10 +296,39 @@ def _run_prompt_toolkit(parser):
     history_path = os.path.join(user_data_dir('crucible'), 'shell_history')
     os.makedirs(os.path.dirname(history_path), exist_ok=True)
 
+    # Spin while fetching initial state (two API calls run in parallel)
+    _msg  = 'Connecting to Crucible'
+    _stop = threading.Event()
+    _is_tty = hasattr(sys.stdout, 'isatty') and sys.stdout.isatty()
+
+    def _spin():
+        for frame in itertools.cycle(['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']):
+            if _stop.is_set():
+                break
+            sys.stdout.write(f'\r  {_msg}...  {frame}')
+            sys.stdout.flush()
+            time.sleep(0.08)
+        sys.stdout.write('\r' + ' ' * (len(_msg) + 8) + '\r')
+        sys.stdout.flush()
+
+    if _is_tty:
+        threading.Thread(target=_spin, daemon=True).start()
+    else:
+        print(f'  {_msg}...')
+
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        f_user     = pool.submit(_fetch_user_label)
+        f_projects = pool.submit(_fetch_projects)
+        _user_label = f_user.result()
+        _projects   = f_projects.result()
+
+    _stop.set()
+
     # Mutable state — reloaded by refresh / config set / config edit
     state = {
-        'user_label': _fetch_user_label(),
-        'projects':   _fetch_projects(),
+        'user_label': _user_label,
+        'projects':   _projects,
         'project':    _fetch_current_project(),
         'session':    _fetch_current_session(),
     }
