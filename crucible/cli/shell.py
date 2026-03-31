@@ -361,7 +361,9 @@ def _run_prompt_toolkit(parser):
     _user_label = f"{_name} ({_email})" if _name and _email else _name or _email or '?'
     _projects   = _fetch_projects()
 
-    print(_BANNER)
+    _first = _u.get('first_name', '').strip() or _name or 'there'
+    print(f"\nWelcome to the Crucible interactive shell, {_first}.\n"
+          "(type 'help' for commands, 'exit' to quit)")
 
     # Mutable state — reloaded by refresh / config set / config edit
     state = {
