@@ -96,6 +96,21 @@ class Instrument(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class DeletionRequest(BaseModel):
+    id: Optional[int] = None
+    resource_type: Optional[str] = None
+    resource_id: Optional[str] = None
+    requester_id: Optional[str] = None
+    reason: Optional[str] = None
+    status: Optional[str] = None          # "pending" | "approved" | "rejected"
+    request_time: Optional[str] = None
+    review_time: Optional[str] = None
+    reviewer_id: Optional[str] = None
+    reviewer_notes: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True, extra='allow')
+
+
 #%% Backward-compatibility aliases (deprecated)
 
 def __getattr__(name: str):
