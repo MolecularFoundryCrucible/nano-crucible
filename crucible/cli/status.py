@@ -93,21 +93,10 @@ def execute(args):
     print(f'  ✓  {term.bold(host)}  {term.dim(f"{elapsed_ms:.0f}ms")}')
     print()
 
-    user    = info.get('user_info', {})
-    first   = user.get('first_name', '')
-    last    = user.get('last_name', '')
-    name    = f'{first} {last}'.strip() or None
-    orcid   = user.get('orcid')
-    email   = user.get('email')
-    project = config.current_project
+    user  = info.get('user_info', {})
+    first = user.get('first_name', '')
+    last  = user.get('last_name', '')
+    name  = f'{first} {last}'.strip() or None
 
-    W = 10
-
-    def _pf(label, value):
-        if value not in (None, ''):
-            print(f'     {label:<{W}}{value}')
-
-    _pf('Name',    name)
-    _pf('ORCID',   term.orcid_link(orcid))
-    _pf('Email',   email)
-    _pf('Project', project)
+    if name:
+        print(f'     Authenticated as  {name}')

@@ -55,6 +55,35 @@ except ImportError:
     ARGCOMPLETE_AVAILABLE = False
 
 
+import re as _re
+
+_RETRY_TOTAL_RE  = _re.compile(r'Retry\(total=(\d+)')
+_RETRY_REASON_RE = _re.compile(r"'(\w*Error)[:(]")
+
+class _CleanRetryFilter(logging.Filter):
+    """Reformat urllib3 retry warnings into a single readable line."""
+
+    _REASONS = {
+        'ReadTimeoutError':    'timed out',
+        'ConnectTimeoutError': 'connection timed out',
+        'NewConnectionError':  'could not connect',
+        'ConnectionError':     'connection error',
+        'ProtocolError':       'protocol error',
+    }
+
+    def filter(self, record):
+        msg = record.getMessage()
+        if 'Retrying' not in msg:
+            return True
+        m_total  = _RETRY_TOTAL_RE.search(msg)
+        m_reason = _RETRY_REASON_RE.search(msg)
+        remaining = m_total.group(1)  if m_total  else '?'
+        reason    = self._REASONS.get(m_reason.group(1) if m_reason else '', 'error')
+        record.msg  = f'  ↻  {reason.capitalize()} — retrying ({remaining} left)'
+        record.args = ()
+        return True
+
+
 def setup_logging(debug=False):
     """
     Configure logging for CLI usage.
@@ -74,10 +103,11 @@ def setup_logging(debug=False):
     # override it so --debug reaches crucible.client and other submodules.
     logging.getLogger('crucible').setLevel(level)
 
-    # Suppress noisy retry/redirect warnings from urllib3/requests unless debugging.
-    if not debug:
-        logging.getLogger('urllib3').setLevel(logging.ERROR)
-        logging.getLogger('requests').setLevel(logging.ERROR)
+    # Reformat urllib3 retry warnings to be human-readable.
+    # The filter must live on the handler (not the urllib3 logger) because Python
+    # logging does not run parent-logger filters on propagated records.
+    for h in logging.getLogger().handlers:
+        h.addFilter(_CleanRetryFilter())
 
 
 def main():
