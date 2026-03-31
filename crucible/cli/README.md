@@ -8,6 +8,16 @@ crucible [--debug] <resource> <action> [options]
 
 Utility commands (`download`, `link`, `unlink`, `open`, `whoami`, `cache`) operate directly on IDs without a sub-action and auto-detect the resource type where relevant.
 
+Running `crucible` with no arguments starts an **interactive shell** with tab-completion, command history, and a status bar showing the active project and user. Built-in shell commands:
+
+| Command | Description |
+|---------|-------------|
+| `use PROJECT_ID` | Switch active project (tab-completes project IDs) |
+| `unuse` | Clear the active project |
+| `refresh` | Re-fetch project list and user info |
+| `help` | Print available commands |
+| `exit` / `quit` | Leave the shell |
+
 Use `crucible <resource> <action> --help` for full option details on any command.
 
 ---
@@ -44,9 +54,11 @@ crucible --debug dataset list   # debug must precede the subcommand
 | Command | Key options | Description |
 |---------|-------------|-------------|
 | `dataset list` | `-pid ID` `-m TYPE` `-k WORD` `--session NAME` `--limit N` `-v` | List datasets, with optional filters |
-| `dataset get ID` | `-v` `--include-metadata` | Get dataset details; `-v` shows keywords and linked samples |
+| `dataset get ID` | `-v` `--include-metadata` | Get dataset details; `-v` shows ownership, file info, keywords, and associated files |
 | `dataset create -i FILE` | `-t TYPE` `-pid ID` `-n NAME` `-m TYPE` `--timestamp DATE` `--metadata JSON` `-k WORDS` `--session NAME` `--instrument NAME` `--public` `--mfid [ID]` `--dry-run` | Upload file(s) and create a dataset record |
 | `dataset update ID` | `--set KEY=VALUE` `--metadata JSON` `--overwrite` | Update model fields (`--set`) and/or scientific metadata (`--metadata`) |
+| `dataset list-files ID` | | List associated files with clickable download links (valid 1 hour) and sizes |
+| `dataset add-file ID FILE` | | Upload and attach a file to an existing dataset |
 | `dataset download ID` | `--output-dir DIR` `--include PATTERN` `--exclude PATTERN` `-f FILE` `--overwrite` | Download dataset files with optional glob filters (delegates to `crucible download`) |
 | `dataset search QUERY` | `--limit N` `-v` | Search datasets by scientific metadata |
 | `dataset link` | `-p PARENT_ID -c CHILD_ID` | Create a parent-child relationship between two datasets |
