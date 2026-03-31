@@ -92,9 +92,7 @@ def _execute_show(args):
     cache_dir = config.cache_dir
     datasets_dir = os.path.join(cache_dir, 'datasets')
 
-    W = 12
-    def _p(label, value):
-        print(f"  {label:<{W}}{value}")
+    _p = term.field_printer(12)
 
     term.header("Cache")
     _p("Location", cache_dir)
@@ -135,9 +133,11 @@ def _execute_show(args):
 
         top_entries = dataset_entries[:n]
 
+        client = CrucibleClient()
+
         def _lookup(dsid):
             try:
-                ds = CrucibleClient().datasets.get(dsid)
+                ds = client.datasets.get(dsid)
                 pid = ds.get('project_id') if ds else None
                 url = f"{_base}/{pid}/dataset/{dsid}" if _base and pid else None
             except Exception:

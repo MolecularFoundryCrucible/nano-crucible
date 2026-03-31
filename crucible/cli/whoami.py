@@ -34,9 +34,7 @@ def execute(args):
         info = config.client.whoami()
         user = info.get('user_info', {})
 
-        W = 16
-        def _p(label, value):
-            print(f"  {label:<{W}}{value if value not in (None, '') else '—'}")
+        _p = term.field_printer(16)
 
         term.header("Whoami")
 

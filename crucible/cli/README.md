@@ -13,7 +13,7 @@ Running `crucible` with no arguments starts an **interactive shell** with tab-co
 | Command | Description |
 |---------|-------------|
 | `use PROJECT_ID` | Switch active project (tab-completes project IDs) |
-| `unuse` | Clear the active project |
+| `unuse` | Clear active project and session |
 | `refresh` | Re-fetch project list and user info |
 | `help` | Print available commands |
 | `exit` / `quit` | Leave the shell |
@@ -54,7 +54,7 @@ crucible --debug dataset list   # debug must precede the subcommand
 | Command | Key options | Description |
 |---------|-------------|-------------|
 | `dataset list` | `-pid ID` `-m TYPE` `-k WORD` `--session NAME` `--limit N` `-v` | List datasets, with optional filters |
-| `dataset get ID` | `-v` `--include-metadata` | Get dataset details; `-v` shows ownership, file info, keywords, and associated files |
+| `dataset get ID` | `-v` `--include-metadata` `-o json` | Get dataset details; `-v` shows ownership, file info, keywords, and associated files; `-o json` prints the raw record as JSON (always includes scientific metadata) |
 | `dataset create -i FILE` | `-t TYPE` `-pid ID` `-n NAME` `-m TYPE` `--timestamp DATE` `--metadata JSON` `-k WORDS` `--session NAME` `--instrument NAME` `--public` `--mfid [ID]` `--dry-run` | Upload file(s) and create a dataset record |
 | `dataset update ID` | `--set KEY=VALUE` `--metadata JSON` `--overwrite` | Update model fields (`--set`) and/or scientific metadata (`--metadata`) |
 | `dataset list-files ID` | | List associated files with clickable download links (valid 1 hour) and sizes |
@@ -96,7 +96,7 @@ crucible dataset search "temperature" --limit 10
 | Command | Key options | Description |
 |---------|-------------|-------------|
 | `sample list` | `-pid ID` `--limit N` `-v` | List samples, with optional filters |
-| `sample get ID` | `-v` | Get sample details; `-v` shows linked datasets |
+| `sample get ID` | `-v` `-o json` | Get sample details; `-v` shows linked datasets; `-o json` prints the raw record as JSON |
 | `sample create` | `-n NAME` `-pid ID` `--type TYPE` `--description TEXT` `--timestamp DATE` | Create a new sample |
 | `sample update ID` | `--set KEY=VALUE` | Update sample fields |
 | `sample link` | `-p PARENT_ID -c CHILD_ID` | Create a parent-child relationship between two samples |

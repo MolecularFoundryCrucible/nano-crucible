@@ -36,53 +36,35 @@ def bold(s: str) -> str:
 def cyan(s: str) -> str:
     return f"\033[36m{s}\033[0m" if _tty() else s
 
-def orcid_link(orcid: str) -> str | None:
-    """
-    Render an ORCID in cyan, optionally as a clickable link to https://orcid.org/.
-
-    Returns ``None`` for falsy input so callers can render it as ``—``.
-    """
-    if not orcid:
-        return None
-    url = f"https://orcid.org/{orcid}"
-    colored = cyan(orcid)
-    if _tty():
-        return f"\033]8;;{url}\007{colored}\033]8;;\007"
-    return colored
-
-
-def hyperlink(text: str, url: str) -> str:
+def hyperlink(text: str, url: str | None) -> str:
     """Wrap *text* in an OSC 8 clickable hyperlink when stdout is a TTY."""
     if url and _tty():
         return f"\033]8;;{url}\007{text}\033]8;;\007"
     return text
 
 
+def orcid_link(orcid: str) -> str | None:
+    """Render an ORCID in cyan as a clickable link to https://orcid.org/."""
+    if not orcid:
+        return None
+    return hyperlink(cyan(orcid), f"https://orcid.org/{orcid}")
+
+
 def project_link(pid: str, url: str | None = None) -> str | None:
     """Render a project ID in cyan, optionally as a clickable OSC 8 hyperlink."""
     if not pid:
         return None
-    colored = cyan(pid)
-    if url and _tty():
-        return f"\033]8;;{url}\007{colored}\033]8;;\007"
-    return colored
+    return hyperlink(cyan(pid), url)
 
 
 def mfid_link(uid: str, url: str | None = None) -> str | None:
-    """
-    Render an MFID in cyan, optionally as a clickable OSC 8 hyperlink.
+    """Render an MFID in cyan, optionally as a clickable OSC 8 hyperlink.
 
     Returns ``None`` for falsy *uid* so callers can render it as ``—``.
-    When *url* is provided and stdout is a TTY, the text becomes clickable
-    in terminals that support OSC 8 (iTerm2, kitty, GNOME Terminal ≥ 3.26,
-    Windows Terminal, etc.).
     """
     if not uid:
         return None
-    colored = cyan(uid)
-    if url and _tty():
-        return f"\033]8;;{url}\007{colored}\033]8;;\007"
-    return colored
+    return hyperlink(cyan(uid), url)
 
 def dim(s: str) -> str:
     return f"\033[2m{s}\033[0m" if _tty() else s
@@ -100,6 +82,13 @@ def header(title: str, width: int = 44) -> None:
 def subheader(title: str) -> None:
     """Print a dim sub-section label with a leading blank line."""
     print(f"\n  {dim(title)}")
+
+
+def field_printer(width: int = 14):
+    """Return a ``_p(label, value)`` closure that prints aligned label:value rows."""
+    def _p(label: str, value) -> None:
+        print(f"  {label:<{width}}{value if value not in (None, '') else '—'}")
+    return _p
 
 
 # ── Formatters ─────────────────────────────────────────────────────────────────

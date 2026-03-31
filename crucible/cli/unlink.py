@@ -58,12 +58,12 @@ Examples:
 
 def execute(args):
     """Execute the unlink command."""
-    from crucible.config import config
+    from crucible.client import CrucibleClient
 
     if args.dataset and args.sample:
         logger.info(f"Unlinking sample '{args.sample}' from dataset '{args.dataset}'...")
         try:
-            result = config.client.datasets.remove_sample(args.dataset, args.sample)
+            CrucibleClient().datasets.remove_sample(args.dataset, args.sample)
             logger.info(f"✓ Unlinked sample {args.sample} from dataset {args.dataset}")
         except Exception as e:
             logger.error(f"Failed to unlink resources: {e}")
@@ -71,7 +71,7 @@ def execute(args):
 
     elif args.parent and args.child:
         try:
-            result = config.client.unlink(args.parent, args.child)
+            CrucibleClient().unlink(args.parent, args.child)
             logger.info(f"✓ Unlinked resources successfully")
         except ValueError as e:
             logger.error(str(e))

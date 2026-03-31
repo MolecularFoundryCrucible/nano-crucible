@@ -175,11 +175,15 @@ Examples:
 
     # Execute the command
     # Each subcommand module should have added a 'func' attribute via set_defaults()
-    if hasattr(args, 'func'):
-        args.func(args)
-    else:
-        parser.print_help()
-        sys.exit(1)
+    try:
+        if hasattr(args, 'func'):
+            args.func(args)
+        else:
+            parser.print_help()
+            sys.exit(1)
+    except KeyboardInterrupt:
+        print("\nCancelled.")
+        sys.exit(130)
 
 
 if __name__ == '__main__':

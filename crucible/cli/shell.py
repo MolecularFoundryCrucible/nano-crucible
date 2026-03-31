@@ -43,6 +43,7 @@ def _fetch_projects():
         return []
 
 
+
 try:
     from prompt_toolkit.completion import Completer, Completion
 
@@ -73,7 +74,7 @@ try:
 
             resource = words[0]
 
-            #  built-in: use <project_id> 
+            #  built-in: use <project_id>
             if resource == 'use':
                 if len(words) > 2:
                     return  # already have a project arg
@@ -86,6 +87,7 @@ try:
                                          display_meta=title)
                 return
 
+
             sub_map  = _get_subparser_map(self._top.get(resource)) \
                        if resource in self._top else {}
 
@@ -97,8 +99,33 @@ try:
                         yield Completion(name + ' ', start_position=-len(prefix))
                 return
 
-            #  level 2+: complete flags for the chosen subcommand 
+            #  level 2+: complete flags for the chosen subcommand
             subcommand = words[1]
+
+            #  special case: config set <KEY> [VALUE]
+            if resource == 'config' and subcommand == 'set':
+                try:
+                    from crucible.config.config import Config as _Cfg
+                    config_keys = list(_Cfg._CONFIG_MAP)
+                except Exception:
+                    return
+                # Complete the KEY (words: ['config','set'] + optional partial key)
+                if not (len(words) == 3 and trailing_space) and len(words) <= 3:
+                    prefix = words[2] if len(words) == 3 else ''
+                    for key in config_keys:
+                        if key.startswith(prefix):
+                            yield Completion(key + ' ', start_position=-len(prefix))
+                # Complete VALUE for current_project from the project list
+                elif len(words) >= 3 and words[2] == 'current_project':
+                    prefix = words[3] if len(words) == 4 and not trailing_space else ''
+                    if not self._projects:
+                        self._projects = _fetch_projects()
+                    for pid, title in self._projects:
+                        if pid.startswith(prefix):
+                            yield Completion(pid + ' ', start_position=-len(prefix),
+                                             display_meta=title)
+                return
+
             sub_parser = sub_map.get(subcommand)
             if sub_parser is None:
                 return
@@ -148,17 +175,25 @@ def _dispatch(parser, line, completer=None, state=None):
         try:
             from crucible.cli.config import set_config_value
             set_config_value('current_project', project_id)
+            set_config_value('current_session', '')  # session is project-scoped
             print(f"Switched to project: {project_id}")
+            if state is not None:
+                state['project'] = project_id
+                state['session'] = ''
         except Exception as e:
             logger.error(f"Error switching project: {e}")
         return True
 
-    # Built-in: unuse — clear the current project
+    # Built-in: unuse — clear project and session
     if line == 'unuse':
         try:
             from crucible.cli.config import set_config_value
             set_config_value('current_project', '')
-            print("Cleared current project.")
+            set_config_value('current_session', '')
+            print("Cleared current project and session.")
+            if state is not None:
+                state['project'] = '(no project set)'
+                state['session'] = ''
         except Exception as e:
             logger.error(f"Error clearing project: {e}")
         return True
@@ -171,6 +206,8 @@ def _dispatch(parser, line, completer=None, state=None):
         if state is not None:
             state['projects']   = new_projects
             state['user_label'] = _fetch_user_label()
+            state['project']    = _fetch_current_project()
+            state['session']    = _fetch_current_session()
             print(f"Refreshed: {len(new_projects)} projects, user info reloaded.")
         else:
             print(f"Refreshed: {len(new_projects)} projects available.")
@@ -186,6 +223,8 @@ def _dispatch(parser, line, completer=None, state=None):
             parser.print_help()
     except SystemExit:
         pass  # subcommands call sys.exit() on error — keep the shell alive
+    except KeyboardInterrupt:
+        print("\nCancelled.")
     except Exception as e:
         logger.error(f"Error: {e}")
 
@@ -194,6 +233,8 @@ def _dispatch(parser, line, completer=None, state=None):
         words = line.split()
         if len(words) >= 2 and words[0] == 'config' and words[1] in ('set', 'edit'):
             state['user_label'] = _fetch_user_label()
+            state['project']    = _fetch_current_project()
+            state['session']    = _fetch_current_session()
             new_projects        = _fetch_projects()
             state['projects']   = new_projects
             if completer is not None:
@@ -219,6 +260,24 @@ def _fetch_user_label():
         return '?'
 
 
+def _fetch_current_project():
+    """Return the current project ID (or a placeholder string)."""
+    try:
+        from crucible.config import config
+        return config.current_project or '(no project set)'
+    except Exception:
+        return '?'
+
+
+def _fetch_current_session():
+    """Return the current session name, or empty string if none."""
+    try:
+        from crucible.config import config
+        return config.current_session or ''
+    except Exception:
+        return ''
+
+
 def _run_prompt_toolkit(parser):
     from prompt_toolkit                  import PromptSession
     from prompt_toolkit.history          import FileHistory
@@ -237,16 +296,15 @@ def _run_prompt_toolkit(parser):
     state = {
         'user_label': _fetch_user_label(),
         'projects':   _fetch_projects(),
+        'project':    _fetch_current_project(),
+        'session':    _fetch_current_session(),
     }
 
     def _toolbar():
-        try:
-            from crucible.config import config
-            proj = config.current_project or '(no project set)'
-        except Exception:
-            proj = '?'
-        # Pad project section to a minimum width (wide enough for long project IDs)
-        proj_content = f'🔬  {proj}'.ljust(34)
+        proj = state['project']
+        sess = state['session']
+        label = f'{proj} / {sess}' if sess else proj
+        proj_content = f'🔬  {label}'.ljust(34)
         return HTML(
             f'<tb-project> {proj_content} </tb-project>'
             f' 🧸  {state["user_label"]} '

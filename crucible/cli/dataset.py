@@ -16,6 +16,23 @@ logger = logging.getLogger(__name__)
 from . import term
 
 
+def _normalize_file_paths(link_map, af_list, dsid):
+    """Normalize paths from get_download_links and get_associated_files to bare filenames."""
+    prefix_dl = dsid + '/'
+    prefix_af = 'api-uploads/'
+    links = {
+        (k[len(prefix_dl):] if k.startswith(prefix_dl) else k): v
+        for k, v in link_map.items()
+    }
+    meta_by_name = {}
+    for m in af_list:
+        fname = m.get('filename') or m.get('name', '')
+        if fname.startswith(prefix_af):
+            fname = fname[len(prefix_af):]
+        meta_by_name[fname] = m
+    return links, meta_by_name
+
+
 def _show_scientific_metadata(sci_md_wrapper):
     """Display scientific metadata, unwrapping the API envelope."""
     if not sci_md_wrapper:
@@ -40,10 +57,7 @@ def _show_scientific_metadata(sci_md_wrapper):
 
 def _show_dataset(dataset, client, verbose=False, graph=False, include_metadata=False):
     """Display dataset fields. Extracted for reuse by top-level 'crucible get'."""
-    W = 14
-
-    def _p(label, value):
-        print(f"  {label:<{W}}{value if value not in (None, '') else '—'}")
+    _p = term.field_printer(14)
 
     try:
         from crucible.config import config
@@ -89,31 +103,22 @@ def _show_dataset(dataset, client, verbose=False, graph=False, include_metadata=
         _p("Modified", term.fmt_ts(dataset.get('modification_time')))
 
         dsid = dataset.get('unique_id')
-        keywords = client.datasets.get_keywords(dsid)
+
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=3) as pool:
+            f_kw    = pool.submit(client.datasets.get_keywords, dsid)
+            f_meta  = pool.submit(client.datasets.get_associated_files, dsid)
+            f_links = pool.submit(client.datasets.get_download_links, dsid)
+            keywords = f_kw.result()
+            af_list  = f_meta.result()
+            link_map = f_links.result()
+
         if keywords:
             words = [kw.get('keyword', kw) if isinstance(kw, dict) else kw for kw in keywords]
             term.subheader("Keywords")
             print(f"  {', '.join(words)}")
 
-        from concurrent.futures import ThreadPoolExecutor
-        with ThreadPoolExecutor(max_workers=2) as pool:
-            f_meta  = pool.submit(client.datasets.get_associated_files, dsid)
-            f_links = pool.submit(client.datasets.get_download_links, dsid)
-            af_list  = f_meta.result()
-            link_map = f_links.result()
-
-        prefix_dl = dsid + '/'
-        prefix_af = 'api-uploads/'
-        links = {
-            (k[len(prefix_dl):] if k.startswith(prefix_dl) else k): v
-            for k, v in link_map.items()
-        }
-        meta_by_name = {}
-        for m in af_list:
-            fname = m.get('filename') or m.get('name', '')
-            if fname.startswith(prefix_af):
-                fname = fname[len(prefix_af):]
-            meta_by_name[fname] = m
+        links, meta_by_name = _normalize_file_paths(link_map, af_list, dsid)
 
         if meta_by_name:
             term.subheader(f"Files ({len(meta_by_name)})")
@@ -128,8 +133,6 @@ def _show_dataset(dataset, client, verbose=False, graph=False, include_metadata=
         _show_scientific_metadata(dataset.get('scientific_metadata'))
 
     if graph:
-        dsid = dataset.get('unique_id')
-
         samples = client.samples.list(dataset_id=dsid)
         term.subheader(f"Linked Samples ({len(samples)})")
         for s in samples:
@@ -348,6 +351,15 @@ def _register_get(subparsers):
         '--graph',
         action='store_true',
         help='Also show linked samples, parents, and children'
+    )
+
+    parser.add_argument(
+        '-o', '--output',
+        dest='output',
+        choices=['json'],
+        default=None,
+        metavar='FORMAT',
+        help='Output format: json (always includes scientific metadata)'
     )
 
     parser.set_defaults(func=_execute_get)
@@ -806,7 +818,7 @@ def _execute_add_sample(args):
     from crucible.client import CrucibleClient
     try:
         client = CrucibleClient()
-        result = client.datasets.add_sample(args.dataset_id, args.sample)
+        client.datasets.add_sample(args.dataset_id, args.sample)
 
         logger.info(f"✓ Linked sample {args.sample} to dataset {args.dataset_id}")
 
@@ -1177,21 +1189,7 @@ def _execute_list_files(args):
             meta_list  = f_meta.result()
             link_map   = f_links.result()   # {filepath: signed_url}
 
-        # Normalise keys to bare filename for matching:
-        #   download_links keys:     "<dsid>/<name>"   → strip "<dsid>/"
-        #   associated_files names:  "api-uploads/<name>" → strip "api-uploads/"
-        prefix_dl   = dsid + '/'
-        prefix_af   = 'api-uploads/'
-        links       = {
-            (k[len(prefix_dl):] if k.startswith(prefix_dl) else k): v
-            for k, v in link_map.items()
-        }
-        meta_by_name = {}
-        for m in meta_list:
-            fname = m.get('filename') or m.get('name', '')
-            if fname.startswith(prefix_af):
-                fname = fname[len(prefix_af):]
-            meta_by_name[fname] = m
+        links, meta_by_name = _normalize_file_paths(link_map, meta_list, dsid)
 
         # Only show files tracked in associated_files — filters out server-internal
         # files (ingest records, etc.) that appear in download_links but aren't
@@ -1321,7 +1319,7 @@ def _execute_add_keyword(args):
     from crucible.client import CrucibleClient
     try:
         client = CrucibleClient()
-        result = client.datasets.add_keyword(args.dataset_id, args.keyword)
+        client.datasets.add_keyword(args.dataset_id, args.keyword)
 
         logger.info(f"✓ Keyword '{args.keyword}' added to {args.dataset_id}")
 
@@ -1504,17 +1502,21 @@ def _execute_list(args):
 def _execute_get(args):
     """Execute the 'dataset get' subcommand."""
     from crucible.client import CrucibleClient
-    include_metadata = getattr(args, 'include_metadata', False)
+    output = getattr(args, 'output', None)
+    include_metadata = output == 'json' or getattr(args, 'include_metadata', False)
     try:
         client = CrucibleClient()
         dataset = client.datasets.get(args.dataset_id, include_metadata=include_metadata)
         if dataset is None:
             logger.error(f"Dataset not found: {args.dataset_id}")
             sys.exit(1)
-        _show_dataset(dataset, client,
-                      verbose=getattr(args, 'verbose', False),
-                      graph=getattr(args, 'graph', False),
-                      include_metadata=include_metadata)
+        if output == 'json':
+            print(json.dumps(dataset, indent=2, default=str))
+        else:
+            _show_dataset(dataset, client,
+                          verbose=getattr(args, 'verbose', False),
+                          graph=getattr(args, 'graph', False),
+                          include_metadata=include_metadata)
     except Exception as e:
         logger.error(f"Error retrieving dataset: {e}")
         if getattr(args, "debug", False):
@@ -1660,9 +1662,7 @@ def _execute_create(args):
         parser.measurement = None
 
     # Display dataset information
-    W = 14
-    def _p(label, value):
-        print(f"  {label:<{W}}{value if value not in (None, '') else '—'}")
+    _p = term.field_printer(14)
 
     term.header("Dataset")
     proj_label = f"{project_id} {term.dim('(from config)')}" if project_from_config else project_id
@@ -1751,7 +1751,7 @@ def _execute_link(args):
     from crucible.client import CrucibleClient
     try:
         client = CrucibleClient()
-        result = client.datasets.link_parent_child(args.parent, args.child)
+        client.datasets.link_parent_child(args.parent, args.child)
 
         logger.info(f"✓ Linked dataset {args.child} as child of {args.parent}")
 

@@ -51,15 +51,26 @@ Examples:
         help='Include scientific metadata (datasets only)'
     )
 
+    parser.add_argument(
+        '-o', '--output',
+        dest='output',
+        choices=['json'],
+        default=None,
+        metavar='FORMAT',
+        help='Output format: json (always includes scientific metadata)'
+    )
+
     parser.set_defaults(func=execute)
 
 
 def execute(args):
     """Execute the top-level get command."""
+    import json
     from crucible.client import CrucibleClient
+    output = getattr(args, 'output', None)
     verbose = getattr(args, 'verbose', False)
     graph = getattr(args, 'graph', False)
-    include_metadata = getattr(args, 'include_metadata', False)
+    include_metadata = output == 'json' or getattr(args, 'include_metadata', False)
 
     try:
         client = CrucibleClient()
@@ -71,8 +82,11 @@ def execute(args):
             if dataset is None:
                 logger.error(f"Dataset not found: {args.resource_id}")
                 sys.exit(1)
-            _show_dataset(dataset, client, verbose=verbose, graph=graph,
-                          include_metadata=include_metadata)
+            if output == 'json':
+                print(json.dumps(dataset, indent=2, default=str))
+            else:
+                _show_dataset(dataset, client, verbose=verbose, graph=graph,
+                              include_metadata=include_metadata)
 
         elif resource_type == 'sample':
             from .sample import _show_sample
@@ -80,7 +94,10 @@ def execute(args):
             if sample is None:
                 logger.error(f"Sample not found: {args.resource_id}")
                 sys.exit(1)
-            _show_sample(sample, client, verbose=verbose, graph=graph)
+            if output == 'json':
+                print(json.dumps(sample, indent=2, default=str))
+            else:
+                _show_sample(sample, client, verbose=verbose, graph=graph)
 
         else:
             logger.error(f"Could not determine resource type for: {args.resource_id}")

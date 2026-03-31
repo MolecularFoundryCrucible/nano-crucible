@@ -34,6 +34,7 @@ class Config:
         'api_url':            {'env': 'CRUCIBLE_API_URL',            'ini': 'api_url',            'section': 'crucible'},
         'graph_explorer_url': {'env': 'CRUCIBLE_GRAPH_EXPLORER_URL', 'ini': 'graph_explorer_url', 'section': 'crucible'},
         'current_project':    {'env': 'CRUCIBLE_CURRENT_PROJECT',    'ini': 'current_project',    'section': 'crucible'},
+        'current_session':    {'env': 'CRUCIBLE_CURRENT_SESSION',    'ini': 'current_session',    'section': 'crucible'},
         # [cache]
         'cache_dir':          {'env': 'CRUCIBLE_CACHE_DIR',          'ini': 'cache_dir',          'section': 'cache'},
         # [display] – UI preferences
@@ -168,6 +169,16 @@ class Config:
             str or None: The current project ID if configured, None otherwise
         """
         return self._data.get('current_project')
+
+    @property
+    def current_session(self):
+        """
+        Get the current/default session name.
+
+        Returns:
+            str or None: The current session name if configured, None otherwise
+        """
+        return self._data.get('current_session') or None
 
     @property
     def editor(self):

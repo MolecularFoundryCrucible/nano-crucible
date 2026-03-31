@@ -183,10 +183,7 @@ Examples:
 
 def _show_user(user):
     """Display user fields."""
-    W = 16
-
-    def _p(label, value):
-        print(f"  {label:<{W}}{value if value not in (None, '') else '—'}")
+    _p = term.field_printer(16)
 
     name_parts = [user.get('first_name') or '', user.get('last_name') or '']
     full_name = ' '.join(p for p in name_parts if p) or None
@@ -451,9 +448,7 @@ def _execute_check_access(args):
         client = CrucibleClient()
         perms = client.users.check_dataset_access(args.orcid, args.dataset_id)
 
-        W = 8
-        def _p(label, value):
-            print(f"  {label:<{W}}{value}")
+        _p = term.field_printer(8)
 
         term.header(f"Access · {args.dataset_id}")
         _p("Read",  "yes" if perms.get('read')  else "no")

@@ -282,10 +282,7 @@ def _execute_list(args):
 
 def _show_instrument(instrument):
     """Display instrument fields."""
-    W = 14
-
-    def _p(label, value):
-        print(f"  {label:<{W}}{value if value not in (None, '') else '—'}")
+    _p = term.field_printer(14)
 
     term.header("Instrument")
     uid = instrument.get('unique_id')

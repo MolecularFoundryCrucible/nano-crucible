@@ -23,7 +23,6 @@ class FieldDef:
 
 
 DATASET_FIELDS: List[FieldDef] = [
-    #  default view 
     FieldDef('dataset_name',               'Name',          editable=True,  verbose=False),
     FieldDef('unique_id',                  'MFID',          editable=False, verbose=False),
     FieldDef('measurement',                'Measurement',   editable=True,  verbose=False),
@@ -32,33 +31,27 @@ DATASET_FIELDS: List[FieldDef] = [
     FieldDef('project_id',                 'Project',       editable=True,  verbose=False),
     FieldDef('timestamp',                  'Timestamp',     editable=True,  verbose=False),
     FieldDef('description',                'Description',   editable=True,  verbose=False),
-    #  verbose: ownership 
     FieldDef('public',                     'Public',        editable=True,  verbose=True),
     FieldDef('owner_orcid',                'Owner ORCID',   editable=False, verbose=True),
     FieldDef('owner_user_id',              'Owner ID',      editable=False, verbose=True),
-    #  verbose: file 
     FieldDef('data_format',                'Data Format',   editable=False, verbose=True),
     FieldDef('instrument_id',              'Instrument ID', editable=False, verbose=True),
     FieldDef('size',                       'Size',          editable=False, verbose=True),
     FieldDef('source_folder',              'Source',        editable=False, verbose=True),
     FieldDef('sha256_hash_file_to_upload', 'SHA256',        editable=False, verbose=True),
-    #  verbose: timing 
     FieldDef('creation_time',              'Created',       editable=False, verbose=True),
     FieldDef('modification_time',          'Modified',      editable=False, verbose=True),
 ]
 
 SAMPLE_FIELDS: List[FieldDef] = [
-    #  default view 
     FieldDef('sample_name',                'Name',          editable=True,  verbose=False),
     FieldDef('unique_id',                  'MFID',          editable=False, verbose=False),
     FieldDef('sample_type',                'Type',          editable=True,  verbose=False),
     FieldDef('project_id',                 'Project',       editable=True,  verbose=False),
     FieldDef('timestamp',                  'Timestamp',     editable=True,  verbose=False),
     FieldDef('description',                'Description',   editable=True,  verbose=False),
-    #  verbose: ownership 
     FieldDef('owner_orcid',                'Owner ORCID',   editable=False, verbose=True),
     FieldDef('owner_user_id',              'Owner ID',      editable=False, verbose=True),
-    #  verbose: timing 
     FieldDef('creation_time',              'Created',       editable=False, verbose=True),
     FieldDef('modification_time',          'Modified',      editable=False, verbose=True),
 ]

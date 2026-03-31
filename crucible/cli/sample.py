@@ -166,6 +166,15 @@ def _register_get(subparsers):
         help='Also show linked datasets, parents, and children'
     )
 
+    parser.add_argument(
+        '-o', '--output',
+        dest='output',
+        choices=['json'],
+        default=None,
+        metavar='FORMAT',
+        help='Output format: json'
+    )
+
     parser.set_defaults(func=_execute_get)
 
 
@@ -307,7 +316,7 @@ def _execute_update(args):
 
     try:
         client = CrucibleClient()
-        result = client.samples.update(args.sample_id, **updates)
+        client.samples.update(args.sample_id, **updates)
 
         logger.info(f"✓ Sample {args.sample_id} updated")
         if getattr(args, "debug", False):
@@ -591,10 +600,7 @@ def _execute_list(args):
 
 def _show_sample(sample, client, verbose=False, graph=False):
     """Display sample fields. Extracted for reuse by top-level 'crucible get'."""
-    W = 14
-
-    def _p(label, value):
-        print(f"  {label:<{W}}{value if value not in (None, '') else '—'}")
+    _p = term.field_printer(14)
 
     try:
         from crucible.config import config
@@ -658,16 +664,21 @@ def _show_sample(sample, client, verbose=False, graph=False):
 
 def _execute_get(args):
     """Execute the 'sample get' subcommand."""
+    import json
     from crucible.client import CrucibleClient
+    output = getattr(args, 'output', None)
     try:
         client = CrucibleClient()
         sample = client.samples.get(args.sample_id)
         if sample is None:
             logger.error(f"Sample not found: {args.sample_id}")
             sys.exit(1)
-        _show_sample(sample, client,
-                     verbose=getattr(args, 'verbose', False),
-                     graph=getattr(args, 'graph', False))
+        if output == 'json':
+            print(json.dumps(sample, indent=2, default=str))
+        else:
+            _show_sample(sample, client,
+                         verbose=getattr(args, 'verbose', False),
+                         graph=getattr(args, 'graph', False))
     except Exception as e:
         logger.error(f"Error retrieving sample: {e}")
         if getattr(args, "debug", False):
@@ -779,7 +790,7 @@ def _execute_link(args):
     from crucible.client import CrucibleClient
     try:
         client = CrucibleClient()
-        result = client.samples.link(args.parent, args.child)
+        client.samples.link(args.parent, args.child)
 
         logger.info(f"✓ Linked sample {args.child} as child of {args.parent}")
 
@@ -860,7 +871,7 @@ def _execute_link_dataset(args):
     try:
         client = CrucibleClient()
         sample_id = args.sample_id
-        result = client.samples.add_dataset(sample_id, args.dataset)
+        client.samples.add_dataset(sample_id, args.dataset)
 
         logger.info(f"✓ Linked sample {sample_id} to dataset {args.dataset}")
 

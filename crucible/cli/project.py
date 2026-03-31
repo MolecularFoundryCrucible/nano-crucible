@@ -285,10 +285,7 @@ def _execute_list(args):
 
 def _show_project(project):
     """Display project fields."""
-    W = 14
-
-    def _p(label, value):
-        print(f"  {label:<{W}}{value if value not in (None, '') else '—'}")
+    _p = term.field_printer(14)
 
     try:
         from crucible.config import config
@@ -466,7 +463,7 @@ def _execute_add_user(args):
 
     try:
         client = CrucibleClient()
-        result = client.projects.add_user(args.orcid, args.project_id)
+        client.projects.add_user(args.orcid, args.project_id)
 
         logger.info(f"\n✓ User {args.orcid} added to project {args.project_id} successfully!")
 

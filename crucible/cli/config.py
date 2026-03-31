@@ -256,9 +256,7 @@ def cmd_show(args):
     """Show current configuration."""
     from crucible.config import config
 
-    W = 22
-    def _p(label, value):
-        print(f"  {label:<{W}}{value if value not in (None, '') else '—'}")
+    _p = term.field_printer(22)
 
     term.header("Configuration")
 
