@@ -152,7 +152,6 @@ except ImportError:
 
 def run(parser):
     """Start the interactive shell. Called from main() when no command given."""
-    print(_BANNER)
     _run_prompt_toolkit(parser) if _CrucibleCompleter else _run_readline(parser)
 
 
@@ -324,6 +323,7 @@ def _run_prompt_toolkit(parser):
         _projects   = f_projects.result()
 
     _stop.set()
+    print(_BANNER)
 
     # Mutable state — reloaded by refresh / config set / config edit
     state = {
@@ -383,6 +383,7 @@ def _run_prompt_toolkit(parser):
 
 def _run_readline(parser):
     """Fallback shell using stdlib readline for history."""
+    print(_BANNER)
     try:
         import readline  # noqa: F401 — activates history/completion automatically
     except ImportError:
