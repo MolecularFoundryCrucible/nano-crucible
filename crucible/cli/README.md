@@ -6,7 +6,7 @@ The `crucible CLI` provides command-line access to Crucible. Resource commands f
 crucible [--debug] <resource> <action> [options]
 ```
 
-Utility commands (`download`, `link`, `unlink`, `open`, `whoami`, `cache`) operate directly on IDs without a sub-action and auto-detect the resource type where relevant.
+Utility commands (`status`, `download`, `link`, `unlink`, `open`, `whoami`, `cache`) operate directly on IDs without a sub-action and auto-detect the resource type where relevant.
 
 Running `crucible` with no arguments starts an **interactive shell** with tab-completion, command history, and a status bar showing the active project and user. Built-in shell commands:
 
@@ -222,6 +222,7 @@ crucible-downloads/
 
 | Command | Description |
 |---------|-------------|
+| `status` | Check API connectivity, auth, and active config |
 | `whoami` | Show current user info for the active API key |
 | `link -p PARENT -c CHILD` | Link two resources (type auto-detected via API) |
 | `link -d DATASET -s SAMPLE` | Link a sample to a dataset |
