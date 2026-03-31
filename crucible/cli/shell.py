@@ -8,10 +8,7 @@ Uses prompt_toolkit if available, falls back to readline + input().
 """
 
 import sys
-import time
 import shlex
-import itertools
-import threading
 import logging
 
 logger = logging.getLogger(__name__)
@@ -295,34 +292,22 @@ def _run_prompt_toolkit(parser):
     history_path = os.path.join(user_data_dir('crucible'), 'shell_history')
     os.makedirs(os.path.dirname(history_path), exist_ok=True)
 
-    # Spin while fetching initial state (two API calls run in parallel)
-    _msg  = 'Connecting to Crucible'
-    _stop = threading.Event()
-    _is_tty = hasattr(sys.stdout, 'isatty') and sys.stdout.isatty()
+    # Verify connection — exit early rather than starting a broken shell
+    print('  Connecting to Crucible...', flush=True)
+    try:
+        from crucible.config import config as _cfg
+        _info = _cfg.client.whoami()
+    except Exception as e:
+        logger.error(f"Cannot connect to Crucible: {e}")
+        sys.exit(1)
 
-    def _spin():
-        for frame in itertools.cycle(['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']):
-            if _stop.is_set():
-                break
-            sys.stdout.write(f'\r  {_msg}...  {frame}')
-            sys.stdout.flush()
-            time.sleep(0.08)
-        sys.stdout.write('\r' + ' ' * (len(_msg) + 8) + '\r')
-        sys.stdout.flush()
+    # Build user label from the whoami response already in hand
+    _u     = _info.get('user_info', {})
+    _name  = f"{_u.get('first_name', '')} {_u.get('last_name', '')}".strip()
+    _email = _u.get('lbl_email') or _u.get('email') or ''
+    _user_label = f"{_name} ({_email})" if _name and _email else _name or _email or '?'
+    _projects   = _fetch_projects()
 
-    if _is_tty:
-        threading.Thread(target=_spin, daemon=True).start()
-    else:
-        print(f'  {_msg}...')
-
-    from concurrent.futures import ThreadPoolExecutor
-    with ThreadPoolExecutor(max_workers=2) as pool:
-        f_user     = pool.submit(_fetch_user_label)
-        f_projects = pool.submit(_fetch_projects)
-        _user_label = f_user.result()
-        _projects   = f_projects.result()
-
-    _stop.set()
     print(_BANNER)
 
     # Mutable state — reloaded by refresh / config set / config edit
