@@ -236,11 +236,9 @@ Examples:
 
 
 def _sample_updatable_fields():
-    """Return sorted list of fields that can be updated on a sample (derived from Sample model)."""
-    from ..models import Sample
-    # Exclude server-managed / identifier fields
-    _readonly = {'unique_id', 'owner_user_id', 'creation_time', 'modification_time'}
-    return sorted(set(Sample.model_fields.keys()) - _readonly)
+    """Return ordered list of fields that can be updated on a sample."""
+    from .schema import SAMPLE_FIELDS, editable_keys
+    return editable_keys(SAMPLE_FIELDS)
 
 
 def _register_update(subparsers):
@@ -354,8 +352,9 @@ def _edit_sample(sid, client, debug=False):
         logger.error(f"Sample not found: {sid}")
         sys.exit(1)
 
+    from .schema import SAMPLE_FIELDS, ordered_dict
     valid_fields = set(_sample_updatable_fields())
-    original = {k: sample.get(k) for k in sorted(valid_fields)}
+    original = ordered_dict(SAMPLE_FIELDS, sample, verbose=True, editable_only=True)
 
     try:
         edited = term.open_editor_json(original)

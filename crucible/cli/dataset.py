@@ -82,7 +82,6 @@ def _show_dataset(dataset, client, verbose=False, graph=False, include_metadata=
         _p("Size",          term.fmt_size(dataset.get('size')))
         _p("Instrument ID", dataset.get('instrument_id'))
         _p("Source",        dataset.get('source_folder'))
-        _p("JSON Link",     dataset.get('json_link'))
         _p("SHA256",        dataset.get('sha256_hash_file_to_upload'))
 
         term.subheader("Timing")
@@ -95,6 +94,35 @@ def _show_dataset(dataset, client, verbose=False, graph=False, include_metadata=
             words = [kw.get('keyword', kw) if isinstance(kw, dict) else kw for kw in keywords]
             term.subheader("Keywords")
             print(f"  {', '.join(words)}")
+
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            f_meta  = pool.submit(client.datasets.get_associated_files, dsid)
+            f_links = pool.submit(client.datasets.get_download_links, dsid)
+            af_list  = f_meta.result()
+            link_map = f_links.result()
+
+        prefix_dl = dsid + '/'
+        prefix_af = 'api-uploads/'
+        links = {
+            (k[len(prefix_dl):] if k.startswith(prefix_dl) else k): v
+            for k, v in link_map.items()
+        }
+        meta_by_name = {}
+        for m in af_list:
+            fname = m.get('filename') or m.get('name', '')
+            if fname.startswith(prefix_af):
+                fname = fname[len(prefix_af):]
+            meta_by_name[fname] = m
+
+        if meta_by_name:
+            term.subheader(f"Files ({len(meta_by_name)})")
+            for name in sorted(meta_by_name):
+                url   = links.get(name)
+                size  = meta_by_name[name].get('size')
+                label = term.hyperlink(term.cyan(name), url) if url else name
+                sz    = f"  {term.dim(term.fmt_size(size))}" if size is not None else ''
+                print(f"  {label}{sz}")
 
     if include_metadata:
         _show_scientific_metadata(dataset.get('scientific_metadata'))
@@ -175,6 +203,7 @@ def register_subcommand(subparsers):
     _register_list_samples(dataset_subparsers)
     _register_download(dataset_subparsers)
     _register_add_file(dataset_subparsers)
+    _register_list_files(dataset_subparsers)
     _register_search(dataset_subparsers)
     _register_add_keyword(dataset_subparsers)
     _register_list_keywords(dataset_subparsers)
@@ -516,12 +545,9 @@ Examples:
 
 
 def _dataset_updatable_fields():
-    """Return sorted list of fields that can be updated on a dataset (derived from Dataset model)."""
-    from ..models import Dataset
-    # Exclude server-managed / identifier fields
-    _readonly = {'unique_id', 'owner_user_id', 'size', 'sha256_hash_file_to_upload',
-                 'creation_time', 'modification_time'}
-    return sorted(set(Dataset.model_fields.keys()) - _readonly)
+    """Return ordered list of fields that can be updated on a dataset."""
+    from .schema import DATASET_FIELDS, editable_keys
+    return editable_keys(DATASET_FIELDS)
 
 
 def _register_update(subparsers):
@@ -666,8 +692,9 @@ def _edit_dataset(dsid, client, debug=False):
         logger.error(f"Dataset not found: {dsid}")
         sys.exit(1)
 
+    from .schema import DATASET_FIELDS, ordered_dict
     valid_fields = set(_dataset_updatable_fields())
-    original_fields = {k: dataset.get(k) for k in sorted(valid_fields)}
+    original_fields = ordered_dict(DATASET_FIELDS, dataset, verbose=True, editable_only=True)
     original_meta = dataset.get('scientific_metadata') or {}
 
     original = dict(original_fields)
@@ -1117,6 +1144,79 @@ def _execute_add_file(args):
 
     except Exception as e:
         logger.error(f"Error uploading file(s): {e}")
+        if getattr(args, 'debug', False):
+            import traceback
+            traceback.print_exc()
+        sys.exit(1)
+
+
+def _register_list_files(subparsers):
+    """Register the 'dataset list-files' subcommand."""
+    parser = subparsers.add_parser(
+        'list-files',
+        help='List files in a dataset with download links',
+        description='Show all files associated with a dataset. File names are '
+                    'clickable download links (valid for 1 hour) in supporting terminals.',
+    )
+    parser.add_argument('dataset_id', metavar='DATASET_ID', help='Dataset unique ID')
+    parser.set_defaults(func=_execute_list_files)
+
+
+def _execute_list_files(args):
+    """Execute the 'dataset list-files' subcommand."""
+    from crucible.client import CrucibleClient
+    try:
+        client = CrucibleClient()
+        dsid = args.dataset_id
+
+        # Fetch metadata (size, hash) and signed download URLs in parallel
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            f_meta  = pool.submit(client.datasets.get_associated_files, dsid)
+            f_links = pool.submit(client.datasets.get_download_links, dsid)
+            meta_list  = f_meta.result()
+            link_map   = f_links.result()   # {filepath: signed_url}
+
+        # Normalise keys to bare filename for matching:
+        #   download_links keys:     "<dsid>/<name>"   → strip "<dsid>/"
+        #   associated_files names:  "api-uploads/<name>" → strip "api-uploads/"
+        prefix_dl   = dsid + '/'
+        prefix_af   = 'api-uploads/'
+        links       = {
+            (k[len(prefix_dl):] if k.startswith(prefix_dl) else k): v
+            for k, v in link_map.items()
+        }
+        meta_by_name = {}
+        for m in meta_list:
+            fname = m.get('filename') or m.get('name', '')
+            if fname.startswith(prefix_af):
+                fname = fname[len(prefix_af):]
+            meta_by_name[fname] = m
+
+        # Only show files tracked in associated_files — filters out server-internal
+        # files (ingest records, etc.) that appear in download_links but aren't
+        # user files.
+        all_names = sorted(meta_by_name)
+
+        term.header(f"Files · {dsid} ({len(all_names)})")
+        if not all_names:
+            print(f"  {term.dim('No files found.')}")
+            return
+
+        rows = []
+        for name in all_names:
+            url   = links.get(name)
+            size  = meta_by_name[name].get('size')
+            label = term.hyperlink(term.cyan(name), url) if url else name
+            rows.append((label, term.fmt_size(size) if size is not None else '—'))
+
+        term.table(rows, ['File', 'Size'], max_widths=[60, 10])
+
+        if links:
+            print(f"\n  {term.dim('Download links are valid for 1 hour.')}")
+
+    except Exception as e:
+        logger.error(f"Error listing files: {e}")
         if getattr(args, 'debug', False):
             import traceback
             traceback.print_exc()

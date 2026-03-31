@@ -122,8 +122,38 @@ def _execute_show(args):
     n = min(args.top, len(dataset_entries))
     if n:
         term.subheader(f"Top {n} Largest Cached Datasets")
-        rows = [(dsid, _human(size)) for dsid, size in dataset_entries[:n]]
-        term.table(rows, ['MFID', 'Size'], max_widths=[30, 10])
+
+        # Look up each dataset in parallel to get project_id for the link URL.
+        # Falls back to an unlinked MFID if the API call fails.
+        from crucible.client import CrucibleClient
+        from concurrent.futures import ThreadPoolExecutor
+
+        try:
+            _base = config.graph_explorer_url.rstrip('/')
+        except Exception:
+            _base = None
+
+        top_entries = dataset_entries[:n]
+
+        def _lookup(dsid):
+            try:
+                ds = CrucibleClient().datasets.get(dsid)
+                pid = ds.get('project_id') if ds else None
+                url = f"{_base}/{pid}/dataset/{dsid}" if _base and pid else None
+            except Exception:
+                url = None
+            return dsid, url
+
+        urls = {}
+        with ThreadPoolExecutor(max_workers=min(n, 8)) as pool:
+            for dsid, url in pool.map(lambda e: _lookup(e[0]), top_entries):
+                urls[dsid] = url
+
+        rows = [
+            (term.mfid_link(dsid, urls.get(dsid)) or dsid, _human(size))
+            for dsid, size in top_entries
+        ]
+        term.table(rows, ['MFID', 'Size'], max_widths=[36, 10])
 
     print(f"\n  {term.dim(f'{len(dataset_entries)} dataset(s) cached in total.')}")
 

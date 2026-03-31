@@ -351,52 +351,49 @@ def cmd_get(args):
         sys.exit(1)
 
 
-def cmd_set(args):
-    """Set a configuration value, preserving comments."""
+def set_config_value(key, value):
+    """Write a single config key=value to the INI file and reload.
+
+    Shared by ``cmd_set`` and the interactive-shell ``use`` built-in.
+    Returns (section, config_file_path).
+    """
     import configparser
     from crucible.config import config
     from crucible.config.config import Config
 
-    key = args.key
-    value = args.value
-
-    # Determine the correct INI section for this key
     mapping = Config._CONFIG_MAP[key]
     section  = mapping['section']
     ini_key  = mapping['ini']
 
-    # Load or create config file
     config_file = config.config_file_path
     config_file.parent.mkdir(parents=True, exist_ok=True)
 
-    # Trick: Set comment_prefixes to something extremely unlikely (like '~~~')
-    # This makes # and ; lines be treated as keys without values instead of comments
-    # Combined with allow_no_value=True, comments are preserved when writing!
     parser = configparser.ConfigParser(comment_prefixes=('~~~',), allow_no_value=True)
-
     if config_file.exists():
         parser.read(config_file)
 
-    # Ensure the target section exists (and also [crucible] for legacy compat)
     if 'crucible' not in parser:
         parser['crucible'] = {}
     if section not in parser:
         parser[section] = {}
 
-    # If this key exists in the legacy [crucible] section under a different
-    # section now, remove it there to avoid duplicate resolution confusion.
     if section != 'crucible' and 'crucible' in parser and ini_key in parser['crucible']:
         del parser['crucible'][ini_key]
 
     parser[section][ini_key] = value
 
-    # Write back (comments preserved!)
     with open(config_file, 'w') as f:
         parser.write(f)
 
-    # Reload config
     config.reload()
+    return section, config_file
 
+
+def cmd_set(args):
+    """Set a configuration value, preserving comments."""
+    key   = args.key
+    value = args.value
+    section, config_file = set_config_value(key, value)
     print(f"✓ Set {key} = {value}  (in [{section}])")
     print(f"✓ Saved to {config_file}")
 

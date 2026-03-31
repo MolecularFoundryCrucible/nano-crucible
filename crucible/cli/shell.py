@@ -13,15 +13,13 @@ import logging
 logger = logging.getLogger(__name__)
 
 _BANNER = """\
+    
 Crucible interactive shell  (type 'help' for commands, 'exit' to quit)"""
 
 _PROMPT = "crucible> "
 
 
-# ---------------------------------------------------------------------------
 # Argparse-backed completer (used by prompt_toolkit)
-# ---------------------------------------------------------------------------
-
 def _get_subparser_map(parser):
     """Return {name: subparser} for a parser's subcommands, or {} if none."""
     for action in parser._actions:
@@ -30,14 +28,33 @@ def _get_subparser_map(parser):
     return {}
 
 
+def _fetch_projects():
+    """Fetch all projects once at startup. Returns [(project_id, title), ...]."""
+    try:
+        from crucible.config import config
+        projects = config.client.projects.list()
+        result = [(p.get('project_id', ''),
+                   p.get('title') or '-')
+                  for p in projects if p.get('project_id')]
+        logger.debug(f"_fetch_projects: got {len(result)} projects")
+        return result
+    except Exception as e:
+        logger.debug(f"_fetch_projects failed: {e}")
+        return []
+
+
 try:
     from prompt_toolkit.completion import Completer, Completion
 
     class _CrucibleCompleter(Completer):
-        """Three-level argparse completer: resource → subcommand → flags."""
+        """Three-level argparse completer: resource → subcommand → flags.
 
-        def __init__(self, parser):
+        Also handles the built-in `use PROJECT_ID` command for project switching.
+        """
+
+        def __init__(self, parser, projects=None):
             self._top = _get_subparser_map(parser)
+            self._projects = projects or []
 
         def get_completions(self, document, complete_event):
             text  = document.text_before_cursor
@@ -45,27 +62,42 @@ try:
             # Are we in the middle of a word, or just after a space?
             trailing_space = text.endswith(' ')
 
-            # ── level 0: complete top-level resource ──────────────────────
+            #  level 0: complete top-level resource (+ built-in 'use') 
             if not words or (len(words) == 1 and not trailing_space):
                 prefix = words[0] if words else ''
-                for name in self._top:
+                candidates = list(self._top) + ['use', 'unuse', 'refresh']
+                for name in candidates:
                     if name.startswith(prefix):
-                        yield Completion(name, start_position=-len(prefix))
+                        yield Completion(name + ' ', start_position=-len(prefix))
                 return
 
             resource = words[0]
+
+            #  built-in: use <project_id> 
+            if resource == 'use':
+                if len(words) > 2:
+                    return  # already have a project arg
+                prefix = words[1] if len(words) == 2 and not trailing_space else ''
+                if not self._projects:
+                    self._projects = _fetch_projects()
+                for pid, title in self._projects:
+                    if pid.startswith(prefix):
+                        yield Completion(pid + ' ', start_position=-len(prefix),
+                                         display_meta=title)
+                return
+
             sub_map  = _get_subparser_map(self._top.get(resource)) \
                        if resource in self._top else {}
 
-            # ── level 1: complete subcommand ──────────────────────────────
+            #  level 1: complete subcommand 
             if len(words) == 1 or (len(words) == 2 and not trailing_space):
                 prefix = words[1] if len(words) == 2 else ''
                 for name in sub_map:
                     if name.startswith(prefix):
-                        yield Completion(name, start_position=-len(prefix))
+                        yield Completion(name + ' ', start_position=-len(prefix))
                 return
 
-            # ── level 2+: complete flags for the chosen subcommand ────────
+            #  level 2+: complete flags for the chosen subcommand 
             subcommand = words[1]
             sub_parser = sub_map.get(subcommand)
             if sub_parser is None:
@@ -77,7 +109,7 @@ try:
 
             for flag in sub_parser._option_string_actions:
                 if flag.startswith(current_word):
-                    yield Completion(flag, start_position=-len(current_word))
+                    yield Completion(flag + ' ', start_position=-len(current_word))
 
 except ImportError:
     _CrucibleCompleter = None
@@ -93,7 +125,7 @@ def run(parser):
     _run_prompt_toolkit(parser) if _CrucibleCompleter else _run_readline(parser)
 
 
-def _dispatch(parser, line):
+def _dispatch(parser, line, completer=None, state=None):
     """Parse and execute one line. Returns False to signal exit."""
     from . import _remap_deprecated, setup_logging
 
@@ -104,6 +136,44 @@ def _dispatch(parser, line):
         return False
     if line == 'help':
         parser.print_help()
+        return True
+
+    # Built-in: use <project_id>
+    if line.startswith('use ') or line == 'use':
+        parts = line.split(None, 1)
+        if len(parts) < 2 or not parts[1].strip():
+            print("Usage: use <project_id>")
+            return True
+        project_id = parts[1].strip()
+        try:
+            from crucible.cli.config import set_config_value
+            set_config_value('current_project', project_id)
+            print(f"Switched to project: {project_id}")
+        except Exception as e:
+            logger.error(f"Error switching project: {e}")
+        return True
+
+    # Built-in: unuse — clear the current project
+    if line == 'unuse':
+        try:
+            from crucible.cli.config import set_config_value
+            set_config_value('current_project', '')
+            print("Cleared current project.")
+        except Exception as e:
+            logger.error(f"Error clearing project: {e}")
+        return True
+
+    # Built-in: refresh — re-fetch projects and user label
+    if line == 'refresh':
+        new_projects = _fetch_projects()
+        if completer is not None:
+            completer._projects = new_projects
+        if state is not None:
+            state['projects']   = new_projects
+            state['user_label'] = _fetch_user_label()
+            print(f"Refreshed: {len(new_projects)} projects, user info reloaded.")
+        else:
+            print(f"Refreshed: {len(new_projects)} projects available.")
         return True
 
     try:
@@ -118,6 +188,16 @@ def _dispatch(parser, line):
         pass  # subcommands call sys.exit() on error — keep the shell alive
     except Exception as e:
         logger.error(f"Error: {e}")
+
+    # Reload identity after config set / config edit (credentials may have changed)
+    if state is not None:
+        words = line.split()
+        if len(words) >= 2 and words[0] == 'config' and words[1] in ('set', 'edit'):
+            state['user_label'] = _fetch_user_label()
+            new_projects        = _fetch_projects()
+            state['projects']   = new_projects
+            if completer is not None:
+                completer._projects = new_projects
 
     return True
 
@@ -140,18 +220,24 @@ def _fetch_user_label():
 
 
 def _run_prompt_toolkit(parser):
-    from prompt_toolkit         import PromptSession
-    from prompt_toolkit.history import FileHistory
-    from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
-    from prompt_toolkit.styles import Style
+    from prompt_toolkit                  import PromptSession
+    from prompt_toolkit.history          import FileHistory
+    from prompt_toolkit.auto_suggest     import AutoSuggestFromHistory
+    from prompt_toolkit.styles           import Style
+    from prompt_toolkit.key_binding      import KeyBindings
+    from prompt_toolkit.filters          import completion_is_selected
+    from prompt_toolkit.formatted_text   import HTML
     from platformdirs import user_data_dir
     import os
 
     history_path = os.path.join(user_data_dir('crucible'), 'shell_history')
     os.makedirs(os.path.dirname(history_path), exist_ok=True)
 
-    # Fetch user info once — toolbar is called on every keypress
-    user_label = _fetch_user_label()
+    # Mutable state — reloaded by refresh / config set / config edit
+    state = {
+        'user_label': _fetch_user_label(),
+        'projects':   _fetch_projects(),
+    }
 
     def _toolbar():
         try:
@@ -159,15 +245,36 @@ def _run_prompt_toolkit(parser):
             proj = config.current_project or '(no project set)'
         except Exception:
             proj = '?'
-        return f' project: {proj}   |   {user_label} '
+        # Pad project section to a minimum width (wide enough for long project IDs)
+        proj_content = f'🔬  {proj}'.ljust(34)
+        return HTML(
+            f'<tb-project> {proj_content} </tb-project>'
+            f' 🧸  {state["user_label"]} '
+        )
 
+    # When a completion is highlighted in the dropdown, Enter should accept it
+    # (insert the text) rather than submit the line.
+    kb = KeyBindings()
+
+    @kb.add('enter', filter=completion_is_selected)
+    def _accept_completion(event):
+        buff = event.app.current_buffer
+        buff.apply_completion(buff.complete_state.current_completion)
+
+    completer = _CrucibleCompleter(parser, projects=state['projects'])
     session = PromptSession(
         history=FileHistory(history_path),
         auto_suggest=AutoSuggestFromHistory(),
-        completer=_CrucibleCompleter(parser),
-        complete_while_typing=False,   # only complete on Tab
+        completer=completer,
+        complete_while_typing=True,   # only complete on Tab
+        key_bindings=kb,
         bottom_toolbar=_toolbar,
-        style=Style.from_dict({'bottom-toolbar': 'bg:#333333 #aaaaaa'}),
+        style=Style.from_dict({
+            # prompt_toolkit styles the toolbar at two levels; both need overriding
+            'bottom-toolbar':      'noinherit bg:#1c9aad fg:#E8F4F7',
+            'bottom-toolbar.text': 'noinherit bg:#1c9aad fg:#E8F4F7',
+            'tb-project':          'noinherit bg:#A8C4CD fg:#0D2B35',
+        }),
     )
 
     while True:
@@ -178,8 +285,9 @@ def _run_prompt_toolkit(parser):
             continue
         except EOFError:
             break
-        if not _dispatch(parser, line):
+        if not _dispatch(parser, line, completer=completer, state=state):
             break
+        print()  # blank line between commands for readability
 
 
 def _run_readline(parser):
@@ -199,3 +307,4 @@ def _run_readline(parser):
             break
         if not _dispatch(parser, line):
             break
+        print()

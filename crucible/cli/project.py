@@ -252,13 +252,20 @@ def _execute_list(args):
         client = CrucibleClient()
         projects = client.projects.list(limit=args.limit)
 
+        try:
+            from crucible.config import config
+            _base = config.graph_explorer_url.rstrip('/')
+        except Exception:
+            _base = None
+
         term.header(f"Projects ({len(projects)})")
         if not projects:
             print(f"  {term.dim('No projects found.')}")
         else:
             rows = [
                 (
-                    p.get('project_id') or '—',
+                    term.project_link(p.get('project_id'),
+                                      f"{_base}/{p.get('project_id')}" if _base else None),
                     p.get('title') or '—',
                     p.get('organization') or '—',
                     p.get('project_lead_email') or '—',
@@ -283,9 +290,15 @@ def _show_project(project):
     def _p(label, value):
         print(f"  {label:<{W}}{value if value not in (None, '') else '—'}")
 
+    try:
+        from crucible.config import config
+        _base = config.graph_explorer_url.rstrip('/')
+    except Exception:
+        _base = None
+
     term.header("Project")
     pid = project.get('project_id')
-    _p("ID",           term.cyan(pid) if pid else None)
+    _p("ID",           term.project_link(pid, f"{_base}/{pid}" if _base and pid else None))
     _p("Title",        project.get('title'))
     _p("Organization", project.get('organization'))
     _p("Lead",         project.get('project_lead_name'))

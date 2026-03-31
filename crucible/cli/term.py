@@ -14,6 +14,8 @@ from datetime import datetime, timezone
 
 # Strips ANSI SGR sequences (\033[...m) and OSC 8 hyperlinks (\033]8;...\007)
 _ANSI_RE = re.compile(r'\033(?:\[[0-9;]*m|\][^\007\033]*(?:\007|\033\\))')
+# Matches a full OSC 8 hyperlink: \033]8;;URL\007TEXT\033]8;;\007
+_OSC8_RE = re.compile(r'\033\]8;;([^\007]*)\007(.*?)\033\]8;;\007', re.DOTALL)
 
 def _dlen(s: str) -> int:
     """Visible display length of *s*, ignoring ANSI/OSC escape sequences."""
@@ -45,6 +47,23 @@ def orcid_link(orcid: str) -> str | None:
     url = f"https://orcid.org/{orcid}"
     colored = cyan(orcid)
     if _tty():
+        return f"\033]8;;{url}\007{colored}\033]8;;\007"
+    return colored
+
+
+def hyperlink(text: str, url: str) -> str:
+    """Wrap *text* in an OSC 8 clickable hyperlink when stdout is a TTY."""
+    if url and _tty():
+        return f"\033]8;;{url}\007{text}\033]8;;\007"
+    return text
+
+
+def project_link(pid: str, url: str | None = None) -> str | None:
+    """Render a project ID in cyan, optionally as a clickable OSC 8 hyperlink."""
+    if not pid:
+        return None
+    colored = cyan(pid)
+    if url and _tty():
         return f"\033]8;;{url}\007{colored}\033]8;;\007"
     return colored
 
@@ -85,45 +104,75 @@ def subheader(title: str) -> None:
 
 # ── Formatters ─────────────────────────────────────────────────────────────────
 
+def _rel(delta) -> str:
+    """Human-readable relative label for a timedelta."""
+    days = delta.days
+    if days < 0:
+        return 'in the future'
+    if days == 0:
+        h = delta.seconds // 3600
+        m = (delta.seconds % 3600) // 60
+        return f"{h}h ago" if h else (f"{m}m ago" if m > 1 else "just now")
+    if days == 1:
+        return 'yesterday'
+    if days < 30:
+        return f"{days}d ago"
+    if days < 365:
+        return f"{days // 30}mo ago"
+    return f"{days // 365}y ago"
+
+
 def fmt_ts(ts) -> str | None:
     """
-    Format an ISO timestamp as ``YYYY-MM-DD HH:MM  ±HH:MM  (relative)``.
+    Format a timestamp for display.
+
+    Handles:
+      - ISO 8601 strings  → ``YYYY-MM-DD HH:MM  ±HH:MM  (relative)``
+      - ``YYYYMMDD_am/pm``→ ``YYYY-MM-DD AM/PM  (relative)``
+      - ``YYYYMMDD``      → ``YYYY-MM-DD  (relative)``
+      - Anything else     → returned as-is
 
     Returns ``None`` for falsy input so callers can render it as ``—``.
     """
     if not ts:
         return None
+
+    s = str(ts).strip()
+    dt = None
+    abs_str = None
+
+    # ── Strategy 1: ISO 8601 ─────────────────────────────────────────────────
     try:
-        dt = datetime.fromisoformat(str(ts))
+        dt = datetime.fromisoformat(s)
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
-        now = datetime.now(tz=dt.tzinfo)
-        delta = now - dt
-        days = delta.days
-
         abs_str = dt.strftime('%Y-%m-%d %H:%M')
         tz_s = dt.strftime('%z')
         if tz_s:
             abs_str += f"  {tz_s[:3]}:{tz_s[3:]}"
-
-        if days < 0:
-            rel = 'in the future'
-        elif days == 0:
-            h = delta.seconds // 3600
-            m = (delta.seconds % 3600) // 60
-            rel = f"{h}h ago" if h else (f"{m}m ago" if m > 1 else "just now")
-        elif days == 1:
-            rel = 'yesterday'
-        elif days < 30:
-            rel = f"{days}d ago"
-        elif days < 365:
-            rel = f"{days // 30}mo ago"
-        else:
-            rel = f"{days // 365}y ago"
-
-        return f"{abs_str}  {dim(f'({rel})')}"
     except (ValueError, TypeError):
-        return str(ts)
+        pass
+
+    # ── Strategy 2: YYYYMMDD[_am|_pm] ───────────────────────────────────────
+    if dt is None:
+        m = re.match(r'^(\d{4})(\d{2})(\d{2})(?:_(am|pm))?$', s.lower())
+        if m:
+            y, mo, d, ampm = m.groups()
+            try:
+                hour = 12 if ampm == 'pm' else 0
+                dt = datetime(int(y), int(mo), int(d), hour, 0, 0,
+                              tzinfo=timezone.utc)
+                abs_str = f"{y}-{mo}-{d}"
+                if ampm:
+                    abs_str += f" {ampm.upper()}"
+            except ValueError:
+                pass
+
+    if dt is None:
+        return s  # unrecognised format — return raw
+
+    now = datetime.now(tz=dt.tzinfo or timezone.utc)
+    return f"{abs_str}  {dim(f'({_rel(now - dt)})')}"
 
 
 def fmt_size(size) -> str | None:
@@ -252,6 +301,21 @@ def open_editor_json(data: dict) -> dict | None:
 
 # ── Table renderer ─────────────────────────────────────────────────────────────
 
+def _truncate_cell(s: str, width: int) -> str:
+    """Truncate *s* to *width* visible chars, preserving OSC 8 hyperlinks."""
+    m = _OSC8_RE.search(s)
+    if m:
+        url  = m.group(1)
+        plain = _ANSI_RE.sub('', s)        # visible text only
+        if len(plain) > width - 1:
+            plain = plain[:width - 1] + '…'
+        colored = cyan(plain)
+        if url and _tty():
+            return f"\033]8;;{url}\007{colored}\033]8;;\007"
+        return colored
+    # No OSC 8 — strip ANSI and truncate plainly
+    return _ANSI_RE.sub('', s)[:width - 1] + '…'
+
 def table(rows: list, headers: list, max_widths: list | None = None) -> None:
     """
     Print a compact aligned table to stdout.
@@ -278,10 +342,6 @@ def table(rows: list, headers: list, max_widths: list | None = None) -> None:
             s = str(cell) if cell is not None else '—'
             dw = _dlen(s)
             if dw > widths[i]:
-                # Only truncate plain strings — don't cut inside escape sequences
-                if dw == len(s):
-                    s = s[:widths[i] - 1] + '…'
-                else:
-                    s = _ANSI_RE.sub('', s)[:widths[i] - 1] + '…'
+                s = _truncate_cell(s, widths[i])
             parts.append(s + ' ' * (widths[i] - _dlen(s)))
         print("  " + "  ".join(parts).rstrip())
