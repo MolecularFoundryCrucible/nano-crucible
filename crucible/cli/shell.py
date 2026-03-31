@@ -8,7 +8,11 @@ Uses prompt_toolkit if available, falls back to readline + input().
 """
 
 import sys
+import re as _re
+import time
 import shlex
+import threading
+import itertools
 import logging
 
 logger = logging.getLogger(__name__)
@@ -292,14 +296,63 @@ def _run_prompt_toolkit(parser):
     history_path = os.path.join(user_data_dir('crucible'), 'shell_history')
     os.makedirs(os.path.dirname(history_path), exist_ok=True)
 
-    # Verify connection — exit early rather than starting a broken shell
-    print('  Connecting to Crucible...', flush=True)
+    # Verify connection — exit early rather than starting a broken shell.
+    # The spinner message is mutable so retry warnings can update it in-place
+    # instead of printing on a separate line and fighting with the spinner.
+    _spin_state = {'msg': 'Connecting to Crucible'}
+    _stop       = threading.Event()
+    _is_tty     = hasattr(sys.stdout, 'isatty') and sys.stdout.isatty()
+    _FRAMES     = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
+    _RETRY_RE   = _re.compile(r'Retry\(total=(\d+)')
+
+    def _spin():
+        for frame in itertools.cycle(_FRAMES):
+            if _stop.is_set():
+                break
+            sys.stdout.write(f'\r  {_spin_state["msg"]}  {frame}')
+            sys.stdout.flush()
+            time.sleep(0.08)
+        sys.stdout.write('\r\033[2K')
+        sys.stdout.flush()
+
+    class _RetryToSpinner(logging.Filter):
+        """Redirect urllib3 retry warnings into the spinner message."""
+        def filter(self, record):
+            msg = record.getMessage()
+            if 'Retrying' not in msg:
+                return True
+            m = _RETRY_RE.search(msg)
+            n = m.group(1) if m else '?'
+            _spin_state['msg'] = f'Retrying... ({n} left)'
+            return False  # swallow — shown in spinner instead
+
+    _filt = _RetryToSpinner()
+    for _h in logging.getLogger().handlers:
+        _h.addFilter(_filt)
+
+    if _is_tty:
+        _spin_thread = threading.Thread(target=_spin, daemon=True)
+        _spin_thread.start()
+    else:
+        print('  Connecting to Crucible...')
+
     try:
         from crucible.config import config as _cfg
         _info = _cfg.client.whoami()
     except Exception as e:
+        _stop.set()
+        if _is_tty:
+            _spin_thread.join()
+        for _h in logging.getLogger().handlers:
+            _h.removeFilter(_filt)
         logger.error(f"Cannot connect to Crucible: {e}")
         sys.exit(1)
+
+    _stop.set()
+    if _is_tty:
+        _spin_thread.join()
+    for _h in logging.getLogger().handlers:
+        _h.removeFilter(_filt)
 
     # Build user label from the whoami response already in hand
     _u     = _info.get('user_info', {})
