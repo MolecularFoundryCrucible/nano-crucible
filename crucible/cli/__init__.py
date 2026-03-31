@@ -74,6 +74,11 @@ def setup_logging(debug=False):
     # override it so --debug reaches crucible.client and other submodules.
     logging.getLogger('crucible').setLevel(level)
 
+    # Suppress noisy retry/redirect warnings from urllib3/requests unless debugging.
+    if not debug:
+        logging.getLogger('urllib3').setLevel(logging.ERROR)
+        logging.getLogger('requests').setLevel(logging.ERROR)
+
 
 def main():
     """Main entry point for the unified Crucible CLI."""
