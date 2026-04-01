@@ -501,7 +501,7 @@ class DatasetOperations(BaseResource):
         else:
             return self._request('patch', f'/datasets/{dsid}/scientific_metadata', json=metadata)
 
-    def search_scientific_metadata(self, q: str) -> list:
+    def search_scientific_metadata(self, q: str, limit: Optional[int] = None) -> List[Dict]:
         """Perform a ranked full-text search on scientific metadata.
 
         Uses PostgreSQL full-text search on the server to find and rank
@@ -509,14 +509,20 @@ class DatasetOperations(BaseResource):
 
         Args:
             q (str): Plain-text search query (e.g. "temperature", "XRD silicon").
+            limit (int, optional): Maximum number of records to return.
+                If omitted, default of 50 is used. Max is 200.
 
         Returns:
             List[Dict]: Matching scientific metadata records, ranked by relevance.
 
         Example:
             >>> results = client.datasets.search_scientific_metadata("thermal conductivity")
+            >>> results = client.datasets.search_scientific_metadata("thermal conductivity", limit=25)
         """
-        return self._request('get', '/scientific_metadata/search', params={"q": q})
+        params = {"q": q}
+        if limit is not None:
+            params["limit"] = limit
+        return self._request('get', '/scientific_metadata/search', params=params)
 
     # Thumbnail Methods
     def get_thumbnails(self, dsid: str, limit: int = DEFAULT_LIMIT) -> List[Dict]:
