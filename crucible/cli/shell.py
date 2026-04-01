@@ -14,6 +14,7 @@ import shlex
 import threading
 import itertools
 import logging
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +32,15 @@ def _get_subparser_map(parser):
         if hasattr(action, 'choices') and isinstance(action.choices, dict):
             return action.choices or {}
     return {}
+
+
+def _fetch_deletions():
+    """Fetch pending deletion requests for autocomplete."""
+    try:
+        from crucible.config import config
+        return config.client.deletions.list(status='pending')
+    except Exception:
+        return []
 
 
 def _fetch_projects():
@@ -58,9 +68,10 @@ try:
         Also handles the built-in `use PROJECT_ID` command for project switching.
         """
 
-        def __init__(self, parser, projects=None):
+        def __init__(self, parser, projects=None, deletions=None):
             self._top = _get_subparser_map(parser)
-            self._projects = projects or []
+            self._projects  = projects  or []
+            self._deletions = deletions or []
 
         def get_completions(self, document, complete_event):
             text  = document.text_before_cursor
@@ -71,13 +82,23 @@ try:
             #  level 0: complete top-level resource (+ built-in 'use') 
             if not words or (len(words) == 1 and not trailing_space):
                 prefix = words[0] if words else ''
-                candidates = list(self._top) + ['use', 'unuse', 'refresh']
+                candidates = list(self._top) + ['use', 'unuse', 'refresh', 'reload', 'debug']
                 for name in candidates:
                     if name.startswith(prefix):
                         yield Completion(name + ' ', start_position=-len(prefix))
                 return
 
             resource = words[0]
+
+            #  built-in: debug on|off
+            if resource == 'debug':
+                if len(words) > 2:
+                    return
+                prefix = words[1] if len(words) == 2 and not trailing_space else ''
+                for choice in ('on', 'off'):
+                    if choice.startswith(prefix):
+                        yield Completion(choice + ' ', start_position=-len(prefix))
+                return
 
             #  built-in: use <project_id>
             if resource == 'use':
@@ -92,6 +113,22 @@ try:
                                          display_meta=title)
                 return
 
+
+            #  built-in: deletion approve/reject <ID> [<ID> ...]
+            if resource == 'deletion' and len(words) >= 2 and words[1] in ('approve', 'reject'):
+                already = set(words[2:]) if trailing_space else set(words[2:-1])
+                prefix  = '' if trailing_space else words[-1]
+                for d in self._deletions:
+                    did = str(d.get('id', ''))
+                    if did in already or not did.startswith(prefix):
+                        continue
+                    rtype  = d.get('resource_type') or ''
+                    name   = (d.get('resource_name') or '')[:22]
+                    reason = (d.get('reason') or '')[:22]
+                    meta   = '  '.join(filter(None, [rtype, name, reason]))
+                    yield Completion(did + ' ', start_position=-len(prefix),
+                                     display_meta=meta)
+                return
 
             sub_map  = _get_subparser_map(self._top.get(resource)) \
                        if resource in self._top else {}
@@ -145,6 +182,20 @@ try:
 
 except ImportError:
     _CrucibleCompleter = None
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _vlen(s):
+    """Visual (terminal column) width of *s*; falls back to len() if wcwidth unavailable."""
+    try:
+        from wcwidth import wcswidth
+        w = wcswidth(s)
+        return w if w >= 0 else len(s)
+    except ImportError:
+        return len(s)
 
 
 # ---------------------------------------------------------------------------
@@ -204,6 +255,11 @@ def _dispatch(parser, line, completer=None, state=None):
 
     # Built-in: refresh — re-fetch projects and user label
     if line == 'refresh':
+        try:
+            from crucible.config import config as _cfg
+            _cfg.reload()
+        except Exception:
+            pass
         new_projects = _fetch_projects()
         if completer is not None:
             completer._projects = new_projects
@@ -212,15 +268,45 @@ def _dispatch(parser, line, completer=None, state=None):
             state['user_label'] = _fetch_user_label()
             state['project']    = _fetch_current_project()
             state['session']    = _fetch_current_session()
+            state['api_label']  = _fetch_api_label()
+            new_deletions = _fetch_deletions()
+            state['deletions']  = new_deletions
+            if completer is not None:
+                completer._deletions = new_deletions
             print(f"Refreshed: {len(new_projects)} projects, user info reloaded.")
         else:
             print(f"Refreshed: {len(new_projects)} projects available.")
         return True
 
+    # Built-in: reload — re-exec the process to pick up source code changes
+    if line == 'reload':
+        import os
+        print("Reloading...")
+        os.execv(sys.executable, [sys.executable] + sys.argv)
+
+    # Built-in: debug on|off — set debug logging for the session
+    if line == 'debug' or line.startswith('debug '):
+        parts = line.split()
+        current = (state or {}).get('debug', False)
+        if len(parts) == 1:
+            print(f"Debug is {'on' if current else 'off'}.")
+            return True
+        action = parts[1].lower()
+        if action not in ('on', 'off'):
+            print("Usage: debug on | debug off")
+            return True
+        from . import setup_logging
+        on = (action == 'on')
+        if state is not None:
+            state['debug'] = on
+        setup_logging(debug=on)
+        print(f"Debug {'enabled' if on else 'disabled'}.")
+        return True
+
     try:
         argv = _remap_deprecated(shlex.split(line))
         args = parser.parse_args(argv)
-        setup_logging(debug=getattr(args, 'debug', False))
+        setup_logging(debug=getattr(args, 'debug', False) or (state or {}).get('debug', False))
         if hasattr(args, 'func'):
             args.func(args)
         else:
@@ -232,6 +318,15 @@ def _dispatch(parser, line, completer=None, state=None):
     except Exception as e:
         logger.error(f"Error: {e}")
 
+    # Re-fetch pending deletions after any deletion command (list changes)
+    if state is not None:
+        words = line.split()
+        if len(words) >= 2 and words[0] == 'deletion' and words[1] in ('approve', 'reject', 'request'):
+            new_deletions       = _fetch_deletions()
+            state['deletions']  = new_deletions
+            if completer is not None:
+                completer._deletions = new_deletions
+
     # Reload identity after config set / config edit (credentials may have changed)
     if state is not None:
         words = line.split()
@@ -239,10 +334,14 @@ def _dispatch(parser, line, completer=None, state=None):
             state['user_label'] = _fetch_user_label()
             state['project']    = _fetch_current_project()
             state['session']    = _fetch_current_session()
+            state['api_label']  = _fetch_api_label()
             new_projects        = _fetch_projects()
             state['projects']   = new_projects
+            new_deletions       = _fetch_deletions()
+            state['deletions']  = new_deletions
             if completer is not None:
-                completer._projects = new_projects
+                completer._projects  = new_projects
+                completer._deletions = new_deletions
 
     return True
 
@@ -256,10 +355,7 @@ def _fetch_user_label():
         first = user.get('first_name', '')
         last  = user.get('last_name', '')
         name  = f"{first} {last}".strip()
-        email = user.get('lbl_email') or user.get('email') or ''
-        if name and email:
-            return f"{name} ({email})"
-        return name or email or '?'
+        return name or info.get('access_group_name') or '?'
     except Exception:
         return '?'
 
@@ -282,6 +378,19 @@ def _fetch_current_session():
         return ''
 
 
+def _fetch_api_label():
+    """Return 'api: <last-path-segment>' derived from the configured api_url."""
+    try:
+        from urllib.parse import urlparse
+        from crucible.config import config
+        parsed = urlparse(config.api_url or '')
+        parts = [p for p in parsed.path.split('/') if p]
+        label = parts[-1] if parts else (parsed.netloc or '?')
+        return f"api: {label}"
+    except Exception:
+        return 'api: ?'
+
+
 def _run_prompt_toolkit(parser):
     from prompt_toolkit                  import PromptSession
     from prompt_toolkit.history          import FileHistory
@@ -290,6 +399,7 @@ def _run_prompt_toolkit(parser):
     from prompt_toolkit.key_binding      import KeyBindings
     from prompt_toolkit.filters          import completion_is_selected
     from prompt_toolkit.formatted_text   import HTML
+    from prompt_toolkit.completion       import ThreadedCompleter
     from platformdirs import user_data_dir
     import os
 
@@ -357,11 +467,16 @@ def _run_prompt_toolkit(parser):
     # Build user label from the whoami response already in hand
     _u     = _info.get('user_info', {})
     _name  = f"{_u.get('first_name', '')} {_u.get('last_name', '')}".strip()
-    _email = _u.get('lbl_email') or _u.get('email') or ''
-    _user_label = f"{_name} ({_email})" if _name and _email else _name or _email or '?'
+    _user_label = _name or _info.get('access_group_name') or '?'
     _projects   = _fetch_projects()
 
-    _first = _u.get('first_name', '').strip() or _name or 'there'
+    # Build API label: last path segment (e.g. "api: testapi-staging")
+    from urllib.parse import urlparse as _urlparse
+    _parsed     = _urlparse(_cfg.api_url or '')
+    _path_parts = [p for p in _parsed.path.split('/') if p]
+    _api_label  = f"api: {_path_parts[-1] if _path_parts else (_parsed.netloc or '?')}"
+
+    _first = _u.get('first_name', '').strip() or _name or _info.get('access_group_name') or 'there'
     print(f"\nWelcome to the Crucible interactive shell, {_first}.\n"
           "(type 'help' for commands, 'exit' to quit)")
 
@@ -371,16 +486,38 @@ def _run_prompt_toolkit(parser):
         'projects':   _projects,
         'project':    _fetch_current_project(),
         'session':    _fetch_current_session(),
+        'api_label':  _api_label,
+        'debug':      False,
+        'deletions':  _fetch_deletions(),
     }
 
     def _toolbar():
+        from prompt_toolkit.application import get_app
         proj = state['project']
         sess = state['session']
         label = f'{proj} / {sess}' if sess else proj
-        proj_content = f'🔬  {label}'.ljust(34)
+        if len(label) > 22:
+            label = label[:21] + '…'
+        proj_content = f'🔬 {label}'.ljust(25)
+        clock        = datetime.now().strftime('%H:%M')
+
+        left_str  = f' {proj_content} '
+        mid_str   = f' 🧸 {state["user_label"]} '
+        right_str = f' 🔗 {state["api_label"]}  │  {clock} '
+        debug_str = ' DEBUG ' if state['debug'] else ''
+
+        try:
+            term_width = get_app().output.get_size().columns
+        except Exception:
+            term_width = 80
+
+        pad = ' ' * max(0, term_width - _vlen(left_str) - _vlen(mid_str)
+                        - len(debug_str) - _vlen(right_str))
         return HTML(
-            f'<tb-project> {proj_content} </tb-project>'
-            f' 🧸  {state["user_label"]} '
+            f'<tb-project>{left_str}</tb-project>'
+            f'{mid_str}{pad}'
+            f'<tb-debug>{debug_str}</tb-debug>'
+            f'<tb-clock>{right_str}</tb-clock>'
         )
 
     # When a completion is highlighted in the dropdown, Enter should accept it
@@ -392,12 +529,13 @@ def _run_prompt_toolkit(parser):
         buff = event.app.current_buffer
         buff.apply_completion(buff.complete_state.current_completion)
 
-    completer = _CrucibleCompleter(parser, projects=state['projects'])
+    completer = _CrucibleCompleter(parser, projects=state['projects'],
+                                   deletions=state['deletions'])
     session = PromptSession(
         history=FileHistory(history_path),
         auto_suggest=AutoSuggestFromHistory(),
-        completer=completer,
-        complete_while_typing=True,   # only complete on Tab
+        completer=ThreadedCompleter(completer),
+        complete_while_typing=True,
         key_bindings=kb,
         bottom_toolbar=_toolbar,
         style=Style.from_dict({
@@ -405,8 +543,28 @@ def _run_prompt_toolkit(parser):
             'bottom-toolbar':      'noinherit bg:#1c9aad fg:#E8F4F7',
             'bottom-toolbar.text': 'noinherit bg:#1c9aad fg:#E8F4F7',
             'tb-project':          'noinherit bg:#A8C4CD fg:#0D2B35',
+            'tb-clock':            'noinherit bg:#A8C4CD fg:#0D2B35',
+            'tb-debug':            'noinherit bg:#E8820A fg:#1C1C1C bold',
         }),
     )
+
+    # Background thread: invalidate the toolbar once per minute so the clock
+    # updates even when the user is idle.
+    _clock_stop = threading.Event()
+
+    def _clock_tick():
+        # Sleep to the next minute boundary, then fire every 60 s.
+        secs_to_next = 60 - datetime.now().second
+        if _clock_stop.wait(timeout=secs_to_next):
+            return
+        while not _clock_stop.is_set():
+            try:
+                session.app.invalidate()
+            except Exception:
+                pass
+            _clock_stop.wait(timeout=60)
+
+    threading.Thread(target=_clock_tick, daemon=True).start()
 
     while True:
         try:
@@ -419,6 +577,8 @@ def _run_prompt_toolkit(parser):
         if not _dispatch(parser, line, completer=completer, state=state):
             break
         print()  # blank line between commands for readability
+
+    _clock_stop.set()
 
 
 def _run_readline(parser):

@@ -64,7 +64,9 @@ class CrucibleClient:
         self._session.mount("http://", adapter)
 
         # Initialize resource operations
-        from .resources import DatasetOperations, SampleOperations, ProjectOperations, UserOperations, InstrumentOperations, DeletionOperations
+        from .resources import DatasetOperations, SampleOperations, ProjectOperations,\
+        UserOperations, InstrumentOperations, DeletionOperations
+        
         self.datasets = DatasetOperations(self)
         self.samples = SampleOperations(self)
         self.projects = ProjectOperations(self)

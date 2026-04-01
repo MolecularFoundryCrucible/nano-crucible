@@ -92,22 +92,26 @@ def setup_logging(debug=False):
         debug (bool): If True (--debug flag), set level to DEBUG; otherwise INFO
     """
     level = logging.DEBUG if debug else logging.INFO
-    logging.basicConfig(
-        level=level,
-        format='%(message)s',  # Clean output for CLI
-        handlers=[
-            logging.StreamHandler(sys.stderr)  # Standard for CLI tools
-        ]
-    )
-    # The crucible package logger has an explicit INFO level set at import time;
-    # override it so --debug reaches crucible.client and other submodules.
-    logging.getLogger('crucible').setLevel(level)
+    root = logging.getLogger()
 
-    # Reformat urllib3 retry warnings to be human-readable.
-    # The filter must live on the handler (not the urllib3 logger) because Python
-    # logging does not run parent-logger filters on propagated records.
-    for h in logging.getLogger().handlers:
-        h.addFilter(_CleanRetryFilter())
+    if not root.handlers:
+        # First call — set up the handler from scratch.
+        handler = logging.StreamHandler(sys.stderr)
+        handler.setFormatter(logging.Formatter('%(message)s'))
+        handler.addFilter(_CleanRetryFilter())
+        root.addHandler(handler)
+
+    # Root logger stays at INFO so third-party libraries (asyncio, urllib3, …)
+    # don't flood output with their own DEBUG messages.
+    # The handler is set to DEBUG so it doesn't filter crucible's debug records.
+    root.setLevel(logging.INFO)
+    for h in root.handlers:
+        h.setLevel(logging.DEBUG)
+        if not any(isinstance(f, _CleanRetryFilter) for f in h.filters):
+            h.addFilter(_CleanRetryFilter())
+
+    # Only the crucible logger switches between INFO and DEBUG.
+    logging.getLogger('crucible').setLevel(level)
 
 
 def main():
@@ -166,7 +170,7 @@ Examples:
     # Import subcommands
     from . import (
         dataset, sample, project, instrument, user,  # Resource commands
-        upload, completion, config as config_cmd, open as open_cmd, link, unlink, whoami, cache, download, get, edit, status  # Utility commands
+        upload, completion, config as config_cmd, open as open_cmd, link, unlink, whoami, cache, download, get, edit, status, deletion  # Utility commands
     )
 
     # Register resource commands (new structure)
@@ -189,6 +193,7 @@ Examples:
     get.register_subcommand(subparsers)
     edit.register_subcommand(subparsers)
     status.register_subcommand(subparsers)
+    deletion.register_subcommand(subparsers)
 
     # Enable shell completion if argcomplete is available
     if ARGCOMPLETE_AVAILABLE:

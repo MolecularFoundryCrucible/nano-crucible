@@ -196,6 +196,7 @@ def register_subcommand(subparsers):
     _register_get(dataset_subparsers)
     _register_create(dataset_subparsers)
     _register_update(dataset_subparsers)
+    _register_delete(dataset_subparsers)
     _register_edit(dataset_subparsers)
     _register_link(dataset_subparsers)
     _register_add_sample(dataset_subparsers)
@@ -667,6 +668,44 @@ def _execute_update(args):
 
     except Exception as e:
         logger.error(f"Error updating dataset: {e}")
+        if getattr(args, "debug", False):
+            import traceback
+            traceback.print_exc()
+        sys.exit(1)
+
+
+def _register_delete(subparsers):
+    """Register the 'dataset delete' subcommand."""
+    parser = subparsers.add_parser(
+        'delete',
+        help='Delete a dataset',
+        description='Permanently delete a dataset (irreversible). Prompts for confirmation unless -y is given.',
+        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+    crucible dataset delete DATASET_ID
+    crucible dataset delete DATASET_ID -y
+"""
+    )
+    parser.add_argument('dataset_id', metavar='DATASET_ID', help='Dataset unique ID to delete')
+    parser.add_argument('-y', '--yes', action='store_true', help='Skip confirmation prompt')
+    parser.set_defaults(func=_execute_delete)
+
+
+def _execute_delete(args):
+    """Execute the 'dataset delete' subcommand."""
+    from crucible.client import CrucibleClient
+    if not args.yes:
+        confirm = input(f"Delete dataset {args.dataset_id}? This cannot be undone. [y/N] ").strip().lower()
+        if confirm != 'y':
+            print("Aborted.")
+            return
+    try:
+        client = CrucibleClient()
+        client.datasets.delete(args.dataset_id)
+        logger.info(f"✓ Deleted dataset {args.dataset_id}")
+    except Exception as e:
+        logger.error(f"Error deleting dataset: {e}")
         if getattr(args, "debug", False):
             import traceback
             traceback.print_exc()

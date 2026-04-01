@@ -100,6 +100,7 @@ class DeletionRequest(BaseModel):
     id: Optional[int] = None
     resource_type: Optional[str] = None
     resource_id: Optional[str] = None
+    resource_name: Optional[str] = None
     requester_id: Optional[str] = None
     reason: Optional[str] = None
     status: Optional[str] = None          # "pending" | "approved" | "rejected"

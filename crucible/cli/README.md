@@ -15,6 +15,9 @@ Running `crucible` with no arguments starts an **interactive shell** with tab-co
 | `use PROJECT_ID` | Switch active project (tab-completes project IDs) |
 | `unuse` | Clear active project and session |
 | `refresh` | Re-fetch project list and user info |
+| `reload` | Re-exec the process — picks up source code changes |
+| `debug on` / `debug off` | Enable or disable debug logging for the current session |
+| `debug` | Show current debug state |
 | `help` | Print available commands |
 | `exit` / `quit` | Leave the shell |
 
@@ -60,6 +63,7 @@ crucible --debug dataset list   # debug must precede the subcommand
 | `dataset list-files ID` | | List associated files with clickable download links (valid 1 hour) and sizes |
 | `dataset add-file ID FILE` | | Upload and attach a file to an existing dataset |
 | `dataset download ID` | `--output-dir DIR` `--include PATTERN` `--exclude PATTERN` `-f FILE` `--overwrite` | Download dataset files with optional glob filters (delegates to `crucible download`) |
+| `dataset delete ID` | `-y` | Permanently delete a dataset (prompts for confirmation) |
 | `dataset search QUERY` | `--limit N` `-v` | Search datasets by scientific metadata |
 | `dataset link` | `-p PARENT_ID -c CHILD_ID` | Create a parent-child relationship between two datasets |
 | `dataset add-sample ID` | `-s SAMPLE_ID` | Link a sample to this dataset |
@@ -214,6 +218,28 @@ crucible-downloads/
     record.json            ← API record + scientific metadata (one per resource, no overwrites)
   <mfid>/file1.h5          ← dataset files at their server-side paths (already include mfid)
   <mfid>/subdir/file2.dat
+```
+
+---
+
+## Deletion
+
+Soft-deletion workflow: users submit requests, admins approve or reject them. While a request is pending, the resource is hidden from list results.
+
+| Command | Key options | Description |
+|---------|-------------|-------------|
+| `deletion request RESOURCE_ID` | `-m TEXT` | Submit a deletion request for a dataset or sample |
+| `deletion list` | `--approved` `--rejected` `--all` | List deletion requests, pending by default *(admin)* |
+| `deletion get REQUEST_ID` | | Get a single deletion request by integer ID *(admin)* |
+| `deletion approve REQUEST_ID` | `-m TEXT` | Approve a pending deletion request *(admin)* |
+| `deletion reject REQUEST_ID` | `-m TEXT` | Reject a pending deletion request — resource is restored *(admin)* |
+
+```bash
+crucible deletion request mf-abc123 -m "Duplicate upload"
+crucible deletion list
+crucible deletion list --approved
+crucible deletion approve 42 -m "Confirmed duplicate"
+crucible deletion reject 42 -m "Still in use"
 ```
 
 ---
