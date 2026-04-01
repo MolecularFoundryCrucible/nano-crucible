@@ -133,25 +133,44 @@ def _show_dataset(dataset, client, verbose=False, graph=False, include_metadata=
         _show_scientific_metadata(dataset.get('scientific_metadata'))
 
     if graph:
-        samples = client.samples.list(dataset_id=dsid)
-        term.subheader(f"Linked Samples ({len(samples)})")
-        for s in samples:
-            print(f"  {_s_link(s)}  {s.get('sample_name') or '(unnamed)'}")
-        if not samples:
+        graph_data      = client.datasets.graph(dsid)
+        nodes           = graph_data.get('nodes', [])
+        edges           = graph_data.get('edges', [])
+        node_map        = {n['id']: n for n in nodes}
+        proj            = dataset.get('project_id') or ''
+
+        linked_samples  = [node_map[e['source']] for e in edges
+                           if e['target'] == dsid
+                           and node_map.get(e['source'], {}).get('entity_type') == 'sample']
+        parent_datasets = [node_map[e['source']] for e in edges
+                           if e['target'] == dsid
+                           and node_map.get(e['source'], {}).get('entity_type') == 'dataset']
+        child_datasets  = [node_map[e['target']] for e in edges
+                           if e['source'] == dsid
+                           and node_map.get(e['target'], {}).get('entity_type') == 'dataset']
+
+        term.subheader(f"Linked Samples ({len(linked_samples)})")
+        for s in linked_samples:
+            uid = s['id']
+            url = f"{_base}/{proj}/sample-graph/{uid}" if _base and proj else None
+            print(f"  {term.mfid_link(uid, url)}  {s.get('name') or '(unnamed)'}")
+        if not linked_samples:
             print(f"  {term.dim('(none)')}")
 
-        parents = client.datasets.list_parents(dsid)
-        term.subheader(f"Parents ({len(parents)})")
-        for p in parents:
-            print(f"  {_ds_link(p)}  {p.get('dataset_name') or '(unnamed)'}")
-        if not parents:
+        term.subheader(f"Parents ({len(parent_datasets)})")
+        for p in parent_datasets:
+            uid = p['id']
+            url = f"{_base}/{proj}/dataset/{uid}" if _base and proj else None
+            print(f"  {term.mfid_link(uid, url)}  {p.get('name') or '(unnamed)'}")
+        if not parent_datasets:
             print(f"  {term.dim('(none)')}")
 
-        children = client.datasets.list_children(dsid)
-        term.subheader(f"Children ({len(children)})")
-        for c in children:
-            print(f"  {_ds_link(c)}  {c.get('dataset_name') or '(unnamed)'}")
-        if not children:
+        term.subheader(f"Children ({len(child_datasets)})")
+        for c in child_datasets:
+            uid = c['id']
+            url = f"{_base}/{proj}/dataset/{uid}" if _base and proj else None
+            print(f"  {term.mfid_link(uid, url)}  {c.get('name') or '(unnamed)'}")
+        if not child_datasets:
             print(f"  {term.dim('(none)')}")
 
 try:
@@ -1191,7 +1210,7 @@ def _execute_add_file(args):
             rows.append((fpath.name, term.fmt_size(fpath.stat().st_size), '✓'))
 
         print()
-        term.table(rows, ['File', 'Size', ''])
+        term.table(rows, ['File', 'Size', ''], max_widths=[60, 10, 4])
 
     except Exception as e:
         logger.error(f"Error uploading file(s): {e}")

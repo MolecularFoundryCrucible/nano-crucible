@@ -256,7 +256,7 @@ def _execute_list(args):
         ]
         term.table(rows,
                    ['ID', 'Resource ID', 'Type', 'Name', 'Status', 'Requested'],
-                   max_widths=[6, 26, 10, 24, 10, 10])
+                   max_widths=[6, 26, 10, 15, 10, 10])
     except Exception as e:
         logger.error(f"Error listing deletion requests: {e}")
         if getattr(args, 'debug', False):

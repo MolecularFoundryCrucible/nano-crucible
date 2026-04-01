@@ -250,6 +250,9 @@ crucible deletion reject 42 -m "Still in use"
 |---------|-------------|
 | `status` | Check API connectivity, auth, and active config |
 | `whoami` | Show current user info for the active API key |
+| `tree ID` | Display connected graph as ASCII tree, rooted at true ancestors; queried node highlighted in green |
+| `tree ID --depth N` | Limit tree traversal to N levels |
+| `tree ID --all` | Show all node types mixed (default: same type only) |
 | `link -p PARENT -c CHILD` | Link two resources (type auto-detected via API) |
 | `link -d DATASET -s SAMPLE` | Link a sample to a dataset |
 | `unlink -p ID -c ID` | Unlink two resources (dataset-sample only, type auto-detected) |

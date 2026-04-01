@@ -448,7 +448,7 @@ def _execute_check_access(args):
         client = CrucibleClient()
         perms = client.users.check_dataset_access(args.orcid, args.dataset_id)
 
-        _p = term.field_printer(8)
+        _p = term.field_printer(14)
 
         term.header(f"Access · {args.dataset_id}")
         _p("Read",  "yes" if perms.get('read')  else "no")

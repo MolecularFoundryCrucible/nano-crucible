@@ -635,30 +635,46 @@ def _show_sample(sample, client, verbose=False, graph=False):
         _p("Modified", term.fmt_ts(sample.get('modification_time')))
 
     if graph:
-        sid = sample.get('unique_id')
+        sid  = sample.get('unique_id')
+        proj = sample.get('project_id') or ''
 
-        datasets = client.datasets.list(sample_id=sid)
-        term.subheader(f"Linked Datasets ({len(datasets)})")
-        for ds in datasets:
-            name = ds.get('dataset_name') or '(unnamed)'
-            meas = ds.get('measurement') or ''
-            suffix = f"  {meas}" if meas else ''
-            print(f"  {_ds_link(ds)}  {name}{suffix}")
-        if not datasets:
+        graph_data      = client.samples.graph(sid)
+        nodes           = graph_data.get('nodes', [])
+        edges           = graph_data.get('edges', [])
+        node_map        = {n['id']: n for n in nodes}
+
+        linked_datasets = [node_map[e['target']] for e in edges
+                           if e['source'] == sid
+                           and node_map.get(e['target'], {}).get('entity_type') == 'dataset']
+        parent_samples  = [node_map[e['source']] for e in edges
+                           if e['target'] == sid
+                           and node_map.get(e['source'], {}).get('entity_type') == 'sample']
+        child_samples   = [node_map[e['target']] for e in edges
+                           if e['source'] == sid
+                           and node_map.get(e['target'], {}).get('entity_type') == 'sample']
+
+        term.subheader(f"Linked Datasets ({len(linked_datasets)})")
+        for ds in linked_datasets:
+            uid = ds['id']
+            url = f"{_base}/{proj}/dataset/{uid}" if _base and proj else None
+            print(f"  {term.mfid_link(uid, url)}  {ds.get('name') or '(unnamed)'}")
+        if not linked_datasets:
             print(f"  {term.dim('(none)')}")
 
-        parents = client.samples.list_parents(sid)
-        term.subheader(f"Parents ({len(parents)})")
-        for p in parents:
-            print(f"  {_s_link(p)}  {p.get('sample_name') or '(unnamed)'}")
-        if not parents:
+        term.subheader(f"Parents ({len(parent_samples)})")
+        for p in parent_samples:
+            uid = p['id']
+            url = f"{_base}/{proj}/sample-graph/{uid}" if _base and proj else None
+            print(f"  {term.mfid_link(uid, url)}  {p.get('name') or '(unnamed)'}")
+        if not parent_samples:
             print(f"  {term.dim('(none)')}")
 
-        children = client.samples.list_children(sid)
-        term.subheader(f"Children ({len(children)})")
-        for c in children:
-            print(f"  {_s_link(c)}  {c.get('sample_name') or '(unnamed)'}")
-        if not children:
+        term.subheader(f"Children ({len(child_samples)})")
+        for c in child_samples:
+            uid = c['id']
+            url = f"{_base}/{proj}/sample-graph/{uid}" if _base and proj else None
+            print(f"  {term.mfid_link(uid, url)}  {c.get('name') or '(unnamed)'}")
+        if not child_samples:
             print(f"  {term.dim('(none)')}")
 
 

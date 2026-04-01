@@ -60,7 +60,8 @@ def _fetch_projects():
 
 
 try:
-    from prompt_toolkit.completion import Completer, Completion
+    from prompt_toolkit.completion      import Completer, Completion
+    from prompt_toolkit.formatted_text  import HTML as _HTML
 
     class _CrucibleCompleter(Completer):
         """Three-level argparse completer: resource → subcommand → flags.
@@ -110,7 +111,8 @@ try:
                 for pid, title in self._projects:
                     if pid.startswith(prefix):
                         yield Completion(pid + ' ', start_position=-len(prefix),
-                                         display_meta=title)
+                                         display=_HTML(f'<b>{pid}</b>'),
+                                         display_meta=_HTML(f'<ansibrightblack>{title}</ansibrightblack>'))
                 return
 
 
@@ -123,11 +125,21 @@ try:
                     if did in already or not did.startswith(prefix):
                         continue
                     rtype  = d.get('resource_type') or ''
-                    name   = (d.get('resource_name') or '')[:22]
-                    reason = (d.get('reason') or '')[:22]
-                    meta   = '  '.join(filter(None, [rtype, name, reason]))
-                    yield Completion(did + ' ', start_position=-len(prefix),
-                                     display_meta=meta)
+                    name   = (d.get('resource_name') or '')[:15]
+                    reason = (d.get('reason') or '')[:24]
+                    parts  = []
+                    if rtype:
+                        parts.append(f'{rtype}')
+                    if name:
+                        parts.append(f'<b>{name}</b>')
+                    if reason:
+                        parts.append(f'<ansibrightblack>{reason}</ansibrightblack>')
+                    yield Completion(
+                        did + ' ',
+                        start_position=-len(prefix),
+                        display=_HTML(f'<b>{did}</b>'),
+                        display_meta=_HTML(' | '.join(parts)),
+                    )
                 return
 
             sub_map  = _get_subparser_map(self._top.get(resource)) \
@@ -165,7 +177,8 @@ try:
                     for pid, title in self._projects:
                         if pid.startswith(prefix):
                             yield Completion(pid + ' ', start_position=-len(prefix),
-                                             display_meta=title)
+                                             display=_HTML(f'<b>{pid}</b>'),
+                                             display_meta=_HTML(f'<ansibrightblack>{title}</ansibrightblack>'))
                 return
 
             sub_parser = sub_map.get(subcommand)
