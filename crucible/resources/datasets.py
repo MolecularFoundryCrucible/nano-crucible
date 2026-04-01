@@ -798,3 +798,18 @@ class DatasetOperations(BaseResource):
         """
         result = self._request('post', f"/datasets/{dsid}/insitu_aggregation")
         return result
+
+    def graph(self, dataset_id: str, recursive: bool = False, as_networkx: bool = False):
+        """Return the graph of entities connected to this dataset.
+
+        Delegates to client.graphs.get(). See GraphOperations.get() for full docs.
+
+        Args:
+            dataset_id (str): Dataset unique identifier.
+            recursive (bool): If True, traverse the full connected component.
+            as_networkx (bool): Return a networkx DiGraph if True.
+
+        Returns:
+            dict | networkx.DiGraph: Node-link graph data.
+        """
+        return self._client.graphs.get(dataset_id, recursive=recursive, as_networkx=as_networkx)

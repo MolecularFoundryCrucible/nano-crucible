@@ -316,3 +316,18 @@ class SampleOperations(BaseResource):
             Dict: Created link object
         """
         return self._request('post', f"/samples/{parent_id}/children/{child_id}")
+
+    def graph(self, sample_id: str, recursive: bool = False, as_networkx: bool = False):
+        """Return the graph of entities connected to this sample.
+
+        Delegates to client.graphs.get(). See GraphOperations.get() for full docs.
+
+        Args:
+            sample_id (str): Sample unique identifier.
+            recursive (bool): If True, traverse the full connected component.
+            as_networkx (bool): Return a networkx DiGraph if True.
+
+        Returns:
+            dict | networkx.DiGraph: Node-link graph data.
+        """
+        return self._client.graphs.get(sample_id, recursive=recursive, as_networkx=as_networkx)

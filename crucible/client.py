@@ -65,14 +65,15 @@ class CrucibleClient:
 
         # Initialize resource operations
         from .resources import DatasetOperations, SampleOperations, ProjectOperations,\
-        UserOperations, InstrumentOperations, DeletionOperations
-        
+        UserOperations, InstrumentOperations, DeletionOperations, GraphOperations
+
         self.datasets = DatasetOperations(self)
         self.samples = SampleOperations(self)
         self.projects = ProjectOperations(self)
         self.users = UserOperations(self)
         self.instruments = InstrumentOperations(self)
         self.deletions = DeletionOperations(self)
+        self.graphs = GraphOperations(self)
     
     def _request(self, method: str, endpoint: str, **kwargs) -> Any:
         """Make an HTTP request to the API.
@@ -165,6 +166,19 @@ class CrucibleClient:
             raise ValueError(f"Unsupported request_type: {request_type}")
     
     #%% GENERIC METHODS
+
+    def health(self) -> Dict:
+        """Check API and database health without requiring authentication.
+
+        Returns:
+            Dict: {"status": "ok"|"degraded", "db": "ok"|"error", "version": str|None}
+                  Raises requests.exceptions.ConnectionError if the host is unreachable.
+        """
+        import requests as _requests
+        url = f"{self.api_url}/health"
+        timeout = (self._config.connect_timeout, self._config.read_timeout)
+        resp = _requests.get(url, timeout=timeout)
+        return resp.json()
 
     def whoami(self) -> Dict:
         """Return account info for the current API key.
