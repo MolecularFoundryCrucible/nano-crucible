@@ -14,7 +14,7 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 from typing import Optional, List, Dict, Any, Union
 from .models import Dataset, Project
-from .constants import DEFAULT_TIMEOUT, DEFAULT_LIMIT
+from .constants import DEFAULT_LIMIT
 from .utils.deprecation import _deprecated, _removed
 
 logger = logging.getLogger(__name__)
@@ -34,12 +34,12 @@ class CrucibleClient:
             ValueError: If api_url or api_key not provided and not found in config
         """
         # Load from config if not provided
-        if api_url is None or api_key is None:
-            from .config import config
-            if api_url is None:
-                api_url = config.api_url
-            if api_key is None:
-                api_key = config.api_key
+        from .config import config as _config
+        self._config = _config
+        if api_url is None:
+            api_url = _config.api_url
+        if api_key is None:
+            api_key = _config.api_key
 
         if not api_url:
             raise ValueError("api_url is required. Provide it directly or run 'crucible config init'")
@@ -64,12 +64,16 @@ class CrucibleClient:
         self._session.mount("http://", adapter)
 
         # Initialize resource operations
-        from .resources import DatasetOperations, SampleOperations, ProjectOperations, UserOperations, InstrumentOperations
+        from .resources import DatasetOperations, SampleOperations, ProjectOperations,\
+        UserOperations, InstrumentOperations, DeletionOperations, GraphOperations
+
         self.datasets = DatasetOperations(self)
         self.samples = SampleOperations(self)
         self.projects = ProjectOperations(self)
         self.users = UserOperations(self)
         self.instruments = InstrumentOperations(self)
+        self.deletions = DeletionOperations(self)
+        self.graphs = GraphOperations(self)
     
     def _request(self, method: str, endpoint: str, **kwargs) -> Any:
         """Make an HTTP request to the API.
@@ -89,7 +93,8 @@ class CrucibleClient:
         """
         url = f"{self.api_url}/{endpoint.lstrip('/')}"
         logger.debug(f"{method.upper()} {url}")
-        response = self._session.request(method, url, timeout=DEFAULT_TIMEOUT, **kwargs)
+        timeout = (self._config.connect_timeout, self._config.read_timeout)
+        response = self._session.request(method, url, timeout=timeout, **kwargs)
         logger.debug(f"Status: {response.status_code}")
         logger.debug(f"Response: {response.text}")
         if not response.ok:
@@ -162,6 +167,19 @@ class CrucibleClient:
     
     #%% GENERIC METHODS
 
+    def health(self) -> Dict:
+        """Check API and database health without requiring authentication.
+
+        Returns:
+            Dict: {"status": "ok"|"degraded", "db": "ok"|"error", "version": str|None}
+                  Raises requests.exceptions.ConnectionError if the host is unreachable.
+        """
+        import requests as _requests
+        url = f"{self.api_url}/health"
+        timeout = (self._config.connect_timeout, self._config.read_timeout)
+        resp = _requests.get(url, timeout=timeout)
+        return resp.json()
+
     def whoami(self) -> Dict:
         """Return account info for the current API key.
 
@@ -182,7 +200,7 @@ class CrucibleClient:
             str: resource_type
         """
         response = self._request('get', f"/idtype/{resource_id}")
-        return response['object_type']
+        return response.get('resource_type') or response['object_type']
 
     def get(self, resource_id: str, resource_type: str = None,
             include_metadata: bool = False) -> Dict:
@@ -306,15 +324,17 @@ class CrucibleClient:
             logger.info(f"Unlinking sample {id_a} from dataset {id_b}")
             return self.datasets.remove_sample(id_b, id_a)
 
-        elif type_a == type_b and type_a in ("dataset", "sample"):
-            raise ValueError(
-                f"Unlinking {type_a}-{type_b} parent-child relationships is not "
-                f"supported by the API. Use the API to manage these directly."
-            )
+        elif type_a == "dataset" and type_b == "dataset":
+            logger.info(f"Unlinking child dataset {id_b} from parent dataset {id_a}")
+            return self.datasets.remove_child(id_a, id_b)
+
+        elif type_a == "sample" and type_b == "sample":
+            logger.info(f"Unlinking child sample {id_b} from parent sample {id_a}")
+            return self.samples.remove_child(id_a, id_b)
+
         else:
             raise ValueError(
-                f"Cannot unlink resources: {id_a} is {type_a}, {id_b} is {type_b}. "
-                f"Only dataset-sample unlinking is supported."
+                f"Cannot unlink resources: {id_a} is {type_a}, {id_b} is {type_b}."
             )
     
     def download(self, resource_id: str, output_dir: str = 'crucible-downloads',

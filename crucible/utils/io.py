@@ -72,6 +72,45 @@ def get_tz_isoformat(timezone="America/Los_Angeles"):
     return curr_pct_time
 
 
+def parse_timestamp(value: str) -> str:
+    """Parse a human-readable date/time string and return an ISO 8601 string.
+
+    Accepts flexible input:
+      - Keywords:   "now", "today", "yesterday"
+      - ISO dates:  "2024-01-15", "2024-01-15T10:30:00"
+      - Common:     "2024-01-15 10:30", "Jan 15 2024", "15/01/2024"
+
+    Args:
+        value (str): Date/time string to parse.
+
+    Returns:
+        str: ISO 8601 formatted string (e.g. "2024-01-15T10:30:00").
+
+    Raises:
+        ValueError: If the string cannot be parsed as a date.
+    """
+    from dateutil import parser as _duparser
+    from datetime import timedelta
+
+    v = value.strip().lower()
+    now = datetime.now()
+
+    if v in ("now", "today"):
+        return now.replace(microsecond=0).isoformat()
+    if v == "yesterday":
+        return (now - timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
+
+    try:
+        dt = _duparser.parse(value)
+        return dt.replace(microsecond=0).isoformat()
+    except (ValueError, OverflowError):
+        raise ValueError(
+            f"Cannot parse timestamp: {value!r}\n"
+            "Accepted formats: ISO date (2024-01-15), ISO datetime (2024-01-15T10:30:00),\n"
+            "                  'today', 'now', 'yesterday', or most common date strings."
+        )
+
+
 def check_small_files(filelist):
     """Check whether all files in a list are under the HTTP upload size threshold (100 MB).
 

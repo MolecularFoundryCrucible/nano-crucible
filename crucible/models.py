@@ -27,7 +27,7 @@ class Sample(BaseModel):
     project_id: Optional[str] = None
     description: Optional[str] = None
 
-    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True, extra='allow')
 
 
 class Dataset(BaseModel):
@@ -41,11 +41,10 @@ class Dataset(BaseModel):
     instrument_name: Optional[str] = None
     measurement: Optional[str] = None
     session_name: Optional[str] = None
-    # timestamp: user-settable date; accepts legacy 'creation_time' from the API
-    # until the server-side rename is complete
+    # timestamp: user-settable date; accepts legacy 'creation_date' from the API
     timestamp: Optional[str] = Field(
         default=None,
-        validation_alias=AliasChoices("timestamp", "creation_time")
+        validation_alias=AliasChoices("timestamp", "creation_date")
     )
     # server-assigned; backfilled on existing records, present on new ones
     creation_time: Optional[str] = None
@@ -55,9 +54,8 @@ class Dataset(BaseModel):
     size: Optional[int] = None
     sha256_hash_file_to_upload: Optional[str] = None
     source_folder: Optional[str] = None
-    json_link: Optional[str] = None
 
-    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True, extra='allow')
 
 class Project(BaseModel):
     project_id: str
@@ -96,6 +94,22 @@ class Instrument(BaseModel):
     other_id_source: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class DeletionRequest(BaseModel):
+    id: Optional[int] = None
+    resource_type: Optional[str] = None
+    resource_id: Optional[str] = None
+    resource_name: Optional[str] = None
+    requester_id: Optional[str] = None
+    reason: Optional[str] = None
+    status: Optional[str] = None          # "pending" | "approved" | "rejected"
+    request_time: Optional[str] = None
+    review_time: Optional[str] = None
+    reviewer_id: Optional[str] = None
+    reviewer_notes: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True, extra='allow')
 
 
 #%% Backward-compatibility aliases (deprecated)

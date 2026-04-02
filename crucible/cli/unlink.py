@@ -5,9 +5,8 @@ Unlink subcommand for removing relationships between Crucible resources.
 
 Supports unlinking:
 - Dataset from sample (and vice versa) — resource types auto-detected
-
-Note: parent-child relationships (dataset-dataset, sample-sample) cannot
-be removed via the API and are not supported here.
+- Dataset from parent dataset — resource types auto-detected
+- Sample from parent sample — resource types auto-detected
 """
 
 import sys
@@ -20,21 +19,16 @@ def register_subcommand(subparsers):
     """Register the unlink subcommand."""
     parser = subparsers.add_parser(
         'unlink',
-        help='Unlink Crucible resources (dataset-sample only)',
-        description='Remove the association between a dataset and a sample',
+        help='Unlink Crucible resources',
+        description='Remove the association between two Crucible resources',
         formatter_class=lambda prog: __import__('argparse').RawDescriptionHelpFormatter(prog, max_help_position=35),
         epilog="""
 Examples:
-    # Unlink a sample from a dataset (resource types auto-detected)
-    crucible unlink -p dataset_id -c sample_id
-    crucible unlink -p sample_id -c dataset_id
+    # Unlink two resources (types auto-detected: dataset-sample, dataset-dataset, sample-sample)
+    crucible unlink -p parent_id -c child_id
 
     # Explicit dataset/sample flags
     crucible unlink -d dataset_id -s sample_id
-
-Note:
-    Parent-child unlinking (dataset-dataset, sample-sample) is not
-    supported by the API.
 """
     )
 
@@ -64,12 +58,12 @@ Note:
 
 def execute(args):
     """Execute the unlink command."""
-    from crucible.config import config
+    from crucible.client import CrucibleClient
 
     if args.dataset and args.sample:
         logger.info(f"Unlinking sample '{args.sample}' from dataset '{args.dataset}'...")
         try:
-            result = config.client.datasets.remove_sample(args.dataset, args.sample)
+            CrucibleClient().datasets.remove_sample(args.dataset, args.sample)
             logger.info(f"✓ Unlinked sample {args.sample} from dataset {args.dataset}")
         except Exception as e:
             logger.error(f"Failed to unlink resources: {e}")
@@ -77,7 +71,7 @@ def execute(args):
 
     elif args.parent and args.child:
         try:
-            result = config.client.unlink(args.parent, args.child)
+            CrucibleClient().unlink(args.parent, args.child)
             logger.info(f"✓ Unlinked resources successfully")
         except ValueError as e:
             logger.error(str(e))

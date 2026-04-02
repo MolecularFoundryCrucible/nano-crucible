@@ -31,6 +31,16 @@ class DatasetOperations(BaseResource):
     Access via: client.datasets.get(), client.datasets.list(), etc.
     """
 
+    @staticmethod
+    def _parse(raw: Dict) -> Dict:
+        """Validate a raw API response dict through the Dataset Pydantic model.
+
+        Normalises field aliases (e.g. creation_date → timestamp) and preserves
+        any extra fields returned by the server (keywords, scientific_metadata, …).
+        """
+        from ..models import Dataset
+        return Dataset.model_validate(raw).model_dump()
+
     def get(self, dsid: str, include_metadata: bool = False) -> Dict:
         """Get dataset details, optionally including scientific metadata.
 
@@ -41,8 +51,11 @@ class DatasetOperations(BaseResource):
         Returns:
             Dict: Dataset object with optional metadata
         """
-        dataset = self._request('get', f'/datasets/{dsid}')
-        if dataset and include_metadata:
+        raw = self._request('get', f'/datasets/{dsid}')
+        if raw is None:
+            return None
+        dataset = self._parse(raw)
+        if include_metadata:
             try:
                 metadata = self._request('get', f'/datasets/{dsid}/scientific_metadata')
                 dataset['scientific_metadata'] = metadata or {}
@@ -60,7 +73,7 @@ class DatasetOperations(BaseResource):
             include_metadata (bool): Include scientific metadata in results
             **kwargs: Query parameters for filtering. Supported fields include:
                         keyword, unique_id, public, dataset_name, file_to_upload, owner_orcid,
-                        project_id, instrument_name, source_folder, creation_time,
+                        project_id, instrument_name, source_folder, timestamp,
                         size, data_format, measurement, session_name, sha256_hash_file_to_upload
 
             Note:   Filters expect exact matches (case sensitive) except for keywords.
@@ -76,7 +89,7 @@ class DatasetOperations(BaseResource):
             result = self._request('get', f'/samples/{sample_id}/datasets', params=params)
         else:
             result = self._request('get', '/datasets', params=params)
-        return result
+        return [self._parse(d) for d in result] if result else []
 
     def create(self, dataset, scientific_metadata: Optional[Dict] = None,
                keywords: Optional[List[str]] = None,
@@ -488,7 +501,7 @@ class DatasetOperations(BaseResource):
         else:
             return self._request('patch', f'/datasets/{dsid}/scientific_metadata', json=metadata)
 
-    def search_scientific_metadata(self, q: str) -> list:
+    def search_scientific_metadata(self, q: str, limit: Optional[int] = None) -> List[Dict]:
         """Perform a ranked full-text search on scientific metadata.
 
         Uses PostgreSQL full-text search on the server to find and rank
@@ -496,14 +509,20 @@ class DatasetOperations(BaseResource):
 
         Args:
             q (str): Plain-text search query (e.g. "temperature", "XRD silicon").
+            limit (int, optional): Maximum number of records to return.
+                If omitted, default of 50 is used. Max is 200.
 
         Returns:
             List[Dict]: Matching scientific metadata records, ranked by relevance.
 
         Example:
             >>> results = client.datasets.search_scientific_metadata("thermal conductivity")
+            >>> results = client.datasets.search_scientific_metadata("thermal conductivity", limit=25)
         """
-        return self._request('get', '/scientific_metadata/search', params={"q": q})
+        params = {"q": q}
+        if limit is not None:
+            params["limit"] = limit
+        return self._request('get', '/scientific_metadata/search', params=params)
 
     # Thumbnail Methods
     def get_thumbnails(self, dsid: str, limit: int = DEFAULT_LIMIT) -> List[Dict]:
@@ -697,6 +716,18 @@ class DatasetOperations(BaseResource):
         """
         return self._request('delete', f"/datasets/{dataset_id}/samples/{sample_id}")
 
+    def remove_child(self, parent_dataset_id: str, child_dataset_id: str) -> Dict:
+        """Remove the parent-child link between two datasets.
+
+        Args:
+            parent_dataset_id (str): The unique ID of the parent dataset
+            child_dataset_id (str): The unique ID of the child dataset
+
+        Returns:
+            Dict: Deletion confirmation
+        """
+        return self._request('delete', f"/datasets/{parent_dataset_id}/children/{child_dataset_id}")
+
     def link_parent_child(self, parent_dataset_id: str, child_dataset_id: str) -> Dict:
         """Link a derived dataset to a parent dataset.
 
@@ -767,3 +798,19 @@ class DatasetOperations(BaseResource):
         """
         result = self._request('post', f"/datasets/{dsid}/insitu_spec_aggregation")
         return result
+    
+
+    def graph(self, dataset_id: str, recursive: bool = False, as_networkx: bool = False):
+        """Return the graph of entities connected to this dataset.
+
+        Delegates to client.graphs.get(). See GraphOperations.get() for full docs.
+
+        Args:
+            dataset_id (str): Dataset unique identifier.
+            recursive (bool): If True, traverse the full connected component.
+            as_networkx (bool): Return a networkx DiGraph if True.
+
+        Returns:
+            dict | networkx.DiGraph: Node-link graph data.
+        """
+        return self._client.graphs.get(dataset_id, recursive=recursive, as_networkx=as_networkx)

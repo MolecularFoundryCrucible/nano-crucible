@@ -20,6 +20,16 @@ class SampleOperations(BaseResource):
     Access via: client.samples.get(), client.samples.list(), etc.
     """
 
+    @staticmethod
+    def _parse(raw: Dict) -> Dict:
+        """Validate a raw API response dict through the Sample Pydantic model.
+
+        Normalises field aliases (e.g. date_created → timestamp) and preserves
+        any extra fields returned by the server (datasets, keywords, …).
+        """
+        from ..models import Sample
+        return Sample.model_validate(raw).model_dump()
+
     def get(self, sample_id: str) -> Dict:
         """Get sample information by ID.
 
@@ -29,7 +39,8 @@ class SampleOperations(BaseResource):
         Returns:
             Dict: Sample information with associated datasets
         """
-        return self._request('get', f"/samples/{sample_id}")
+        raw = self._request('get', f"/samples/{sample_id}")
+        return self._parse(raw) if raw is not None else None
 
     def list(self, dataset_id: Optional[str] = None, parent_id: Optional[str] = None,
              limit: int = DEFAULT_LIMIT, **kwargs) -> List[Dict]:
@@ -52,7 +63,7 @@ class SampleOperations(BaseResource):
             result = self._request('get', f"/samples/{parent_id}/children", params=params)
         else:
             result = self._request('get', f"/samples", params=params)
-        return result
+        return [self._parse(s) for s in result] if result else []
 
     def list_parents(self, sample_id: str, limit: int = DEFAULT_LIMIT, **kwargs) -> List[Dict]:
         """List the parents of a given sample with optional filtering.
@@ -282,6 +293,18 @@ class SampleOperations(BaseResource):
         )
         return self.remove_dataset(sample_id, dataset_id)
 
+    def remove_child(self, parent_id: str, child_id: str) -> Dict:
+        """Remove the parent-child link between two samples.
+
+        Args:
+            parent_id (str): Unique sample identifier of parent sample
+            child_id (str): Unique sample identifier of child sample
+
+        Returns:
+            Dict: Deletion confirmation
+        """
+        return self._request('delete', f"/samples/{parent_id}/children/{child_id}")
+
     def link(self, parent_id: str, child_id: str) -> Dict:
         """Link two samples with a parent-child relationship.
 
@@ -293,3 +316,18 @@ class SampleOperations(BaseResource):
             Dict: Created link object
         """
         return self._request('post', f"/samples/{parent_id}/children/{child_id}")
+
+    def graph(self, sample_id: str, recursive: bool = False, as_networkx: bool = False):
+        """Return the graph of entities connected to this sample.
+
+        Delegates to client.graphs.get(). See GraphOperations.get() for full docs.
+
+        Args:
+            sample_id (str): Sample unique identifier.
+            recursive (bool): If True, traverse the full connected component.
+            as_networkx (bool): Return a networkx DiGraph if True.
+
+        Returns:
+            dict | networkx.DiGraph: Node-link graph data.
+        """
+        return self._client.graphs.get(sample_id, recursive=recursive, as_networkx=as_networkx)

@@ -11,6 +11,9 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+from . import term
+from ..config import config as _config
+
 try:
     import argcomplete
     ARGCOMPLETE_AVAILABLE = True
@@ -55,9 +58,9 @@ def _register_list(subparsers):
     parser.add_argument(
         '--limit',
         type=int,
-        default=100,
+        default=_config.default_limit,
         metavar='N',
-        help='Maximum number of results to return (default: 100)'
+        help=f'Maximum number of results to return (default: {_config.default_limit})'
     )
 
     parser.add_argument(
@@ -176,8 +179,8 @@ def _execute_create(args):
 
     interactive = instrument_name is None or owner is None or location is None
     if interactive:
-        logger.info("\n=== Interactive Instrument Creation ===")
-        logger.info("Please provide the following information:\n")
+        term.header("Create Instrument")
+        print("")
 
     if instrument_name is None:
         while True:
@@ -233,21 +236,10 @@ def _execute_create(args):
             description=description,
         )
 
-        logger.info("\n=== Creating Instrument ===")
         result = client.instruments.create(instrument)
 
-        logger.info(f"\n✓ Instrument created successfully!")
-        logger.info(f"Name:     {result.get('instrument_name', 'N/A')}")
-        if result.get('unique_id'):
-            logger.info(f"ID:       {result['unique_id']}")
-        logger.info(f"Owner:    {result.get('owner', 'N/A')}")
-        logger.info(f"Location: {result.get('location', 'N/A')}")
-        if result.get('manufacturer'):
-            logger.info(f"Manufacturer: {result['manufacturer']}")
-        if result.get('model'):
-            logger.info(f"Model:    {result['model']}")
-        if result.get('instrument_type'):
-            logger.info(f"Type:     {result['instrument_type']}")
+        logger.info("✓ Instrument created")
+        _show_instrument(result)
 
     except Exception as e:
         logger.error(f"Error creating instrument: {e}")
@@ -264,21 +256,21 @@ def _execute_list(args):
         client = CrucibleClient()
         instruments = client.instruments.list(limit=args.limit)
 
-        logger.info(f"\n=== Instruments ===")
-        logger.info(f"Found {len(instruments)} instrument(s)\n")
-
-        if instruments:
-            for instrument in instruments:
-                logger.info(f"Name: {instrument.get('instrument_name', 'N/A')}")
-                if instrument.get('id'):
-                    logger.info(f"  ID: {instrument['id']}")
-                if instrument.get('unique_id'):
-                    logger.info(f"  Unique ID: {instrument['unique_id']}")
-                if instrument.get('location'):
-                    logger.info(f"  Location: {instrument['location']}")
-                if instrument.get('owner'):
-                    logger.info(f"  Owner: {instrument['owner']}")
-                logger.info("")
+        term.header(f"Instruments ({len(instruments)})")
+        if not instruments:
+            print(f"  {term.dim('No instruments found.')}")
+        else:
+            rows = [
+                (
+                    i.get('instrument_name') or '—',
+                    i.get('unique_id') or '—',
+                    i.get('owner') or '—',
+                    i.get('location') or '—',
+                )
+                for i in instruments
+            ]
+            term.table(rows, ['Name', 'MFID', 'Owner', 'Location'],
+                       max_widths=[20, 26, 15, 25])
 
     except Exception as e:
         logger.error(f"Error listing instruments: {e}")
@@ -286,6 +278,25 @@ def _execute_list(args):
             import traceback
             traceback.print_exc()
         sys.exit(1)
+
+
+def _show_instrument(instrument):
+    """Display instrument fields."""
+    _p = term.field_printer(14)
+
+    term.header("Instrument")
+    uid = instrument.get('unique_id')
+    _p("Name",         instrument.get('instrument_name'))
+    _p("MFID",         term.cyan(uid) if uid else None)
+    _p("ID",           instrument.get('id'))
+    _p("Type",         instrument.get('instrument_type'))
+    _p("Manufacturer", instrument.get('manufacturer'))
+    _p("Model",        instrument.get('model'))
+    _p("Owner",        instrument.get('owner'))
+    _p("Location",     instrument.get('location'))
+    _p("Description",  instrument.get('description'))
+    if instrument.get('other_id'):
+        _p("Other ID",     f"{instrument['other_id']}  ({instrument.get('other_id_source', '')})")
 
 
 def _execute_get(args):
@@ -303,16 +314,7 @@ def _execute_get(args):
             logger.error(f"Instrument not found: {args.instrument}")
             sys.exit(1)
 
-        logger.info("\n=== Instrument Information ===")
-        logger.info(f"Name: {instrument.get('instrument_name', 'N/A')}")
-        if instrument.get('id'):
-            logger.info(f"ID: {instrument['id']}")
-        if instrument.get('unique_id'):
-            logger.info(f"Unique ID: {instrument['unique_id']}")
-        if instrument.get('location'):
-            logger.info(f"Location: {instrument['location']}")
-        if instrument.get('owner'):
-            logger.info(f"Owner: {instrument['owner']}")
+        _show_instrument(instrument)
 
     except Exception as e:
         logger.error(f"Error retrieving instrument: {e}")

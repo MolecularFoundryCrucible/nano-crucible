@@ -27,7 +27,7 @@ class BaseParser:
                  metadata=None, keywords=None, mfid=None,
                  measurement=None, dataset_name=None,
                  session_name=None, public=False, instrument_name=None,
-                 data_format=None):
+                 data_format=None, timestamp=None):
         """
         Initialize the parser with dataset properties.
 
@@ -65,6 +65,7 @@ class BaseParser:
         self.measurement     = measurement
         self.dataset_name    = dataset_name
         self.session_name    = session_name
+        self.timestamp       = timestamp
         self.owner_orcid     = owner_orcid
         self.public          = public
         self.instrument_name = instrument_name
@@ -244,6 +245,7 @@ class BaseParser:
             owner_orcid    = self.owner_orcid,  # API key handles user authentication
             dataset_name   = self.dataset_name,
             session_name   = self.session_name,
+            timestamp      = self.timestamp,
             public         = self.public,
             instrument_name = self.instrument_name,
             data_format    = self.data_format,

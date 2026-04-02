@@ -6,7 +6,20 @@ The `crucible CLI` provides command-line access to Crucible. Resource commands f
 crucible [--debug] <resource> <action> [options]
 ```
 
-Utility commands (`download`, `link`, `unlink`, `open`, `whoami`, `cache`) operate directly on IDs without a sub-action and auto-detect the resource type where relevant.
+Utility commands (`status`, `download`, `link`, `unlink`, `open`, `whoami`, `cache`) operate directly on IDs without a sub-action and auto-detect the resource type where relevant.
+
+Running `crucible` with no arguments starts an **interactive shell** with tab-completion, command history, and a status bar showing the active project and user. Built-in shell commands:
+
+| Command | Description |
+|---------|-------------|
+| `use PROJECT_ID` | Switch active project (tab-completes project IDs) |
+| `unuse` | Clear active project and session |
+| `refresh` | Re-fetch project list and user info |
+| `reload` | Re-exec the process — picks up source code changes |
+| `debug on` / `debug off` | Enable or disable debug logging for the current session |
+| `debug` | Show current debug state |
+| `help` | Print available commands |
+| `exit` / `quit` | Leave the shell |
 
 Use `crucible <resource> <action> --help` for full option details on any command.
 
@@ -44,10 +57,13 @@ crucible --debug dataset list   # debug must precede the subcommand
 | Command | Key options | Description |
 |---------|-------------|-------------|
 | `dataset list` | `-pid ID` `-m TYPE` `-k WORD` `--session NAME` `--limit N` `-v` | List datasets, with optional filters |
-| `dataset get ID` | `-v` `--include-metadata` | Get dataset details; `-v` shows keywords and linked samples |
-| `dataset create -i FILE` | `-t TYPE` `-pid ID` `-n NAME` `-m TYPE` `--metadata JSON` `-k WORDS` `--session NAME` `--instrument NAME` `--public` `--mfid [ID]` `--dry-run` | Upload file(s) and create a dataset record |
+| `dataset get ID` | `-v` `--include-metadata` `-o json` | Get dataset details; `-v` shows ownership, file info, keywords, and associated files; `-o json` prints the raw record as JSON (always includes scientific metadata) |
+| `dataset create -i FILE` | `-t TYPE` `-pid ID` `-n NAME` `-m TYPE` `--timestamp DATE` `--metadata JSON` `-k WORDS` `--session NAME` `--instrument NAME` `--public` `--mfid [ID]` `--dry-run` | Upload file(s) and create a dataset record |
 | `dataset update ID` | `--set KEY=VALUE` `--metadata JSON` `--overwrite` | Update model fields (`--set`) and/or scientific metadata (`--metadata`) |
+| `dataset list-files ID` | | List associated files with clickable download links (valid 1 hour) and sizes |
+| `dataset add-file ID FILE` | | Upload and attach a file to an existing dataset |
 | `dataset download ID` | `--output-dir DIR` `--include PATTERN` `--exclude PATTERN` `-f FILE` `--overwrite` | Download dataset files with optional glob filters (delegates to `crucible download`) |
+| `dataset delete ID` | `-y` | Permanently delete a dataset (prompts for confirmation) |
 | `dataset search QUERY` | `--limit N` `-v` | Search datasets by scientific metadata |
 | `dataset link` | `-p PARENT_ID -c CHILD_ID` | Create a parent-child relationship between two datasets |
 | `dataset add-sample ID` | `-s SAMPLE_ID` | Link a sample to this dataset |
@@ -60,7 +76,7 @@ crucible --debug dataset list   # debug must precede the subcommand
 | `dataset parsers` | | List available client-side parsers |
 | `dataset ingestors` | | List available server-side ingestors |
 
-**Updatable fields** (via `--set`): `dataset_name`, `measurement`, `data_format`, `session_name`, `instrument_name`, `instrument_id`, `project_id`, `owner_orcid`, `source_folder`, `file_to_upload`, `json_link`, `public`, `timestamp`
+**Updatable fields** (via `--set`): `dataset_name`, `measurement`, `data_format`, `session_name`, `instrument_name`, `instrument_id`, `project_id`, `owner_orcid`, `source_folder`, `file_to_upload`, `public`, `timestamp`
 
 ```bash
 # Upload a file (server assigns ID)
@@ -84,8 +100,8 @@ crucible dataset search "temperature" --limit 10
 | Command | Key options | Description |
 |---------|-------------|-------------|
 | `sample list` | `-pid ID` `--limit N` `-v` | List samples, with optional filters |
-| `sample get ID` | `-v` | Get sample details; `-v` shows linked datasets |
-| `sample create` | `-n NAME` `-pid ID` `--type TYPE` `--description TEXT` | Create a new sample |
+| `sample get ID` | `-v` `-o json` | Get sample details; `-v` shows linked datasets; `-o json` prints the raw record as JSON |
+| `sample create` | `-n NAME` `-pid ID` `--type TYPE` `--description TEXT` `--timestamp DATE` | Create a new sample |
 | `sample update ID` | `--set KEY=VALUE` | Update sample fields |
 | `sample link` | `-p PARENT_ID -c CHILD_ID` | Create a parent-child relationship between two samples |
 | `sample add-dataset ID` | `-d DATASET_ID` | Link a dataset to this sample |
@@ -206,11 +222,37 @@ crucible-downloads/
 
 ---
 
+## Deletion
+
+Soft-deletion workflow: users submit requests, admins approve or reject them. While a request is pending, the resource is hidden from list results.
+
+| Command | Key options | Description |
+|---------|-------------|-------------|
+| `deletion request RESOURCE_ID` | `-m TEXT` | Submit a deletion request for a dataset or sample |
+| `deletion list` | `--approved` `--rejected` `--all` | List deletion requests, pending by default *(admin)* |
+| `deletion get REQUEST_ID` | | Get a single deletion request by integer ID *(admin)* |
+| `deletion approve REQUEST_ID` | `-m TEXT` | Approve a pending deletion request *(admin)* |
+| `deletion reject REQUEST_ID` | `-m TEXT` | Reject a pending deletion request — resource is restored *(admin)* |
+
+```bash
+crucible deletion request mf-abc123 -m "Duplicate upload"
+crucible deletion list
+crucible deletion list --approved
+crucible deletion approve 42 -m "Confirmed duplicate"
+crucible deletion reject 42 -m "Still in use"
+```
+
+---
+
 ## Linking & Utilities
 
 | Command | Description |
 |---------|-------------|
+| `status` | Check API connectivity, auth, and active config |
 | `whoami` | Show current user info for the active API key |
+| `tree ID` | Display connected graph as ASCII tree, rooted at true ancestors; queried node highlighted in green |
+| `tree ID --depth N` | Limit tree traversal to N levels |
+| `tree ID --all` | Show all node types mixed (default: same type only) |
 | `link -p PARENT -c CHILD` | Link two resources (type auto-detected via API) |
 | `link -d DATASET -s SAMPLE` | Link a sample to a dataset |
 | `unlink -p ID -c ID` | Unlink two resources (dataset-sample only, type auto-detected) |
