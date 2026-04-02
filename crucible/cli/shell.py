@@ -83,7 +83,7 @@ try:
             #  level 0: complete top-level resource (+ built-in 'use') 
             if not words or (len(words) == 1 and not trailing_space):
                 prefix = words[0] if words else ''
-                candidates = list(self._top) + ['use', 'unuse', 'refresh', 'reload', 'debug']
+                candidates = list(self._top) + ['use', 'unuse', 'refresh', 'reload', 'debug', 'v']
                 for name in candidates:
                     if name.startswith(prefix):
                         yield Completion(name + ' ', start_position=-len(prefix))
@@ -294,8 +294,30 @@ def _dispatch(parser, line, completer=None, state=None):
     # Built-in: reload — re-exec the process to pick up source code changes
     if line == 'reload':
         import os
-        print("Reloading...")
+        print('\033[2J\033[H', end='', flush=True)  # clear screen
         os.execv(sys.executable, [sys.executable] + sys.argv)
+
+    # Built-in: v — toggle verbose view for the last get command (no extra API call)
+    if line == 'v':
+        last = (state or {}).get('last_resource')
+        if not last:
+            print("No recent get to toggle. Run 'get <id>' first.")
+            return True
+        last['verbose'] = not last['verbose']
+        rtype = last['type']
+        data  = last['data']
+        from crucible.client import CrucibleClient
+        client = CrucibleClient()
+        if rtype == 'dataset':
+            from .dataset import _show_dataset
+            _show_dataset(data, client, verbose=last['verbose'],
+                          graph=last.get('graph', False),
+                          include_metadata=last.get('include_metadata', False))
+        elif rtype == 'sample':
+            from .sample import _show_sample
+            _show_sample(data, client, verbose=last['verbose'],
+                         graph=last.get('graph', False))
+        return True
 
     # Built-in: debug on|off — set debug logging for the session
     if line == 'debug' or line.startswith('debug '):
@@ -321,6 +343,7 @@ def _dispatch(parser, line, completer=None, state=None):
         args = parser.parse_args(argv)
         setup_logging(debug=getattr(args, 'debug', False) or (state or {}).get('debug', False))
         if hasattr(args, 'func'):
+            args._shell_state = state  # available to subcommands that want to cache data
             args.func(args)
         else:
             parser.print_help()
@@ -413,11 +436,14 @@ def _run_prompt_toolkit(parser):
     from prompt_toolkit.filters          import completion_is_selected
     from prompt_toolkit.formatted_text   import HTML
     from prompt_toolkit.completion       import ThreadedCompleter
+    from prompt_toolkit.application      import run_in_terminal
     from platformdirs import user_data_dir
     import os
 
     history_path = os.path.join(user_data_dir('crucible'), 'shell_history')
     os.makedirs(os.path.dirname(history_path), exist_ok=True)
+
+    print('\033[2J\033[H', end='', flush=True)  # clear screen on entry
 
     # Verify connection — exit early rather than starting a broken shell.
     # The spinner message is mutable so retry warnings can update it in-place
@@ -541,6 +567,31 @@ def _run_prompt_toolkit(parser):
     def _accept_completion(event):
         buff = event.app.current_buffer
         buff.apply_completion(buff.complete_state.current_completion)
+
+    @kb.add('escape', 'v')  # Alt+V
+    def _alt_v(event):
+        last = state.get('last_resource')
+        if not last:
+            return
+        last['verbose'] = not last['verbose']
+        rtype = last['type']
+        data  = last['data']
+        def _render():
+            try:
+                from crucible.client import CrucibleClient
+                client = CrucibleClient()
+                if rtype == 'dataset':
+                    from .dataset import _show_dataset
+                    _show_dataset(data, client, verbose=last['verbose'],
+                                  graph=last.get('graph', False),
+                                  include_metadata=last.get('include_metadata', False))
+                elif rtype == 'sample':
+                    from .sample import _show_sample
+                    _show_sample(data, client, verbose=last['verbose'],
+                                 graph=last.get('graph', False))
+            except Exception as e:
+                logger.error(f"Error rendering resource: {e}")
+        run_in_terminal(_render)
 
     completer = _CrucibleCompleter(parser, projects=state['projects'],
                                    deletions=state['deletions'])

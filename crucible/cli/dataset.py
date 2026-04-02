@@ -109,9 +109,18 @@ def _show_dataset(dataset, client, verbose=False, graph=False, include_metadata=
             f_kw    = pool.submit(client.datasets.get_keywords, dsid)
             f_meta  = pool.submit(client.datasets.get_associated_files, dsid)
             f_links = pool.submit(client.datasets.get_download_links, dsid)
-            keywords = f_kw.result()
-            af_list  = f_meta.result()
-            link_map = f_links.result()
+            try:
+                keywords = f_kw.result()
+            except Exception:
+                keywords = []
+            try:
+                af_list = f_meta.result()
+            except Exception:
+                af_list = []
+            try:
+                link_map = f_links.result()
+            except Exception:
+                link_map = {}
 
         if keywords:
             words = [kw.get('keyword', kw) if isinstance(kw, dict) else kw for kw in keywords]
