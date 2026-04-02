@@ -76,12 +76,19 @@ def execute(args):
         client = CrucibleClient()
         resource_type = client.get_resource_type(args.resource_id)
 
+        shell_state = getattr(args, '_shell_state', None)
+
         if resource_type == 'dataset':
             from .dataset import _show_dataset
             dataset = client.datasets.get(args.resource_id, include_metadata=include_metadata)
             if dataset is None:
                 logger.error(f"Dataset not found: {args.resource_id}")
                 sys.exit(1)
+            if shell_state is not None:
+                shell_state['last_resource'] = {
+                    'data': dataset, 'type': 'dataset', 'verbose': verbose,
+                    'graph': graph, 'include_metadata': include_metadata,
+                }
             if output == 'json':
                 print(json.dumps(dataset, indent=2, default=str))
             else:
@@ -94,6 +101,11 @@ def execute(args):
             if sample is None:
                 logger.error(f"Sample not found: {args.resource_id}")
                 sys.exit(1)
+            if shell_state is not None:
+                shell_state['last_resource'] = {
+                    'data': sample, 'type': 'sample', 'verbose': verbose,
+                    'graph': graph,
+                }
             if output == 'json':
                 print(json.dumps(sample, indent=2, default=str))
             else:
