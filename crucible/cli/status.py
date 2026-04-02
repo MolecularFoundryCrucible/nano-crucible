@@ -72,9 +72,7 @@ def execute(args):
         sys.exit(1)
 
     from urllib.parse import urlparse
-    _parsed = urlparse(api_url)
-    host     = _parsed.netloc or api_url
-    base_url = f"{_parsed.scheme}://{_parsed.netloc}"
+    host = urlparse(api_url).netloc or api_url
     is_tty = hasattr(sys.stdout, 'isatty') and sys.stdout.isatty()
     stop = threading.Event()
 
@@ -84,27 +82,33 @@ def execute(args):
     # ── 1. Reachability + DB health (/health, no auth) ────────────────────────
     def _health():
         resp = requests.get(
-            f"{base_url}/health",
+            f"{api_url.rstrip('/')}/health",
             timeout=(5, 15),
         )
-        return resp.json()
+        return resp.status_code, resp.json()
 
-    health, elapsed_ms, err = _check(stop, is_tty, _health)
+    health_result, elapsed_ms, err = _check(stop, is_tty, _health)
 
     if err is not None:
         print(f'  ✗  {term.bold(host)}  {term.dim("unreachable")}')
         print(f'\n     {err}')
         sys.exit(1)
 
-    version_str = health.get("version")
+    http_status, health = health_result
+    version_str = health.get("version") if health else None
     ver_label   = f"  {term.dim(version_str)}" if version_str else ""
     print(f'  ✓  {term.bold(host)}  {term.dim(f"{elapsed_ms:.0f}ms")}{ver_label}')
 
-    db_ok = health.get("db") == "ok"
-    if db_ok:
-        print(f'  ✓  Database reachable')
+    if "db" in health:
+        db_ok = health.get("db") == "ok"
+        if db_ok:
+            print(f'  ✓  Database reachable')
+        else:
+            print(f'  ✗  Database unreachable')
     else:
-        print(f'  ✗  Database unreachable')
+        db_ok = True  # can't determine; don't block auth check
+        print(f'  —  Health endpoint not yet deployed  {term.dim(f"(HTTP {http_status})")}')
+
 
     # ── 2. Authentication (/account, requires API key) ────────────────────────
     print()
