@@ -229,7 +229,14 @@ class CrucibleClient:
             >>> resource = client.get('abc123', resource_type='sample')
         """
         if resource_type is None:
-            resource_type = self.get_resource_type(resource_id)
+            result = self._request('get', f"/resources/{resource_id}")
+            if include_metadata and result.get("resource_type") == "dataset":
+                try:
+                    metadata = self._request('get', f"/datasets/{resource_id}/scientific_metadata")
+                    result['scientific_metadata'] = metadata or {}
+                except Exception:
+                    result['scientific_metadata'] = {}
+            return result
 
         if resource_type == "sample":
             return self.samples.get(resource_id)
@@ -298,9 +305,10 @@ class CrucibleClient:
     def unlink(self, id_a: str, id_b: str) -> Dict:
         """Unlink two resources with automatic type detection.
 
-        Only dataset-sample unlinking is supported by the API.
-        Parent-child relationships (dataset-dataset, sample-sample) cannot
-        be removed via the API.
+        Automatically determines resource types and removes the appropriate link:
+        - Both datasets: Removes parent-child dataset relationship
+        - Both samples: Removes parent-child sample relationship
+        - Dataset + sample: Removes dataset-sample link
 
         Args:
             id_a (str): First resource unique identifier (dataset or sample)
@@ -310,8 +318,7 @@ class CrucibleClient:
             Dict: Deletion confirmation
 
         Raises:
-            ValueError: If the combination is not a dataset-sample pair, or if
-                        the resource types cannot be determined.
+            ValueError: If resource types cannot be determined or combination is invalid.
         """
         type_a = self.get_resource_type(id_a)
         type_b = self.get_resource_type(id_b)
