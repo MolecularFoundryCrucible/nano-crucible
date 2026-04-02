@@ -63,18 +63,14 @@ def execute(args):
         # No mfid -> open root URL
         url = graph_explorer_url
     else:
-        # mfid provided -> get resource with automatic type detection
         try:
-            resource_type = config.client.get_resource_type(mfid)
-            resource = config.client.get(mfid, resource_type=resource_type)
+            resource = config.client.get(mfid)
         except Exception as e:
             logger.error(f"Resource '{mfid}' not found: {e}")
             sys.exit(1)
 
-        # Map resource type to URL path
+        resource_type = resource.get("resource_type")
         dtype = "sample-graph" if resource_type == "sample" else "dataset"
-
-        # Extract project ID
         project_id = resource.get("project_id")
         if not project_id:
             logger.error(f"Resource '{mfid}' has no project_id")

@@ -75,6 +75,19 @@ def _show_dataset(dataset, client, verbose=False, graph=False, include_metadata=
 
     term.header("Dataset")
 
+    dr = dataset.get('deletion_request')
+    if dr:
+        status = dr.get('status', '')
+        reason = dr.get('reason') or ''
+        rid    = dr.get('id', '')
+        color  = term.yellow if status == 'pending' else term.red
+        msg    = color(f"⚠  Deletion {status}")
+        if reason:
+            msg += f'  "{reason}"'
+        if rid:
+            msg += '  ' + term.dim(f"(request #{rid})")
+        print(f"  {msg}")
+
     _p("Name",        dataset.get('dataset_name') or '(unnamed)')
     _p("MFID",        _ds_link(dataset))
     _p("Measurement", dataset.get('measurement'))

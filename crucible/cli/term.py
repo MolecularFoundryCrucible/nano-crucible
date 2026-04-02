@@ -39,6 +39,12 @@ def cyan(s: str) -> str:
 def green(s: str) -> str:
     return f"\033[32m{s}\033[0m" if _tty() else s
 
+def yellow(s: str) -> str:
+    return f"\033[33m{s}\033[0m" if _tty() else s
+
+def red(s: str) -> str:
+    return f"\033[31m{s}\033[0m" if _tty() else s
+
 def hyperlink(text: str, url: str | None) -> str:
     """Wrap *text* in an OSC 8 clickable hyperlink when stdout is a TTY."""
     if url and _tty():

@@ -618,6 +618,19 @@ def _show_sample(sample, client, verbose=False, graph=False, graph_data=None):
 
     term.header("Sample")
 
+    dr = sample.get('deletion_request')
+    if dr:
+        status = dr.get('status', '')
+        reason = dr.get('reason') or ''
+        rid    = dr.get('id', '')
+        color  = term.yellow if status == 'pending' else term.red
+        msg    = color(f"⚠  Deletion {status}")
+        if reason:
+            msg += f'  "{reason}"'
+        if rid:
+            msg += '  ' + term.dim(f"(request #{rid})")
+        print(f"  {msg}")
+
     _p("Name",        sample.get('sample_name') or '(unnamed)')
     _p("MFID",        _s_link(sample))
     _p("Type",        sample.get('sample_type'))
