@@ -3,10 +3,69 @@
 """
 Shared CLI helper utilities.
 
-Functions here are used across multiple CLI modules (dataset, sample, get, …)
-and don't belong in term.py (display-only) or shell.py (would create circular
-imports since shell imports from dataset/sample).
+Functions here are used across multiple CLI modules (dataset, sample, get,
+shell, keybindings, …) and don't belong in term.py (display-only) or
+shell.py (which would create circular imports).
 """
+
+
+def fetch_projects(client):
+    """Return [(project_id, title), ...] for all accessible projects."""
+    try:
+        return [(p.get('project_id', ''), p.get('title') or '-')
+                for p in client.projects.list() if p.get('project_id')]
+    except Exception:
+        return []
+
+
+def fetch_deletions(client):
+    """Return pending deletion requests for autocomplete."""
+    try:
+        return client.deletions.list(status='pending')
+    except Exception:
+        return []
+
+
+def fetch_user_label(client):
+    """Return a display name for the authenticated user."""
+    try:
+        info = client.whoami()
+        user = info.get('user_info', {})
+        name = f"{user.get('first_name', '')} {user.get('last_name', '')}".strip()
+        return name or info.get('access_group_name') or '?'
+    except Exception:
+        return '?'
+
+
+def fetch_current_project():
+    """Return the current project ID from config, or a placeholder."""
+    try:
+        from crucible.config import config
+        return config.current_project or '(no project set)'
+    except Exception:
+        return '?'
+
+
+def fetch_current_session():
+    """Return the current session name from config, or empty string."""
+    try:
+        from crucible.config import config
+        return config.current_session or ''
+    except Exception:
+        return ''
+
+
+def fetch_api_label():
+    """Return 'api: <last-path-segment>' derived from the configured api_url."""
+    try:
+        from urllib.parse import urlparse
+        from crucible.config import config
+        parsed = urlparse(config.api_url or '')
+        parts  = [p for p in parsed.path.split('/') if p]
+        label  = parts[-1] if parts else (parsed.netloc or '?')
+        return f"api: {label}"
+    except Exception:
+        return 'api: ?'
 
 
 def cache_resource(shell_state, client, data, rtype, resource_id, **flags):
