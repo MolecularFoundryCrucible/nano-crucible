@@ -228,7 +228,7 @@ def _execute_list(args):
             status = 'pending'
             status_label = 'pending'
 
-        records = client.deletions.list(status=status)
+        records = sorted(client.deletions.list(status=status), key=lambda r: r.get('id') or 0)
 
         term.header(f"Deletion Requests — {status_label} ({len(records)})")
 
