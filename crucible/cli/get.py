@@ -82,16 +82,9 @@ def execute(args):
         resource_type = resource.get('resource_type')
         shell_state   = getattr(args, '_shell_state', None)
 
-        if shell_state is not None:
-            from concurrent.futures import ThreadPoolExecutor as _TPE
-            _pool = _TPE(max_workers=1, thread_name_prefix='graph-prefetch')
-            _graph_future = _pool.submit(client.graphs.get, args.resource_id, recursive=True)
-            _pool.shutdown(wait=False)
-            shell_state['last_resource'] = {
-                'data': resource, 'type': resource_type, 'verbose': verbose,
-                'graph': graph, 'include_metadata': include_metadata,
-                '_graph_future': _graph_future,
-            }
+        from .helpers import cache_resource
+        cache_resource(shell_state, client, resource, resource_type, args.resource_id,
+                       verbose=verbose, graph=graph, include_metadata=include_metadata)
 
         if resource_type == 'dataset':
             from .dataset import _show_dataset

@@ -651,7 +651,13 @@ def _show_sample(sample, client, verbose=False, graph=False, graph_data=None):
         sid  = sample.get('unique_id')
         proj = sample.get('project_id') or ''
 
-        graph_data      = graph_data or client.samples.graph(sid)
+        try:
+            graph_data  = graph_data or client.samples.graph(sid)
+        except Exception:
+            graph_data  = None
+        if not graph_data:
+            print(f"  {term.dim('⚠  Could not fetch graph info.')}")
+            return
         nodes           = graph_data.get('nodes', [])
         edges           = graph_data.get('edges', [])
         node_map        = {n['id']: n for n in nodes}
@@ -702,6 +708,10 @@ def _execute_get(args):
         if sample is None:
             logger.error(f"Sample not found: {args.sample_id}")
             sys.exit(1)
+        from .helpers import cache_resource
+        cache_resource(getattr(args, '_shell_state', None), client, sample, 'sample',
+                       args.sample_id, verbose=getattr(args, 'verbose', False),
+                       graph=getattr(args, 'graph', False))
         if output == 'json':
             print(json.dumps(sample, indent=2, default=str))
         else:

@@ -155,7 +155,13 @@ def _show_dataset(dataset, client, verbose=False, graph=False, include_metadata=
         _show_scientific_metadata(dataset.get('scientific_metadata'))
 
     if graph:
-        graph_data      = graph_data or client.datasets.graph(dsid)
+        try:
+            graph_data  = graph_data or client.datasets.graph(dsid)
+        except Exception:
+            graph_data  = None
+        if not graph_data:
+            print(f"  {term.dim('⚠  Could not fetch graph info.')}")
+            return
         nodes           = graph_data.get('nodes', [])
         edges           = graph_data.get('edges', [])
         node_map        = {n['id']: n for n in nodes}
@@ -1590,6 +1596,10 @@ def _execute_get(args):
         if dataset is None:
             logger.error(f"Dataset not found: {args.dataset_id}")
             sys.exit(1)
+        from .helpers import cache_resource
+        cache_resource(getattr(args, '_shell_state', None), client, dataset, 'dataset',
+                       args.dataset_id, verbose=getattr(args, 'verbose', False),
+                       graph=getattr(args, 'graph', False), include_metadata=include_metadata)
         if output == 'json':
             print(json.dumps(dataset, indent=2, default=str))
         else:
