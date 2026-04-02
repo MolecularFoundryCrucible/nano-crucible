@@ -55,7 +55,7 @@ def _show_scientific_metadata(sci_md_wrapper):
             print(f"  {k:<{max_key}}  {v}")
 
 
-def _show_dataset(dataset, client, verbose=False, graph=False, include_metadata=False):
+def _show_dataset(dataset, client, verbose=False, graph=False, include_metadata=False, graph_data=None):
     """Display dataset fields. Extracted for reuse by top-level 'crucible get'."""
     _p = term.field_printer(14)
 
@@ -142,7 +142,7 @@ def _show_dataset(dataset, client, verbose=False, graph=False, include_metadata=
         _show_scientific_metadata(dataset.get('scientific_metadata'))
 
     if graph:
-        graph_data      = client.datasets.graph(dsid)
+        graph_data      = graph_data or client.datasets.graph(dsid)
         nodes           = graph_data.get('nodes', [])
         edges           = graph_data.get('edges', [])
         node_map        = {n['id']: n for n in nodes}

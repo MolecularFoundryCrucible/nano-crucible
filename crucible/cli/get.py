@@ -85,9 +85,14 @@ def execute(args):
                 logger.error(f"Dataset not found: {args.resource_id}")
                 sys.exit(1)
             if shell_state is not None:
+                from concurrent.futures import ThreadPoolExecutor as _TPE
+                _pool = _TPE(max_workers=1, thread_name_prefix='graph-prefetch')
+                _graph_future = _pool.submit(client.graphs.get, args.resource_id, recursive=True)
+                _pool.shutdown(wait=False)
                 shell_state['last_resource'] = {
                     'data': dataset, 'type': 'dataset', 'verbose': verbose,
                     'graph': graph, 'include_metadata': include_metadata,
+                    '_graph_future': _graph_future,
                 }
             if output == 'json':
                 print(json.dumps(dataset, indent=2, default=str))
@@ -102,9 +107,13 @@ def execute(args):
                 logger.error(f"Sample not found: {args.resource_id}")
                 sys.exit(1)
             if shell_state is not None:
+                from concurrent.futures import ThreadPoolExecutor as _TPE
+                _pool = _TPE(max_workers=1, thread_name_prefix='graph-prefetch')
+                _graph_future = _pool.submit(client.graphs.get, args.resource_id, recursive=True)
+                _pool.shutdown(wait=False)
                 shell_state['last_resource'] = {
                     'data': sample, 'type': 'sample', 'verbose': verbose,
-                    'graph': graph,
+                    'graph': graph, '_graph_future': _graph_future,
                 }
             if output == 'json':
                 print(json.dumps(sample, indent=2, default=str))

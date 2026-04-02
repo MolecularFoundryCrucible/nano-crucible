@@ -598,7 +598,7 @@ def _execute_list(args):
         sys.exit(1)
 
 
-def _show_sample(sample, client, verbose=False, graph=False):
+def _show_sample(sample, client, verbose=False, graph=False, graph_data=None):
     """Display sample fields. Extracted for reuse by top-level 'crucible get'."""
     _p = term.field_printer(14)
 
@@ -638,7 +638,7 @@ def _show_sample(sample, client, verbose=False, graph=False):
         sid  = sample.get('unique_id')
         proj = sample.get('project_id') or ''
 
-        graph_data      = client.samples.graph(sid)
+        graph_data      = graph_data or client.samples.graph(sid)
         nodes           = graph_data.get('nodes', [])
         edges           = graph_data.get('edges', [])
         node_map        = {n['id']: n for n in nodes}

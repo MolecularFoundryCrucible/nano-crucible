@@ -304,19 +304,24 @@ def _dispatch(parser, line, completer=None, state=None):
             print("No recent get to toggle. Run 'get <id>' first.")
             return True
         last['verbose'] = not last['verbose']
-        rtype = last['type']
-        data  = last['data']
+        future = last.get('_graph_future')
+        graph_data = None
+        if last.get('graph') and future is not None:
+            try:
+                graph_data = future.result(timeout=15)
+            except Exception:
+                pass
         from crucible.client import CrucibleClient
         client = CrucibleClient()
-        if rtype == 'dataset':
+        if last['type'] == 'dataset':
             from .dataset import _show_dataset
-            _show_dataset(data, client, verbose=last['verbose'],
-                          graph=last.get('graph', False),
-                          include_metadata=last.get('include_metadata', False))
-        elif rtype == 'sample':
+            _show_dataset(last['data'], client, verbose=last['verbose'],
+                          graph=last['graph'], include_metadata=last.get('include_metadata', False),
+                          graph_data=graph_data)
+        elif last['type'] == 'sample':
             from .sample import _show_sample
-            _show_sample(data, client, verbose=last['verbose'],
-                         graph=last.get('graph', False))
+            _show_sample(last['data'], client, verbose=last['verbose'],
+                         graph=last['graph'], graph_data=graph_data)
         return True
 
     # Built-in: debug on|off — set debug logging for the session
@@ -568,30 +573,92 @@ def _run_prompt_toolkit(parser):
         buff = event.app.current_buffer
         buff.apply_completion(buff.complete_state.current_completion)
 
+    @kb.add('c-l')  # Ctrl+L — clear screen
+    def _ctrl_l(event):
+        event.app.renderer.clear()
+
+    def _resolve_graph(last):
+        """Return cached graph data from the prefetch future, or None on failure."""
+        future = last.get('_graph_future')
+        if future is None:
+            return None
+        try:
+            return future.result(timeout=15)
+        except Exception:
+            return None
+
+    def _render_resource(last):
+        """Render the cached resource with current verbose/graph flags."""
+        try:
+            from crucible.client import CrucibleClient
+            client     = CrucibleClient()
+            rtype      = last['type']
+            data       = last['data']
+            graph_data = _resolve_graph(last) if last.get('graph') else None
+            if rtype == 'dataset':
+                from .dataset import _show_dataset
+                _show_dataset(data, client, verbose=last['verbose'],
+                              graph=last['graph'],
+                              include_metadata=last.get('include_metadata', False),
+                              graph_data=graph_data)
+            elif rtype == 'sample':
+                from .sample import _show_sample
+                _show_sample(data, client, verbose=last['verbose'],
+                             graph=last['graph'], graph_data=graph_data)
+        except Exception as e:
+            logger.error(f"Error rendering resource: {e}")
+
     @kb.add('escape', 'v')  # Alt+V
     def _alt_v(event):
         last = state.get('last_resource')
         if not last:
             return
         last['verbose'] = not last['verbose']
-        rtype = last['type']
-        data  = last['data']
-        def _render():
+        run_in_terminal(lambda: _render_resource(last))
+
+    @kb.add('escape', 'g')  # Alt+G — toggle graph for last resource
+    def _alt_g(event):
+        last = state.get('last_resource')
+        if not last:
+            return
+        last['graph'] = not last.get('graph', False)
+        run_in_terminal(lambda: _render_resource(last))
+
+    @kb.add('escape', 'r')  # Alt+R — refresh projects, user, deletions
+    def _alt_r(event):
+        def _do_refresh():
+            new_projects = _fetch_projects()
+            completer._projects  = new_projects
+            state['projects']    = new_projects
+            state['user_label']  = _fetch_user_label()
+            state['project']     = _fetch_current_project()
+            state['session']     = _fetch_current_session()
+            state['api_label']   = _fetch_api_label()
+            new_deletions        = _fetch_deletions()
+            state['deletions']   = new_deletions
+            completer._deletions = new_deletions
+            print(f"Refreshed: {len(new_projects)} projects, user info reloaded.")
+        run_in_terminal(_do_refresh)
+
+    @kb.add('escape', 'o')  # Alt+O — open last resource in Graph Explorer
+    def _alt_o(event):
+        last = state.get('last_resource')
+        if not last:
+            return
+        uid = last['data'].get('unique_id') or last['data'].get('sample_id')
+        if not uid:
+            return
+        def _open():
             try:
-                from crucible.client import CrucibleClient
-                client = CrucibleClient()
-                if rtype == 'dataset':
-                    from .dataset import _show_dataset
-                    _show_dataset(data, client, verbose=last['verbose'],
-                                  graph=last.get('graph', False),
-                                  include_metadata=last.get('include_metadata', False))
-                elif rtype == 'sample':
-                    from .sample import _show_sample
-                    _show_sample(data, client, verbose=last['verbose'],
-                                 graph=last.get('graph', False))
+                import webbrowser
+                from crucible.config import config as _cfg
+                dtype = 'sample-graph' if last['type'] == 'sample' else 'dataset'
+                pid   = last['data'].get('project_id', '')
+                url   = f"{_cfg.graph_explorer_url.rstrip('/')}/{pid}/{dtype}/{uid}"
+                webbrowser.open(url)
             except Exception as e:
-                logger.error(f"Error rendering resource: {e}")
-        run_in_terminal(_render)
+                logger.error(f"Could not open resource: {e}")
+        run_in_terminal(_open)
 
     completer = _CrucibleCompleter(parser, projects=state['projects'],
                                    deletions=state['deletions'])
