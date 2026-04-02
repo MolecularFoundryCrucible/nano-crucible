@@ -83,7 +83,7 @@ try:
             #  level 0: complete top-level resource (+ built-in 'use') 
             if not words or (len(words) == 1 and not trailing_space):
                 prefix = words[0] if words else ''
-                candidates = list(self._top) + ['use', 'unuse', 'refresh', 'reload', 'debug', 'v']
+                candidates = list(self._top) + ['use', 'unuse', 'refresh', 'reload', 'debug']
                 for name in candidates:
                     if name.startswith(prefix):
                         yield Completion(name + ' ', start_position=-len(prefix))
@@ -639,6 +639,47 @@ def _run_prompt_toolkit(parser):
             completer._deletions = new_deletions
             print(f"Refreshed: {len(new_projects)} projects, user info reloaded.")
         run_in_terminal(_do_refresh)
+
+    @kb.add('escape', 'p')  # Alt+P — interactive project picker
+    def _alt_p(event):
+        projects = state.get('projects') or []
+        if not projects:
+            return
+        current = state.get('project', '')
+
+        def _pick():
+            print()
+            for i, (pid, title) in enumerate(projects, 1):
+                marker = ' ◀' if pid == current else ''
+                print(f"  {i:2}.  {pid}  {title}{marker}")
+            print()
+            try:
+                raw = input("  Project [1-{}, Enter to cancel]: ".format(len(projects))).strip()
+            except (KeyboardInterrupt, EOFError):
+                print()
+                return
+            if not raw:
+                return
+            try:
+                idx = int(raw) - 1
+            except ValueError:
+                print("  Invalid choice.")
+                return
+            if not (0 <= idx < len(projects)):
+                print("  Invalid choice.")
+                return
+            pid, title = projects[idx]
+            try:
+                from crucible.cli.config import set_config_value
+                set_config_value('current_project', pid)
+                set_config_value('current_session', '')
+                state['project'] = pid
+                state['session'] = ''
+                print(f"  Switched to: {title}  ({pid})")
+            except Exception as e:
+                logger.error(f"Error switching project: {e}")
+
+        run_in_terminal(_pick)
 
     @kb.add('escape', 'o')  # Alt+O — open last resource in Graph Explorer
     def _alt_o(event):
