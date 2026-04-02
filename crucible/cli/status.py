@@ -72,7 +72,9 @@ def execute(args):
         sys.exit(1)
 
     from urllib.parse import urlparse
-    host = urlparse(api_url).netloc or api_url
+    _parsed = urlparse(api_url)
+    host     = _parsed.netloc or api_url
+    base_url = f"{_parsed.scheme}://{_parsed.netloc}"
     is_tty = hasattr(sys.stdout, 'isatty') and sys.stdout.isatty()
     stop = threading.Event()
 
@@ -82,7 +84,7 @@ def execute(args):
     # ── 1. Reachability + DB health (/health, no auth) ────────────────────────
     def _health():
         resp = requests.get(
-            f"{api_url.rstrip('/')}/health",
+            f"{base_url}/health",
             timeout=(5, 15),
         )
         return resp.json()

@@ -175,7 +175,10 @@ class CrucibleClient:
                   Raises requests.exceptions.ConnectionError if the host is unreachable.
         """
         import requests as _requests
-        url = f"{self.api_url}/health"
+        from urllib.parse import urlparse
+        _parsed = urlparse(self.api_url)
+        base_url = f"{_parsed.scheme}://{_parsed.netloc}"
+        url = f"{base_url}/health"
         timeout = (self._config.connect_timeout, self._config.read_timeout)
         resp = _requests.get(url, timeout=timeout)
         return resp.json()
