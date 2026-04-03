@@ -94,7 +94,7 @@ Examples:
         default=None,
         dest='sample_type',
         metavar='TYPE',
-        help='Filter by sample type (exact match)'
+        help='Filter by sample type (exact match, or use * / ? wildcards)'
     )
 
     parser.add_argument(
@@ -525,13 +525,21 @@ def _execute_list(args):
     filters = {}
     if args.name:
         filters['sample_name'] = args.name
-    if args.sample_type:
-        filters['sample_type'] = args.sample_type
+    type_pattern = args.sample_type or None
+    if type_pattern and not any(c in type_pattern for c in ('*', '?', '[')):
+        filters['sample_type'] = type_pattern
+        type_pattern = None  # exact match handled by API; no client-side filter needed
 
     try:
         import fnmatch
         client = CrucibleClient()
         samples = client.samples.list(project_id=project_id, limit=args.limit, **filters)
+
+        # Client-side wildcard filtering on type
+        if type_pattern:
+            samples = [s for s in samples if fnmatch.fnmatch(
+                (s.get('sample_type') or '').lower(), type_pattern.lower()
+            )]
 
         # Client-side glob filtering on name
         if getattr(args, 'include', None):
