@@ -340,6 +340,16 @@ class CrucibleShell:
         except Exception:
             return None
 
+    def _resolve_future(self, last, key, default=None):
+        """Resolve a named future from last_resource, returning default on failure."""
+        future = last.get(key)
+        if future is None:
+            return default
+        try:
+            return future.result(timeout=15)
+        except Exception:
+            return default
+
     def _render_resource(self, last):
         """Re-render the cached resource with current verbose/graph flags."""
         try:
@@ -348,10 +358,15 @@ class CrucibleShell:
             graph_data = self._resolve_graph(last) if last.get('graph') else None
             if rtype == 'dataset':
                 from .dataset import _show_dataset
+                prefetched = {
+                    'keywords': self._resolve_future(last, '_keywords_future', []),
+                    'af_list':  self._resolve_future(last, '_files_future', []),
+                    'link_map': self._resolve_future(last, '_links_future', {}),
+                }
                 _show_dataset(data, self.client, verbose=last['verbose'],
                               graph=last['graph'],
                               include_metadata=last.get('include_metadata', False),
-                              graph_data=graph_data)
+                              graph_data=graph_data, prefetched=prefetched)
             elif rtype == 'sample':
                 from .sample import _show_sample
                 _show_sample(data, self.client, verbose=last['verbose'],

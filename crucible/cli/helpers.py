@@ -69,27 +69,39 @@ def fetch_api_label():
 
 
 def cache_resource(shell_state, client, data, rtype, resource_id, **flags):
-    """Cache a fetched resource in the shell state and start a graph prefetch.
+    """Cache a fetched resource in the shell state and start background prefetches.
 
-    The graph is fetched in a background thread so Alt+G / Alt+V in the
-    interactive shell can re-render without an extra API call.
+    For datasets, prefetches graph, keywords, associated files, and download
+    links in parallel so Alt+V / Alt+G can re-render without extra API calls.
+    For samples, only the graph is prefetched.
 
     Args:
         shell_state: The shell's mutable state dict (args._shell_state), or
                      None when running outside the interactive shell.
-        client:      CrucibleClient instance (used for the graph prefetch).
+        client:      CrucibleClient instance.
         data:        The fetched resource dict.
         rtype:       Resource type string — 'dataset' or 'sample'.
-        resource_id: MFID of the resource (used for the graph API call).
+        resource_id: MFID of the resource.
         **flags:     Additional keys stored in last_resource (verbose, graph,
                      include_metadata, …).
     """
     if shell_state is None:
         return
     from concurrent.futures import ThreadPoolExecutor
-    pool   = ThreadPoolExecutor(max_workers=1, thread_name_prefix='graph-prefetch')
-    future = pool.submit(client.graphs.get, resource_id, recursive=True)
+    if rtype == 'dataset':
+        pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix='prefetch')
+        futures = {
+            '_graph_future':    pool.submit(client.graphs.get, resource_id, recursive=True),
+            '_keywords_future': pool.submit(client.datasets.get_keywords, resource_id),
+            '_files_future':    pool.submit(client.datasets.get_associated_files, resource_id),
+            '_links_future':    pool.submit(client.datasets.get_download_links, resource_id),
+        }
+    else:
+        pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix='prefetch')
+        futures = {
+            '_graph_future': pool.submit(client.graphs.get, resource_id, recursive=True),
+        }
     pool.shutdown(wait=False)
     shell_state['last_resource'] = {
-        'data': data, 'type': rtype, '_graph_future': future, **flags
+        'data': data, 'type': rtype, **futures, **flags
     }

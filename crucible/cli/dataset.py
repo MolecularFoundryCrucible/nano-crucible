@@ -55,7 +55,7 @@ def _show_scientific_metadata(sci_md_wrapper):
             print(f"  {k:<{max_key}}  {v}")
 
 
-def _show_dataset(dataset, client, verbose=False, graph=False, include_metadata=False, graph_data=None):
+def _show_dataset(dataset, client, verbose=False, graph=False, include_metadata=False, graph_data=None, prefetched=None):
     """Display dataset fields. Extracted for reuse by top-level 'crucible get'."""
     _p = term.field_printer(14)
 
@@ -117,23 +117,28 @@ def _show_dataset(dataset, client, verbose=False, graph=False, include_metadata=
 
         dsid = dataset.get('unique_id')
 
-        from concurrent.futures import ThreadPoolExecutor
-        with ThreadPoolExecutor(max_workers=3) as pool:
-            f_kw    = pool.submit(client.datasets.get_keywords, dsid)
-            f_meta  = pool.submit(client.datasets.get_associated_files, dsid)
-            f_links = pool.submit(client.datasets.get_download_links, dsid)
-            try:
-                keywords = f_kw.result()
-            except Exception:
-                keywords = []
-            try:
-                af_list = f_meta.result()
-            except Exception:
-                af_list = []
-            try:
-                link_map = f_links.result()
-            except Exception:
-                link_map = {}
+        if prefetched is not None:
+            keywords = prefetched.get('keywords', [])
+            af_list  = prefetched.get('af_list', [])
+            link_map = prefetched.get('link_map', {})
+        else:
+            from concurrent.futures import ThreadPoolExecutor
+            with ThreadPoolExecutor(max_workers=3) as pool:
+                f_kw    = pool.submit(client.datasets.get_keywords, dsid)
+                f_meta  = pool.submit(client.datasets.get_associated_files, dsid)
+                f_links = pool.submit(client.datasets.get_download_links, dsid)
+                try:
+                    keywords = f_kw.result()
+                except Exception:
+                    keywords = []
+                try:
+                    af_list = f_meta.result()
+                except Exception:
+                    af_list = []
+                try:
+                    link_map = f_links.result()
+                except Exception:
+                    link_map = {}
 
         if keywords:
             words = [kw.get('keyword', kw) if isinstance(kw, dict) else kw for kw in keywords]
