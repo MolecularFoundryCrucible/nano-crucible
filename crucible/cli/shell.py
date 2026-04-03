@@ -97,7 +97,7 @@ try:
                                          display_meta=_HTML(f'<ansibrightblack>{title}</ansibrightblack>'))
                 return
 
-            if resource == 'deletion' and len(words) >= 2 and words[1] in ('approve', 'reject'):
+            if resource == 'deletion' and len(words) >= 2 and words[1] in ('approve', 'reject', 'get'):
                 already = set(words[2:]) if trailing_space else set(words[2:-1])
                 prefix  = '' if trailing_space else words[-1]
                 for d in self._deletions:
