@@ -854,7 +854,8 @@ def _execute_list_parents(args):
     from crucible.client import CrucibleClient
     try:
         client = CrucibleClient()
-        parents = client.samples.list_parents(args.sample_id, limit=args.limit)
+        parents = sorted(client.samples.list_parents(args.sample_id, limit=args.limit),
+                         key=lambda s: (s.get('sample_name') or '').lower())
         term.header(f"Parent Samples · {args.sample_id} ({len(parents)})")
         if not parents:
             print(f"  {term.dim('No parent samples found.')}")
@@ -875,7 +876,8 @@ def _execute_list_children(args):
     from crucible.client import CrucibleClient
     try:
         client = CrucibleClient()
-        children = client.samples.list_children(args.sample_id, limit=args.limit)
+        children = sorted(client.samples.list_children(args.sample_id, limit=args.limit),
+                          key=lambda s: (s.get('sample_name') or '').lower())
         term.header(f"Child Samples · {args.sample_id} ({len(children)})")
         if not children:
             print(f"  {term.dim('No child samples found.')}")
@@ -896,7 +898,8 @@ def _execute_list_datasets(args):
     from crucible.client import CrucibleClient
     try:
         client = CrucibleClient()
-        datasets = client.datasets.list(sample_id=args.sample_id, limit=args.limit)
+        datasets = sorted(client.datasets.list(sample_id=args.sample_id, limit=args.limit),
+                          key=lambda ds: (ds.get('dataset_name') or '').lower())
         term.header(f"Datasets · {args.sample_id} ({len(datasets)})")
         if not datasets:
             print(f"  {term.dim('No datasets linked.')}")
