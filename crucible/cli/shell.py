@@ -486,6 +486,15 @@ class CrucibleShell:
                 fetch_projects, fetch_deletions, fetch_user_label,
                 fetch_current_project, fetch_current_session, fetch_api_label,
             )
+            from crucible.config import config as _cfg
+            from crucible.client import CrucibleClient
+            try:
+                _cfg.reload()
+                self.client = CrucibleClient()
+                if self.completer is not None:
+                    self.completer._client = self.client
+            except Exception:
+                pass
             self.state['user_label'] = fetch_user_label(self.client)
             self.state['project']    = fetch_current_project()
             self.state['session']    = fetch_current_session()
