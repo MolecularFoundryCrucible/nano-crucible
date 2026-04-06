@@ -65,18 +65,34 @@ def _status_label(status):
     return status
 
 
-def _show_deletion_request(record):
+def _show_deletion_request(record, client=None):
     """Print a DeletionRequest record."""
     _p = term.field_printer(16)
     term.header("Deletion Request")
-    _p("Request ID",   record.get('id'))
-    _p("Resource ID",  term.mfid_link(record.get('resource_id') or ''))
-    _p("Resource Type", record.get('resource_type'))
-    _p("Name",         record.get('resource_name'))
-    _p("Status",       _status_label(record.get('status')))
-    _p("Reason",       record.get('reason'))
-    _p("Requested",    term.fmt_ts(record.get('request_time')))
-    _p("Requester ID", record.get('requester_id'))
+    _p("Request ID",    record.get('id'))
+
+    rid   = record.get('resource_id') or ''
+    rtype = record.get('resource_type')
+    url   = None
+    if client and rid:
+        try:
+            from crucible.config import config as _cfg
+            base = (_cfg.graph_explorer_url or '').rstrip('/')
+            if base:
+                resource   = client.get(rid)
+                project_id = resource.get('project_id')
+                if project_id:
+                    dtype = 'sample-graph' if rtype == 'sample' else 'dataset'
+                    url   = f"{base}/{project_id}/{dtype}/{rid}"
+        except Exception:
+            pass
+    _p("Resource ID",   term.mfid_link(rid, url))
+    _p("Resource Type", rtype)
+    _p("Name",          record.get('resource_name'))
+    _p("Status",        _status_label(record.get('status')))
+    _p("Reason",        record.get('reason'))
+    _p("Requested",     term.fmt_ts(record.get('request_time')))
+    _p("Requester ID",  record.get('requester_id'))
     if record.get('reviewer_notes') or record.get('review_time'):
         _p("Review Time",  term.fmt_ts(record.get('review_time')))
         _p("Reviewer ID",  record.get('reviewer_id'))
@@ -236,17 +252,10 @@ def _execute_list(args):
             print(f"  {term.dim('No deletion requests found.')}")
             return
 
-        try:
-            from crucible.config import config
-            _base = config.graph_explorer_url.rstrip('/')
-        except Exception:
-            _base = None
-
         rows = [
             (
                 record.get('id'),
-                term.mfid_link(record.get('resource_id') or '',
-                               f"{_base}/{record.get('resource_id')}" if _base else None) or '—',
+                term.mfid_link(record.get('resource_id') or '') or '—',
                 record.get('resource_type') or '—',
                 record.get('resource_name') or '—',
                 _status_label(record.get('status') or ''),
@@ -271,7 +280,7 @@ def _execute_get(args):
     try:
         client = CrucibleClient()
         record = client.deletions.get(args.request_id)
-        _show_deletion_request(record)
+        _show_deletion_request(record, client=client)
     except Exception as e:
         logger.error(f"Error fetching deletion request: {e}")
         if getattr(args, 'debug', False):
@@ -289,7 +298,7 @@ def _execute_approve(args):
             record = client.deletions.approve(rid, reviewer_notes=args.notes)
             logger.info(f"✓ Deletion request {rid} approved")
             print()
-            _show_deletion_request(record)
+            _show_deletion_request(record, client=client)
         except Exception as e:
             logger.error(f"Error approving deletion request {rid}: {e}")
             if getattr(args, 'debug', False):
@@ -306,7 +315,7 @@ def _execute_reject(args):
             record = client.deletions.reject(rid, reviewer_notes=args.notes)
             logger.info(f"✓ Deletion request {rid} rejected")
             print()
-            _show_deletion_request(record)
+            _show_deletion_request(record, client=client)
         except Exception as e:
             logger.error(f"Error rejecting deletion request {rid}: {e}")
             if getattr(args, 'debug', False):
