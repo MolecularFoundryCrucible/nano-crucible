@@ -63,6 +63,7 @@ try:
             return self._projects
 
         def get_completions(self, document, complete_event):
+            import html as _html
             text           = document.text_before_cursor
             words          = text.split()
             trailing_space = text.endswith(' ')
@@ -94,7 +95,7 @@ try:
                     if pid.startswith(prefix):
                         yield Completion(pid + ' ', start_position=-len(prefix),
                                          display=_HTML(f'<b>{pid}</b>'),
-                                         display_meta=_HTML(f'<ansibrightblack>{title}</ansibrightblack>'))
+                                         display_meta=_HTML(f'<ansibrightblack>{_html.escape(title)}</ansibrightblack>'))
                 return
 
             if resource == 'deletion' and len(words) >= 2 and words[1] in ('approve', 'reject', 'get'):
@@ -111,9 +112,9 @@ try:
                     if rtype:
                         parts.append(f'{rtype}')
                     if name:
-                        parts.append(f'<b>{name}</b>')
+                        parts.append(f'<b>{_html.escape(name)}</b>')
                     if reason:
-                        parts.append(f'<ansibrightblack>{reason}</ansibrightblack>')
+                        parts.append(f'<ansibrightblack>{_html.escape(reason)}</ansibrightblack>')
                     yield Completion(
                         did + ' ',
                         start_position=-len(prefix),
@@ -151,7 +152,7 @@ try:
                         if pid.startswith(prefix):
                             yield Completion(pid + ' ', start_position=-len(prefix),
                                              display=_HTML(f'<b>{pid}</b>'),
-                                             display_meta=_HTML(f'<ansibrightblack>{title}</ansibrightblack>'))
+                                             display_meta=_HTML(f'<ansibrightblack>{_html.escape(title)}</ansibrightblack>'))
                 return
 
             sub_parser  = sub_map.get(subcommand)
