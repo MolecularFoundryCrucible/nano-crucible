@@ -70,7 +70,7 @@ try:
 
             if not words or (len(words) == 1 and not trailing_space):
                 prefix = words[0] if words else ''
-                candidates = list(self._top) + ['use', 'unuse', 'refresh', 'reload', 'debug']
+                candidates = list(self._top) + ['use', 'unuse', 'refresh', 'reload', 'debug', 'cd', 'ls', 'pwd']
                 for name in candidates:
                     if name.startswith(prefix):
                         yield Completion(name + ' ', start_position=-len(prefix))
@@ -121,6 +121,76 @@ try:
                         display=_HTML(f'<b>{did}</b>'),
                         display_meta=_HTML(' | '.join(parts)),
                     )
+                return
+
+            if resource in ('cast', 'cd', 'ls'):
+                import os as _os, html as _html2
+                current = (words[1] if len(words) == 2 and not trailing_space else
+                           '' if trailing_space and len(words) == 1 else None)
+                if current is not None and not current.startswith('-'):
+                    expanded   = _os.path.expanduser(current)
+                    search_dir = _os.path.dirname(expanded) or '.'
+                    prefix     = _os.path.basename(expanded)
+
+                    results = []
+
+                    # For cd: always offer '..' when at a directory boundary
+                    if resource == 'cd' and '..'.startswith(prefix):
+                        remaining = '..'[len(prefix):]
+                        results.append((False, '', Completion(
+                            remaining + '/',
+                            start_position=0,
+                            display=_HTML('<ansiblue><b>../</b></ansiblue>'),
+                        )))
+
+                    try:
+                        scan = _os.scandir(search_dir)
+                    except (PermissionError, FileNotFoundError):
+                        return
+
+                    with scan:
+                        for entry in scan:
+                            if not entry.name.startswith(prefix):
+                                continue
+                            is_dir    = entry.is_dir(follow_symlinks=True)
+                            is_hidden = entry.name.startswith('.')
+                            is_crux   = entry.name.endswith('.crux')
+
+                            if resource == 'cd'   and not is_dir:   continue
+                            if resource == 'cast' and not (is_dir or is_crux): continue
+
+                            display_name    = entry.name + ('/' if is_dir else '')
+                            completion_text = entry.name[len(prefix):] + ('/' if is_dir else '')
+                            esc = _html2.escape(display_name)
+
+                            if is_dir:
+                                disp = f'<ansiblue><b>{esc}</b></ansiblue>'
+                            elif is_crux:
+                                disp = f'<ansiyellow><b>{esc}</b></ansiyellow>'
+                            elif is_hidden:
+                                disp = f'<ansibrightblack>{esc}</ansibrightblack>'
+                            else:
+                                disp = esc
+
+                            results.append((is_hidden, display_name.lower(), Completion(
+                                completion_text,
+                                start_position=0,
+                                display=_HTML(disp),
+                            )))
+
+                    results.sort(key=lambda x: (x[0], x[1]))
+                    yield from (c for _, _, c in results)
+                    return
+
+                # Flag completion for cast
+                if resource == 'cast':
+                    current_word = '' if trailing_space else words[-1]
+                    if current_word.startswith('-'):
+                        cast_parser = self._top.get('cast')
+                        if cast_parser:
+                            for flag in cast_parser._option_string_actions:
+                                if flag.startswith(current_word):
+                                    yield Completion(flag + ' ', start_position=-len(current_word))
                 return
 
             sub_map = _get_subparser_map(self._top.get(resource)) \
@@ -430,6 +500,70 @@ class CrucibleShell:
             import os
             print('\033[2J\033[H', end='', flush=True)
             os.execv(sys.executable, [sys.executable] + sys.argv)
+
+        if line.startswith('!'):
+            import subprocess, os
+            cmd = line[1:].strip()
+            if cmd:
+                subprocess.run(cmd, shell=True)
+            return True
+
+        if line == 'pwd':
+            import os
+            print(os.getcwd())
+            return True
+
+        if line.startswith('ls') and (len(line) == 2 or line[2] == ' '):
+            import os, shutil
+            from . import term
+            parts = line.split(None, 1)
+            path  = os.path.expanduser(parts[1].strip()) if len(parts) > 1 else '.'
+            try:
+                entries = sorted(os.scandir(path), key=lambda e: (e.name.startswith('.'), e.name.lower()))
+            except (FileNotFoundError, NotADirectoryError) as exc:
+                print(f"ls: {exc}")
+                return True
+            col_width = max((len(e.name) for e in entries), default=0) + 3
+            term_width = shutil.get_terminal_size().columns
+            cols = max(1, term_width // col_width)
+            for i, entry in enumerate(entries):
+                display = entry.name + ('/' if entry.is_dir() else '')
+                if entry.is_dir():
+                    label = term.cyan(display)
+                elif entry.name.endswith('.crux'):
+                    label = term.bold(display)
+                elif entry.name.startswith('.'):
+                    label = term.dim(display)
+                else:
+                    label = display
+                pad = ' ' * (col_width - _vlen(display))
+                end = '\n' if (i + 1) % cols == 0 or i == len(entries) - 1 else ''
+                print(label + pad, end=end)
+            return True
+
+        if line.startswith('cd') and (len(line) == 2 or line[2] == ' '):
+            import os
+            parts = line.split(None, 1)
+            arg   = parts[1].strip() if len(parts) > 1 else '~'
+            if arg == '-':
+                oldpwd = self.state.get('oldpwd')
+                if not oldpwd:
+                    print("cd: no previous directory")
+                    return True
+                path = oldpwd
+            else:
+                path = os.path.expanduser(arg)
+            try:
+                prev = os.getcwd()
+                os.chdir(path)
+                self.state['oldpwd'] = prev
+                if arg == '-':
+                    print(os.getcwd())
+            except FileNotFoundError:
+                print(f"cd: no such directory: {path}")
+            except NotADirectoryError:
+                print(f"cd: not a directory: {path}")
+            return True
 
         if line == 'v':
             last = self.state.get('last_resource')
