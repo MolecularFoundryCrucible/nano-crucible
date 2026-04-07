@@ -41,6 +41,7 @@ dependencies = [
     "argcomplete>=2.0.0",
     "platformdirs>=2.5.0",
     "mfid>=1.0.0",
+    "pyyaml>=6.0",
 ]
 
 [project.optional-dependencies]
