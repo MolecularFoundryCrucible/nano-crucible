@@ -9,6 +9,7 @@ and opens the appropriate fields in $EDITOR.
 
 import sys
 import logging
+from . import term
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +20,7 @@ def register_subcommand(subparsers):
         'edit',
         help='Edit a resource by MFID (auto-detects type)',
         description='Edit a dataset or sample — resource type is detected automatically.',
-        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     crucible edit 0td7evvtg5wb90005k1j97ak94

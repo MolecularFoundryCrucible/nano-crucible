@@ -9,6 +9,7 @@ Handles parsing and uploading datasets to Crucible.
 import sys
 import logging
 from pathlib import Path
+from . import term
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +39,7 @@ def register_subcommand(subparsers):
         'upload',
         help='[Deprecated] Use "crucible dataset create" instead',
         description='DEPRECATED: This command will be removed in a future release.\nUse "crucible dataset create -i FILE ..." instead.',
-        formatter_class=lambda prog: __import__('argparse').RawDescriptionHelpFormatter(prog, max_help_position=35),
+        formatter_class=lambda prog: term.ColorHelpFormatter(prog, max_help_position=35),
         epilog="""
 Examples:
     # Generic upload (no parsing) - upload any files

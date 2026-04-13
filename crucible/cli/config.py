@@ -56,7 +56,7 @@ def register_subcommand(subparsers):
         'config',
         help='Manage crucible configuration',
         description='View and modify crucible configuration settings',
-        formatter_class=lambda prog: __import__('argparse').RawDescriptionHelpFormatter(prog, max_help_position=35),
+        formatter_class=lambda prog: term.ColorHelpFormatter(prog, max_help_position=35),
         epilog="""
 Examples:
     # Interactive setup wizard

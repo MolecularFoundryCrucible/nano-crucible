@@ -33,7 +33,7 @@ def register_subcommand(subparsers):
             'the Graph Explorer. By default only nodes of the same type are shown; '
             'use --all to mix types.'
         ),
-        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     crucible tree mf-abc123

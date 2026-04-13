@@ -110,7 +110,7 @@ def _register_request(subparsers):
             'Submit a soft-deletion request for a dataset or sample. '
             'The resource is immediately hidden from list results until an admin reviews the request.'
         ),
-        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     crucible deletion request mf-abc123
@@ -131,7 +131,7 @@ def _register_list(subparsers):
         'list',
         help='List deletion requests (admin)',
         description='List deletion requests. Shows pending by default. Requires admin.',
-        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     crucible deletion list              # pending only (default)
@@ -153,7 +153,7 @@ def _register_get(subparsers):
         'get',
         help='Get a deletion request by ID (admin)',
         description='Fetch a single deletion request record. Requires admin.',
-        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     crucible deletion get 42
@@ -170,7 +170,7 @@ def _register_approve(subparsers):
         'approve',
         help='Approve a pending deletion request (admin)',
         description='Approve a pending deletion request. The resource remains hidden. Requires admin.',
-        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     crucible deletion approve 42
@@ -191,7 +191,7 @@ def _register_reject(subparsers):
         'reject',
         help='Reject a pending deletion request (admin)',
         description='Reject a pending deletion request. The resource is restored to active. Requires admin.',
-        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     crucible deletion reject 42

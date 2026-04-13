@@ -63,7 +63,7 @@ def _register_list(subparsers):
         'list',
         help='List samples',
         description='List samples, with optional filters',
-        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     crucible sample list -pid my-project
@@ -184,7 +184,7 @@ def _register_create(subparsers):
         'create',
         help='Create a new sample',
         description='Create a new sample in Crucible',
-        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     # Interactive mode (prompts for input)
@@ -257,7 +257,7 @@ def _register_update(subparsers):
         'update',
         help='Update sample fields',
         description='Update fields of an existing sample',
-        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        formatter_class=term.ColorHelpFormatter,
         epilog=f"""
 Updatable fields:
     {', '.join(fields)}
@@ -336,7 +336,7 @@ def _register_edit(subparsers):
         'edit',
         help='Edit sample fields interactively',
         description='Open sample fields in $EDITOR and update on save',
-        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     crucible sample edit SAMPLE_ID
@@ -441,7 +441,7 @@ def _register_add_dataset(subparsers):
         'add-dataset',
         help='Link a sample to a dataset',
         description='Associate a dataset with a sample',
-        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     crucible sample add-dataset SAMPLE_ID --dataset DATASET_ID
@@ -459,7 +459,7 @@ def _register_list_parents(subparsers):
         'list-parents',
         help='List parent samples',
         description='List parent samples of a given sample',
-        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     crucible sample list-parents SAMPLE_ID
@@ -478,7 +478,7 @@ def _register_list_children(subparsers):
         'list-children',
         help='List child samples',
         description='List child samples derived from a given sample',
-        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     crucible sample list-children SAMPLE_ID
@@ -497,7 +497,7 @@ def _register_list_datasets(subparsers):
         'list-datasets',
         help='List datasets linked to a sample',
         description='Show all datasets associated with a given sample',
-        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     crucible sample list-datasets SAMPLE_ID
@@ -939,7 +939,7 @@ def _register_remove_child(subparsers):
         'remove-child',
         help='Unlink a child sample from a parent sample',
         description='Remove the parent-child relationship between two samples (requires admin)',
-        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     crucible sample remove-child PARENT_ID --child CHILD_ID
@@ -971,7 +971,7 @@ def _register_remove_dataset(subparsers):
         'remove-dataset',
         help='Unlink a dataset from a sample',
         description='Remove the association between a sample and a dataset (requires admin)',
-        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     crucible sample remove-dataset SAMPLE_ID --dataset DATASET_ID

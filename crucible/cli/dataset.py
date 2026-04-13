@@ -273,7 +273,7 @@ def _register_list(subparsers):
         'list',
         help='List datasets',
         description='List datasets, with optional filters',
-        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     crucible dataset list -pid my-project
@@ -426,7 +426,7 @@ def _register_create(subparsers):
         'create',
         help='Create and upload a new dataset',
         description='Parse and upload dataset files to Crucible',
-        formatter_class=lambda prog: __import__('argparse').RawDescriptionHelpFormatter(prog, max_help_position=35),
+        formatter_class=lambda prog: term.ColorHelpFormatter(prog, max_help_position=35),
         epilog="""
 Examples:
     # Preview what would be uploaded (dry run)
@@ -636,7 +636,7 @@ def _register_update(subparsers):
         'update',
         help='Update dataset fields or scientific metadata',
         description='Update fields or scientific metadata of an existing dataset',
-        formatter_class=argparse.RawDescriptionHelpFormatter,
+        formatter_class=term.ColorHelpFormatter,
         epilog=f"""
 Updatable fields (use --set):
     {', '.join(fields)}
@@ -732,7 +732,7 @@ def _register_delete(subparsers):
         'delete',
         help='Delete a dataset',
         description='Permanently delete a dataset (irreversible). Prompts for confirmation unless -y is given.',
-        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     crucible dataset delete DATASET_ID
@@ -770,7 +770,7 @@ def _register_edit(subparsers):
         'edit',
         help='Edit dataset fields interactively',
         description='Open dataset fields in $EDITOR and update on save. Scientific metadata is included as a top-level key.',
-        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     crucible dataset edit DATASET_ID
@@ -892,7 +892,7 @@ def _register_add_sample(subparsers):
         'add-sample',
         help='Link a sample to a dataset',
         description='Associate a sample with a dataset',
-        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     crucible dataset add-sample DATASET_ID --sample SAMPLE_ID
@@ -927,7 +927,7 @@ def _register_remove_sample(subparsers):
         'remove-sample',
         help='Unlink a sample from a dataset',
         description='Remove the association between a dataset and a sample (requires admin)',
-        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     crucible dataset remove-sample DATASET_ID --sample SAMPLE_ID
@@ -959,7 +959,7 @@ def _register_remove_child(subparsers):
         'remove-child',
         help='Unlink a child dataset from a parent dataset',
         description='Remove the parent-child relationship between two datasets (requires admin)',
-        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     crucible dataset remove-child PARENT_ID --child CHILD_ID
@@ -991,7 +991,7 @@ def _register_list_parents(subparsers):
         'list-parents',
         help='List parent datasets',
         description='List parent datasets of a given dataset',
-        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     crucible dataset list-parents DATASET_ID
@@ -1011,7 +1011,7 @@ def _register_list_children(subparsers):
         'list-children',
         help='List child datasets',
         description='List child datasets derived from a given dataset',
-        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     crucible dataset list-children DATASET_ID
@@ -1031,7 +1031,7 @@ def _register_list_samples(subparsers):
         'list-samples',
         help='List samples linked to a dataset',
         description='Show all samples associated with a given dataset',
-        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     crucible dataset list-samples DATASET_ID
@@ -1050,7 +1050,7 @@ def _register_download(subparsers):
         'download',
         help='Download dataset files',
         description='Download files from a Crucible dataset',
-        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     # Download all files into ./crucible-downloads/<dataset_id>/
@@ -1175,7 +1175,7 @@ def _register_add_file(subparsers):
         'add-file',
         help='Upload file(s) to an existing dataset',
         description='Upload one or more files to an existing dataset without re-creating it',
-        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     # Add a single file
@@ -1318,7 +1318,7 @@ def _register_search(subparsers):
         'search',
         help='Search datasets by scientific metadata',
         description='Full-text search across scientific metadata of all datasets',
-        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     crucible dataset search "thermal conductivity"
@@ -1391,7 +1391,7 @@ def _register_add_keyword(subparsers):
         'add-keyword',
         help='Add a keyword to a dataset',
         description='Associate a keyword tag with an existing dataset',
-        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     crucible dataset add-keyword DATASET_ID silicon
@@ -1470,7 +1470,7 @@ def _register_parsers(subparsers):
         'parsers',
         help='List available dataset parsers',
         description='Show all available dataset parsers, including those installed via third-party packages',
-        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     crucible dataset parsers
@@ -1968,7 +1968,7 @@ def _register_ingestors(subparsers):
         'ingestors',
         help='List available server-side ingestors',
         description='Show all known server-side ingestor classes',
-        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     crucible dataset ingestors

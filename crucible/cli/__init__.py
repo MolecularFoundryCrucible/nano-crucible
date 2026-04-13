@@ -56,6 +56,7 @@ except ImportError:
 
 
 import re as _re
+from . import term
 
 _RETRY_TOTAL_RE  = _re.compile(r'Retry\(total=(\d+)')
 _RETRY_REASON_RE = _re.compile(r"'(\w*Error)[:(]")
@@ -119,7 +120,7 @@ def main():
     parser = argparse.ArgumentParser(
         prog='crucible',
         description='Crucible API command-line interface',
-        formatter_class=argparse.RawDescriptionHelpFormatter,
+        formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     # Configuration
@@ -170,7 +171,7 @@ Examples:
     # Import subcommands
     from . import (
         dataset, sample, project, instrument, user,  # Resource commands
-        upload, completion, config as config_cmd, open as open_cmd, link, unlink, whoami, cache, download, get, edit, status, deletion, tree  # Utility commands
+        upload, completion, config as config_cmd, open as open_cmd, link, unlink, whoami, cache, download, get, edit, status, deletion, tree, cast  # Utility commands
     )
 
     # Register resource commands (new structure)
@@ -195,6 +196,7 @@ Examples:
     status.register_subcommand(subparsers)
     deletion.register_subcommand(subparsers)
     tree.register_subcommand(subparsers)
+    cast.register_subcommand(subparsers)
 
     # Enable shell completion if argcomplete is available
     if ARGCOMPLETE_AVAILABLE:

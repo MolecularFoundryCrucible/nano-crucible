@@ -107,7 +107,7 @@ def _register_create(subparsers):
         'create',
         help='Create a new project',
         description='Create a new project in Crucible',
-        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     # Interactive mode (prompts for input)
@@ -195,7 +195,7 @@ def _register_list_users(subparsers):
         'list-users',
         help='List users in a project',
         description='List all users associated with a project (requires admin permissions)',
-        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     crucible project list-users my-project
@@ -212,7 +212,7 @@ def _register_add_user(subparsers):
         'add-user',
         help='Add a user to a project',
         description='Add a user to a project by ORCID (requires admin permissions)',
-        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     crucible project add-user my-project --orcid 0000-0002-1825-0097

@@ -9,6 +9,7 @@ Opens the Graph Explorer home page or a specific resource by mfid.
 import sys
 import webbrowser
 import logging
+from . import term
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +19,7 @@ def register_subcommand(subparsers):
         'open',
         help='Open a Crucible resource in the browser',
         description='Open the Graph Explorer or a specific resource by mfid',
-        formatter_class=lambda prog: __import__('argparse').RawDescriptionHelpFormatter(prog, max_help_position=35),
+        formatter_class=lambda prog: term.ColorHelpFormatter(prog, max_help_position=35),
         epilog="""
 Examples:
     # Open the Graph Explorer home page

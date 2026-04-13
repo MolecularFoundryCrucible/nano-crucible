@@ -7,20 +7,23 @@ Starts when `crucible` is invoked with no arguments.
 Uses prompt_toolkit if available, falls back to readline + input().
 """
 
+import os
 import sys
 import re as _re
 import time
+import html as _html
 import shlex
+import shutil
 import threading
 import itertools
 import logging
+from collections import deque
 from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor
+
+from . import term
 
 logger = logging.getLogger(__name__)
-
-_BANNER = """\
-
-Crucible interactive shell  (type 'help' for commands, 'exit' to quit)"""
 
 _PROMPT = "crucible> "
 
@@ -43,24 +46,74 @@ def _vlen(s):
         return len(s)
 
 
+_ENTITY_ICONS = {
+    'dataset': '<ansired><b>[ds]</b></ansired>',
+    'sample':  '<ansimagenta><b>[s]</b></ansimagenta>',
+}
+
+
 try:
     from prompt_toolkit.completion     import Completer, Completion
     from prompt_toolkit.formatted_text import HTML as _HTML
 
     class _CrucibleCompleter(Completer):
-        """Three-level argparse completer: resource → subcommand → flags."""
+        """Three-level argparse completer: resource -> subcommand -> flags."""
 
-        def __init__(self, parser, client=None, projects=None, deletions=None):
-            self._top       = _get_subparser_map(parser)
-            self._client    = client
-            self._projects  = projects  or []
-            self._deletions = deletions or []
+        def __init__(self, parser, client=None, projects=None, deletions=None, state=None):
+            self._top          = _get_subparser_map(parser)
+            self._client       = client
+            self._projects     = projects  or []
+            self._deletions    = deletions or []
+            self._unlink_cache = {}  # mfid -> [(uid, name, entity_type), ...]
+            self._users        = []  # [(orcid, full_name), ...]
+            self._state        = state or {}
 
         def _lazy_projects(self):
             if not self._projects and self._client is not None:
                 from .helpers import fetch_projects
                 self._projects = fetch_projects(self._client)
             return self._projects
+
+        def _lazy_users(self):
+            if not self._users and self._client is not None:
+                try:
+                    users = self._client.users.list()
+                    self._users = [
+                        (u.get('orcid') or '',
+                         f"{u.get('first_name', '')} {u.get('last_name', '')}".strip())
+                        for u in users if u.get('orcid')
+                    ]
+                except Exception:
+                    pass
+            return self._users
+
+        def _yield_user_completions(self, prefix):
+            """Yield ORCID completions matching prefix against ORCID or name."""
+            prefix_lower = prefix.lower()
+            for orcid, name in self._lazy_users():
+                if orcid.startswith(prefix) or prefix_lower in name.lower():
+                    yield Completion(
+                        orcid + ' ',
+                        start_position=-len(prefix),
+                        display=_HTML(f'<b>{_html.escape(orcid)}</b>'),
+                        display_meta=_HTML(f'<ansibrightblack>{_html.escape(name)}</ansibrightblack>'),
+                    )
+
+        def _unlink_neighbors(self, mfid):
+            """Return [(uid, name, entity_type)] of entities directly linked to mfid (cached)."""
+            if mfid in self._unlink_cache:
+                return self._unlink_cache[mfid]
+            try:
+                graph  = self._client.graphs.get(mfid, recursive=False)
+                result = [
+                    (node['id'], node.get('name') or '', node.get('entity_type') or '')
+                    for node in graph.get('nodes', [])
+                    if node.get('id') != mfid
+                ]
+                self._unlink_cache[mfid] = result
+            except Exception:
+                result = []
+            return result
 
         def get_completions(self, document, complete_event):
             text           = document.text_before_cursor
@@ -69,7 +122,7 @@ try:
 
             if not words or (len(words) == 1 and not trailing_space):
                 prefix = words[0] if words else ''
-                candidates = list(self._top) + ['use', 'unuse', 'refresh', 'reload', 'debug']
+                candidates = list(self._top) + ['use', 'unuse', 'refresh', 'reload', 'debug', 'cd', 'ls', 'pwd']
                 for name in candidates:
                     if name.startswith(prefix):
                         yield Completion(name + ' ', start_position=-len(prefix))
@@ -94,7 +147,7 @@ try:
                     if pid.startswith(prefix):
                         yield Completion(pid + ' ', start_position=-len(prefix),
                                          display=_HTML(f'<b>{pid}</b>'),
-                                         display_meta=_HTML(f'<ansibrightblack>{title}</ansibrightblack>'))
+                                         display_meta=_HTML(f'<ansibrightblack>{_html.escape(title)}</ansibrightblack>'))
                 return
 
             if resource == 'deletion' and len(words) >= 2 and words[1] in ('approve', 'reject', 'get'):
@@ -111,15 +164,141 @@ try:
                     if rtype:
                         parts.append(f'{rtype}')
                     if name:
-                        parts.append(f'<b>{name}</b>')
+                        parts.append(f'<b>{_html.escape(name)}</b>')
                     if reason:
-                        parts.append(f'<ansibrightblack>{reason}</ansibrightblack>')
+                        parts.append(f'<ansibrightblack>{_html.escape(reason)}</ansibrightblack>')
                     yield Completion(
                         did + ' ',
                         start_position=-len(prefix),
                         display=_HTML(f'<b>{did}</b>'),
                         display_meta=_HTML(' | '.join(parts)),
                     )
+                return
+
+            if resource == 'unlink' and self._client is not None:
+                # Positional form: unlink MFID1 MFID2
+                # Complete MFID2 from the graph neighbors of MFID1.
+                first = None
+                prefix = ''
+                if trailing_space and len(words) == 2 and not words[1].startswith('-'):
+                    first, prefix = words[1], ''
+                elif not trailing_space and len(words) == 3 \
+                        and not words[1].startswith('-') and not words[2].startswith('-'):
+                    first, prefix = words[1], words[2]
+                if first:
+                    for uid, name, etype in self._unlink_neighbors(first):
+                        if uid.startswith(prefix):
+                            icon_html = _ENTITY_ICONS.get(etype, '<ansibrightblack>[?]</ansibrightblack>')
+                            meta = f'{icon_html} <ansibrightblack>{_html.escape(name)}</ansibrightblack>'
+                            yield Completion(
+                                uid + ' ',
+                                start_position=-len(prefix),
+                                display=_HTML(f'<b>{_html.escape(uid)}</b>'),
+                                display_meta=_HTML(meta),
+                            )
+                    return
+
+            if resource in ('get', 'edit', 'open', 'tree'):
+                # Complete the first positional MFID from recently visited resources.
+                if trailing_space and len(words) == 1:
+                    prefix = ''
+                elif not trailing_space and len(words) == 2 and not words[1].startswith('-'):
+                    prefix = words[1]
+                else:
+                    prefix = None
+                if prefix is not None:
+                    for uid, name, rtype in self._state.get('recent_mfids', []):
+                        if uid.startswith(prefix):
+                            icon = _ENTITY_ICONS.get(rtype, '<ansibrightblack>[?]</ansibrightblack>')
+                            yield Completion(
+                                uid + ' ',
+                                start_position=-len(prefix),
+                                display=_HTML(f'<b>{_html.escape(uid)}</b>'),
+                                display_meta=_HTML(f'{icon} <ansibrightblack>{_html.escape(name)}</ansibrightblack>'),
+                            )
+                    return
+
+            if resource == 'user' and len(words) >= 2:
+                # Complete the ORCID positional for admin subcommands.
+                _ORCID_SUBS = {'list-datasets', 'check-access', 'list-access-groups', 'list-projects'}
+                if words[1] in _ORCID_SUBS:
+                    if trailing_space and len(words) == 2:
+                        prefix = ''
+                    elif not trailing_space and len(words) == 3 and not words[2].startswith('-'):
+                        prefix = words[2]
+                    else:
+                        prefix = None
+                    if prefix is not None:
+                        yield from self._yield_user_completions(prefix)
+                        return
+
+            if resource in ('cast', 'cd', 'ls'):
+                current = (words[1] if len(words) == 2 and not trailing_space else
+                           '' if trailing_space and len(words) == 1 else None)
+                if current is not None and not current.startswith('-'):
+                    expanded   = os.path.expanduser(current)
+                    search_dir = os.path.dirname(expanded) or '.'
+                    prefix     = os.path.basename(expanded)
+
+                    results = []
+
+                    # For cd: always offer '..' when at a directory boundary
+                    if resource == 'cd' and '..'.startswith(prefix):
+                        remaining = '..'[len(prefix):]
+                        results.append((False, '', Completion(
+                            remaining + '/',
+                            start_position=0,
+                            display=_HTML('<ansiblue><b>../</b></ansiblue>'),
+                        )))
+
+                    try:
+                        scan = os.scandir(search_dir)
+                    except (PermissionError, FileNotFoundError):
+                        return
+
+                    with scan:
+                        for entry in scan:
+                            if not entry.name.startswith(prefix):
+                                continue
+                            is_dir    = entry.is_dir(follow_symlinks=True)
+                            is_hidden = entry.name.startswith('.')
+                            is_crux   = entry.name.endswith('.crux')
+
+                            if resource == 'cd'   and not is_dir:   continue
+                            if resource == 'cast' and not (is_dir or is_crux): continue
+
+                            display_name    = entry.name + ('/' if is_dir else '')
+                            completion_text = entry.name[len(prefix):] + ('/' if is_dir else '')
+                            esc = _html.escape(display_name)
+
+                            if is_dir:
+                                disp = f'<ansiblue><b>{esc}</b></ansiblue>'
+                            elif is_crux:
+                                disp = f'<ansiyellow><b>{esc}</b></ansiyellow>'
+                            elif is_hidden:
+                                disp = f'<ansibrightblack>{esc}</ansibrightblack>'
+                            else:
+                                disp = esc
+
+                            results.append((is_hidden, display_name.lower(), Completion(
+                                completion_text,
+                                start_position=0,
+                                display=_HTML(disp),
+                            )))
+
+                    results.sort(key=lambda x: (x[0], x[1]))
+                    yield from (c for _, _, c in results)
+                    return
+
+                # Flag completion for cast
+                if resource == 'cast':
+                    current_word = '' if trailing_space else words[-1]
+                    if current_word.startswith('-'):
+                        cast_parser = self._top.get('cast')
+                        if cast_parser:
+                            for flag in cast_parser._option_string_actions:
+                                if flag.startswith(current_word):
+                                    yield Completion(flag + ' ', start_position=-len(current_word))
                 return
 
             sub_map = _get_subparser_map(self._top.get(resource)) \
@@ -151,7 +330,7 @@ try:
                         if pid.startswith(prefix):
                             yield Completion(pid + ' ', start_position=-len(prefix),
                                              display=_HTML(f'<b>{pid}</b>'),
-                                             display_meta=_HTML(f'<ansibrightblack>{title}</ansibrightblack>'))
+                                             display_meta=_HTML(f'<ansibrightblack>{_html.escape(title)}</ansibrightblack>'))
                 return
 
             sub_parser  = sub_map.get(subcommand)
@@ -160,6 +339,9 @@ try:
 
             current_word = '' if trailing_space else words[-1]
             if not current_word.startswith('-'):
+                prev = words[-1] if trailing_space else (words[-2] if len(words) >= 2 else '')
+                if prev == '--orcid':
+                    yield from self._yield_user_completions(current_word)
                 return
 
             for flag in sub_parser._option_string_actions:
@@ -260,13 +442,14 @@ class CrucibleShell:
             fetch_current_project, fetch_current_session, fetch_api_label,
         )
         self.state = {
-            'user_label': fetch_user_label(self.client),
-            'projects':   fetch_projects(self.client),
-            'project':    fetch_current_project(),
-            'session':    fetch_current_session(),
-            'api_label':  fetch_api_label(),
-            'debug':      False,
-            'deletions':  fetch_deletions(self.client),
+            'user_label':    fetch_user_label(self.client, whoami_info),
+            'projects':      fetch_projects(self.client),
+            'project':       fetch_current_project(),
+            'session':       fetch_current_session(),
+            'api_label':     fetch_api_label(),
+            'debug':         False,
+            'deletions':     fetch_deletions(self.client),
+            'recent_mfids':  deque(maxlen=15),
         }
 
     def refresh(self):
@@ -275,8 +458,11 @@ class CrucibleShell:
             fetch_projects, fetch_deletions, fetch_user_label,
             fetch_current_project, fetch_current_session, fetch_api_label,
         )
-        new_projects = fetch_projects(self.client)
-        new_deletions = fetch_deletions(self.client)
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            proj_f = pool.submit(fetch_projects,  self.client)
+            del_f  = pool.submit(fetch_deletions, self.client)
+            new_projects  = proj_f.result()
+            new_deletions = del_f.result()
         self.state['projects']   = new_projects
         self.state['user_label'] = fetch_user_label(self.client)
         self.state['project']    = fetch_current_project()
@@ -330,16 +516,6 @@ class CrucibleShell:
                 pass
             self._clock_stop.wait(timeout=60)
 
-    def _resolve_graph(self, last):
-        """Return cached graph data from the prefetch future, or None."""
-        future = last.get('_graph_future')
-        if future is None:
-            return None
-        try:
-            return future.result(timeout=15)
-        except Exception:
-            return None
-
     def _resolve_future(self, last, key, default=None):
         """Resolve a named future from last_resource, returning default on failure."""
         future = last.get(key)
@@ -355,7 +531,7 @@ class CrucibleShell:
         try:
             rtype      = last['type']
             data       = last['data']
-            graph_data = self._resolve_graph(last) if last.get('graph') else None
+            graph_data = self._resolve_future(last, '_graph_future') if last.get('graph') else None
             if rtype == 'dataset':
                 from .dataset import _show_dataset
                 prefetched = {
@@ -385,6 +561,36 @@ class CrucibleShell:
             return False
         if line == 'help':
             self.parser.print_help()
+            _W = 18
+            print()
+            term.header("Shell commands")
+            for _cmd, _desc in [
+                ('use PROJECT',   'switch active project'),
+                ('unuse',         'clear active project'),
+                ('refresh',       're-fetch projects, user info, deletions'),
+                ('reload',        'restart the shell process'),
+                ('debug on|off',  'toggle debug logging'),
+                ('v',             'toggle verbose view for last fetched resource'),
+                ('! CMD',         'run a shell command'),
+                ('ls [PATH]',     'list directory'),
+                ('cd [PATH]',     'change directory'),
+                ('pwd',           'print working directory'),
+                ('exit / quit',   'exit the shell'),
+            ]:
+                print(f"  {term.cyan(_cmd)}{' ' * (_W - len(_cmd))} {_desc}")
+            if _CrucibleCompleter:
+                print()
+                term.header("Keyboard shortcuts")
+                for _key, _desc in [
+                    ('Alt+V',  'toggle verbose view for last fetched resource'),
+                    ('Alt+G',  'toggle graph view for last fetched resource'),
+                    ('Alt+R',  'refresh projects, user info, and deletions'),
+                    ('Alt+P',  'project picker (type a number or filter text)'),
+                    ('Alt+O',  'open last resource in Graph Explorer'),
+                    ('Ctrl+L', 'clear screen'),
+                ]:
+                    print(f"  {term.bold(_key)}{' ' * (_W - len(_key))} {_desc}")
+            print()
             return True
 
         if line.startswith('use ') or line == 'use':
@@ -426,9 +632,68 @@ class CrucibleShell:
             return True
 
         if line == 'reload':
-            import os
             print('\033[2J\033[H', end='', flush=True)
             os.execv(sys.executable, [sys.executable] + sys.argv)
+
+        if line.startswith('!'):
+            import subprocess
+            cmd = line[1:].strip()
+            if cmd:
+                subprocess.run(cmd, shell=True)
+            return True
+
+        if line == 'pwd':
+            print(os.getcwd())
+            return True
+
+        if line.startswith('ls') and (len(line) == 2 or line[2] == ' '):
+            parts = line.split(None, 1)
+            path  = os.path.expanduser(parts[1].strip()) if len(parts) > 1 else '.'
+            try:
+                entries = sorted(os.scandir(path), key=lambda e: (e.name.startswith('.'), e.name.lower()))
+            except (FileNotFoundError, NotADirectoryError) as exc:
+                print(f"ls: {exc}")
+                return True
+            col_width = max((len(e.name) for e in entries), default=0) + 3
+            term_width = shutil.get_terminal_size().columns
+            cols = max(1, term_width // col_width)
+            for i, entry in enumerate(entries):
+                display = entry.name + ('/' if entry.is_dir() else '')
+                if entry.is_dir():
+                    label = term.cyan(display)
+                elif entry.name.endswith('.crux'):
+                    label = term.bold(display)
+                elif entry.name.startswith('.'):
+                    label = term.dim(display)
+                else:
+                    label = display
+                pad = ' ' * (col_width - _vlen(display))
+                end = '\n' if (i + 1) % cols == 0 or i == len(entries) - 1 else ''
+                print(label + pad, end=end)
+            return True
+
+        if line.startswith('cd') and (len(line) == 2 or line[2] == ' '):
+            parts = line.split(None, 1)
+            arg   = parts[1].strip() if len(parts) > 1 else '~'
+            if arg == '-':
+                oldpwd = self.state.get('oldpwd')
+                if not oldpwd:
+                    print("cd: no previous directory")
+                    return True
+                path = oldpwd
+            else:
+                path = os.path.expanduser(arg)
+            try:
+                prev = os.getcwd()
+                os.chdir(path)
+                self.state['oldpwd'] = prev
+                if arg == '-':
+                    print(os.getcwd())
+            except FileNotFoundError:
+                print(f"cd: no such directory: {path}")
+            except NotADirectoryError:
+                print(f"cd: not a directory: {path}")
+            return True
 
         if line == 'v':
             last = self.state.get('last_resource')
@@ -455,6 +720,7 @@ class CrucibleShell:
             print(f"Debug {'enabled' if on else 'disabled'}.")
             return True
 
+        words = line.split()
         try:
             argv = _remap_deprecated(shlex.split(line))
             args = self.parser.parse_args(argv)
@@ -472,7 +738,6 @@ class CrucibleShell:
             logger.error(f"Error: {e}")
 
         # Re-fetch pending deletions after any deletion command
-        words = line.split()
         if len(words) >= 2 and words[0] == 'deletion' and words[1] in ('approve', 'reject', 'request'):
             from .helpers import fetch_deletions
             new_deletions = fetch_deletions(self.client)
@@ -480,32 +745,20 @@ class CrucibleShell:
             if self.completer is not None:
                 self.completer._deletions = new_deletions
 
-        # Reload identity after config set / config edit
+        # Reload client and full state after config set / config edit
         if len(words) >= 2 and words[0] == 'config' and words[1] in ('set', 'edit'):
-            from .helpers import (
-                fetch_projects, fetch_deletions, fetch_user_label,
-                fetch_current_project, fetch_current_session, fetch_api_label,
-            )
             from crucible.config import config as _cfg
             from crucible.client import CrucibleClient
             try:
                 _cfg.reload()
                 self.client = CrucibleClient()
                 if self.completer is not None:
-                    self.completer._client = self.client
+                    self.completer._client       = self.client
+                    self.completer._unlink_cache = {}
+                    self.completer._users        = []
             except Exception:
                 pass
-            self.state['user_label'] = fetch_user_label(self.client)
-            self.state['project']    = fetch_current_project()
-            self.state['session']    = fetch_current_session()
-            self.state['api_label']  = fetch_api_label()
-            new_projects  = fetch_projects(self.client)
-            new_deletions = fetch_deletions(self.client)
-            self.state['projects']  = new_projects
-            self.state['deletions'] = new_deletions
-            if self.completer is not None:
-                self.completer._projects  = new_projects
-                self.completer._deletions = new_deletions
+            self.refresh()
 
         return True
 
@@ -517,7 +770,6 @@ class CrucibleShell:
         from prompt_toolkit.key_binding    import KeyBindings
         from prompt_toolkit.completion     import ThreadedCompleter
         from platformdirs import user_data_dir
-        import os
 
         history_path = os.path.join(user_data_dir('crucible'), 'shell_history')
         os.makedirs(os.path.dirname(history_path), exist_ok=True)
@@ -529,7 +781,7 @@ class CrucibleShell:
 
         _u     = info.get('user_info', {})
         _first = _u.get('first_name', '').strip() or \
-                 f"{_u.get('first_name', '')} {_u.get('last_name', '')}".strip() or \
+                 _u.get('last_name', '').strip() or \
                  info.get('access_group_name') or 'there'
         print(f"\nWelcome to the Crucible interactive shell, {_first}.\n"
               "(type 'help' for commands, 'exit' to quit)")
@@ -539,6 +791,7 @@ class CrucibleShell:
             client=self.client,
             projects=self.state['projects'],
             deletions=self.state['deletions'],
+            state=self.state,
         )
 
         kb = KeyBindings()
@@ -579,7 +832,7 @@ class CrucibleShell:
 
     def _run_readline(self):
         """Fallback shell using stdlib readline."""
-        print(_BANNER)
+        print("\nCrucible interactive shell  (type 'help' for commands, 'exit' to quit)")
         try:
             import readline  # noqa: F401
         except ImportError:

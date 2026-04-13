@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 class BaseParser:
 
-    _measurement = "base"
+    _measurement = None
     _data_format = None
     _instrument_name = None
 
