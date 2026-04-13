@@ -543,7 +543,7 @@ class DatasetOperations(BaseResource):
         Args:
             dsid (str): Dataset unique identifier
             image: Image to use as thumbnail. Accepts:
-                - str or Path: path to an image file
+                - str or Path: path to an image file or a base64-encoded image string
                 - PIL.Image.Image: PIL image object
                 - matplotlib.figure.Figure: matplotlib figure
                 - numpy.ndarray: array of shape (H, W) or (H, W, C)
