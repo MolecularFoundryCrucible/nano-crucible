@@ -6,6 +6,7 @@ Cast subcommand - execute .crux recipe files to create Crucible entities.
 
 import logging
 import sys
+from . import term
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +17,7 @@ def register_subcommand(subparsers):
         'cast',
         help='Execute a .crux recipe file',
         description='Load a .crux file and create datasets, samples, and links in Crucible.',
-        formatter_class=lambda prog: __import__('argparse').RawDescriptionHelpFormatter(prog, max_help_position=35),
+        formatter_class=lambda prog: term.ColorHelpFormatter(prog, max_help_position=35),
         epilog="""
 Examples:
     crucible cast experiment.crux                 # execute the recipe

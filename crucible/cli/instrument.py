@@ -110,7 +110,7 @@ def _register_create(subparsers):
         'create',
         help='Create a new instrument',
         description='Register a new instrument in Crucible (requires admin permissions)',
-        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     # Interactive mode (prompts for input)

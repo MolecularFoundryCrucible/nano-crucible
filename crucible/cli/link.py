@@ -11,6 +11,7 @@ Supports linking:
 
 import sys
 import logging
+from . import term
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +22,7 @@ def register_subcommand(subparsers):
         'link',
         help='Link Crucible resources (datasets, samples)',
         description='Create parent-child relationships between datasets or samples, or link samples to datasets',
-        formatter_class=lambda prog: __import__('argparse').RawDescriptionHelpFormatter(prog, max_help_position=35),
+        formatter_class=lambda prog: term.ColorHelpFormatter(prog, max_help_position=35),
         epilog="""
 Examples:
     # Link two datasets (resource types auto-detected)

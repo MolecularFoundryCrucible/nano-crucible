@@ -9,6 +9,7 @@ and delegates to the appropriate display function.
 
 import sys
 import logging
+from . import term
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +20,7 @@ def register_subcommand(subparsers):
         'get',
         help='Get a resource by MFID (auto-detects type)',
         description='Retrieve a dataset or sample — resource type is detected automatically.',
-        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     crucible get 0td7evvtg5wb90005k1j97ak94

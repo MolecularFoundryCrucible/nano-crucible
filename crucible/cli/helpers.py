@@ -4,9 +4,11 @@
 Shared CLI helper utilities.
 
 Functions here are used across multiple CLI modules (dataset, sample, get,
-shell, keybindings, …) and don't belong in term.py (display-only) or
+shell, keybindings, etc.) and don't belong in term.py (display-only) or
 shell.py (which would create circular imports).
 """
+
+from concurrent.futures import ThreadPoolExecutor
 
 
 def fetch_projects(client):
@@ -26,10 +28,14 @@ def fetch_deletions(client):
         return []
 
 
-def fetch_user_label(client):
-    """Return a display name for the authenticated user."""
+def fetch_user_label(client, whoami_info=None):
+    """Return a display name for the authenticated user.
+
+    Pass whoami_info to skip a redundant API call when the caller already
+    has the result of client.whoami().
+    """
     try:
-        info = client.whoami()
+        info = whoami_info if whoami_info is not None else client.whoami()
         user = info.get('user_info', {})
         name = f"{user.get('first_name', '')} {user.get('last_name', '')}".strip()
         return name or info.get('access_group_name') or '?'
@@ -80,14 +86,25 @@ def cache_resource(shell_state, client, data, rtype, resource_id, **flags):
                      None when running outside the interactive shell.
         client:      CrucibleClient instance.
         data:        The fetched resource dict.
-        rtype:       Resource type string — 'dataset' or 'sample'.
+        rtype:       Resource type string, 'dataset' or 'sample'.
         resource_id: MFID of the resource.
         **flags:     Additional keys stored in last_resource (verbose, graph,
-                     include_metadata, …).
+                     include_metadata, etc.).
     """
     if shell_state is None:
         return
-    from concurrent.futures import ThreadPoolExecutor
+
+    # Track recently visited MFIDs for shell tab completion.
+    recent = shell_state.get('recent_mfids')
+    if recent is not None:
+        name = data.get('dataset_name' if rtype == 'dataset' else 'sample_name') or ''
+        # Remove stale entry for same uid (name may have changed), then prepend.
+        for i, (uid, _, _) in enumerate(recent):
+            if uid == resource_id:
+                del recent[i]
+                break
+        recent.appendleft((resource_id, name, rtype))
+
     if rtype == 'dataset':
         pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix='prefetch')
         futures = {

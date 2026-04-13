@@ -56,6 +56,7 @@ except ImportError:
 
 
 import re as _re
+from . import term
 
 _RETRY_TOTAL_RE  = _re.compile(r'Retry\(total=(\d+)')
 _RETRY_REASON_RE = _re.compile(r"'(\w*Error)[:(]")
@@ -119,7 +120,7 @@ def main():
     parser = argparse.ArgumentParser(
         prog='crucible',
         description='Crucible API command-line interface',
-        formatter_class=argparse.RawDescriptionHelpFormatter,
+        formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     # Configuration

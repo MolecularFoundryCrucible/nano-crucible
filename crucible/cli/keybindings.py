@@ -62,28 +62,7 @@ def register(kb, shell):
             return
         current = shell.state.get('project', '')
 
-        def _pick():
-            print()
-            for i, (pid, title) in enumerate(projects, 1):
-                marker = ' ◀' if pid == current else ''
-                print(f"  {i:2}.  {pid}  {title}{marker}")
-            print()
-            try:
-                raw = input(f"  Project [1-{len(projects)}, Enter to cancel]: ").strip()
-            except (KeyboardInterrupt, EOFError):
-                print()
-                return
-            if not raw:
-                return
-            try:
-                idx = int(raw) - 1
-            except ValueError:
-                print("  Invalid choice.")
-                return
-            if not (0 <= idx < len(projects)):
-                print("  Invalid choice.")
-                return
-            pid, title = projects[idx]
+        def _switch(pid, title):
             try:
                 from crucible.cli.config import set_config_value
                 set_config_value('current_project', pid)
@@ -93,6 +72,46 @@ def register(kb, shell):
                 print(f"  Switched to: {title}  ({pid})")
             except Exception as e:
                 logger.error(f"Error switching project: {e}")
+
+        def _pick():
+            all_projects = list(projects)
+            shown = all_projects
+
+            while True:
+                print()
+                for i, (pid, title) in enumerate(shown, 1):
+                    marker = ' <' if pid == current else ''
+                    print(f"  {i:2}.  {pid}  {title}{marker}")
+                print()
+                try:
+                    raw = input("  [number, filter text, Enter to cancel]: ").strip()
+                except (KeyboardInterrupt, EOFError):
+                    print()
+                    return
+                if not raw:
+                    return
+
+                # Numeric selection
+                try:
+                    idx = int(raw) - 1
+                    if 0 <= idx < len(shown):
+                        _switch(*shown[idx])
+                        return
+                    print(f"  Choice must be 1-{len(shown)}.")
+                    continue
+                except ValueError:
+                    pass
+
+                # Substring filter against project ID and title
+                q = raw.lower()
+                filtered = [(p, t) for p, t in all_projects if q in p.lower() or q in t.lower()]
+                if not filtered:
+                    print(f"  No match for '{raw}'.")
+                elif len(filtered) == 1:
+                    _switch(*filtered[0])
+                    return
+                else:
+                    shown = filtered
 
         run_in_terminal(_pick)
 

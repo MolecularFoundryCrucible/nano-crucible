@@ -53,7 +53,7 @@ def _register_get(subparsers):
         'get',
         help='Get user by ORCID or email',
         description='Retrieve user information (requires admin permissions)',
-        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     crucible user get --orcid 0000-0002-1825-0097
@@ -88,7 +88,7 @@ def _register_create(subparsers):
         'create',
         help='Create a new user',
         description='Add a new user to Crucible (requires admin permissions)',
-        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     # Interactive mode (prompts for input)
@@ -156,7 +156,7 @@ def _register_list(subparsers):
         'list',
         help='List all users',
         description='List all users in the system (requires admin permissions)',
-        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     crucible user list
@@ -335,7 +335,7 @@ def _execute_list(args):
         for user in users:
             name_parts = [user.get('first_name') or '', user.get('last_name') or '']
             name  = ' '.join(p for p in name_parts if p) or '—'
-            orcid = user.get('orcid') or '—'
+            orcid = term.orcid_link(user.get('orcid')) or '—'
             email = user.get('email') or user.get('lbl_email') or '—'
             rows.append((name, orcid, email))
         term.table(rows, ['Name', 'ORCID', 'Email'], max_widths=[25, 19, 35])
@@ -354,7 +354,7 @@ def _register_list_datasets(subparsers):
         'list-datasets',
         help='List datasets accessible to a user',
         description='List dataset IDs the user has access to (requires admin permissions)',
-        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     crucible user list-datasets 0000-0002-1825-0097
@@ -371,7 +371,7 @@ def _register_check_access(subparsers):
         'check-access',
         help='Check user access to a dataset',
         description='Check read/write permissions for a user on a specific dataset (requires admin permissions)',
-        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     crucible user check-access 0000-0002-1825-0097 0tcbwt4cp9x1z000bazhkv5gkg
@@ -390,7 +390,7 @@ def _register_list_access_groups(subparsers):
         'list-access-groups',
         help='List access groups for a user',
         description="List the access groups a user belongs to",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
+        formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     crucible user list-access-groups 0000-0002-1825-0097
@@ -408,7 +408,7 @@ def _register_list_projects(subparsers):
         'list-projects',
         help='List projects for a user',
         description='List projects a user is associated with',
-        formatter_class=argparse.RawDescriptionHelpFormatter,
+        formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     crucible user list-projects 0000-0002-1825-0097
