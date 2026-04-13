@@ -4,6 +4,7 @@
 File I/O, hashing, time, and image utilities.
 """
 
+import base64
 import os
 import pytz
 import subprocess as sp
@@ -127,6 +128,12 @@ def check_small_files(filelist):
             return False
     return True
 
+def is_base64(s):
+      try:
+          base64.b64decode(s, validate=True)
+          return True
+      except Exception:
+          return False
 
 def data2thumbnail(image) -> str:
     """Convert an image object to a path to a PNG file.

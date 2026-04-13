@@ -543,7 +543,7 @@ class DatasetOperations(BaseResource):
         Args:
             dsid (str): Dataset unique identifier
             image: Image to use as thumbnail. Accepts:
-                - str or Path: path to an image file
+                - str or Path: path to an image file or a base64-encoded image string
                 - PIL.Image.Image: PIL image object
                 - matplotlib.figure.Figure: matplotlib figure
                 - numpy.ndarray: array of shape (H, W) or (H, W, C)
@@ -554,7 +554,14 @@ class DatasetOperations(BaseResource):
             Dict: Created thumbnail object
         """
         import base64
-        from ..utils import data2thumbnail
+        from ..utils import data2thumbnail, is_base64
+
+        if is_base64(image):
+            thumbnail_data = {
+                'thumbnail_name': thumbnail_name or f"{dsid}_thumbnail",
+                'thumbnail_b64str': image,
+            }
+            return self._request('post', f'/datasets/{dsid}/thumbnails', json=thumbnail_data)
 
         png_path = data2thumbnail(image)
 
