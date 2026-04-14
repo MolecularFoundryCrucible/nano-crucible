@@ -366,7 +366,7 @@ def set_config_value(key, value):
     config_file = config.config_file_path
     config_file.parent.mkdir(parents=True, exist_ok=True)
 
-    parser = configparser.ConfigParser(comment_prefixes=('~~~',), allow_no_value=True)
+    parser = configparser.ConfigParser(comment_prefixes=('~~~',), allow_no_value=True, strict=False)
     if config_file.exists():
         parser.read(config_file)
 
