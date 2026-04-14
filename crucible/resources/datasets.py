@@ -191,22 +191,43 @@ class DatasetOperations(BaseResource):
         logger.debug(f"dsid={dsid}")
 
         result = {"created_record": new_ds_record, "scientific_metadata_record": scimd, "dsid": dsid}
+        if not files_to_upload:
+            return result
+        
+        #  === File Upload
+        failed_files = {}
+        uploaded_files = []
 
-        # Handle file upload and ingestion if files provided
-        if files_to_upload:
-            uploaded_files = [self.upload_file(dsid, each_file, verbose) for each_file in files_to_upload]
+        for each_file in files_to_upload:
+            if not os.path.isfile(each_file):
+                failed_files[each_file] = f"File not found"
+                continue
 
-            logger.debug(f"Submitting {dsid} to be ingested from file {main_file_cloud} using the class {ingestor}")
+            resp = self.upload_file(dsid, each_file)
+            if resp is None:
+                failed_files[each_file] = "Exceeds maximum size for API upload"
+                continue
+            else:
+                uploaded_files.append(resp)
 
-            ingest_req_info = self.request_ingestion(dsid, main_file_cloud, ingestor)
+        if failed_files:
+            ingestion_command = f"client.datasets.request_ingestion('{dsid}', file_to_upload='{main_file_cloud}', ingestion_class='{ingestor}')"
+            logger.error(f"Some files failed to upload for dataset {dsid}: {failed_files}")
+            logger.info(f"Please upload these files manually and then request ingestion: {ingestion_command}")
+            raise RuntimeError(f"File upload failed for dataset {dsid}.\n\nFailed files: {failed_files}.\n\nPlease upload these files manually and then request ingestion: {ingestion_command}")
+        
+        # Ingestion
+        logger.debug(f"Submitting {dsid} to be ingested from file {main_file_cloud} using the class {ingestor}")
 
-            logger.debug(f"Ingestion request {ingest_req_info['id']} is added to the queue")
+        ingest_req_info = self.request_ingestion(dsid, main_file_cloud, ingestor)
 
-            if wait_for_ingestion_response:
-                ingest_req_info = self._client._wait_for_request_completion(dsid, ingest_req_info['id'], 'ingest')
+        logger.debug(f"Ingestion request {ingest_req_info['id']} is added to the queue")
 
-            result["uploaded_files"] = uploaded_files
-            result["ingestion_request"] = ingest_req_info
+        if wait_for_ingestion_response:
+            ingest_req_info = self._client._wait_for_request_completion(dsid, ingest_req_info['id'], 'ingest')
+
+        result["uploaded_files"] = uploaded_files
+        result["ingestion_request"] = ingest_req_info
 
         return result
     
@@ -268,19 +289,17 @@ class DatasetOperations(BaseResource):
         params = {"group_name": group_name, "read": read, "write": write}
         return self._request('post', f'/datasets/{dsid}/access_groups', params=params)
 
-    def upload_file(self, dsid: str, file_path: str, verbose: bool = True) -> Dict:
+
+    def upload_file(self, dsid: str, file_path: str) -> Dict:
         """Upload a file to a dataset.
 
         Args:
             dsid (str): Dataset unique identifier
             file_path (str): Local path to file to upload
-            verbose (bool): Enable verbose output
 
         Returns:
             Dict: Upload response
         """
-        from ..utils import checkhash, run_shell
-
         logger.debug(f"Uploading file {file_path}...")
         use_upload_endpoint = check_small_files([file_path])
 
@@ -290,29 +309,10 @@ class DatasetOperations(BaseResource):
                 files = [('files', (fname, f, 'application/octet-stream'))]
                 added_af = self._request('post', f'/datasets/{dsid}/upload', files=files)
                 return added_af
-        else:
-            try:
-                # use rclone to copy to bucket (using list args for security)
-                rclone_cmd = ['rclone', 'copy', file_path,
-                             'mf-cloud-storage-upload:/crucible-uploads/api-uploads/']
-                logger.debug(f"Uploading file {file_path}...")
-                logger.debug(f"Running: {' '.join(rclone_cmd)}")
-                xx = run_shell(rclone_cmd)
-                logger.debug(f"stdout={xx.stdout}")
-                logger.debug(f"stderr={xx.stderr}")
-                logger.debug(f"Upload complete.")
+            
+        logger.error(f"{file_path} is too large for HTTP upload via the Crucible API. Please upload manually.")
+        return None
 
-                # call add associated file
-                fname = os.path.basename(file_path)
-                af = {"filename": os.path.join("api-uploads", fname),
-                     "size": os.path.getsize(file_path),
-                     "sha256_hash": checkhash(file_path)}
-                added_af = self._request('post', f"/datasets/{dsid}/associated_files", json=af)
-                return added_af[-1]
-
-            except (OSError, subprocess.SubprocessError, FileNotFoundError) as e:
-                logger.error(f"File upload failed: {e}")
-                raise RuntimeError("Files too large for transfer by http or rclone upload failed") from e
 
     def get_download_links(self, dsid: str) -> Dict:
         """Get the download links for files in a given dataset.
