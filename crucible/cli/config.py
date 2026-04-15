@@ -352,37 +352,41 @@ def cmd_get(args):
 def set_config_value(key, value):
     """Write a single config key=value to the INI file and reload.
 
+    Uses configupdater so all comments and formatting in the file are
+    preserved exactly.
+
     Shared by ``cmd_set`` and the interactive-shell ``use`` built-in.
     Returns (section, config_file_path).
     """
-    import configparser
+    from configupdater import ConfigUpdater
     from crucible.config import config
     from crucible.config.config import Config
 
     mapping = Config._CONFIG_MAP[key]
-    section  = mapping['section']
-    ini_key  = mapping['ini']
+    section = mapping['section']
+    ini_key = mapping['ini']
 
     config_file = config.config_file_path
     config_file.parent.mkdir(parents=True, exist_ok=True)
 
-    parser = configparser.ConfigParser(comment_prefixes=('~~~',), allow_no_value=True, strict=False)
+    updater = ConfigUpdater()
     if config_file.exists():
-        parser.read(config_file)
+        updater.read(str(config_file))
 
-    if 'crucible' not in parser:
-        parser['crucible'] = {}
-    if section not in parser:
-        parser[section] = {}
+    # Ensure the target section exists.
+    if not updater.has_section(section):
+        updater.add_section(section)
 
-    if section != 'crucible' and 'crucible' in parser and ini_key in parser['crucible']:
-        del parser['crucible'][ini_key]
+    # Set the value (adds the key if it doesn't exist yet).
+    updater[section][ini_key] = value
 
-    parser[section][ini_key] = value
+    # Remove stale entry from legacy flat [crucible] section if the canonical
+    # home for this key is a different section.
+    if section != 'crucible' and updater.has_section('crucible'):
+        if updater.has_option('crucible', ini_key):
+            updater.remove_option('crucible', ini_key)
 
-    with open(config_file, 'w') as f:
-        parser.write(f)
-
+    config_file.write_text(str(updater))
     config.reload()
     return section, config_file
 

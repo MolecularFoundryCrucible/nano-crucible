@@ -15,12 +15,12 @@ from ..models import Project
 logger = logging.getLogger(__name__)
 
 
-def _build_project_from_args(project_id, organization, project_lead_email):
+def _build_project_from_args(project_id, organization, project_lead_orcid):
     """Default function to build project info from arguments."""
     return {
         "project_id": project_id,
         "organization": organization,
-        "project_lead_email": project_lead_email
+        "project_lead_orcid": project_lead_orcid,
     }
 
 
@@ -33,23 +33,29 @@ class ProjectOperations(BaseResource):
     def get(self, project_id: str) -> Dict:
         """Get details of a specific project.
 
+        The response includes a ``lead`` key with the project lead's full user
+        record (orcid, first_name, last_name, email, lbl_email).
+
         Args:
             project_id (str): Unique project identifier
 
         Returns:
-            Dict: Complete project information
+            Dict: Complete project information including embedded lead user
         """
         return self._request('get', f'/projects/{project_id}')
 
     def list(self, orcid: Optional[str] = None, limit: int = DEFAULT_LIMIT) -> List[Dict]:
         """List all accessible projects.
 
+        Each project dict includes a ``lead`` key with the project lead's full
+        user record (orcid, first_name, last_name, email, lbl_email).
+
         Args:
             orcid (str, optional): Filter projects by those associated with a certain user
             limit (int): Maximum number of results to return (default: 100)
 
         Returns:
-            List[Dict]: Project metadata including project_id, project_name, description, project_lead_email
+            List[Dict]: Project metadata including project_id, title, organization, lead
         """
         if orcid is None:
             return self._request('get', '/projects')
@@ -78,30 +84,12 @@ class ProjectOperations(BaseResource):
             >>> result = client.projects.create(project)
         """
         
-        # check input type
         if isinstance(project, Project):
             project_details = project.model_dump(exclude_none=True)
         else:
             project_details = dict(project)
-        
-        # obtain project id
-        project_id = project_details.get("project_id")
 
-        # check if project already exists
-        proj = self.get(project_id)
-        if proj is not None:
-            import warnings
-            warnings.warn(
-                f"Project '{project_id}' already exists; returning existing record.",
-                UserWarning, stacklevel=2,
-            )
-            return proj
-
-        if project_details:
-            proj = self._request('post', "/projects", json=project_details)
-            return proj
-        else:
-            raise ValueError(f"Project info for {project_id} not found in database or using the provided get_project_info_function")
+        return self._request('post', "/projects", json=project_details)
 
     def get_users(self, project_id: str, limit: int = DEFAULT_LIMIT) -> List[Dict]:
         """Get users associated with a project.
@@ -117,6 +105,35 @@ class ProjectOperations(BaseResource):
         """
         result = self._request('get', f'/projects/{project_id}/users')
         return result
+
+    def update(self, project_id: str, **kwargs) -> Dict:
+        """Partially update a project record.
+
+        **Requires admin permissions.**
+
+        Args:
+            project_id (str): Unique project identifier
+            **kwargs: Fields to update. Accepted: organization, status, title,
+                      project_lead_email, project_lead_orcid.
+
+        Returns:
+            Dict: Updated project object
+        """
+        return self._request('patch', f'/projects/{project_id}', json=kwargs)
+
+    def remove_user(self, project_id: str, orcid: str) -> Dict:
+        """Remove a user from a project.
+
+        **Requires admin permissions.**
+
+        Args:
+            project_id (str): Unique project identifier
+            orcid (str): User's ORCID identifier
+
+        Returns:
+            Dict: Response message
+        """
+        return self._request('delete', f'/projects/{project_id}/users/{orcid}')
 
     def add_user(self, orcid: str, project_id: str) -> List[Dict]:
         """Add a user to a project.

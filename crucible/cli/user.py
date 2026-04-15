@@ -40,10 +40,12 @@ def register_subcommand(subparsers):
     # Register individual user commands
     _register_get(user_subparsers)
     _register_create(user_subparsers)
+    _register_update(user_subparsers)
     _register_list(user_subparsers)
     _register_list_datasets(user_subparsers)
     _register_check_access(user_subparsers)
     _register_list_access_groups(user_subparsers)
+    _register_remove_access_group(user_subparsers)
     _register_list_projects(user_subparsers)
 
 
@@ -315,6 +317,81 @@ def _execute_create(args):
         if getattr(args, "debug", False):
             import traceback
             traceback.print_exc()
+        sys.exit(1)
+
+
+def _register_update(subparsers):
+    """Register the 'user update' subcommand."""
+    parser = subparsers.add_parser(
+        'update',
+        help='Update a user record',
+        description='Partially update a user record (requires admin permissions)',
+        formatter_class=term.ColorHelpFormatter,
+        epilog="""
+Examples:
+    crucible user update 0000-0002-1825-0097 --first-name Jane
+    crucible user update 0000-0002-1825-0097 --email jane@example.com --last-name Smith
+"""
+    )
+    parser.add_argument('orcid', metavar='ORCID', help='User ORCID identifier')
+    parser.add_argument('--first-name',       dest='first_name',       metavar='NAME',  help='First name')
+    parser.add_argument('--last-name',        dest='last_name',        metavar='NAME',  help='Last name')
+    parser.add_argument('--email',            dest='email',            metavar='EMAIL', help='Email address')
+    parser.add_argument('--employee-number',  dest='employee_number',  metavar='NUM',   help='Employee number')
+    parser.set_defaults(func=_execute_update)
+
+
+def _execute_update(args):
+    """Execute the 'user update' subcommand."""
+    from crucible.client import CrucibleClient
+
+    fields = {k: v for k, v in {
+        'first_name':      args.first_name,
+        'last_name':       args.last_name,
+        'email':           args.email,
+        'employee_number': args.employee_number,
+    }.items() if v is not None}
+
+    if not fields:
+        logger.error("No fields to update. Provide at least one of: --first-name, --last-name, --email, --employee-number")
+        sys.exit(1)
+
+    try:
+        client = CrucibleClient()
+        result = client.users.update(args.orcid, **fields)
+        logger.info("User updated")
+        _show_user(result)
+    except Exception as e:
+        logger.error(f"Error updating user: {e}")
+        sys.exit(1)
+
+
+def _register_remove_access_group(subparsers):
+    """Register the 'user remove-access-group' subcommand."""
+    parser = subparsers.add_parser(
+        'remove-access-group',
+        help='Remove a user from an access group',
+        description='Remove a user from an access group (requires admin permissions)',
+        formatter_class=term.ColorHelpFormatter,
+        epilog="""
+Examples:
+    crucible user remove-access-group 0000-0002-1825-0097 my-group
+"""
+    )
+    parser.add_argument('orcid',      metavar='ORCID', help='User ORCID identifier')
+    parser.add_argument('group_name', metavar='GROUP', help='Access group name')
+    parser.set_defaults(func=_execute_remove_access_group)
+
+
+def _execute_remove_access_group(args):
+    """Execute the 'user remove-access-group' subcommand."""
+    from crucible.client import CrucibleClient
+    try:
+        client = CrucibleClient()
+        client.users.remove_from_access_group(args.orcid, args.group_name)
+        logger.info(f"Removed {args.orcid} from access group '{args.group_name}'")
+    except Exception as e:
+        logger.error(f"Error removing user from access group: {e}")
         sys.exit(1)
 
 

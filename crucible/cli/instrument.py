@@ -45,6 +45,7 @@ def register_subcommand(subparsers):
     _register_list(instrument_subparsers)
     _register_get(instrument_subparsers)
     _register_create(instrument_subparsers)
+    _register_update(instrument_subparsers)
 
 
 def _register_list(subparsers):
@@ -318,6 +319,65 @@ def _execute_get(args):
 
     except Exception as e:
         logger.error(f"Error retrieving instrument: {e}")
+        if getattr(args, "debug", False):
+            import traceback
+            traceback.print_exc()
+        sys.exit(1)
+
+
+def _register_update(subparsers):
+    """Register the 'instrument update' subcommand."""
+    parser = subparsers.add_parser(
+        'update',
+        help='Update an instrument record',
+        description='Partially update an instrument record (requires admin permissions)',
+        formatter_class=term.ColorHelpFormatter,
+        epilog="""
+Examples:
+    crucible instrument update MFID001 --location "Building 67, Room 101"
+    crucible instrument update MFID001 --owner "mf" --model "Titan 80-300"
+"""
+    )
+    uid_arg = parser.add_argument(
+        'unique_id', metavar='MFID', help='Instrument unique ID (MFID)'
+    )
+    if ARGCOMPLETE_AVAILABLE:
+        uid_arg.completer = argcomplete.completers.SuppressCompleter()
+    parser.add_argument('--name',         dest='instrument_name',  metavar='NAME',  help='Instrument name')
+    parser.add_argument('--owner',        dest='owner',            metavar='OWNER', help='Instrument owner')
+    parser.add_argument('--location',     dest='location',         metavar='LOC',   help='Instrument location')
+    parser.add_argument('--manufacturer', dest='manufacturer',     metavar='MFR',   help='Manufacturer')
+    parser.add_argument('--model',        dest='model',            metavar='MODEL', help='Model')
+    parser.add_argument('--type',         dest='instrument_type',  metavar='TYPE',  help='Instrument type')
+    parser.add_argument('--description',  dest='description',      metavar='TEXT',  help='Description')
+    parser.set_defaults(func=_execute_update)
+
+
+def _execute_update(args):
+    """Execute the 'instrument update' subcommand."""
+    from crucible.client import CrucibleClient
+
+    fields = {k: v for k, v in {
+        'instrument_name': args.instrument_name,
+        'owner':           args.owner,
+        'location':        args.location,
+        'manufacturer':    args.manufacturer,
+        'model':           args.model,
+        'instrument_type': args.instrument_type,
+        'description':     args.description,
+    }.items() if v is not None}
+
+    if not fields:
+        logger.error("No fields to update. Provide at least one of: --name, --owner, --location, --manufacturer, --model, --type, --description")
+        sys.exit(1)
+
+    try:
+        client = CrucibleClient()
+        result = client.instruments.update(args.unique_id, **fields)
+        logger.info("Instrument updated")
+        _show_instrument(result)
+    except Exception as e:
+        logger.error(f"Error updating instrument: {e}")
         if getattr(args, "debug", False):
             import traceback
             traceback.print_exc()

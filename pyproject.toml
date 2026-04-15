@@ -40,6 +40,7 @@ dependencies = [
     "python-dotenv",
     "argcomplete>=2.0.0",
     "platformdirs>=2.5.0",
+    "configupdater>=3.0",
     "mfid>=1.0.0",
     "pyyaml>=6.0",
 ]

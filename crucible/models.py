@@ -60,7 +60,8 @@ class Dataset(BaseModel):
 class Project(BaseModel):
     project_id: str
     organization: str
-    project_lead_email: str
+    project_lead_orcid: Optional[str] = None
+    project_lead_email: Optional[str] = None  # kept for backward compat; not sent to API
     status: Optional[str] = None
     title: Optional[str] = None
     project_lead_name: Optional[str] = None

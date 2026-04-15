@@ -92,6 +92,21 @@ class InstrumentOperations(BaseResource):
 
         return self._request('post', '/instruments', json=payload)
 
+    def update(self, unique_id: str, **kwargs) -> Dict:
+        """Partially update an instrument record.
+
+        **Requires admin permissions.**
+
+        Args:
+            unique_id (str): Instrument unique identifier (MFID)
+            **kwargs: Fields to update. Accepted: instrument_name, owner, location,
+                      manufacturer, model, instrument_type, description.
+
+        Returns:
+            Dict: Updated instrument object
+        """
+        return self._request('patch', f'/instruments/{unique_id}', json=kwargs)
+
     def get_or_create(self, instrument_name: str, location: Optional[str] = None,
                      instrument_owner: Optional[str] = None) -> Dict:
         """Deprecated: use create() instead.

@@ -366,6 +366,7 @@ class CrucibleShell:
         self.client    = None
         self.state     = {}
         self.completer = None
+        self.is_admin  = False
         self._session  = None         # prompt_toolkit PromptSession
         self._clock_stop = threading.Event()
 
@@ -441,6 +442,9 @@ class CrucibleShell:
             fetch_projects, fetch_deletions, fetch_user_label,
             fetch_current_project, fetch_current_session, fetch_api_label,
         )
+        ag = whoami_info.get('access_group_name', '')
+        self.is_admin = isinstance(ag, str) and ag.startswith('admin')
+
         self.state = {
             'user_label':    fetch_user_label(self.client, whoami_info),
             'projects':      fetch_projects(self.client),
@@ -448,7 +452,7 @@ class CrucibleShell:
             'session':       fetch_current_session(),
             'api_label':     fetch_api_label(),
             'debug':         False,
-            'deletions':     fetch_deletions(self.client),
+            'deletions':     fetch_deletions(self.client) if self.is_admin else [],
             'recent_mfids':  deque(maxlen=15),
         }
 
@@ -459,10 +463,10 @@ class CrucibleShell:
             fetch_current_project, fetch_current_session, fetch_api_label,
         )
         with ThreadPoolExecutor(max_workers=2) as pool:
-            proj_f = pool.submit(fetch_projects,  self.client)
-            del_f  = pool.submit(fetch_deletions, self.client)
+            proj_f = pool.submit(fetch_projects, self.client)
+            del_f  = pool.submit(fetch_deletions, self.client) if self.is_admin else None
             new_projects  = proj_f.result()
-            new_deletions = del_f.result()
+            new_deletions = del_f.result() if del_f is not None else []
         self.state['projects']   = new_projects
         self.state['user_label'] = fetch_user_label(self.client)
         self.state['project']    = fetch_current_project()
@@ -737,8 +741,9 @@ class CrucibleShell:
         except Exception as e:
             logger.error(f"Error: {e}")
 
-        # Re-fetch pending deletions after any deletion command
-        if len(words) >= 2 and words[0] == 'deletion' and words[1] in ('approve', 'reject', 'request'):
+        # Re-fetch pending deletions after any deletion command (admin only)
+        if (self.is_admin and len(words) >= 2
+                and words[0] == 'deletion' and words[1] in ('approve', 'reject', 'request')):
             from .helpers import fetch_deletions
             new_deletions = fetch_deletions(self.client)
             self.state['deletions'] = new_deletions

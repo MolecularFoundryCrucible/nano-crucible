@@ -175,6 +175,35 @@ class UserOperations(BaseResource):
         """
         return self._request('get', f'/users/{orcid}/projects')
 
+    def update(self, orcid: str, **kwargs) -> Dict:
+        """Partially update a user record.
+
+        **Requires admin permissions.**
+
+        Args:
+            orcid (str): User ORCID identifier
+            **kwargs: Fields to update. Accepted: first_name, last_name,
+                      email, employee_number.
+
+        Returns:
+            Dict: Updated user object
+        """
+        return self._request('patch', f'/users/{orcid}', json=kwargs)
+
+    def remove_from_access_group(self, orcid: str, group_name: str) -> Dict:
+        """Remove a user from an access group.
+
+        **Requires admin permissions.**
+
+        Args:
+            orcid (str): User ORCID identifier
+            group_name (str): Name of the access group
+
+        Returns:
+            Dict: Response message
+        """
+        return self._request('delete', f'/users/{orcid}/access_groups/{group_name}')
+
     def get_or_create(self, orcid: str, get_user_info_function, **kwargs) -> Dict:
         """Get an existing user or create a new one if they don't exist.
 

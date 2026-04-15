@@ -46,8 +46,10 @@ def register_subcommand(subparsers):
     _register_list(project_subparsers)
     _register_get(project_subparsers)
     _register_create(project_subparsers)
+    _register_update(project_subparsers)
     _register_list_users(project_subparsers)
     _register_add_user(project_subparsers)
+    _register_remove_user(project_subparsers)
 
 
 def _register_list(subparsers):
@@ -115,8 +117,9 @@ Examples:
 
     # Command-line mode
     crucible project create --project-id my-project -o "LBNL" -e "lead@lbl.gov"
+    crucible project create --project-id my-project -o "LBNL" -e "0000-0002-1825-0097"
     crucible project create --project-id my-project -o "LBNL" -e "lead@lbl.gov" \\
-        --title "Silicon Wafer Study" --lead-name "Jane Doe"
+        --title "Silicon Wafer Study"
 """
     )
 
@@ -137,12 +140,12 @@ Examples:
     )
 
     parser.add_argument(
-        '-e', '--email',
+        '-e', '--lead',
         required=False,
         default=None,
-        metavar='EMAIL',
+        metavar='EMAIL_OR_ORCID',
         dest='project_lead_email',
-        help='Project lead email address. If not provided, will prompt interactively.'
+        help='Project lead email or ORCID. If not provided, will prompt interactively.'
     )
 
     parser.add_argument(
@@ -151,15 +154,6 @@ Examples:
         default=None,
         metavar='TITLE',
         help='Human-readable project title (optional)'
-    )
-
-    parser.add_argument(
-        '--lead-name',
-        required=False,
-        default=None,
-        metavar='NAME',
-        dest='project_lead_name',
-        help='Project lead full name (optional)'
     )
 
     parser.add_argument(
@@ -245,6 +239,50 @@ Examples:
     parser.set_defaults(func=_execute_add_user)
 
 
+def _register_update(subparsers):
+    """Register the 'project update' subcommand."""
+    parser = subparsers.add_parser(
+        'update',
+        help='Update a project record',
+        description='Partially update a project record (requires admin permissions)',
+        formatter_class=term.ColorHelpFormatter,
+        epilog="""
+Examples:
+    crucible project update my-project --title "New Title"
+    crucible project update my-project --status active --organization "Molecular Foundry"
+    crucible project update my-project --lead-orcid 0000-0002-1825-0097
+"""
+    )
+    parser.add_argument('project_id', metavar='PROJECT_ID', help='Project ID')
+    parser.add_argument('--title',        dest='title',               metavar='TITLE',  help='Project title')
+    parser.add_argument('--organization', dest='organization',        metavar='ORG',    help='Organization name')
+    parser.add_argument('--status',       dest='status',              metavar='STATUS', help='Project status')
+    parser.add_argument('--lead-email',   dest='project_lead_email',  metavar='EMAIL',  help='Project lead email')
+    parser.add_argument('--lead-orcid',   dest='project_lead_orcid',  metavar='ORCID',  help='Project lead ORCID')
+    parser.set_defaults(func=_execute_update)
+
+
+def _register_remove_user(subparsers):
+    """Register the 'project remove-user' subcommand."""
+    parser = subparsers.add_parser(
+        'remove-user',
+        help='Remove a user from a project',
+        description='Remove a user from a project (requires admin permissions)',
+        formatter_class=term.ColorHelpFormatter,
+        epilog="""
+Examples:
+    crucible project remove-user my-project 0000-0002-1825-0097
+"""
+    )
+    project_id_arg = parser.add_argument(
+        'project_id', metavar='PROJECT_ID', help='Project ID'
+    )
+    if ARGCOMPLETE_AVAILABLE:
+        project_id_arg.completer = argcomplete.completers.SuppressCompleter()
+    parser.add_argument('orcid', metavar='ORCID', help='User ORCID identifier')
+    parser.set_defaults(func=_execute_remove_user)
+
+
 def _execute_list(args):
     """Execute the 'project list' subcommand."""
     from crucible.client import CrucibleClient
@@ -268,12 +306,12 @@ def _execute_list(args):
                                       f"{_base}/{p.get('project_id')}" if _base else None),
                     p.get('title') or '—',
                     p.get('organization') or '—',
-                    p.get('project_lead_email') or '—',
+                    _lead_name(p) or '—',
                 )
                 for p in projects
             ]
-            term.table(rows, ['ID', 'Title', 'Organization', 'Lead Email'],
-                       max_widths=[20, 30, 20, 30])
+            term.table(rows, ['ID', 'Title', 'Organization', 'Lead'],
+                       max_widths=[20, 30, 20, 25])
 
     except Exception as e:
         logger.error(f"Error listing projects: {e}")
@@ -281,6 +319,14 @@ def _execute_list(args):
             import traceback
             traceback.print_exc()
         sys.exit(1)
+
+
+def _lead_name(project):
+    """Return the lead's display name from embedded lead dict, or fallback to project_lead_email."""
+    lead = project.get('lead') or {}
+    parts = [lead.get('first_name') or '', lead.get('last_name') or '']
+    name = ' '.join(p for p in parts if p)
+    return name or project.get('project_lead_email') or None
 
 
 def _show_project(project):
@@ -293,13 +339,15 @@ def _show_project(project):
     except Exception:
         _base = None
 
+    lead = project.get('lead') or {}
+
     term.header("Project")
     pid = project.get('project_id')
     _p("ID",           term.project_link(pid, f"{_base}/{pid}" if _base and pid else None))
     _p("Title",        project.get('title'))
     _p("Organization", project.get('organization'))
-    _p("Lead",         project.get('project_lead_name'))
-    _p("Lead Email",   project.get('project_lead_email'))
+    _p("Lead",         _lead_name(project))
+    _p("Lead Email",   lead.get('email') or lead.get('lbl_email') or project.get('project_lead_email'))
     _p("Status",       project.get('status'))
 
 
@@ -333,7 +381,6 @@ def _execute_create(args):
     organization = args.organization
     project_lead_email = args.project_lead_email
     title = args.title
-    project_lead_name = args.project_lead_name
     status = args.status
 
     interactive = project_id is None or organization is None or project_lead_email is None
@@ -346,7 +393,6 @@ def _execute_create(args):
         while True:
             project_id = input("Project ID (e.g., my-project): ").strip()
             if project_id:
-                # Validate project_id format (alphanumeric, hyphens, underscores)
                 if re.match(r'^[a-zA-Z0-9_-]+$', project_id):
                     break
                 else:
@@ -363,28 +409,20 @@ def _execute_create(args):
             else:
                 logger.error("Organization is required.")
 
-    # Prompt for project lead email
+    # Prompt for project lead (email or ORCID)
     if project_lead_email is None:
         while True:
-            project_lead_email = input("Project lead email: ").strip()
+            project_lead_email = input("Project lead email or ORCID: ").strip()
             if project_lead_email:
-                # Basic email validation
-                if re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', project_lead_email):
-                    break
-                else:
-                    logger.error("Invalid email format.")
+                break
             else:
-                logger.error("Project lead email is required.")
+                logger.error("Project lead is required.")
 
     # Optional fields — only prompt in interactive mode
     if interactive:
         if title is None:
             val = input("Project title (optional, press Enter to skip): ").strip()
             title = val or None
-
-        if project_lead_name is None:
-            val = input("Project lead name (optional, press Enter to skip): ").strip()
-            project_lead_name = val or None
 
         if status is None:
             val = input("Status (optional, press Enter to skip): ").strip()
@@ -394,20 +432,14 @@ def _execute_create(args):
         from crucible.models import Project
         client = CrucibleClient()
 
-        # Check if project already exists
-        existing = client.projects.get(project_id)
-        if existing is not None:
-            logger.warning(f"Project '{project_id}' already exists.")
-            _show_project(existing)
-            return
-
-        # Build Project model and create
+        # Route to the right field based on format.
+        is_orcid = bool(re.match(r'^\d{4}-\d{4}-\d{4}-\d{3}[0-9X]$', project_lead_email))
         project = Project(
             project_id=project_id,
             organization=organization,
-            project_lead_email=project_lead_email,
+            project_lead_orcid=project_lead_email if is_orcid else None,
+            project_lead_email=None if is_orcid else project_lead_email,
             title=title,
-            project_lead_name=project_lead_name,
             status=status,
         )
         result = client.projects.create(project)
@@ -469,6 +501,50 @@ def _execute_add_user(args):
 
     except Exception as e:
         logger.error(f"Error adding user to project: {e}")
+        if getattr(args, "debug", False):
+            import traceback
+            traceback.print_exc()
+        sys.exit(1)
+
+
+def _execute_update(args):
+    """Execute the 'project update' subcommand."""
+    from crucible.client import CrucibleClient
+
+    fields = {k: v for k, v in {
+        'title':               args.title,
+        'organization':        args.organization,
+        'status':              args.status,
+        'project_lead_email':  args.project_lead_email,
+        'project_lead_orcid':  args.project_lead_orcid,
+    }.items() if v is not None}
+
+    if not fields:
+        logger.error("No fields to update. Provide at least one of: --title, --organization, --status, --lead-email, --lead-orcid")
+        sys.exit(1)
+
+    try:
+        client = CrucibleClient()
+        result = client.projects.update(args.project_id, **fields)
+        logger.info("Project updated")
+        _show_project(result)
+    except Exception as e:
+        logger.error(f"Error updating project: {e}")
+        if getattr(args, "debug", False):
+            import traceback
+            traceback.print_exc()
+        sys.exit(1)
+
+
+def _execute_remove_user(args):
+    """Execute the 'project remove-user' subcommand."""
+    from crucible.client import CrucibleClient
+    try:
+        client = CrucibleClient()
+        client.projects.remove_user(args.project_id, args.orcid)
+        logger.info(f"Removed {args.orcid} from project '{args.project_id}'")
+    except Exception as e:
+        logger.error(f"Error removing user from project: {e}")
         if getattr(args, "debug", False):
             import traceback
             traceback.print_exc()
