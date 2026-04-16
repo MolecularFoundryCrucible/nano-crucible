@@ -179,7 +179,7 @@ class DatasetOperations(BaseResource):
         scimd = None
         if scientific_metadata is not None:
             logger.debug(f'Adding scientific metadata record for {dsid}')
-            scimd = self._request('post', f'/datasets/{dsid}/scientific_metadata', json=scientific_metadata)
+            scimd = self.add_scientific_metadata(dsid, scientific_metadata)
             logger.debug('Metadata addition complete')
             
         # add keywords
@@ -485,21 +485,61 @@ class DatasetOperations(BaseResource):
         """
         return self._request('get', f'/datasets/{dsid}/scientific_metadata')
 
-    def update_scientific_metadata(self, dsid: str, metadata: Dict, overwrite: bool = False) -> Dict:
-        """Create or replace scientific metadata for a dataset.
+    def add_scientific_metadata(self, dsid: str, metadata: Dict) -> Dict:
+        """Create or replace scientific metadata for a dataset in both the old and new tables.
+
+        Sends a POST request to the legacy ``ScientificMetadata`` table
+        (``/datasets/{dsid}/scientific_metadata``) and, in parallel, to the new
+        ``NewScientificMetadata`` table (``/datasets/{dsid}/scientific_metadata_new``)
+        which supports JSONB full-text search.
 
         Args:
             dsid (str): Dataset unique identifier
             metadata (Dict): Scientific metadata dictionary
-            overwrite (bool): If True, replace all metadata; if False, merge with existing
 
         Returns:
-            Dict: Updated metadata object
+            Dict: Metadata object returned by the legacy table endpoint
+        """
+        result = self._request('post', f'/datasets/{dsid}/scientific_metadata', json=metadata)
+        try:
+            self._request('post', f'/datasets/{dsid}/scientific_metadata_new', json=metadata)
+        except Exception:
+            logger.warning(
+                f'Failed to write scientific metadata to new table for dataset {dsid}. '
+                'The new scientific_metadata_new endpoint may not be available yet.'
+            )
+        return result
+
+    def update_scientific_metadata(self, dsid: str, metadata: Dict, overwrite: bool = False) -> Dict:
+        """Create or replace scientific metadata for a dataset in both the old and new tables.
+
+        Args:
+            dsid (str): Dataset unique identifier
+            metadata (Dict): Scientific metadata dictionary
+            overwrite (bool): If True, replace all metadata (POST); if False, merge with existing (PATCH)
+
+        Returns:
+            Dict: Updated metadata object from the legacy table
         """
         if overwrite:
-            return self._request('post', f'/datasets/{dsid}/scientific_metadata', json=metadata)
+            result = self._request('post', f'/datasets/{dsid}/scientific_metadata', json=metadata)
+            try:
+                self._request('post', f'/datasets/{dsid}/scientific_metadata_new', json=metadata)
+            except Exception:
+                logger.warning(
+                    f'Failed to overwrite scientific metadata in new table for dataset {dsid}. '
+                    'The new scientific_metadata_new endpoint may not be available yet.'
+                )
         else:
-            return self._request('patch', f'/datasets/{dsid}/scientific_metadata', json=metadata)
+            result = self._request('patch', f'/datasets/{dsid}/scientific_metadata', json=metadata)
+            try:
+                self._request('patch', f'/datasets/{dsid}/scientific_metadata_new', json=metadata)
+            except Exception:
+                logger.warning(
+                    f'Failed to update scientific metadata in new table for dataset {dsid}. '
+                    'The new scientific_metadata_new endpoint may not be available yet.'
+                )
+        return result
 
     def search_scientific_metadata(self, q: str, limit: Optional[int] = None) -> List[Dict]:
         """Perform a ranked full-text search on scientific metadata.
