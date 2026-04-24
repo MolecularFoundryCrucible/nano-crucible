@@ -649,7 +649,6 @@ def _show_sample(sample, client, verbose=False, graph=False, graph_data=None):
     if verbose or graph:
         term.subheader("Ownership")
         _p("Owner ORCID", term.orcid_link(sample.get('owner_orcid')))
-        _p("Owner ID",    sample.get('owner_user_id'))
 
         term.subheader("Timing")
         _p("Created",  term.fmt_ts(sample.get('creation_time')))

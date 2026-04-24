@@ -347,7 +347,7 @@ def _show_project(project):
     _p("Title",        project.get('title'))
     _p("Organization", project.get('organization'))
     _p("Lead",         _lead_name(project))
-    _p("Lead Email",   lead.get('email') or lead.get('lbl_email') or project.get('project_lead_email'))
+    _p("Lead Email",   lead.get('email') or project.get('project_lead_email'))
     _p("Status",       project.get('status'))
 
 
@@ -470,8 +470,8 @@ def _execute_list_users(args):
             for u in users:
                 name_parts = [u.get('first_name') or '', u.get('last_name') or '']
                 name  = ' '.join(p for p in name_parts if p) or '—'
-                orcid = u.get('orcid') or '—'
-                email = u.get('email') or u.get('lbl_email') or '—'
+                orcid = u.get('unique_id') or u.get('orcid') or '—'
+                email = u.get('email') or '—'
                 rows.append((name, orcid, email))
             term.table(rows, ['Name', 'ORCID', 'Email'], max_widths=[25, 19, 35])
 

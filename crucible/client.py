@@ -49,6 +49,16 @@ class CrucibleClient:
         self.api_url = api_url.rstrip('/')
         self.api_key = api_key
 
+        if '/api/v1' in self.api_url:
+            import warnings
+            from .config.config import Config as _Cfg
+            warnings.warn(
+                f"You are connected to Crucible API v1 which is deprecated. "
+                f"Update with: crucible config set api_url {_Cfg.DEFAULT_API_URL}",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+
         # Session with automatic retry on transient server/network errors
         retry = Retry(
             total            = 3,
@@ -184,10 +194,19 @@ class CrucibleClient:
         """Return account info for the current API key.
 
         Returns:
-            Dict: access_group_name (ORCID), access_group_ids, and user_info
-                  with full user profile fields.
+            Dict: user_unique_id, access_group_ids, and user_info with full
+                  user profile fields.
         """
-        return self._request('get', '/account')
+        result = self._request('get', '/account')
+        # Normalize field renames introduced in API v2 so callers work against
+        # both API versions without separate handling.
+        user_info = result.get('user_info') or {}
+        is_service = user_info.get('is_service_account', False)
+        if not is_service and 'orcid' not in user_info and 'unique_id' in user_info:
+            user_info['orcid'] = user_info['unique_id']
+        if 'user_unique_id' in result and 'access_group_name' not in result:
+            result['access_group_name'] = result['user_unique_id']
+        return result
 
     def get_resource_type(self, resource_id: str) -> dict:
         """
@@ -242,6 +261,8 @@ class CrucibleClient:
             return self.samples.get(resource_id)
         elif resource_type == "dataset":
             return self.datasets.get(resource_id, include_metadata=include_metadata)
+        elif resource_type == "instrument":
+            return self.instruments.get(instrument_id=resource_id)
         else:
             raise ValueError(f"Unknown or unsupported resource type: {resource_type}")
 

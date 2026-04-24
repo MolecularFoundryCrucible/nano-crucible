@@ -14,7 +14,6 @@ class Sample(BaseModel):
     sample_name: Optional[str] = None
     sample_type: Optional[str] = None
     owner_orcid: Optional[str] = None
-    owner_user_id: Optional[int] = None
     # timestamp: user-settable date; accepts legacy 'date_created' from the API
     # until the server-side rename is complete
     timestamp: Optional[str] = Field(
@@ -34,12 +33,11 @@ class Dataset(BaseModel):
     unique_id: Optional[str] = None
     dataset_name: Optional[str] = None
     public: Optional[bool] = False
-    owner_user_id: Optional[int] = None
     owner_orcid: Optional[str] = None
     project_id: Optional[str] = None
-    instrument_id: Optional[int] = None
     instrument_name: Optional[str] = None
     measurement: Optional[str] = None
+    data_type: Optional[str] = None
     session_name: Optional[str] = None
     # timestamp: user-settable date; accepts legacy 'creation_date' from the API
     timestamp: Optional[str] = Field(
@@ -71,14 +69,21 @@ class Project(BaseModel):
 
 class User(BaseModel):
     id: Optional[int] = None
-    orcid: Optional[str] = None
+    unique_id: Optional[str] = Field(
+        default=None,
+        validation_alias=AliasChoices("unique_id", "orcid"),
+    )
     first_name: Optional[str] = None
     last_name: Optional[str] = None
     email: Optional[str] = None
-    lbl_email: Optional[str] = None
-    employee_number: Optional[str] = None
+    is_service_account: Optional[bool] = None
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+
+    @property
+    def orcid(self) -> Optional[str]:
+        """Backward-compat alias for unique_id."""
+        return self.unique_id
 
 
 class Instrument(BaseModel):

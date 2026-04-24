@@ -47,8 +47,9 @@ def _vlen(s):
 
 
 _ENTITY_ICONS = {
-    'dataset': '<ansired><b>[ds]</b></ansired>',
-    'sample':  '<ansimagenta><b>[s]</b></ansimagenta>',
+    'dataset':    '<ansired><b>[ds]</b></ansired>',
+    'sample':     '<ansimagenta><b>[s]</b></ansimagenta>',
+    'instrument': '<ansicyan><b>[i]</b></ansicyan>',
 }
 
 
@@ -79,9 +80,11 @@ try:
                 try:
                     users = self._client.users.list()
                     self._users = [
-                        (u.get('orcid') or '',
+                        (u.get('orcid') or u.get('unique_id') or '',
                          f"{u.get('first_name', '')} {u.get('last_name', '')}".strip())
-                        for u in users if u.get('orcid')
+                        for u in users
+                        if not u.get('is_service_account')
+                        and (u.get('orcid') or u.get('unique_id'))
                     ]
                 except Exception:
                     pass
@@ -140,9 +143,9 @@ try:
                 return
 
             if resource == 'use':
-                if len(words) > 2:
+                if len(words) > 2 or (trailing_space and len(words) == 2):
                     return
-                prefix = words[1] if len(words) == 2 and not trailing_space else ''
+                prefix = words[1] if len(words) == 2 else ''
                 for pid, title in self._lazy_projects():
                     if pid.startswith(prefix):
                         yield Completion(pid + ' ', start_position=-len(prefix),
@@ -205,18 +208,17 @@ try:
                 elif not trailing_space and len(words) == 2 and not words[1].startswith('-'):
                     prefix = words[1]
                 else:
-                    prefix = None
-                if prefix is not None:
-                    for uid, name, rtype in self._state.get('recent_mfids', []):
-                        if uid.startswith(prefix):
-                            icon = _ENTITY_ICONS.get(rtype, '<ansibrightblack>[?]</ansibrightblack>')
-                            yield Completion(
-                                uid + ' ',
-                                start_position=-len(prefix),
-                                display=_HTML(f'<b>{_html.escape(uid)}</b>'),
-                                display_meta=_HTML(f'{icon} <ansibrightblack>{_html.escape(name)}</ansibrightblack>'),
-                            )
-                    return
+                    return  # ID already filled — nothing more to complete
+                for uid, name, rtype in self._state.get('recent_mfids', []):
+                    if uid.startswith(prefix):
+                        icon = _ENTITY_ICONS.get(rtype, '<ansibrightblack>[?]</ansibrightblack>')
+                        yield Completion(
+                            uid + ' ',
+                            start_position=-len(prefix),
+                            display=_HTML(f'<b>{_html.escape(uid)}</b>'),
+                            display_meta=_HTML(f'{icon} <ansibrightblack>{_html.escape(name)}</ansibrightblack>'),
+                        )
+                return
 
             if resource == 'user' and len(words) >= 2:
                 # Complete the ORCID positional for admin subcommands.
@@ -227,10 +229,29 @@ try:
                     elif not trailing_space and len(words) == 3 and not words[2].startswith('-'):
                         prefix = words[2]
                     else:
-                        prefix = None
-                    if prefix is not None:
-                        yield from self._yield_user_completions(prefix)
-                        return
+                        return  # ORCID already filled
+                    yield from self._yield_user_completions(prefix)
+                    return
+
+            if resource == 'project' and len(words) >= 2:
+                # Complete the PROJECT_ID positional for subcommands that take one.
+                _PID_SUBS = {'get', 'update', 'list-users', 'add-user', 'remove-user'}
+                if words[1] in _PID_SUBS:
+                    if trailing_space and len(words) == 2:
+                        prefix = ''
+                    elif not trailing_space and len(words) == 3 and not words[2].startswith('-'):
+                        prefix = words[2]
+                    else:
+                        return  # project ID already filled
+                    for pid, title in self._lazy_projects():
+                        if pid.startswith(prefix):
+                            yield Completion(
+                                pid + ' ',
+                                start_position=-len(prefix),
+                                display=_HTML(f'<b>{pid}</b>'),
+                                display_meta=_HTML(f'<ansibrightblack>{_html.escape(title)}</ansibrightblack>'),
+                            )
+                    return
 
             if resource in ('cast', 'cd', 'ls'):
                 current = (words[1] if len(words) == 2 and not trailing_space else
@@ -442,8 +463,8 @@ class CrucibleShell:
             fetch_projects, fetch_deletions, fetch_user_label,
             fetch_current_project, fetch_current_session, fetch_api_label,
         )
-        ag = whoami_info.get('access_group_name', '')
-        self.is_admin = isinstance(ag, str) and ag.startswith('admin')
+        deletions = fetch_deletions(self.client)
+        self.is_admin = deletions is not None
 
         self.state = {
             'user_label':    fetch_user_label(self.client, whoami_info),
@@ -452,7 +473,7 @@ class CrucibleShell:
             'session':       fetch_current_session(),
             'api_label':     fetch_api_label(),
             'debug':         False,
-            'deletions':     fetch_deletions(self.client) if self.is_admin else [],
+            'deletions':     deletions or [],
             'recent_mfids':  deque(maxlen=15),
         }
 
@@ -463,16 +484,17 @@ class CrucibleShell:
             fetch_current_project, fetch_current_session, fetch_api_label,
         )
         with ThreadPoolExecutor(max_workers=2) as pool:
-            proj_f = pool.submit(fetch_projects, self.client)
-            del_f  = pool.submit(fetch_deletions, self.client) if self.is_admin else None
+            proj_f = pool.submit(fetch_projects,  self.client)
+            del_f  = pool.submit(fetch_deletions, self.client)
             new_projects  = proj_f.result()
-            new_deletions = del_f.result() if del_f is not None else []
+            new_deletions = del_f.result()
+        self.is_admin = new_deletions is not None
         self.state['projects']   = new_projects
         self.state['user_label'] = fetch_user_label(self.client)
         self.state['project']    = fetch_current_project()
         self.state['session']    = fetch_current_session()
         self.state['api_label']  = fetch_api_label()
-        self.state['deletions']  = new_deletions
+        self.state['deletions']  = new_deletions or []
         if self.completer is not None:
             self.completer._projects  = new_projects
             self.completer._deletions = new_deletions
