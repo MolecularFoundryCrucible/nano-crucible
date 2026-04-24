@@ -91,6 +91,7 @@ class DatasetOperations(BaseResource):
             result = self._request('get', '/datasets', params=params)
         return [self._parse(d) for d in result] if result else []
 
+
     def create(self, dataset, scientific_metadata: Optional[Dict] = None,
                keywords: Optional[List[str]] = None,
                get_user_info_function=None, verbose: bool = False,
@@ -115,6 +116,7 @@ class DatasetOperations(BaseResource):
         """
         if scientific_metadata is None:
             scientific_metadata = {}
+
         if keywords is None:
             keywords = []
 
@@ -141,31 +143,23 @@ class DatasetOperations(BaseResource):
                 dataset_details['timestamp'] = datetime.datetime.fromtimestamp(
                     mtime, tz=datetime.timezone.utc).isoformat()
 
-        # get owner_id if orcid provided
-        owner_orcid = dataset_details.get('owner_orcid')
-        logger.debug(f"owner_orcid={owner_orcid}")
-        if owner_orcid:
-            owner = self._client.users.get_or_create(owner_orcid, get_user_info_function)
-            logger.debug(f"owner={owner}")
-            dataset_details['owner_user_id'] = owner['id']
+        # # get or add project
+        # project_id = dataset_details.get('project_id')
+        # if project_id:
+        #     project = self._client.projects.get(project_id)
+        #     if not project:
+        #         raise ValueError(f"Project with ID '{project_id}' does not exist in the database.")
+        #     else:
+        #         project_id = project['project_id']
 
-        # get or add project
-        project_id = dataset_details.get('project_id')
-        if project_id:
-            project = self._client.projects.get(project_id)
-            if not project:
-                raise ValueError(f"Project with ID '{project_id}' does not exist in the database.")
-            else:
-                project_id = project['project_id']
-
-        # get instrument_id if instrument_name provided
-        instrument_name = dataset_details.get('instrument_name')
-        if instrument_name:
-            instrument = self._client.instruments.get(instrument_name=instrument_name)
-            if instrument:
-                dataset_details['instrument_id'] = instrument['id']
-            else:
-                raise ValueError(f'Provided instrument does not exist: {instrument_name}')
+        # # get instrument_id if instrument_name provided
+        # instrument_name = dataset_details.get('instrument_name')
+        # if instrument_name:
+        #     instrument = self._client.instruments.get(instrument_name=instrument_name)
+        #     if instrument:
+        #         dataset_details['instrument_id'] = instrument['id']
+        #     else:
+        #         raise ValueError(f'Provided instrument does not exist: {instrument_name}')
 
         logger.debug('Creating new dataset record...')
 
