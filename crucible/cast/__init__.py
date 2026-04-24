@@ -16,10 +16,14 @@ Load a .crux file and apply it against the Crucible API:
 from .models import CastConfig, CastDataset, CastSample, CastPlan, Link
 from .loader import load
 from .executor import CastExecutor
+from .builder import Cast, CastDatasetNode, CastSampleNode
 
 __all__ = [
     "load",
     "CastExecutor",
+    "Cast",
+    "CastDatasetNode",
+    "CastSampleNode",
     "CastConfig",
     "CastDataset",
     "CastSample",

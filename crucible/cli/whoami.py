@@ -22,7 +22,7 @@ def register_subcommand(subparsers):
     parser.add_argument(
         '-v', '--verbose',
         action='store_true',
-        help='Show all fields including employee number and access group IDs'
+        help='Show all fields including access group IDs'
     )
     parser.set_defaults(func=execute)
 
@@ -41,20 +41,19 @@ def execute(args):
         first = user.get('first_name', '')
         last  = user.get('last_name', '')
         name  = f"{first} {last}".strip() or None
+        uid = user.get('unique_id') or user.get('orcid')
         _p("Name",  name)
-        _p("ORCID", term.orcid_link(user.get('orcid')))
+        _p("ORCID", term.orcid_link(uid) if not user.get('is_service_account') else uid)
         _p("Email", user.get('email'))
-        lbl = user.get('lbl_email')
-        if lbl and lbl != user.get('email'):
-            _p("LBL Email", lbl)
+        if user.get('is_service_account'):
+            _p("Type", "service account")
 
         if getattr(args, 'verbose', False):
-            _p("ID",              user.get('id'))
-            _p("Employee number", user.get('employee_number'))
+            _p("ID", user.get('id'))
 
             # Dump any remaining user_info fields not already shown
-            _known = {'first_name', 'last_name', 'orcid', 'email', 'lbl_email',
-                      'id', 'employee_number'}
+            _known = {'first_name', 'last_name', 'unique_id', 'orcid',
+                      'email', 'id', 'is_service_account'}
             extras = {k: v for k, v in user.items() if k not in _known and v not in (None, '')}
             for key, val in extras.items():
                 _p(key.replace('_', ' ').title(), val)

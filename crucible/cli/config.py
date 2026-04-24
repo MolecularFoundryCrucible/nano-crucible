@@ -201,15 +201,16 @@ def cmd_init(args):
 
     # Get API key
     print("\n1. Crucible API Key (required)")
-    print("   Get your key from: https://crucible.lbl.gov/api/v1/user_apikey")
+    print("   Get your key from: https://crucible.lbl.gov/api/v2/user_apikey")
     api_key = input("   API Key: ").strip()
     if not api_key:
         print("Error: API key is required")
         sys.exit(1)
 
     # Get API URL
+    from crucible.config.config import Config as _Cfg
     print("\n2. Crucible API URL (optional)")
-    print("   Press Enter to use default: https://crucible.lbl.gov/api/v1")
+    print(f"   Press Enter to use the built-in default ({_Cfg.DEFAULT_API_URL})")
     api_url = input("   API URL: ").strip()
     if not api_url:
         api_url = None

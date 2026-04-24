@@ -131,13 +131,6 @@ Examples:
     )
 
     parser.add_argument(
-        '--lbl-email',
-        dest='lbl_email',
-        metavar='EMAIL',
-        help='LBL email address (optional)'
-    )
-
-    parser.add_argument(
         '--projects', '-p',
         metavar='IDS',
         help='Comma-separated list of project IDs to associate with user (optional)'
@@ -189,14 +182,15 @@ def _show_user(user):
 
     name_parts = [user.get('first_name') or '', user.get('last_name') or '']
     full_name = ' '.join(p for p in name_parts if p) or None
+    uid = user.get('unique_id') or user.get('orcid')
 
     term.header("User")
-    _p("Name",            full_name)
-    _p("ORCID",           term.orcid_link(user.get('orcid')))
-    _p("Email",           user.get('email'))
-    _p("LBL Email",       user.get('lbl_email'))
-    _p("Employee Number", user.get('employee_number'))
-    _p("ID",              user.get('id'))
+    _p("Name",    full_name)
+    _p("ORCID",   term.orcid_link(uid))
+    _p("Email",   user.get('email'))
+    if user.get('is_service_account'):
+        _p("Type", "service account")
+    _p("ID",      user.get('id'))
 
 
 def _execute_get(args):
@@ -233,7 +227,6 @@ def _execute_create(args):
     first_name = args.first_name
     last_name = args.last_name
     email = args.email
-    lbl_email = args.lbl_email
     projects = args.projects
 
     interactive = orcid is None or first_name is None or last_name is None
@@ -246,7 +239,6 @@ def _execute_create(args):
         while True:
             orcid = input("ORCID (format: 0000-0000-0000-000X): ").strip()
             if orcid:
-                # Validate ORCID format
                 if re.match(r'^\d{4}-\d{4}-\d{4}-\d{3}[0-9X]$', orcid):
                     break
                 else:
@@ -282,14 +274,6 @@ def _execute_create(args):
                 else:
                     logger.warning("Invalid email format. Skipping.")
 
-        if lbl_email is None:
-            lbl_email_input = input("LBL Email (optional, press Enter to skip): ").strip()
-            if lbl_email_input:
-                if re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', lbl_email_input):
-                    lbl_email = lbl_email_input
-                else:
-                    logger.warning("Invalid email format. Skipping.")
-
         if projects is None:
             projects_input = input("Project IDs (comma-separated, optional, press Enter to skip): ").strip()
             if projects_input:
@@ -300,11 +284,10 @@ def _execute_create(args):
         client = CrucibleClient()
 
         user = User(
-            orcid=orcid,
+            unique_id=orcid,
             first_name=first_name,
             last_name=last_name,
             email=email or None,
-            lbl_email=lbl_email or None,
         )
         project_ids = [p.strip() for p in projects.split(',')] if projects else []
         result = client.users.create(user, project_ids=project_ids)
@@ -337,8 +320,11 @@ Examples:
     parser.add_argument('--first-name',       dest='first_name',       metavar='NAME',  help='First name')
     parser.add_argument('--last-name',        dest='last_name',        metavar='NAME',  help='Last name')
     parser.add_argument('--email',            dest='email',            metavar='EMAIL', help='Email address')
-    parser.add_argument('--employee-number',  dest='employee_number',  metavar='NUM',   help='Employee number')
-    parser.set_defaults(func=_execute_update)
+    parser.add_argument('--service-account',    dest='is_service_account', action='store_true',
+                        help='Mark as a service account')
+    parser.add_argument('--no-service-account', dest='is_service_account', action='store_false',
+                        help='Unmark as a service account')
+    parser.set_defaults(func=_execute_update, is_service_account=None)
 
 
 def _execute_update(args):
@@ -346,14 +332,14 @@ def _execute_update(args):
     from crucible.client import CrucibleClient
 
     fields = {k: v for k, v in {
-        'first_name':      args.first_name,
-        'last_name':       args.last_name,
-        'email':           args.email,
-        'employee_number': args.employee_number,
+        'first_name':       args.first_name,
+        'last_name':        args.last_name,
+        'email':            args.email,
+        'is_service_account': args.is_service_account,
     }.items() if v is not None}
 
     if not fields:
-        logger.error("No fields to update. Provide at least one of: --first-name, --last-name, --email, --employee-number")
+        logger.error("No fields to update. Provide at least one of: --first-name, --last-name, --email, --service-account, --no-service-account")
         sys.exit(1)
 
     try:
@@ -412,8 +398,8 @@ def _execute_list(args):
         for user in users:
             name_parts = [user.get('first_name') or '', user.get('last_name') or '']
             name  = ' '.join(p for p in name_parts if p) or '—'
-            orcid = term.orcid_link(user.get('orcid')) or '—'
-            email = user.get('email') or user.get('lbl_email') or '—'
+            orcid = term.orcid_link(user.get('unique_id') or user.get('orcid')) or '—'
+            email = user.get('email') or '—'
             rows.append((name, orcid, email))
         term.table(rows, ['Name', 'ORCID', 'Email'], max_widths=[25, 19, 35])
 

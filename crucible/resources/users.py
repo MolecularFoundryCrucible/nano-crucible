@@ -21,35 +21,28 @@ class UserOperations(BaseResource):
     """
 
     def get(self, orcid: Optional[str] = None, email: Optional[str] = None) -> Dict:
-        """Get user details by ORCID or email.
+        """Get user details by unique ID (ORCID for real users) or email.
 
         **Requires admin permissions.**
 
         Args:
-            orcid (str, optional): ORCID identifier (format: 0000-0000-0000-000X)
+            orcid (str, optional): User unique ID (ORCID for real users)
             email (str, optional): User's email address
 
         Returns:
-            Dict: User profile with orcid, name, email, timestamps
+            Dict: User profile with unique_id, name, email, is_service_account
 
         Raises:
             ValueError: If neither orcid nor email is provided
 
         Note:
-            If both orcid and email are provided, only orcid will be used.
+            If both are provided, orcid takes precedence.
         """
         if orcid:
             return self._request('get', f'/users/{orcid}')
         elif email:
-            params = {"email": email}
-            result = self._request('get', '/users', params=params)
-            if not result:
-                params = {"lbl_email": email}
-                result = self._request('get', '/users', params=params)
-            if len(result) > 0:
-                return result[-1]
-            else:
-                return None
+            result = self._request('get', '/users', params={"email": email})
+            return result[-1] if result else None
         else:
             raise ValueError('please provide orcid or email')
 
@@ -63,7 +56,7 @@ class UserOperations(BaseResource):
             **kwargs: Additional query parameters for filtering
 
         Returns:
-            List[Dict]: List of user objects with orcid, name, email, timestamps
+            List[Dict]: List of user objects with unique_id, name, email, is_service_account
 
         Example:
             >>> users = client.users.list(limit=50)
@@ -86,7 +79,7 @@ class UserOperations(BaseResource):
         Args:
             user: User model or dict with user information.
                   Required fields: first_name, last_name, orcid.
-                  Optional: email, lbl_email, employee_number.
+                  Optional: email, is_service_account.
                   If a dict, may include a 'projects' key (list of project IDs)
                   as an alternative to the project_ids parameter.
             project_ids (list, optional): Project IDs to associate with the user.
@@ -183,7 +176,7 @@ class UserOperations(BaseResource):
         Args:
             orcid (str): User ORCID identifier
             **kwargs: Fields to update. Accepted: first_name, last_name,
-                      email, employee_number.
+                      email.
 
         Returns:
             Dict: Updated user object

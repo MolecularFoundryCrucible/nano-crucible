@@ -102,6 +102,13 @@ def execute(args):
             else:
                 _show_sample(resource, client, verbose=verbose, graph=graph)
 
+        elif resource_type == 'instrument':
+            from .instrument import _show_instrument
+            if output == 'json':
+                print(json.dumps(resource, indent=2, default=str))
+            else:
+                _show_instrument(resource)
+
         else:
             logger.error(f"Unknown resource type '{resource_type}' for: {args.resource_id}")
             sys.exit(1)

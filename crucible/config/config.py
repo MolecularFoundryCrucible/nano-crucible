@@ -117,15 +117,18 @@ class Config:
             )
         return key
 
+    # Default API URL for this release. Bumped on major API version changes.
+    DEFAULT_API_URL = 'https://crucible.lbl.gov/api/v2'
+
     @property
     def api_url(self):
         """
         Get the Crucible API URL.
 
         Returns:
-            str: The API URL (defaults to https://crucible.lbl.gov/api/v1)
+            str: The API URL (defaults to the version-appropriate built-in default)
         """
-        return self._data.get('api_url', 'https://crucible.lbl.gov/api/v1')
+        return self._data.get('api_url', self.DEFAULT_API_URL)
 
     @property
     def cache_dir(self):
@@ -380,7 +383,6 @@ def create_config_file(api_key, api_url=None, cache_dir=None,
     config_dir.mkdir(parents=True, exist_ok=True)
     config_file = config_dir / "config.ini"
 
-    default_api_url             = 'https://crucible.lbl.gov/api/v1'
     default_cache_dir           = str(user_cache_dir("nano-crucible"))
     default_graph_explorer_url  = 'https://crucible-graph-explorer-776258882599.us-central1.run.app'
 
@@ -392,7 +394,11 @@ def create_config_file(api_key, api_url=None, cache_dir=None,
         f.write(f"api_key = {api_key}\n\n")
 
         f.write("# Crucible API endpoint URL\n")
-        f.write(f"api_url = {api_url or default_api_url}\n\n")
+        f.write("# Leave unset to use the built-in default for this client version.\n")
+        if api_url:
+            f.write(f"api_url = {api_url}\n\n")
+        else:
+            f.write(f"# api_url = {Config.DEFAULT_API_URL}\n\n")
 
         f.write("# Crucible Graph Explorer URL\n")
         f.write(f"graph_explorer_url = {graph_explorer_url or default_graph_explorer_url}\n\n")

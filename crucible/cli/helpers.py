@@ -21,11 +21,11 @@ def fetch_projects(client):
 
 
 def fetch_deletions(client):
-    """Return pending deletion requests for autocomplete."""
+    """Return pending deletion requests, or None if the user lacks permission."""
     try:
         return client.deletions.list(status='pending')
     except Exception:
-        return []
+        return None
 
 
 def fetch_user_label(client, whoami_info=None):
@@ -38,7 +38,7 @@ def fetch_user_label(client, whoami_info=None):
         info = whoami_info if whoami_info is not None else client.whoami()
         user = info.get('user_info', {})
         name = f"{user.get('first_name', '')} {user.get('last_name', '')}".strip()
-        return name or info.get('access_group_name') or '?'
+        return name or info.get('user_unique_id') or '?'
     except Exception:
         return '?'
 
@@ -97,8 +97,9 @@ def cache_resource(shell_state, client, data, rtype, resource_id, **flags):
     # Track recently visited MFIDs for shell tab completion.
     recent = shell_state.get('recent_mfids')
     if recent is not None:
-        name = data.get('dataset_name' if rtype == 'dataset' else 'sample_name') or ''
-        # Remove stale entry for same uid (name may have changed), then prepend.
+        name_key = {'dataset': 'dataset_name', 'sample': 'sample_name',
+                    'instrument': 'instrument_name'}.get(rtype, 'name')
+        name = data.get(name_key) or ''
         for i, (uid, _, _) in enumerate(recent):
             if uid == resource_id:
                 del recent[i]
@@ -113,12 +114,16 @@ def cache_resource(shell_state, client, data, rtype, resource_id, **flags):
             '_files_future':    pool.submit(client.datasets.get_associated_files, resource_id),
             '_links_future':    pool.submit(client.datasets.get_download_links, resource_id),
         }
-    else:
+    elif rtype == 'sample':
         pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix='prefetch')
         futures = {
             '_graph_future': pool.submit(client.graphs.get, resource_id, recursive=True),
         }
-    pool.shutdown(wait=False)
+    else:
+        futures = {}
+
+    if futures:
+        pool.shutdown(wait=False)
     shell_state['last_resource'] = {
         'data': data, 'type': rtype, **futures, **flags
     }

@@ -91,6 +91,7 @@ def _show_dataset(dataset, client, verbose=False, graph=False, include_metadata=
     _p("Name",        dataset.get('dataset_name') or '(unnamed)')
     _p("MFID",        _ds_link(dataset))
     _p("Measurement", dataset.get('measurement'))
+    _p("Data Type",   dataset.get('data_type'))
     _p("Session",     dataset.get('session_name'))
     _p("Instrument",  dataset.get('instrument_name'))
     _p("Project",     dataset.get('project_id'))
@@ -102,13 +103,11 @@ def _show_dataset(dataset, client, verbose=False, graph=False, include_metadata=
         pub = dataset.get('public')
         _p("Public",      "Yes" if pub else ("No" if pub is not None else None))
         _p("Owner ORCID", term.orcid_link(dataset.get('owner_orcid')))
-        _p("Owner ID",    dataset.get('owner_user_id'))
 
         term.subheader("File")
-        _p("Data Format",   dataset.get('data_format'))
-        _p("Size",          term.fmt_size(dataset.get('size')))
-        _p("Instrument ID", dataset.get('instrument_id'))
-        _p("Source",        dataset.get('source_folder'))
+        _p("Data Format", dataset.get('data_format'))
+        _p("Size",        term.fmt_size(dataset.get('size')))
+        _p("Source",      dataset.get('source_folder'))
         _p("SHA256",        dataset.get('sha256_hash_file_to_upload'))
 
         term.subheader("Timing")
@@ -321,6 +320,14 @@ Examples:
         dest='data_format',
         metavar='FORMAT',
         help='Filter by data format (exact match)'
+    )
+
+    parser.add_argument(
+        '--data-type',
+        default=None,
+        dest='data_type',
+        metavar='TYPE',
+        help='Filter by data type (exact match)'
     )
 
     parser.add_argument(
@@ -574,6 +581,15 @@ Examples:
         default=None,
         metavar='FORMAT',
         help='Data format type (optional)'
+    )
+
+    # Data type
+    parser.add_argument(
+        '--data-type',
+        dest='data_type',
+        default=None,
+        metavar='TYPE',
+        help='Data type (optional)'
     )
 
     # Timestamp
@@ -1509,6 +1525,8 @@ def _execute_list(args):
         filters['session_name'] = args.session
     if args.data_format:
         filters['data_format'] = args.data_format
+    if args.data_type:
+        filters['data_type'] = args.data_type
     if args.instrument_name:
         filters['instrument_name'] = args.instrument_name
 
@@ -1742,6 +1760,7 @@ def _execute_create(args):
             public=args.public,
             instrument_name=args.instrument_name,
             data_format=args.data_format,
+            data_type=args.data_type,
             timestamp=timestamp,
         )
     except Exception as e:
@@ -1766,6 +1785,7 @@ def _execute_create(args):
     _p("Name",        parser.dataset_name)
     _p("Measurement", parser.measurement or term.dim("(server assigns)"))
     _p("Data format", parser.data_format)
+    _p("Data type",   parser.data_type)
     _p("Session",     parser.session_name)
     _p("Timestamp",   parser.timestamp)
     _p("Public",      "yes" if parser.public else "no")
