@@ -606,7 +606,7 @@ def _execute_list(args):
         sys.exit(1)
 
 
-def _show_sample(sample, client, verbose=False, graph=False, graph_data=None):
+def _show_sample(sample, client, verbose=False, graph=False, links=None):
     """Display sample fields. Extracted for reuse by top-level 'crucible get'."""
     _p = term.field_printer(14)
 
@@ -658,30 +658,26 @@ def _show_sample(sample, client, verbose=False, graph=False, graph_data=None):
         sid  = sample.get('unique_id')
         proj = sample.get('project_id') or ''
 
-        try:
-            graph_data  = graph_data or client.samples.graph(sid)
-        except Exception:
-            graph_data  = None
-        if not graph_data:
-            print(f"  {term.dim('⚠  Could not fetch graph info.')}")
+        links_list = links if links is not None else sample.get('links')
+        if links_list is None:
+            try:
+                links_list = client.get_links(sid)
+            except Exception:
+                links_list = None
+        if links_list is None:
+            print(f"  {term.dim('⚠  Could not fetch links.')}")
             return
-        nodes           = graph_data.get('nodes', [])
-        edges           = graph_data.get('edges', [])
-        node_map        = {n['id']: n for n in nodes}
 
-        linked_datasets = [node_map[e['target']] for e in edges
-                           if e['source'] == sid
-                           and node_map.get(e['target'], {}).get('entity_type') == 'dataset']
-        parent_samples  = [node_map[e['source']] for e in edges
-                           if e['target'] == sid
-                           and node_map.get(e['source'], {}).get('entity_type') == 'sample']
-        child_samples   = [node_map[e['target']] for e in edges
-                           if e['source'] == sid
-                           and node_map.get(e['target'], {}).get('entity_type') == 'sample']
+        linked_datasets = [l for l in links_list if l.get('relationship') == 'associated'
+                           and l.get('resource_type') == 'dataset']
+        parent_samples  = [l for l in links_list if l.get('relationship') == 'parent'
+                           and l.get('resource_type') == 'sample']
+        child_samples   = [l for l in links_list if l.get('relationship') == 'child'
+                           and l.get('resource_type') == 'sample']
 
         term.subheader(f"Linked Datasets ({len(linked_datasets)})")
         for ds in linked_datasets:
-            uid = ds['id']
+            uid = ds['unique_id']
             url = f"{_base}/{proj}/dataset/{uid}" if _base and proj else None
             print(f"  {term.mfid_link(uid, url)}  {ds.get('name') or '(unnamed)'}")
         if not linked_datasets:
@@ -689,7 +685,7 @@ def _show_sample(sample, client, verbose=False, graph=False, graph_data=None):
 
         term.subheader(f"Parents ({len(parent_samples)})")
         for p in parent_samples:
-            uid = p['id']
+            uid = p['unique_id']
             url = f"{_base}/{proj}/sample-graph/{uid}" if _base and proj else None
             print(f"  {term.mfid_link(uid, url)}  {p.get('name') or '(unnamed)'}")
         if not parent_samples:
@@ -697,7 +693,7 @@ def _show_sample(sample, client, verbose=False, graph=False, graph_data=None):
 
         term.subheader(f"Children ({len(child_samples)})")
         for c in child_samples:
-            uid = c['id']
+            uid = c['unique_id']
             url = f"{_base}/{proj}/sample-graph/{uid}" if _base and proj else None
             print(f"  {term.mfid_link(uid, url)}  {c.get('name') or '(unnamed)'}")
         if not child_samples:
@@ -710,21 +706,22 @@ def _execute_get(args):
     from crucible.client import CrucibleClient
     output = getattr(args, 'output', None)
     try:
+        graph  = getattr(args, 'graph', False)
         client = CrucibleClient()
-        sample = client.samples.get(args.sample_id)
+        sample = client.samples.get(args.sample_id, include_links=graph)
         if sample is None:
             logger.error(f"Sample not found: {args.sample_id}")
             sys.exit(1)
         from .helpers import cache_resource
         cache_resource(getattr(args, '_shell_state', None), client, sample, 'sample',
                        args.sample_id, verbose=getattr(args, 'verbose', False),
-                       graph=getattr(args, 'graph', False))
+                       graph=graph)
         if output == 'json':
             print(json.dumps(sample, indent=2, default=str))
         else:
             _show_sample(sample, client,
                          verbose=getattr(args, 'verbose', False),
-                         graph=getattr(args, 'graph', False))
+                         graph=graph)
     except Exception as e:
         logger.error(f"Error retrieving sample: {e}")
         if getattr(args, "debug", False):

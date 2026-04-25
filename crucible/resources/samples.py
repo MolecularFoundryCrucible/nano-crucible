@@ -30,16 +30,18 @@ class SampleOperations(BaseResource):
         from ..models import Sample
         return Sample.model_validate(raw).model_dump()
 
-    def get(self, sample_id: str) -> Dict:
+    def get(self, sample_id: str, include_links: bool = False) -> Dict:
         """Get sample information by ID.
 
         Args:
             sample_id (str): Sample unique identifier
+            include_links (bool): Whether to include immediate parent/child/associated links
 
         Returns:
-            Dict: Sample information with associated datasets
+            Dict: Sample information with optional links
         """
-        raw = self._request('get', f"/samples/{sample_id}")
+        params = {'include_links': True} if include_links else None
+        raw = self._request('get', f"/samples/{sample_id}", params=params)
         return self._parse(raw) if raw is not None else None
 
     def list(self, dataset_id: Optional[str] = None, parent_id: Optional[str] = None,

@@ -5,7 +5,7 @@ Pydantic models for Crucible API request and response objects.
 """
 
 from pydantic import BaseModel, ConfigDict, Field, AliasChoices
-from typing import Optional
+from typing import Dict, List, Optional
 
 #%% Models
 
@@ -25,6 +25,7 @@ class Sample(BaseModel):
     modification_time: Optional[str] = None
     project_id: Optional[str] = None
     description: Optional[str] = None
+    links: Optional[List[Dict]] = None
 
     model_config = ConfigDict(from_attributes=True, populate_by_name=True, extra='allow')
 
@@ -52,6 +53,7 @@ class Dataset(BaseModel):
     size: Optional[int] = None
     sha256_hash_file_to_upload: Optional[str] = None
     source_folder: Optional[str] = None
+    links: Optional[List[Dict]] = None
 
     model_config = ConfigDict(from_attributes=True, populate_by_name=True, extra='allow')
 
@@ -98,6 +100,9 @@ class Instrument(BaseModel):
     instrument_type: Optional[str] = None
     other_id: Optional[str] = None
     other_id_source: Optional[str] = None
+    resource_type: Optional[str] = None
+    creation_time: Optional[str] = None
+    modification_time: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 

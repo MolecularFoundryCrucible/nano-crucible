@@ -77,9 +77,9 @@ def fetch_api_label():
 def cache_resource(shell_state, client, data, rtype, resource_id, **flags):
     """Cache a fetched resource in the shell state and start background prefetches.
 
-    For datasets, prefetches graph, keywords, associated files, and download
+    For datasets, prefetches links, keywords, associated files, and download
     links in parallel so Alt+V / Alt+G can re-render without extra API calls.
-    For samples, only the graph is prefetched.
+    For samples, only links are prefetched.
 
     Args:
         shell_state: The shell's mutable state dict (args._shell_state), or
@@ -109,15 +109,15 @@ def cache_resource(shell_state, client, data, rtype, resource_id, **flags):
     if rtype == 'dataset':
         pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix='prefetch')
         futures = {
-            '_graph_future':    pool.submit(client.graphs.get, resource_id, recursive=True),
+            '_links_future':    pool.submit(client.get_links, resource_id),
             '_keywords_future': pool.submit(client.datasets.get_keywords, resource_id),
             '_files_future':    pool.submit(client.datasets.get_associated_files, resource_id),
-            '_links_future':    pool.submit(client.datasets.get_download_links, resource_id),
+            '_dl_links_future': pool.submit(client.datasets.get_download_links, resource_id),
         }
     elif rtype == 'sample':
         pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix='prefetch')
         futures = {
-            '_graph_future': pool.submit(client.graphs.get, resource_id, recursive=True),
+            '_links_future': pool.submit(client.get_links, resource_id),
         }
     else:
         futures = {}

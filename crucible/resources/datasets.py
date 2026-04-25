@@ -41,17 +41,22 @@ class DatasetOperations(BaseResource):
         from ..models import Dataset
         return Dataset.model_validate(raw).model_dump()
 
-    def get(self, dsid: str, include_metadata: bool = False) -> Dict:
-        """Get dataset details, optionally including scientific metadata.
+    def get(self, dsid: str, include_metadata: bool = False,
+            include_links: bool = False) -> Dict:
+        """Get dataset details, optionally including scientific metadata and links.
 
         Args:
             dsid (str): Dataset unique identifier
             include_metadata (bool): Whether to include scientific metadata
+            include_links (bool): Whether to include immediate parent/child/associated links
 
         Returns:
-            Dict: Dataset object with optional metadata
+            Dict: Dataset object with optional metadata and links
         """
-        raw = self._request('get', f'/datasets/{dsid}')
+        params = {}
+        if include_links:
+            params['include_links'] = True
+        raw = self._request('get', f'/datasets/{dsid}', params=params or None)
         if raw is None:
             return None
         dataset = self._parse(raw)

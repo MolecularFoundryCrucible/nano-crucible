@@ -555,24 +555,24 @@ class CrucibleShell:
     def _render_resource(self, last):
         """Re-render the cached resource with current verbose/graph flags."""
         try:
-            rtype      = last['type']
-            data       = last['data']
-            graph_data = self._resolve_future(last, '_graph_future') if last.get('graph') else None
+            rtype = last['type']
+            data  = last['data']
+            links = self._resolve_future(last, '_links_future', []) if last.get('graph') else None
             if rtype == 'dataset':
                 from .dataset import _show_dataset
                 prefetched = {
                     'keywords': self._resolve_future(last, '_keywords_future', []),
                     'af_list':  self._resolve_future(last, '_files_future', []),
-                    'link_map': self._resolve_future(last, '_links_future', {}),
+                    'link_map': self._resolve_future(last, '_dl_links_future', {}),
                 }
                 _show_dataset(data, self.client, verbose=last['verbose'],
                               graph=last['graph'],
                               include_metadata=last.get('include_metadata', False),
-                              graph_data=graph_data, prefetched=prefetched)
+                              links=links, prefetched=prefetched)
             elif rtype == 'sample':
                 from .sample import _show_sample
                 _show_sample(data, self.client, verbose=last['verbose'],
-                             graph=last['graph'], graph_data=graph_data)
+                             graph=last['graph'], links=links)
         except Exception as e:
             logger.error(f"Error rendering resource: {e}")
 

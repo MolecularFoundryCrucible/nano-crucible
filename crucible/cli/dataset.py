@@ -55,7 +55,7 @@ def _show_scientific_metadata(sci_md_wrapper):
             print(f"  {k:<{max_key}}  {v}")
 
 
-def _show_dataset(dataset, client, verbose=False, graph=False, include_metadata=False, graph_data=None, prefetched=None):
+def _show_dataset(dataset, client, verbose=False, graph=False, include_metadata=False, links=None, prefetched=None):
     """Display dataset fields. Extracted for reuse by top-level 'crucible get'."""
     _p = term.field_printer(14)
 
@@ -159,31 +159,27 @@ def _show_dataset(dataset, client, verbose=False, graph=False, include_metadata=
         _show_scientific_metadata(dataset.get('scientific_metadata'))
 
     if graph:
-        try:
-            graph_data  = graph_data or client.datasets.graph(dsid)
-        except Exception:
-            graph_data  = None
-        if not graph_data:
-            print(f"  {term.dim('⚠  Could not fetch graph info.')}")
+        links_list = links if links is not None else dataset.get('links')
+        if links_list is None:
+            try:
+                links_list = client.get_links(dsid)
+            except Exception:
+                links_list = None
+        if links_list is None:
+            print(f"  {term.dim('⚠  Could not fetch links.')}")
             return
-        nodes           = graph_data.get('nodes', [])
-        edges           = graph_data.get('edges', [])
-        node_map        = {n['id']: n for n in nodes}
-        proj            = dataset.get('project_id') or ''
 
-        linked_samples  = [node_map[e['source']] for e in edges
-                           if e['target'] == dsid
-                           and node_map.get(e['source'], {}).get('entity_type') == 'sample']
-        parent_datasets = [node_map[e['source']] for e in edges
-                           if e['target'] == dsid
-                           and node_map.get(e['source'], {}).get('entity_type') == 'dataset']
-        child_datasets  = [node_map[e['target']] for e in edges
-                           if e['source'] == dsid
-                           and node_map.get(e['target'], {}).get('entity_type') == 'dataset']
+        proj            = dataset.get('project_id') or ''
+        linked_samples  = [l for l in links_list if l.get('relationship') == 'associated'
+                           and l.get('resource_type') == 'sample']
+        parent_datasets = [l for l in links_list if l.get('relationship') == 'parent'
+                           and l.get('resource_type') == 'dataset']
+        child_datasets  = [l for l in links_list if l.get('relationship') == 'child'
+                           and l.get('resource_type') == 'dataset']
 
         term.subheader(f"Linked Samples ({len(linked_samples)})")
         for s in linked_samples:
-            uid = s['id']
+            uid = s['unique_id']
             url = f"{_base}/{proj}/sample-graph/{uid}" if _base and proj else None
             print(f"  {term.mfid_link(uid, url)}  {s.get('name') or '(unnamed)'}")
         if not linked_samples:
@@ -191,7 +187,7 @@ def _show_dataset(dataset, client, verbose=False, graph=False, include_metadata=
 
         term.subheader(f"Parents ({len(parent_datasets)})")
         for p in parent_datasets:
-            uid = p['id']
+            uid = p['unique_id']
             url = f"{_base}/{proj}/dataset/{uid}" if _base and proj else None
             print(f"  {term.mfid_link(uid, url)}  {p.get('name') or '(unnamed)'}")
         if not parent_datasets:
@@ -199,7 +195,7 @@ def _show_dataset(dataset, client, verbose=False, graph=False, include_metadata=
 
         term.subheader(f"Children ({len(child_datasets)})")
         for c in child_datasets:
-            uid = c['id']
+            uid = c['unique_id']
             url = f"{_base}/{proj}/dataset/{uid}" if _base and proj else None
             print(f"  {term.mfid_link(uid, url)}  {c.get('name') or '(unnamed)'}")
         if not child_datasets:
@@ -1615,7 +1611,9 @@ def _execute_get(args):
     include_metadata = output == 'json' or getattr(args, 'include_metadata', False)
     try:
         client = CrucibleClient()
-        dataset = client.datasets.get(args.dataset_id, include_metadata=include_metadata)
+        graph   = getattr(args, 'graph', False)
+        dataset = client.datasets.get(args.dataset_id, include_metadata=include_metadata,
+                                      include_links=graph)
         if dataset is None:
             logger.error(f"Dataset not found: {args.dataset_id}")
             sys.exit(1)
@@ -1628,7 +1626,7 @@ def _execute_get(args):
         else:
             _show_dataset(dataset, client,
                           verbose=getattr(args, 'verbose', False),
-                          graph=getattr(args, 'graph', False),
+                          graph=graph,
                           include_metadata=include_metadata)
     except Exception as e:
         logger.error(f"Error retrieving dataset: {e}")
