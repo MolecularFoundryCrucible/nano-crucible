@@ -500,13 +500,6 @@ class DatasetOperations(BaseResource):
             Dict: Metadata object returned by the legacy table endpoint
         """
         result = self._request('post', f'/datasets/{dsid}/scientific_metadata', json=metadata)
-        try:
-            self._request('post', f'/datasets/{dsid}/scientific_metadata_new', json=metadata)
-        except Exception:
-            logger.warning(
-                f'Failed to write scientific metadata to new table for dataset {dsid}. '
-                'The new scientific_metadata_new endpoint may not be available yet.'
-            )
         return result
 
     def update_scientific_metadata(self, dsid: str, metadata: Dict, overwrite: bool = False) -> Dict:
@@ -522,22 +515,8 @@ class DatasetOperations(BaseResource):
         """
         if overwrite:
             result = self._request('post', f'/datasets/{dsid}/scientific_metadata', json=metadata)
-            try:
-                self._request('post', f'/datasets/{dsid}/scientific_metadata_new', json=metadata)
-            except Exception:
-                logger.warning(
-                    f'Failed to overwrite scientific metadata in new table for dataset {dsid}. '
-                    'The new scientific_metadata_new endpoint may not be available yet.'
-                )
         else:
             result = self._request('patch', f'/datasets/{dsid}/scientific_metadata', json=metadata)
-            try:
-                self._request('patch', f'/datasets/{dsid}/scientific_metadata_new', json=metadata)
-            except Exception:
-                logger.warning(
-                    f'Failed to update scientific metadata in new table for dataset {dsid}. '
-                    'The new scientific_metadata_new endpoint may not be available yet.'
-                )
         return result
 
     def search_scientific_metadata(self, q: str, limit: Optional[int] = None) -> List[Dict]:
