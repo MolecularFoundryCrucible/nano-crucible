@@ -53,31 +53,6 @@ class Sample(BaseModel):
 class Dataset(BaseModel):
     '''
     Dataset record plus optional file payload. 
-    The dataset object captures structured metadata about the data being uploaded. 
-    Datasets can be linked to other datasets and samples in many-to-many relationships
-    to document hierarchical parent-child relationships (eg. raw data -> processed data)
-    and to capture information about the sample synthesis or measured properties.
-    
-    Attributes:
-        unique_id: System-assigned unique identifier for the dataset generated with the mfid package.
-        dataset_name: Human-readable name. Defaults to the file name of the uploaded file if not provided.
-        public: Whether the dataset is publicly visible. Defaults to False.
-        owner_orcid: ORCID of the person who owns this dataset. Defaults to the user associated with the API key used.
-        project_id: ID of the project this dataset belongs to. All project members will have access to the dataset.
-        instrument_name: Name of the instrument used to generate the data. If the instrument does not already exist in Crucible, it can be added with instruments.create()
-        measurement: General measurement description that captures the intention of the experiment. Terminology should be interpretable across institutions. (eg. "X-ray diffraction", "UV-Vis spectroscopy", "SEM imaging")
-        data_type: The type of data being uploaded. This is designed to be more institution-specific and useful as a label for determining the necessary postprocessing or expected data organization.
-        session_name:  Optional label for grouping related datasets acquired as part of a session (eg. TEM datasets acquired during a microscope session may share a similar context that is useful to capture with a session name). 
-        timestamp: Timestamp of when the data was collected(ISO 8601). Also accepted as ``creation_date`` from legacy API responses. Dataset record creation is stored separately as creation_time and assigned automatically. 
-        creation_time: Server-assigned creation timestamp (read-only).
-        modification_time: Server-assigned last-modification timestamp (read-only).
-        data_format: File format of the uploaded data (e.g., "csv", "txt", "dm4")
-        file_to_upload: Local path to the file to be uploaded. The client reads this file and uploads it as a multipart form submission.
-        size: Size of the file to be uploaded in bytes. This will be calculated on the server if not provided. 
-        sha256_hash_file_to_upload: SHA-256 hash of the file to be uploaded. This will be calculated on the server if not provided.
-        source_folder: Optional file path to where the data can be located if stored somewhere in addition to/instead of Crucible (eg. Google Drive, Dropbox, NERSC).
-        links: Raw list of link objects returned by the API when ``include_links=True`` is passed to the get endpoint.
-
     '''
     unique_id: Optional[str] = None
     dataset_name: Optional[str] = None
@@ -88,7 +63,6 @@ class Dataset(BaseModel):
     measurement: Optional[str] = None
     data_type: Optional[str] = None
     session_name: Optional[str] = None
-    # timestamp: user-settable date; accepts legacy 'creation_date' from the API
     timestamp: Optional[str] = Field(
         default=None,
         validation_alias=AliasChoices("timestamp", "creation_date")
@@ -101,6 +75,7 @@ class Dataset(BaseModel):
     size: Optional[int] = None
     sha256_hash_file_to_upload: Optional[str] = None
     source_folder: Optional[str] = None
+    scientific_metadata: Optional[Dict] = None
     links: Optional[List[Dict]] = None
 
     model_config = ConfigDict(from_attributes=True, populate_by_name=True, extra='allow')

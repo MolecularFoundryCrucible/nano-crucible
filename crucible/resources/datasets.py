@@ -56,17 +56,19 @@ class DatasetOperations(BaseResource):
         params = {}
         if include_links:
             params['include_links'] = True
+
+        if include_metadata:
+            params['include_metadata'] = True
+
         raw = self._request('get', f'/datasets/{dsid}', params=params or None)
         if raw is None:
             return None
+
+        print(raw)
         dataset = self._parse(raw)
-        if include_metadata:
-            try:
-                metadata = self._request('get', f'/datasets/{dsid}/scientific_metadata')
-                dataset['scientific_metadata'] = metadata or {}
-            except requests.exceptions.RequestException:
-                dataset['scientific_metadata'] = {}
+        print(dataset.get('scientific_metadata'))
         return dataset
+
 
     def list(self, sample_id: Optional[str] = None, include_metadata: bool = False,
              limit: int = DEFAULT_LIMIT, **kwargs) -> List[Dict]:
@@ -147,24 +149,6 @@ class DatasetOperations(BaseResource):
                 mtime = os.path.getmtime(main_file)
                 dataset_details['timestamp'] = datetime.datetime.fromtimestamp(
                     mtime, tz=datetime.timezone.utc).isoformat()
-
-        # # get or add project
-        # project_id = dataset_details.get('project_id')
-        # if project_id:
-        #     project = self._client.projects.get(project_id)
-        #     if not project:
-        #         raise ValueError(f"Project with ID '{project_id}' does not exist in the database.")
-        #     else:
-        #         project_id = project['project_id']
-
-        # # get instrument_id if instrument_name provided
-        # instrument_name = dataset_details.get('instrument_name')
-        # if instrument_name:
-        #     instrument = self._client.instruments.get(instrument_name=instrument_name)
-        #     if instrument:
-        #         dataset_details['instrument_id'] = instrument['id']
-        #     else:
-        #         raise ValueError(f'Provided instrument does not exist: {instrument_name}')
 
         logger.debug('Creating new dataset record...')
 
