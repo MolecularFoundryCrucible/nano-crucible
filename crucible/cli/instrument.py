@@ -97,6 +97,13 @@ def _register_get(subparsers):
     )
 
     parser.add_argument(
+        '--include-metadata',
+        action='store_true',
+        dest='include_metadata',
+        help='Include scientific metadata in output'
+    )
+
+    parser.add_argument(
         '-v', '--verbose',
         action='store_true',
         help='Verbose output'
@@ -281,7 +288,7 @@ def _execute_list(args):
         sys.exit(1)
 
 
-def _show_instrument(instrument):
+def _show_instrument(instrument, include_metadata=False):
     """Display instrument fields."""
     _p = term.field_printer(14)
 
@@ -298,24 +305,30 @@ def _show_instrument(instrument):
     _p("Description",  instrument.get('description'))
     if instrument.get('other_id'):
         _p("Other ID",     f"{instrument['other_id']}  ({instrument.get('other_id_source', '')})")
+    if include_metadata:
+        from .dataset import _show_scientific_metadata
+        _show_scientific_metadata(instrument.get('scientific_metadata'))
 
 
 def _execute_get(args):
     """Execute the 'instrument get' subcommand."""
     from crucible.client import CrucibleClient
+    include_metadata = getattr(args, 'include_metadata', False)
     try:
         client = CrucibleClient()
 
         if args.by_id:
-            instrument = client.instruments.get(instrument_id=args.instrument)
+            instrument = client.instruments.get(instrument_id=args.instrument,
+                                                include_metadata=include_metadata)
         else:
-            instrument = client.instruments.get(instrument_name=args.instrument)
+            instrument = client.instruments.get(instrument_name=args.instrument,
+                                                include_metadata=include_metadata)
 
         if instrument is None:
             logger.error(f"Instrument not found: {args.instrument}")
             sys.exit(1)
 
-        _show_instrument(instrument)
+        _show_instrument(instrument, include_metadata=include_metadata)
 
     except Exception as e:
         logger.error(f"Error retrieving instrument: {e}")
@@ -329,13 +342,16 @@ def _register_update(subparsers):
     """Register the 'instrument update' subcommand."""
     parser = subparsers.add_parser(
         'update',
-        help='Update an instrument record',
+        help='Update an instrument record or scientific metadata',
         description='Partially update an instrument record (requires admin permissions)',
         formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     crucible instrument update MFID001 --location "Building 67, Room 101"
     crucible instrument update MFID001 --owner "mf" --model "Titan 80-300"
+    crucible instrument update MFID001 --metadata '{"voltage_kv": 300, "cs_mm": 1.2}'
+    crucible instrument update MFID001 --metadata metadata.json
+    crucible instrument update MFID001 --metadata metadata.json --overwrite
 """
     )
     uid_arg = parser.add_argument(
@@ -350,11 +366,17 @@ Examples:
     parser.add_argument('--model',        dest='model',            metavar='MODEL', help='Model')
     parser.add_argument('--type',         dest='instrument_type',  metavar='TYPE',  help='Instrument type')
     parser.add_argument('--description',  dest='description',      metavar='TEXT',  help='Description')
+    parser.add_argument('--metadata',     dest='metadata',         metavar='JSON',
+                        help='Scientific metadata as JSON string or path to JSON file')
+    parser.add_argument('--overwrite',    action='store_true',
+                        help='Replace all existing scientific metadata instead of merging (only with --metadata)')
     parser.set_defaults(func=_execute_update)
 
 
 def _execute_update(args):
     """Execute the 'instrument update' subcommand."""
+    import json
+    from pathlib import Path
     from crucible.client import CrucibleClient
 
     fields = {k: v for k, v in {
@@ -367,15 +389,43 @@ def _execute_update(args):
         'description':     args.description,
     }.items() if v is not None}
 
-    if not fields:
-        logger.error("No fields to update. Provide at least one of: --name, --owner, --location, --manufacturer, --model, --type, --description")
+    has_metadata = bool(getattr(args, 'metadata', None))
+
+    if not fields and not has_metadata:
+        logger.error("No fields to update. Provide at least one of: --name, --owner, --location, --manufacturer, --model, --type, --description, --metadata")
         sys.exit(1)
+
+    metadata_dict = None
+    if has_metadata:
+        metadata_path = Path(args.metadata)
+        if metadata_path.exists():
+            try:
+                with open(metadata_path, 'r') as f:
+                    metadata_dict = json.load(f)
+            except json.JSONDecodeError as e:
+                logger.error(f"Error: Invalid JSON in file {metadata_path}: {e}")
+                sys.exit(1)
+        else:
+            try:
+                metadata_dict = json.loads(args.metadata)
+            except json.JSONDecodeError:
+                logger.error(f"Error: '{args.metadata}' is not valid JSON and no such file exists.")
+                sys.exit(1)
 
     try:
         client = CrucibleClient()
-        result = client.instruments.update(args.unique_id, **fields)
-        logger.info("Instrument updated")
-        _show_instrument(result)
+
+        if fields:
+            result = client.instruments.update(args.unique_id, **fields)
+            logger.info("✓ Instrument updated")
+            _show_instrument(result)
+
+        if metadata_dict is not None:
+            overwrite = getattr(args, 'overwrite', False)
+            client.instruments.update_scientific_metadata(args.unique_id, metadata_dict, overwrite=overwrite)
+            action = "replaced" if overwrite else "updated"
+            logger.info(f"✓ Scientific metadata {action} for instrument {args.unique_id}")
+
     except Exception as e:
         logger.error(f"Error updating instrument: {e}")
         if getattr(args, "debug", False):

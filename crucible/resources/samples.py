@@ -30,27 +30,34 @@ class SampleOperations(BaseResource):
         from ..models import Sample
         return Sample.model_validate(raw).model_dump()
 
-    def get(self, sample_id: str, include_links: bool = False) -> Dict:
+    def get(self, sample_id: str, include_links: bool = False,
+            include_metadata: bool = False) -> Dict:
         """Get sample information by ID.
 
         Args:
             sample_id (str): Sample unique identifier
             include_links (bool): Whether to include immediate parent/child/associated links
+            include_metadata (bool): Whether to include scientific metadata
 
         Returns:
-            Dict: Sample information with optional links
+            Dict: Sample information with optional links and metadata
         """
-        params = {'include_links': True} if include_links else None
-        raw = self._request('get', f"/samples/{sample_id}", params=params)
+        params = {}
+        if include_links:
+            params['include_links'] = True
+        if include_metadata:
+            params['include_metadata'] = True
+        raw = self._request('get', f"/samples/{sample_id}", params=params or None)
         return self._parse(raw) if raw is not None else None
 
     def list(self, dataset_id: Optional[str] = None, parent_id: Optional[str] = None,
-             limit: int = DEFAULT_LIMIT, **kwargs) -> List[Dict]:
+             include_metadata: bool = False, limit: int = DEFAULT_LIMIT, **kwargs) -> List[Dict]:
         """List samples with optional filtering.
 
         Args:
             dataset_id (str, optional): Get samples from specific dataset
             parent_id (str, optional): Get child samples from parent (deprecated)
+            include_metadata (bool): Include scientific metadata in results
             limit (int): Maximum number of results to return (default: 100)
             **kwargs: Query parameters for filtering samples
 
@@ -58,6 +65,7 @@ class SampleOperations(BaseResource):
             List[Dict]: Sample information
         """
         params = {**kwargs}
+        params['include_metadata'] = include_metadata
         if dataset_id:
             result = self._request('get', f"/datasets/{dataset_id}/samples", params=params)
         elif parent_id:
@@ -248,6 +256,34 @@ class SampleOperations(BaseResource):
             self._request('post', f"/samples/{parent_id}/children/{child_id}")
 
         return upd_samp
+
+    def add_scientific_metadata(self, sample_id: str, metadata: Dict) -> Dict:
+        """Create scientific metadata for a sample.
+
+        Args:
+            sample_id (str): Sample unique identifier
+            metadata (Dict): Scientific metadata dictionary
+
+        Returns:
+            Dict: Created metadata object
+        """
+        return self._request('post', f'/metadata/{sample_id}', json=metadata)
+
+    def update_scientific_metadata(self, sample_id: str, metadata: Dict,
+                                   overwrite: bool = False) -> Dict:
+        """Update scientific metadata for a sample.
+
+        Args:
+            sample_id (str): Sample unique identifier
+            metadata (Dict): Scientific metadata dictionary
+            overwrite (bool): If True, replace all metadata (POST); if False, merge with existing (PATCH)
+
+        Returns:
+            Dict: Updated metadata object
+        """
+        if overwrite:
+            return self._request('post', f'/metadata/{sample_id}', json=metadata)
+        return self._request('patch', f'/metadata/{sample_id}', json=metadata)
 
     def add_dataset(self, sample_id: str, dataset_id: str) -> Dict:
         """Link a dataset to this sample.

@@ -64,10 +64,7 @@ class DatasetOperations(BaseResource):
         if raw is None:
             return None
 
-        print(raw)
-        dataset = self._parse(raw)
-        print(dataset.get('scientific_metadata'))
-        return dataset
+        return self._parse(raw)
 
 
     def list(self, sample_id: Optional[str] = None, include_metadata: bool = False,
@@ -469,25 +466,19 @@ class DatasetOperations(BaseResource):
         return self._request('get', f'/datasets/{dsid}/scientific_metadata')
 
     def add_scientific_metadata(self, dsid: str, metadata: Dict) -> Dict:
-        """Create or replace scientific metadata for a dataset in both the old and new tables.
-
-        Sends a POST request to the legacy ``ScientificMetadata`` table
-        (``/datasets/{dsid}/scientific_metadata``) and, in parallel, to the new
-        ``NewScientificMetadata`` table (``/datasets/{dsid}/scientific_metadata_new``)
-        which supports JSONB full-text search.
+        """Create scientific metadata for a dataset.
 
         Args:
             dsid (str): Dataset unique identifier
             metadata (Dict): Scientific metadata dictionary
 
         Returns:
-            Dict: Metadata object returned by the legacy table endpoint
+            Dict: Created metadata object
         """
-        result = self._request('post', f'/datasets/{dsid}/scientific_metadata', json=metadata)
-        return result
+        return self._request('post', f'/metadata/{dsid}', json=metadata)
 
     def update_scientific_metadata(self, dsid: str, metadata: Dict, overwrite: bool = False) -> Dict:
-        """Create or replace scientific metadata for a dataset in both the old and new tables.
+        """Update scientific metadata for a dataset.
 
         Args:
             dsid (str): Dataset unique identifier
@@ -495,13 +486,11 @@ class DatasetOperations(BaseResource):
             overwrite (bool): If True, replace all metadata (POST); if False, merge with existing (PATCH)
 
         Returns:
-            Dict: Updated metadata object from the legacy table
+            Dict: Updated metadata object
         """
         if overwrite:
-            result = self._request('post', f'/datasets/{dsid}/scientific_metadata', json=metadata)
-        else:
-            result = self._request('patch', f'/datasets/{dsid}/scientific_metadata', json=metadata)
-        return result
+            return self._request('post', f'/metadata/{dsid}', json=metadata)
+        return self._request('patch', f'/metadata/{dsid}', json=metadata)
 
     def search_scientific_metadata(self, q: str, limit: Optional[int] = None) -> List[Dict]:
         """Perform a ranked full-text search on scientific metadata.

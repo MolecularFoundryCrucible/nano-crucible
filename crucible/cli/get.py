@@ -49,7 +49,7 @@ Examples:
         '--include-metadata',
         action='store_true',
         dest='include_metadata',
-        help='Include scientific metadata (datasets only)'
+        help='Include scientific metadata'
     )
 
     parser.add_argument(
@@ -101,14 +101,15 @@ def execute(args):
             if output == 'json':
                 print(json.dumps(resource, indent=2, default=str))
             else:
-                _show_sample(resource, client, verbose=verbose, graph=graph)
+                _show_sample(resource, client, verbose=verbose, graph=graph,
+                             include_metadata=include_metadata)
 
         elif resource_type == 'instrument':
             from .instrument import _show_instrument
             if output == 'json':
                 print(json.dumps(resource, indent=2, default=str))
             else:
-                _show_instrument(resource)
+                _show_instrument(resource, include_metadata=include_metadata)
 
         else:
             logger.error(f"Unknown resource type '{resource_type}' for: {args.resource_id}")

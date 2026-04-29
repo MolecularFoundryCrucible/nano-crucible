@@ -45,6 +45,7 @@ class Sample(BaseModel):
     modification_time: Optional[str] = None
     project_id: Optional[str] = None
     description: Optional[str] = None
+    scientific_metadata: Optional[Dict] = None
     links: Optional[List[Dict]] = None
 
     model_config = ConfigDict(from_attributes=True, populate_by_name=True, extra='allow')
@@ -169,6 +170,7 @@ class Instrument(BaseModel):
     resource_type: Optional[str] = None
     creation_time: Optional[str] = None
     modification_time: Optional[str] = None
+    scientific_metadata: Optional[Dict] = None
 
     model_config = ConfigDict(from_attributes=True)
 
