@@ -230,7 +230,7 @@ class CrucibleClient:
             resource_id (str): The unique identifier (mfid) of the resource
             resource_type (str, optional): Resource type ('sample', 'dataset', 'instrument').
                                           If not provided, will be auto-detected.
-            include_metadata (bool): Include scientific metadata (datasets only)
+            include_metadata (bool): Include scientific metadata
             include_links (bool): Include immediate parent/child/associated links
 
         Returns:
@@ -243,22 +243,19 @@ class CrucibleClient:
             params = {}
             if include_links:
                 params['include_links'] = True
-            result = self._request('get', f"/resources/{resource_id}", params=params or None)
-            if include_metadata and result.get("resource_type") == "dataset":
-                try:
-                    metadata = self._request('get', f"/datasets/{resource_id}/scientific_metadata")
-                    result['scientific_metadata'] = metadata or {}
-                except Exception:
-                    result['scientific_metadata'] = {}
-            return result
+            if include_metadata:
+                params['include_metadata'] = True
+            return self._request('get', f"/resources/{resource_id}", params=params or None)
 
         if resource_type == "sample":
-            return self.samples.get(resource_id, include_links=include_links)
+            return self.samples.get(resource_id, include_links=include_links,
+                                    include_metadata=include_metadata)
         elif resource_type == "dataset":
             return self.datasets.get(resource_id, include_metadata=include_metadata,
                                      include_links=include_links)
         elif resource_type == "instrument":
-            return self.instruments.get(instrument_id=resource_id)
+            return self.instruments.get(instrument_id=resource_id,
+                                        include_metadata=include_metadata)
         else:
             raise ValueError(f"Unknown or unsupported resource type: {resource_type}")
 

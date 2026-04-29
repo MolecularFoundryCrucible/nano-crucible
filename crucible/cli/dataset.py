@@ -37,11 +37,12 @@ def _show_scientific_metadata(sci_md_wrapper):
     """Display scientific metadata, unwrapping the API envelope."""
     if not sci_md_wrapper:
         return
-    actual = sci_md_wrapper.get('scientific_metadata') if isinstance(sci_md_wrapper, dict) else sci_md_wrapper
-    if not actual:
-        term.subheader("Scientific Metadata")
-        print("  (empty)")
-        return
+    actual = sci_md_wrapper
+    # actual = sci_md_wrapper.get('scientific_metadata') if isinstance(sci_md_wrapper, dict) else sci_md_wrapper
+    # if not actual:
+    #     term.subheader("Scientific Metadata")
+    #     print("  (empty)")
+    #     return
     term.subheader(f"Scientific Metadata ({len(actual)} fields)")
     max_key = max(len(k) for k in actual)
     for k, v in actual.items():

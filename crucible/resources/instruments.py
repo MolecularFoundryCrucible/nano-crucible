@@ -20,24 +20,29 @@ class InstrumentOperations(BaseResource):
     Access via: client.instruments.get(), client.instruments.list(), etc.
     """
 
-    def list(self, limit: int = DEFAULT_LIMIT) -> List[Dict]:
+    def list(self, include_metadata: bool = False, limit: int = DEFAULT_LIMIT) -> List[Dict]:
         """List all available instruments.
 
         Args:
+            include_metadata (bool): Include scientific metadata in results
             limit (int): Maximum number of results to return
 
         Returns:
             List[Dict]: Instrument objects with specifications and metadata
         """
-        result = self._request('get', '/instruments')
-        return result
+        params = {}
+        if include_metadata:
+            params['include_metadata'] = True
+        return self._request('get', '/instruments', params=params or None)
 
-    def get(self, instrument_name: Optional[str] = None, instrument_id: Optional[str] = None) -> Dict:
+    def get(self, instrument_name: Optional[str] = None, instrument_id: Optional[str] = None,
+            include_metadata: bool = False) -> Dict:
         """Get instrument information by name or ID.
 
         Args:
             instrument_name (str, optional): Name of the instrument
             instrument_id (str, optional): Unique ID of the instrument
+            include_metadata (bool): Whether to include scientific metadata
 
         Returns:
             Dict or None: Instrument information if found, None otherwise
@@ -53,6 +58,9 @@ class InstrumentOperations(BaseResource):
             params = {"unique_id": instrument_id}
         else:
             params = {"instrument_name": instrument_name}
+
+        if include_metadata:
+            params['include_metadata'] = True
 
         found_inst = self._request('get', '/instruments', params=params)
 
@@ -106,6 +114,34 @@ class InstrumentOperations(BaseResource):
             Dict: Updated instrument object
         """
         return self._request('patch', f'/instruments/{unique_id}', json=kwargs)
+
+    def add_scientific_metadata(self, instrument_id: str, metadata: Dict) -> Dict:
+        """Create scientific metadata for an instrument.
+
+        Args:
+            instrument_id (str): Instrument unique identifier
+            metadata (Dict): Scientific metadata dictionary
+
+        Returns:
+            Dict: Created metadata object
+        """
+        return self._request('post', f'/metadata/{instrument_id}', json=metadata)
+
+    def update_scientific_metadata(self, instrument_id: str, metadata: Dict,
+                                   overwrite: bool = False) -> Dict:
+        """Update scientific metadata for an instrument.
+
+        Args:
+            instrument_id (str): Instrument unique identifier
+            metadata (Dict): Scientific metadata dictionary
+            overwrite (bool): If True, replace all metadata (POST); if False, merge with existing (PATCH)
+
+        Returns:
+            Dict: Updated metadata object
+        """
+        if overwrite:
+            return self._request('post', f'/metadata/{instrument_id}', json=metadata)
+        return self._request('patch', f'/metadata/{instrument_id}', json=metadata)
 
     def get_or_create(self, instrument_name: str, location: Optional[str] = None,
                      instrument_owner: Optional[str] = None) -> Dict:

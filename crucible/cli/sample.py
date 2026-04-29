@@ -7,6 +7,7 @@ Provides sample-related operations: list, get, create, link, etc.
 """
 
 import sys
+import json
 import logging
 
 logger = logging.getLogger(__name__)
@@ -167,12 +168,19 @@ def _register_get(subparsers):
     )
 
     parser.add_argument(
+        '--include-metadata',
+        action='store_true',
+        dest='include_metadata',
+        help='Include scientific metadata in output'
+    )
+
+    parser.add_argument(
         '-o', '--output',
         dest='output',
         choices=['json'],
         default=None,
         metavar='FORMAT',
-        help='Output format: json'
+        help='Output format: json (always includes scientific metadata)'
     )
 
     parser.set_defaults(func=_execute_get)
@@ -255,17 +263,20 @@ def _register_update(subparsers):
     fields = _sample_updatable_fields()
     parser = subparsers.add_parser(
         'update',
-        help='Update sample fields',
-        description='Update fields of an existing sample',
+        help='Update sample fields or scientific metadata',
+        description='Update fields or scientific metadata of an existing sample',
         formatter_class=term.ColorHelpFormatter,
         epilog=f"""
-Updatable fields:
+Updatable fields (use --set):
     {', '.join(fields)}
 
 Examples:
     crucible sample update SAMPLE_ID --set sample_name="Silicon Wafer B"
     crucible sample update SAMPLE_ID --set description="Annealed at 900C"
     crucible sample update SAMPLE_ID --set sample_type=substrate --set project_id=my-project
+    crucible sample update SAMPLE_ID --metadata '{{"thickness_nm": 50, "substrate": "SiO2"}}'
+    crucible sample update SAMPLE_ID --metadata metadata.json
+    crucible sample update SAMPLE_ID --metadata metadata.json --overwrite
 """
     )
 
@@ -282,8 +293,20 @@ Examples:
         action='append',
         dest='set_fields',
         metavar='KEY=VALUE',
-        required=True,
         help='Set a sample field (repeatable). Values are auto-cast to int, float, bool, or string.'
+    )
+
+    parser.add_argument(
+        '--metadata',
+        default=None,
+        metavar='JSON',
+        help='Scientific metadata as JSON string or path to JSON file'
+    )
+
+    parser.add_argument(
+        '--overwrite',
+        action='store_true',
+        help='Replace all existing scientific metadata instead of merging (only with --metadata)'
     )
 
     parser.add_argument(
@@ -297,30 +320,62 @@ Examples:
 
 def _execute_update(args):
     """Execute the 'sample update' subcommand."""
+    from pathlib import Path
     from crucible.client import CrucibleClient
-    valid_fields = set(_sample_updatable_fields())
+
+    has_set = bool(getattr(args, 'set_fields', None))
+    has_metadata = bool(getattr(args, 'metadata', None))
+
+    if not has_set and not has_metadata:
+        logger.error("Error: provide at least one of --set KEY=VALUE or --metadata JSON")
+        sys.exit(1)
+
     updates = {}
-    for field in args.set_fields:
-        if '=' not in field:
-            logger.error(f"Error: --set requires KEY=VALUE format, got: '{field}'")
-            sys.exit(1)
-        key, _, value = field.partition('=')
-        key = key.strip()
-        if key not in valid_fields:
-            logger.error(
-                f"Unknown field '{key}'.\n"
-                f"Valid fields: {', '.join(sorted(valid_fields))}"
-            )
-            sys.exit(1)
-        updates[key] = value  # samples API expects strings; no cast needed
+    if has_set:
+        valid_fields = set(_sample_updatable_fields())
+        for field in args.set_fields:
+            if '=' not in field:
+                logger.error(f"Error: --set requires KEY=VALUE format, got: '{field}'")
+                sys.exit(1)
+            key, _, value = field.partition('=')
+            key = key.strip()
+            if key not in valid_fields:
+                logger.error(
+                    f"Unknown field '{key}'.\n"
+                    f"Valid fields: {', '.join(sorted(valid_fields))}"
+                )
+                sys.exit(1)
+            updates[key] = value
+
+    metadata_dict = None
+    if has_metadata:
+        metadata_path = Path(args.metadata)
+        if metadata_path.exists():
+            try:
+                with open(metadata_path, 'r') as f:
+                    metadata_dict = json.load(f)
+            except json.JSONDecodeError as e:
+                logger.error(f"Error: Invalid JSON in file {metadata_path}: {e}")
+                sys.exit(1)
+        else:
+            try:
+                metadata_dict = json.loads(args.metadata)
+            except json.JSONDecodeError:
+                logger.error(f"Error: '{args.metadata}' is not valid JSON and no such file exists.")
+                sys.exit(1)
 
     try:
         client = CrucibleClient()
-        client.samples.update(args.sample_id, **updates)
 
-        logger.info(f"✓ Sample {args.sample_id} updated")
-        if getattr(args, "debug", False):
-            logger.debug(f"Updated fields: {list(updates.keys())}")
+        if updates:
+            client.samples.update(args.sample_id, **updates)
+            logger.info(f"✓ Sample {args.sample_id} fields updated")
+
+        if metadata_dict is not None:
+            overwrite = getattr(args, 'overwrite', False)
+            client.samples.update_scientific_metadata(args.sample_id, metadata_dict, overwrite=overwrite)
+            action = "replaced" if overwrite else "updated"
+            logger.info(f"✓ Scientific metadata {action} for sample {args.sample_id}")
 
     except Exception as e:
         logger.error(f"Error updating sample: {e}")
@@ -606,7 +661,7 @@ def _execute_list(args):
         sys.exit(1)
 
 
-def _show_sample(sample, client, verbose=False, graph=False, links=None):
+def _show_sample(sample, client, verbose=False, graph=False, include_metadata=False, links=None):
     """Display sample fields. Extracted for reuse by top-level 'crucible get'."""
     _p = term.field_printer(14)
 
@@ -645,6 +700,10 @@ def _show_sample(sample, client, verbose=False, graph=False, links=None):
     _p("Project",     sample.get('project_id'))
     _p("Timestamp",   term.fmt_ts(sample.get('timestamp')))
     _p("Description", sample.get('description'))
+
+    if include_metadata:
+        from .dataset import _show_scientific_metadata
+        _show_scientific_metadata(sample.get('scientific_metadata'))
 
     if verbose or graph:
         term.subheader("Ownership")
@@ -705,10 +764,12 @@ def _execute_get(args):
     import json
     from crucible.client import CrucibleClient
     output = getattr(args, 'output', None)
+    include_metadata = output == 'json' or getattr(args, 'include_metadata', False)
     try:
         graph  = getattr(args, 'graph', False)
         client = CrucibleClient()
-        sample = client.samples.get(args.sample_id, include_links=graph)
+        sample = client.samples.get(args.sample_id, include_links=graph,
+                                    include_metadata=include_metadata)
         if sample is None:
             logger.error(f"Sample not found: {args.sample_id}")
             sys.exit(1)
@@ -721,7 +782,8 @@ def _execute_get(args):
         else:
             _show_sample(sample, client,
                          verbose=getattr(args, 'verbose', False),
-                         graph=graph)
+                         graph=graph,
+                         include_metadata=include_metadata)
     except Exception as e:
         logger.error(f"Error retrieving sample: {e}")
         if getattr(args, "debug", False):
