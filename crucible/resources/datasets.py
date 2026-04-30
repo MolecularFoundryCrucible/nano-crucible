@@ -754,8 +754,7 @@ class DatasetOperations(BaseResource):
             List[Dict]: Children datasets
         """
         params = {k: v for k, v in kwargs.items() if v is not None}
-        params.update({'limit': limit, 'offset': offset})
-        return self._request('get', f"/datasets/{parent_dataset_id}/children", params=params) or []
+        return self._paginate(f"/datasets/{parent_dataset_id}/children", params, limit, offset)
 
     def list_parents(self, child_dataset_id: str, limit: int = DEFAULT_LIMIT,
                      offset: int = 0, **kwargs) -> List[Dict]:
@@ -771,8 +770,7 @@ class DatasetOperations(BaseResource):
             List[Dict]: Parent datasets
         """
         params = {k: v for k, v in kwargs.items() if v is not None}
-        params.update({'limit': limit, 'offset': offset})
-        return self._request('get', f"/datasets/{child_dataset_id}/parents", params=params) or []
+        return self._paginate(f"/datasets/{child_dataset_id}/parents", params, limit, offset)
 
     # Special Processing Methods
     def request_carrier_segmentation(self, dsid: str) -> Dict:

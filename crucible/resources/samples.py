@@ -72,19 +72,14 @@ class SampleOperations(BaseResource):
         if include_metadata:
             params['include_metadata'] = True
         if dataset_id:
-            # plain list endpoint - pass limit/offset directly
-            params.update({'limit': limit, 'offset': offset})
-            result = self._request('get', f"/datasets/{dataset_id}/samples", params=params)
-            return [self._parse(s) for s in result] if result else []
+            endpoint = f"/datasets/{dataset_id}/samples"
         elif parent_id:
             logger.warning('Using parent_id with list() is deprecated. Please use list_children() instead.')
-            params.update({'limit': limit, 'offset': offset})
-            result = self._request('get', f"/samples/{parent_id}/children", params=params)
-            return [self._parse(s) for s in result] if result else []
+            endpoint = f"/samples/{parent_id}/children"
         else:
-            # paginated envelope endpoint
-            raw = self._paginate("/samples", params, limit, offset)
-            return [self._parse(s) for s in raw]
+            endpoint = "/samples"
+        raw = self._paginate(endpoint, params, limit, offset)
+        return [self._parse(s) for s in raw]
 
     def list_parents(self, sample_id: str, limit: int = DEFAULT_LIMIT,
                      offset: int = 0, **kwargs) -> List[Dict]:
@@ -100,8 +95,7 @@ class SampleOperations(BaseResource):
             List[Dict]: Parent samples
         """
         params = {k: v for k, v in kwargs.items() if v is not None}
-        params.update({'limit': limit, 'offset': offset})
-        return self._request('get', f"/samples/{sample_id}/parents", params=params) or []
+        return self._paginate(f"/samples/{sample_id}/parents", params, limit, offset)
 
     def list_children(self, sample_id: str, limit: int = DEFAULT_LIMIT,
                       offset: int = 0, **kwargs) -> List[Dict]:
@@ -117,8 +111,7 @@ class SampleOperations(BaseResource):
             List[Dict]: Children samples
         """
         params = {k: v for k, v in kwargs.items() if v is not None}
-        params.update({'limit': limit, 'offset': offset})
-        return self._request('get', f"/samples/{sample_id}/children", params=params) or []
+        return self._paginate(f"/samples/{sample_id}/children", params, limit, offset)
 
     def create(self, unique_id: Optional[str] = None, sample_name: Optional[str] = None,
                description: Optional[str] = None, timestamp: Optional[str] = None,

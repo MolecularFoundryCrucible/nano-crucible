@@ -105,8 +105,7 @@ class ProjectOperations(BaseResource):
         Returns:
             List[Dict]: Project team members (excludes project lead)
         """
-        return self._request('get', f'/projects/{project_id}/users',
-                             params={'limit': limit, 'offset': offset}) or []
+        return self._paginate(f'/projects/{project_id}/users', {}, limit, offset)
 
     def update(self, project_id: str, **kwargs) -> Dict:
         """Partially update a project record.

@@ -10,6 +10,7 @@ admins approve or reject them via /deletion_requests endpoints.
 from typing import Dict, List, Optional
 
 from .base import BaseResource
+from ..constants import DEFAULT_LIMIT
 from ..models import DeletionRequest
 
 
@@ -39,12 +40,15 @@ class DeletionOperations(BaseResource):
         raw = self._request("post", "/deletion_requests", params=params)
         return self._parse(raw)
 
-    def list(self, status: Optional[str] = None) -> List[Dict]:
+    def list(self, status: Optional[str] = None, limit: int = DEFAULT_LIMIT,
+             offset: int = 0) -> List[Dict]:
         """List deletion requests. Admin only.
 
         Args:
             status: Filter by status — "pending", "approved", or "rejected".
                     Omit to return all requests.
+            limit (int): Maximum number of results to return (default: 100)
+            offset (int): Starting position in the full result set (default: 0)
 
         Returns:
             List[Dict]: Matching DeletionRequest records.
@@ -52,8 +56,8 @@ class DeletionOperations(BaseResource):
         params = {}
         if status is not None:
             params["status"] = status
-        result = self._request("get", "/deletion_requests", params=params)
-        return [self._parse(r) for r in result] if result else []
+        raw = self._paginate("/deletion_requests", params, limit, offset)
+        return [self._parse(r) for r in raw]
 
     def get(self, request_id: int) -> Dict:
         """Fetch a single deletion request by ID. Admin only.
