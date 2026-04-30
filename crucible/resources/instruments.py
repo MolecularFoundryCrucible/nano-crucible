@@ -20,12 +20,14 @@ class InstrumentOperations(BaseResource):
     Access via: client.instruments.get(), client.instruments.list(), etc.
     """
 
-    def list(self, include_metadata: bool = False, limit: int = DEFAULT_LIMIT) -> List[Dict]:
+    def list(self, include_metadata: bool = False, limit: int = DEFAULT_LIMIT,
+             offset: int = 0) -> List[Dict]:
         """List all available instruments.
 
         Args:
             include_metadata (bool): Include scientific metadata in results
             limit (int): Maximum number of results to return
+            offset (int): Starting position in the full result set (default: 0)
 
         Returns:
             List[Dict]: Instrument objects with specifications and metadata
@@ -33,7 +35,7 @@ class InstrumentOperations(BaseResource):
         params = {}
         if include_metadata:
             params['include_metadata'] = True
-        return self._request('get', '/instruments', params=params or None)
+        return self._paginate('/instruments', params, limit, offset)
 
     def get(self, instrument_name: Optional[str] = None, instrument_id: Optional[str] = None,
             include_metadata: bool = False) -> Dict:

@@ -9,7 +9,7 @@ Provides organized access to sample-related API endpoints.
 import logging
 from typing import Optional, List, Dict
 from .base import BaseResource
-from ..constants import DEFAULT_LIMIT
+from ..constants import DEFAULT_LIMIT, API_PAGE_MAX
 
 logger = logging.getLogger(__name__)
 
@@ -51,61 +51,74 @@ class SampleOperations(BaseResource):
         return self._parse(raw) if raw is not None else None
 
     def list(self, dataset_id: Optional[str] = None, parent_id: Optional[str] = None,
-             include_metadata: bool = False, limit: int = DEFAULT_LIMIT, **kwargs) -> List[Dict]:
-        """List samples with optional filtering.
+             include_metadata: bool = False, limit: int = DEFAULT_LIMIT,
+             offset: int = 0, **kwargs) -> List[Dict]:
+        """List samples with optional filtering and automatic pagination.
 
         Args:
             dataset_id (str, optional): Get samples from specific dataset
             parent_id (str, optional): Get child samples from parent (deprecated)
             include_metadata (bool): Include scientific metadata in results
-            limit (int): Maximum number of results to return (default: 100)
+            limit (int): Maximum total results to return (default: 100). Requests
+                         above API_PAGE_MAX (1000) are handled transparently via
+                         parallel pagination.
+            offset (int): Starting position in the full result set (default: 0)
             **kwargs: Query parameters for filtering samples
 
         Returns:
             List[Dict]: Sample information
         """
-        params = {**kwargs}
-        params['include_metadata'] = include_metadata
+        params = {k: v for k, v in kwargs.items() if v is not None}
+        if include_metadata:
+            params['include_metadata'] = True
         if dataset_id:
+            # plain list endpoint - pass limit/offset directly
+            params.update({'limit': limit, 'offset': offset})
             result = self._request('get', f"/datasets/{dataset_id}/samples", params=params)
+            return [self._parse(s) for s in result] if result else []
         elif parent_id:
             logger.warning('Using parent_id with list() is deprecated. Please use list_children() instead.')
+            params.update({'limit': limit, 'offset': offset})
             result = self._request('get', f"/samples/{parent_id}/children", params=params)
+            return [self._parse(s) for s in result] if result else []
         else:
-            result = self._request('get', f"/samples", params=params)
-        return [self._parse(s) for s in result] if result else []
+            # paginated envelope endpoint
+            raw = self._paginate("/samples", params, limit, offset)
+            return [self._parse(s) for s in raw]
 
-    def list_parents(self, sample_id: str, limit: int = DEFAULT_LIMIT, **kwargs) -> List[Dict]:
+    def list_parents(self, sample_id: str, limit: int = DEFAULT_LIMIT,
+                     offset: int = 0, **kwargs) -> List[Dict]:
         """List the parents of a given sample with optional filtering.
 
         Args:
             sample_id (str): The unique ID of the sample for which you want to find the parents
             limit (int): Maximum number of results to return (default: 100)
+            offset (int): Starting position in the full result set (default: 0)
             **kwargs: Query parameters for filtering samples
 
         Returns:
             List[Dict]: Parent samples
         """
-        params = {**kwargs}
-        params['limit'] = limit
-        result = self._request('get', f"/samples/{sample_id}/parents", params=params)
-        return result
+        params = {k: v for k, v in kwargs.items() if v is not None}
+        params.update({'limit': limit, 'offset': offset})
+        return self._request('get', f"/samples/{sample_id}/parents", params=params) or []
 
-    def list_children(self, sample_id: str, limit: int = DEFAULT_LIMIT, **kwargs) -> List[Dict]:
+    def list_children(self, sample_id: str, limit: int = DEFAULT_LIMIT,
+                      offset: int = 0, **kwargs) -> List[Dict]:
         """List the children of a given sample with optional filtering.
 
         Args:
             sample_id (str): The unique ID of the sample for which you want to find the children
             limit (int): Maximum number of results to return (default: 100)
+            offset (int): Starting position in the full result set (default: 0)
             **kwargs: Query parameters for filtering samples
 
         Returns:
             List[Dict]: Children samples
         """
-        params = {**kwargs}
-        params['limit'] = limit
-        result = self._request('get', f"/samples/{sample_id}/children", params=params)
-        return result
+        params = {k: v for k, v in kwargs.items() if v is not None}
+        params.update({'limit': limit, 'offset': offset})
+        return self._request('get', f"/samples/{sample_id}/children", params=params) or []
 
     def create(self, unique_id: Optional[str] = None, sample_name: Optional[str] = None,
                description: Optional[str] = None, timestamp: Optional[str] = None,

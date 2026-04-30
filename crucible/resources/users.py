@@ -46,13 +46,14 @@ class UserOperations(BaseResource):
         else:
             raise ValueError('please provide orcid or email')
 
-    def list(self, limit: int = DEFAULT_LIMIT, **kwargs) -> List[Dict]:
+    def list(self, limit: int = DEFAULT_LIMIT, offset: int = 0, **kwargs) -> List[Dict]:
         """List all users in the system.
 
         **Requires admin permissions.**
 
         Args:
             limit (int): Maximum number of results to return (default: 100)
+            offset (int): Starting position in the full result set (default: 0)
             **kwargs: Additional query parameters for filtering
 
         Returns:
@@ -63,9 +64,8 @@ class UserOperations(BaseResource):
             >>> for user in users:
             ...     print(f"{user['first_name']} {user['last_name']} ({user['orcid']})")
         """
-        params = kwargs
-        params['limit'] = limit
-        users = self._request('get', '/users', params=params)
+        params = {k: v for k, v in kwargs.items() if v is not None}
+        users = self._paginate('/users', params, limit, offset)
         return sorted(users, key=lambda u: u.get('id') or 0)
 
     def create(self, user, project_ids=None) -> Dict:

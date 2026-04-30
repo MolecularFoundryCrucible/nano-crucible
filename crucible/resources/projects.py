@@ -44,7 +44,8 @@ class ProjectOperations(BaseResource):
         """
         return self._request('get', f'/projects/{project_id}')
 
-    def list(self, orcid: Optional[str] = None, limit: int = DEFAULT_LIMIT) -> List[Dict]:
+    def list(self, orcid: Optional[str] = None, limit: int = DEFAULT_LIMIT,
+             offset: int = 0) -> List[Dict]:
         """List all accessible projects.
 
         Each project dict includes a ``lead`` key with the project lead's full
@@ -53,14 +54,13 @@ class ProjectOperations(BaseResource):
         Args:
             orcid (str, optional): Filter projects by those associated with a certain user
             limit (int): Maximum number of results to return (default: 100)
+            offset (int): Starting position in the full result set (default: 0)
 
         Returns:
             List[Dict]: Project metadata including project_id, title, organization, lead
         """
-        if orcid is None:
-            return self._request('get', '/projects')
-        else:
-            return self._request('get', f'/users/{orcid}/projects')
+        endpoint = f'/users/{orcid}/projects' if orcid else '/projects'
+        return self._paginate(endpoint, {}, limit, offset)
 
     def create(self, project: Union[Project, Dict]) -> Dict:
         """Create a new project.
@@ -91,7 +91,8 @@ class ProjectOperations(BaseResource):
 
         return self._request('post', "/projects", json=project_details)
 
-    def get_users(self, project_id: str, limit: int = DEFAULT_LIMIT) -> List[Dict]:
+    def get_users(self, project_id: str, limit: int = DEFAULT_LIMIT,
+                  offset: int = 0) -> List[Dict]:
         """Get users associated with a project.
 
         **Requires admin permissions.**
@@ -99,12 +100,13 @@ class ProjectOperations(BaseResource):
         Args:
             project_id (str): Unique project identifier
             limit (int): Maximum number of results to return (default: 100)
+            offset (int): Starting position in the full result set (default: 0)
 
         Returns:
             List[Dict]: Project team members (excludes project lead)
         """
-        result = self._request('get', f'/projects/{project_id}/users')
-        return result
+        return self._request('get', f'/projects/{project_id}/users',
+                             params={'limit': limit, 'offset': offset}) or []
 
     def update(self, project_id: str, **kwargs) -> Dict:
         """Partially update a project record.

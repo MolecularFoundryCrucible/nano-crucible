@@ -16,7 +16,7 @@ from typing import Optional, List, Dict
 
 # internal modules
 from .base import BaseResource
-from ..constants import DEFAULT_LIMIT
+from ..constants import DEFAULT_LIMIT, API_PAGE_MAX
 from ..utils import check_small_files
 from ..utils.deprecation import _deprecated
 
@@ -68,12 +68,15 @@ class DatasetOperations(BaseResource):
 
 
     def list(self, sample_id: Optional[str] = None, include_metadata: bool = False,
-             limit: int = DEFAULT_LIMIT, **kwargs) -> List[Dict]:
-        """List datasets with optional filtering.
+             limit: int = DEFAULT_LIMIT, offset: int = 0, **kwargs) -> List[Dict]:
+        """List datasets with optional filtering and automatic pagination.
 
         Args:
             sample_id (str, optional): If provided, returns datasets for this sample
-            limit (int): Maximum number of results to return (default: 100)
+            limit (int): Maximum total results to return (default: 100). Requests
+                         above API_PAGE_MAX (1000) are handled transparently via
+                         parallel pagination.
+            offset (int): Starting position in the full result set (default: 0)
             include_metadata (bool): Include scientific metadata in results
             **kwargs: Query parameters for filtering. Supported fields include:
                         keyword, unique_id, public, dataset_name, file_to_upload, owner_orcid,
@@ -86,14 +89,12 @@ class DatasetOperations(BaseResource):
         Returns:
             List[Dict]: Dataset objects matching filter criteria
         """
-        params = {**kwargs}
-        params['limit'] = limit
-        params['include_metadata'] = include_metadata
-        if sample_id:
-            result = self._request('get', f'/samples/{sample_id}/datasets', params=params)
-        else:
-            result = self._request('get', '/datasets', params=params)
-        return [self._parse(d) for d in result] if result else []
+        params = {k: v for k, v in kwargs.items() if v is not None}
+        if include_metadata:
+            params['include_metadata'] = True
+        endpoint = f'/samples/{sample_id}/datasets' if sample_id else '/datasets'
+        raw = self._paginate(endpoint, params, limit, offset)
+        return [self._parse(d) for d in raw]
 
 
     def create(self, dataset, scientific_metadata: Optional[Dict] = None,
@@ -739,37 +740,39 @@ class DatasetOperations(BaseResource):
         new_link = self._request('post', f"/datasets/{parent_dataset_id}/children/{child_dataset_id}")
         return new_link
 
-    def list_children(self, parent_dataset_id: str, limit: int = DEFAULT_LIMIT, **kwargs) -> List[Dict]:
+    def list_children(self, parent_dataset_id: str, limit: int = DEFAULT_LIMIT,
+                      offset: int = 0, **kwargs) -> List[Dict]:
         """List the children of a given dataset with optional filtering.
 
         Args:
             parent_dataset_id (str): The unique ID of the dataset for which you want to find the children
             limit (int): Maximum number of results to return
+            offset (int): Starting position in the full result set (default: 0)
             **kwargs: Query parameters for filtering datasets
 
         Returns:
             List[Dict]: Children datasets
         """
-        params = {**kwargs}
-        params['limit'] = limit
-        result = self._request('get', f"/datasets/{parent_dataset_id}/children", params=params)
-        return result
+        params = {k: v for k, v in kwargs.items() if v is not None}
+        params.update({'limit': limit, 'offset': offset})
+        return self._request('get', f"/datasets/{parent_dataset_id}/children", params=params) or []
 
-    def list_parents(self, child_dataset_id: str, limit: int = DEFAULT_LIMIT, **kwargs) -> List[Dict]:
+    def list_parents(self, child_dataset_id: str, limit: int = DEFAULT_LIMIT,
+                     offset: int = 0, **kwargs) -> List[Dict]:
         """List the parents of a given dataset with optional filtering.
 
         Args:
             child_dataset_id (str): The unique ID of the dataset for which you want to find the parents
             limit (int): Maximum number of results to return
+            offset (int): Starting position in the full result set (default: 0)
             **kwargs: Query parameters for filtering datasets
 
         Returns:
             List[Dict]: Parent datasets
         """
-        params = {**kwargs}
-        params['limit'] = limit
-        result = self._request('get', f"/datasets/{child_dataset_id}/parents", params=params)
-        return result
+        params = {k: v for k, v in kwargs.items() if v is not None}
+        params.update({'limit': limit, 'offset': offset})
+        return self._request('get', f"/datasets/{child_dataset_id}/parents", params=params) or []
 
     # Special Processing Methods
     def request_carrier_segmentation(self, dsid: str) -> Dict:
