@@ -131,7 +131,7 @@ class CrucibleClient:
             return response
     
     def _wait_for_request_completion(self, dsid: str, reqid: str, request_type: str,
-                                  sleep_interval: int = 5) -> Dict:
+                                  sleep_interval: int = 1) -> Dict:
         """Wait for a request to complete by polling its status.
 
         Args:
