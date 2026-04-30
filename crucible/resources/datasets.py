@@ -6,6 +6,7 @@ Dataset resource operations for Crucible API.
 Provides organized access to dataset-related API endpoints.
 """
 
+from fileinput import filename
 import os
 import re
 import fnmatch
@@ -98,26 +99,15 @@ class DatasetOperations(BaseResource):
 
 
     def create(self, dataset, scientific_metadata: Optional[Dict] = None,
-               keywords: Optional[List[str]] = None,
-               get_user_info_function=None, verbose: bool = False,
-               files_to_upload: Optional[List[str]] = None,
-               ingestor: str = 'ApiUploadIngestor',
-               wait_for_ingestion_response: bool = True) -> Dict:
+               keywords: Optional[List[str]] = None) -> Dict:
         """Create a new dataset with metadata and optionally upload files.
 
         Args:
             dataset: Dataset object with dataset details
             scientific_metadata (dict, optional): Scientific metadata
             keywords (list, optional): Keywords to associate with dataset
-            get_user_info_function (callable, optional): Function to get user info
-            verbose (bool): Enable verbose output
-            files_to_upload (List[str], optional): List of file paths to upload
-            ingestor (str): Ingestion class to use (default: 'ApiUploadIngestor')
-            wait_for_ingestion_response (bool): Wait for ingestion to complete
-
         Returns:
-            Dict: created_record, scientific_metadata_record, dsid, and optionally
-                  uploaded_files and ingestion_request if files_to_upload provided
+            Dict: created_record, scientific_metadata_record, dsid
         """
         if scientific_metadata is None:
             scientific_metadata = {}
@@ -125,35 +115,12 @@ class DatasetOperations(BaseResource):
         if keywords is None:
             keywords = []
 
-        dataset_details = dict(**dataset.model_dump())
-
-        # Handle file upload path if files provided
-        if files_to_upload:
-            logger.debug(f'files_to_upload={files_to_upload}')
-            main_file = dataset_details.get('file_to_upload')
-            logger.debug(f'main_file from dataset_details: {main_file}')
-            if not main_file:
-                main_file = files_to_upload[0]
-                logger.debug(f'main_file from files_to_upload: {main_file}')
-            base_file_name = os.path.basename(main_file)
-            logger.debug(f'base_file_name={base_file_name}')
-            main_file_cloud = os.path.join(f'api-uploads/{base_file_name}')
-            dataset_details['file_to_upload'] = main_file_cloud
-            logger.debug(f'main_file_cloud={main_file_cloud}')
-
-            # auto-set timestamp from file modification time if not provided
-            if dataset_details.get('timestamp') is None:
-                import datetime
-                mtime = os.path.getmtime(main_file)
-                dataset_details['timestamp'] = datetime.datetime.fromtimestamp(
-                    mtime, tz=datetime.timezone.utc).isoformat()
+        dataset_details = dataset.model_dump()
 
         logger.debug('Creating new dataset record...')
 
         clean_dataset = {k: v for k, v in dataset_details.items() if v is not None}
-        logger.debug(f'POST request to /datasets with {clean_dataset}')
         new_ds_record = self._request('post', '/datasets', json=clean_dataset)
-        logger.debug('Request complete')
         dsid = new_ds_record['unique_id']
 
         # add scientific metadata
@@ -161,7 +128,7 @@ class DatasetOperations(BaseResource):
         if scientific_metadata is not None:
             logger.debug(f'Adding scientific metadata record for {dsid}')
             scimd = self.add_scientific_metadata(dsid, scientific_metadata)
-            logger.debug('Metadata addition complete')
+
             
         # add keywords
         if keywords:
@@ -169,48 +136,82 @@ class DatasetOperations(BaseResource):
             for kw in keywords:
                 self.add_keyword(dsid, kw)
 
-        logger.debug(f"dsid={dsid}")
-
         result = {"created_record": new_ds_record, "scientific_metadata_record": scimd, "dsid": dsid}
-        if not files_to_upload:
-            return result
-        
-        #  === File Upload
-        failed_files = {}
-        uploaded_files = []
-
-        for each_file in files_to_upload:
-            if not os.path.isfile(each_file):
-                failed_files[each_file] = f"File not found"
-                continue
-
-            resp = self.upload_file(dsid, each_file)
-            if resp is None:
-                failed_files[each_file] = "Exceeds maximum size for API upload"
-                continue
-            else:
-                uploaded_files.append(resp)
-
-        if failed_files:
-            ingestion_command = f"client.datasets.request_ingestion('{dsid}', file_to_upload='{main_file_cloud}', ingestion_class='{ingestor}')"
-            logger.error(f"Some files failed to upload for dataset {dsid}: {failed_files}")
-            logger.info(f"Please upload these files manually and then request ingestion: {ingestion_command}")
-            raise RuntimeError(f"File upload failed for dataset {dsid}.\n\nFailed files: {failed_files}.\n\nPlease upload these files manually and then request ingestion: {ingestion_command}")
-        
-        # Ingestion
-        logger.debug(f"Submitting {dsid} to be ingested from file {main_file_cloud} using the class {ingestor}")
-
-        ingest_req_info = self.request_ingestion(dsid, main_file_cloud, ingestor)
-
-        logger.debug(f"Ingestion request {ingest_req_info['id']} is added to the queue")
-
-        if wait_for_ingestion_response:
-            ingest_req_info = self._client._wait_for_request_completion(dsid, ingest_req_info['id'], 'ingest')
-
-        result["uploaded_files"] = uploaded_files
-        result["ingestion_request"] = ingest_req_info
-
         return result
+
+    # Associated Files Methods
+    def get_associated_files(self, dsid: str, limit: int = DEFAULT_LIMIT) -> List[Dict]:
+        """Get associated files for a dataset.
+
+        Args:
+            dsid (str): Dataset unique identifier
+            limit (int): Maximum number of results to return
+
+        Returns:
+            List[Dict]: File metadata with names, sizes, and hashes
+        """
+        return self._request('get', f'/datasets/{dsid}/associated_files')
+
+    def add_file_to_dataset(self, dsid: str, file_path: str, ingestion_class: Optional[str] = None, wait_for_ingestion_response: bool = False) -> Dict:
+        """Add an associated file to a dataset.
+
+        Args:
+            dsid (str): Dataset unique identifier
+            file_path (str): Path to file (for calculating metadata)
+            ingestion_class (str, optional): Ingestion class to use for this file (e.g. 'ApiUploadIngestor') If None, ingestors will be scanned to find a match based on file format.
+
+        Returns:
+            Dict: Associated file record and Ingestion request.
+        """
+        from ..utils import checkhash
+
+        # Calculate file metadata
+        file_size = os.path.getsize(file_path)
+        if file_size >= 1e8:
+            raise RuntimeError(f"File {file_path} is too large for API upload ({file_size} bytes).")
+        
+        file_hash = checkhash(file_path)
+        filename = os.path.basename(file_path)
+
+        # upload
+        upload_status = self._upload_file(dsid, file_path)
+        if upload_status is None:
+            raise RuntimeError(f"Failed to upload {file_path}. File may be too large. ")
+        
+        # add associated file record to database + request ingestion
+        associated_file_data = {
+            'filename': filename,
+            'size': file_size,
+            'sha256_hash': file_hash,
+            'ingestion_class': ingestion_class
+        }
+        response = self._request('post', f'/datasets/{dsid}/associated_files', json=associated_file_data)
+        if wait_for_ingestion_response:
+            ingestion_request = response.get('ingestion_request')
+            status = self._client._wait_for_request_completion(dsid, ingestion_request['id'], 'ingest')
+
+        return response
+
+    def _upload_file(self, dsid: str, file_path: str) -> Dict:
+        """Upload a file to a dataset.
+
+        Args:
+            dsid (str): Dataset unique identifier
+            file_path (str): Local path to file to upload
+
+        Returns:
+            Dict: Upload response
+        """
+        logger.debug(f"Uploading file {file_path}...")
+        with open(file_path, 'rb') as f:
+            fname = os.path.basename(file_path)
+            files = [('files', (fname, f, 'application/octet-stream'))]
+            added_af = self._request('post', f'/datasets/{dsid}/upload', files=files)
+            return added_af
+            
+        logger.error(f"{file_path} is too large for HTTP upload via the Crucible API. Please upload manually.")
+        return None
+
     
     def update(self, dsid: str, **updates) -> Dict:
         """Update an existing dataset with new field values.
@@ -269,31 +270,6 @@ class DatasetOperations(BaseResource):
         """
         params = {"group_name": group_name, "read": read, "write": write}
         return self._request('post', f'/datasets/{dsid}/access_groups', params=params)
-
-
-    def upload_file(self, dsid: str, file_path: str) -> Dict:
-        """Upload a file to a dataset.
-
-        Args:
-            dsid (str): Dataset unique identifier
-            file_path (str): Local path to file to upload
-
-        Returns:
-            Dict: Upload response
-        """
-        logger.debug(f"Uploading file {file_path}...")
-        use_upload_endpoint = check_small_files([file_path])
-
-        if use_upload_endpoint:
-            with open(file_path, 'rb') as f:
-                fname = os.path.basename(file_path)
-                files = [('files', (fname, f, 'application/octet-stream'))]
-                added_af = self._request('post', f'/datasets/{dsid}/upload', files=files)
-                return added_af
-            
-        logger.error(f"{file_path} is too large for HTTP upload via the Crucible API. Please upload manually.")
-        return None
-
 
     def get_download_links(self, dsid: str) -> Dict:
         """Get the download links for files in a given dataset.
@@ -396,28 +372,6 @@ class DatasetOperations(BaseResource):
                                      no_record=no_record,
                                      overwrite_existing=overwrite_existing,
                                      include=include, exclude=exclude)
-
-    def request_ingestion(self, dsid: str, file_to_upload: Optional[str] = None,
-                         ingestion_class: Optional[str] = None,
-                         wait_for_response: bool = False) -> Dict:
-        """Request dataset ingestion.
-
-        Args:
-            dsid (str): Dataset unique identifier
-            file_to_upload (str, optional): Path to file for ingestion
-            ingestion_class (str, optional): Ingestion class to use
-            wait_for_response (bool): Wait for ingestion to complete
-
-        Returns:
-            Dict: Ingestion request with id and status
-        """
-        params = {"ingestion_class": ingestion_class, "file_to_upload": file_to_upload}
-        logger.debug(f"Ingestion params: {params}")
-        req_info = self._request('post', f'/datasets/{dsid}/ingest', params=params)
-        if wait_for_response:
-            req_info = self._client._wait_for_request_completion(dsid, req_info['id'], 'ingest')
-
-        return req_info
 
     @_deprecated("create() with files_to_upload parameter")
     def create_from_files(self, dataset, files_to_upload: List[str],
@@ -569,46 +523,6 @@ class DatasetOperations(BaseResource):
         }
         return self._request('post', f'/datasets/{dsid}/thumbnails', json=thumbnail_data)
 
-    # Associated Files Methods
-    def get_associated_files(self, dsid: str, limit: int = DEFAULT_LIMIT) -> List[Dict]:
-        """Get associated files for a dataset.
-
-        Args:
-            dsid (str): Dataset unique identifier
-            limit (int): Maximum number of results to return
-
-        Returns:
-            List[Dict]: File metadata with names, sizes, and hashes
-        """
-        return self._request('get', f'/datasets/{dsid}/associated_files')
-
-    def add_associated_file(self, dsid: str, file_path: str, filename: Optional[str] = None) -> Dict:
-        """Add an associated file to a dataset.
-
-        Args:
-            dsid (str): Dataset unique identifier
-            file_path (str): Path to file (for calculating metadata)
-            filename (str, optional): Filename to store (uses basename if not provided)
-
-        Returns:
-            Dict: Created associated file object
-        """
-        from ..utils import checkhash
-
-        # Calculate file metadata
-        file_size = os.path.getsize(file_path)
-        file_hash = checkhash(file_path)
-
-        # Use basename if no filename provided
-        if filename is None:
-            filename = os.path.basename(file_path)
-
-        associated_file_data = {
-            'filename': filename,
-            'size': file_size,
-            'sha256_hash': file_hash
-        }
-        return self._request('post', f'/datasets/{dsid}/associated_files', json=associated_file_data)
 
     # Keyword Methods
     def get_keywords(self, dsid: Optional[str] = None, limit: int = DEFAULT_LIMIT) -> List[Dict]:
@@ -655,8 +569,6 @@ class DatasetOperations(BaseResource):
         """
         if request_type == 'ingest':
             return self._request('get', f'/datasets/{dsid}/ingest/{reqid}')
-        elif request_type == 'scicat_update':
-            return self._request('get', f'/datasets/{dsid}/scicat_update/{reqid}')
         else:
             raise ValueError(f"Unsupported request_type: {request_type}")
 
@@ -786,7 +698,6 @@ class DatasetOperations(BaseResource):
         """
         result = self._request('post', f"/datasets/{dsid}/carrier_segmentation")
         return result
-
 
     def request_insitu_aggregation(self, dsid: str) -> Dict:
         """Request insitu spectroscopy data aggregation for a dataset.
