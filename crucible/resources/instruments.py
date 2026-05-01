@@ -56,20 +56,16 @@ class InstrumentOperations(BaseResource):
             raise ValueError("Either instrument_name or instrument_id must be provided")
 
         if instrument_id:
-            logger.debug("Using Instrument ID to find Instrument")
-            params = {"unique_id": instrument_id}
-        else:
-            params = {"instrument_name": instrument_name}
+            params = {}
+            if include_metadata:
+                params['include_metadata'] = True
+            return self._request('get', f'/instruments/{instrument_id}', params=params or None)
 
+        params = {"instrument_name": instrument_name}
         if include_metadata:
             params['include_metadata'] = True
-
-        found_inst = self._request('get', '/instruments', params=params)
-
-        if len(found_inst) > 0:
-            return found_inst[-1]
-        else:
-            return None
+        results = self._paginate('/instruments', params, limit=1)
+        return results[0] if results else None
 
     def create(self, instrument) -> Dict:
         """Create a new instrument, returning the existing one if it already exists.

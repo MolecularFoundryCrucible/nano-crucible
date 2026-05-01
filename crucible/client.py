@@ -177,15 +177,29 @@ class CrucibleClient:
     
     #%% GENERIC METHODS
 
+    def live(self) -> Dict:
+        """Check whether the API process is running (no DB check, no auth).
+
+        Returns:
+            Dict: {"status": "ok"}
+        """
+        import requests as _requests
+        url = f"{self.api_url}/health/live"
+        timeout = (self._config.connect_timeout, self._config.read_timeout)
+        resp = _requests.get(url, timeout=timeout)
+        resp.raise_for_status()
+        return resp.json()
+
     def health(self) -> Dict:
         """Check API and database health without requiring authentication.
 
         Returns:
-            Dict: {"status": "ok"|"degraded", "db": "ok"|"error", "version": str|None}
+            Dict: {"status": "ok"|"degraded", "db": "ok"|"error",
+                   "db_ms": float|None, "version": str|None}
                   Raises requests.exceptions.ConnectionError if the host is unreachable.
         """
         import requests as _requests
-        url = f"{self.api_url}/health"
+        url = f"{self.api_url}/health/ready"
         timeout = (self._config.connect_timeout, self._config.read_timeout)
         resp = _requests.get(url, timeout=timeout)
         return resp.json()

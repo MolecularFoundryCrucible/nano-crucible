@@ -30,7 +30,7 @@ class ProjectOperations(BaseResource):
     Access via: client.projects.get(), client.projects.list(), etc.
     """
 
-    def get(self, project_id: str) -> Dict:
+    def get(self, project_id: str, include_metadata: bool = False) -> Dict:
         """Get details of a specific project.
 
         The response includes a ``lead`` key with the project lead's full user
@@ -38,11 +38,13 @@ class ProjectOperations(BaseResource):
 
         Args:
             project_id (str): Unique project identifier
+            include_metadata (bool): Whether to include scientific metadata
 
         Returns:
             Dict: Complete project information including embedded lead user
         """
-        return self._request('get', f'/projects/{project_id}')
+        params = {'include_metadata': True} if include_metadata else None
+        return self._request('get', f'/projects/{project_id}', params=params)
 
     def list(self, orcid: Optional[str] = None, limit: int = DEFAULT_LIMIT,
              offset: int = 0) -> List[Dict]:

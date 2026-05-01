@@ -702,8 +702,8 @@ def _show_sample(sample, client, verbose=False, graph=False, include_metadata=Fa
     _p("Description", sample.get('description'))
 
     if include_metadata:
-        from .dataset import _show_scientific_metadata
-        _show_scientific_metadata(sample.get('scientific_metadata'))
+        from .helpers import show_scientific_metadata
+        show_scientific_metadata(sample.get('scientific_metadata'))
 
     if verbose or graph:
         term.subheader("Ownership")

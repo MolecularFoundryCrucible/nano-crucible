@@ -45,7 +45,10 @@ class Sample(BaseModel):
     modification_time: Optional[str] = None
     project_id: Optional[str] = None
     description: Optional[str] = None
+    resource_type: Optional[str] = None
     scientific_metadata: Optional[Dict] = None
+    datasets: Optional[List[Dict]] = None
+    deletion_request: Optional[Dict] = None
     links: Optional[List[Dict]] = None
 
     model_config = ConfigDict(from_attributes=True, populate_by_name=True, extra='allow')
@@ -76,7 +79,9 @@ class Dataset(BaseModel):
     size: Optional[int] = None
     sha256_hash_file_to_upload: Optional[str] = None
     source_folder: Optional[str] = None
+    resource_type: Optional[str] = None
     scientific_metadata: Optional[Dict] = None
+    deletion_request: Optional[Dict] = None
     links: Optional[List[Dict]] = None
 
     model_config = ConfigDict(from_attributes=True, populate_by_name=True, extra='allow')
@@ -104,8 +109,12 @@ class Project(BaseModel):
     status: Optional[str] = None
     title: Optional[str] = None
     project_lead_name: Optional[str] = None
+    lead: Optional[Dict] = None
+    scientific_metadata: Optional[Dict] = None
+    creation_time: Optional[str] = None
+    modification_time: Optional[str] = None
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, extra='allow')
 
 
 class User(BaseModel):
@@ -194,7 +203,7 @@ class DeletionRequest(BaseModel):
         reviewer_notes: Optional notes provided by the reviewer when approving or rejecting the deletion request
     '''  
 
-    # id: Optional[int] = None
+    id: Optional[int] = None
     resource_type: Optional[str] = None
     resource_id: Optional[str] = None
     resource_name: Optional[str] = None

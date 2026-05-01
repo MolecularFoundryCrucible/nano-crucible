@@ -292,11 +292,11 @@ def _show_instrument(instrument, include_metadata=False):
     """Display instrument fields."""
     _p = term.field_printer(14)
 
+    verbose = include_metadata  # reuse flag for verbose fields
     term.header("Instrument")
     uid = instrument.get('unique_id')
     _p("Name",         instrument.get('instrument_name'))
     _p("MFID",         term.cyan(uid) if uid else None)
-    _p("ID",           instrument.get('id'))
     _p("Type",         instrument.get('instrument_type'))
     _p("Manufacturer", instrument.get('manufacturer'))
     _p("Model",        instrument.get('model'))
@@ -305,9 +305,11 @@ def _show_instrument(instrument, include_metadata=False):
     _p("Description",  instrument.get('description'))
     if instrument.get('other_id'):
         _p("Other ID",     f"{instrument['other_id']}  ({instrument.get('other_id_source', '')})")
-    if include_metadata:
-        from .dataset import _show_scientific_metadata
-        _show_scientific_metadata(instrument.get('scientific_metadata'))
+    if verbose:
+        _p("Created",      instrument.get('creation_time'))
+        _p("Modified",     instrument.get('modification_time'))
+        from .helpers import show_scientific_metadata
+        show_scientific_metadata(instrument.get('scientific_metadata'))
 
 
 def _execute_get(args):

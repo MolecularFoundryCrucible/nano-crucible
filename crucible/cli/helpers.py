@@ -74,6 +74,24 @@ def fetch_api_label():
         return 'api: ?'
 
 
+def show_scientific_metadata(sci_md):
+    """Display scientific metadata dict under a subheader."""
+    from . import term
+    if not sci_md:
+        return
+    term.subheader(f"Scientific Metadata ({len(sci_md)} fields)")
+    max_key = max(len(k) for k in sci_md)
+    for k, v in sci_md.items():
+        if isinstance(v, dict):
+            print(f"  {k}:")
+            for kk, vv in v.items():
+                print(f"    {kk}: {vv}")
+        elif isinstance(v, list) and len(v) > 8:
+            print(f"  {k:<{max_key}}  <list with {len(v)} items>")
+        else:
+            print(f"  {k:<{max_key}}  {v}")
+
+
 def cache_resource(shell_state, client, data, rtype, resource_id, **flags):
     """Cache a fetched resource in the shell state and start background prefetches.
 

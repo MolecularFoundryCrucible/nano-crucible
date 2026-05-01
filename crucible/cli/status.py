@@ -79,10 +79,10 @@ def execute(args):
     term.header("Status")
     print()
 
-    # ── 1. Reachability + DB health (/health, no auth) ────────────────────────
+    # ── 1. Reachability + DB health (/health/ready, no auth) ─────────────────
     def _health():
         resp = requests.get(
-            f"{api_url.rstrip('/')}/health",
+            f"{api_url.rstrip('/')}/health/ready",
             timeout=(5, 15),
         )
         return resp.status_code, resp.json()
@@ -101,8 +101,10 @@ def execute(args):
 
     if "db" in health:
         db_ok = health.get("db") == "ok"
+        db_ms = health.get("db_ms")
+        db_latency = f"  {term.dim(f'{db_ms:.0f}ms')}" if db_ms is not None else ""
         if db_ok:
-            print(f'  ✓  Database reachable')
+            print(f'  ✓  Database reachable{db_latency}')
         else:
             print(f'  ✗  Database unreachable')
     else:

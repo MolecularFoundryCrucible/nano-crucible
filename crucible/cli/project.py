@@ -95,6 +95,13 @@ def _register_get(subparsers):
         project_id_arg.completer = argcomplete.completers.SuppressCompleter()
 
     parser.add_argument(
+        '--include-metadata',
+        action='store_true',
+        dest='include_metadata',
+        help='Include scientific metadata in output'
+    )
+
+    parser.add_argument(
         '-v', '--verbose',
         action='store_true',
         help='Verbose output'
@@ -329,7 +336,7 @@ def _lead_name(project):
     return name or project.get('project_lead_email') or None
 
 
-def _show_project(project):
+def _show_project(project, include_metadata=False):
     """Display project fields."""
     _p = term.field_printer(14)
 
@@ -350,19 +357,25 @@ def _show_project(project):
     _p("Lead Email",   lead.get('email') or project.get('project_lead_email'))
     _p("Status",       project.get('status'))
 
+    if include_metadata:
+        from .helpers import show_scientific_metadata
+        show_scientific_metadata(project.get('scientific_metadata'))
+
 
 def _execute_get(args):
     """Execute the 'project get' subcommand."""
     from crucible.client import CrucibleClient
+    include_metadata = getattr(args, 'include_metadata', False)
     try:
         client = CrucibleClient()
-        project = client.projects.get(args.project_id)
+        project = client.projects.get(args.project_id,
+                                      include_metadata=include_metadata)
 
         if project is None:
             logger.error(f"Project not found: {args.project_id}")
             sys.exit(1)
 
-        _show_project(project)
+        _show_project(project, include_metadata=include_metadata)
 
     except Exception as e:
         logger.error(f"Error retrieving project: {e}")

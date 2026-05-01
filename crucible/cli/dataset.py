@@ -33,27 +33,10 @@ def _normalize_file_paths(link_map, af_list, dsid):
     return links, meta_by_name
 
 
-def _show_scientific_metadata(sci_md_wrapper):
-    """Display scientific metadata, unwrapping the API envelope."""
-    if not sci_md_wrapper:
-        return
-    actual = sci_md_wrapper
-    # actual = sci_md_wrapper.get('scientific_metadata') if isinstance(sci_md_wrapper, dict) else sci_md_wrapper
-    # if not actual:
-    #     term.subheader("Scientific Metadata")
-    #     print("  (empty)")
-    #     return
-    term.subheader(f"Scientific Metadata ({len(actual)} fields)")
-    max_key = max(len(k) for k in actual)
-    for k, v in actual.items():
-        if isinstance(v, dict):
-            print(f"  {k}:")
-            for kk, vv in v.items():
-                print(f"    {kk}: {vv}")
-        elif isinstance(v, list) and len(v) > 8:
-            print(f"  {k:<{max_key}}  <list with {len(v)} items>")
-        else:
-            print(f"  {k:<{max_key}}  {v}")
+def _show_scientific_metadata(sci_md):
+    """Display scientific metadata. Delegates to helpers.show_scientific_metadata."""
+    from .helpers import show_scientific_metadata
+    show_scientific_metadata(sci_md)
 
 
 def _show_dataset(dataset, client, verbose=False, graph=False, include_metadata=False, links=None, prefetched=None):
