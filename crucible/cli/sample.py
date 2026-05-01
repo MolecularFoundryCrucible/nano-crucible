@@ -417,14 +417,18 @@ Examples:
 
 def _edit_sample(sid, client, debug=False):
     """Core edit logic for a sample — shared with the top-level 'crucible edit' command."""
-    sample = client.samples.get(sid)
+    sample = client.samples.get(sid, include_metadata=True)
     if sample is None:
         logger.error(f"Sample not found: {sid}")
         sys.exit(1)
 
     from .schema import SAMPLE_FIELDS, ordered_dict
     valid_fields = set(_sample_updatable_fields())
-    original = ordered_dict(SAMPLE_FIELDS, sample, verbose=True, editable_only=True)
+    original_fields = ordered_dict(SAMPLE_FIELDS, sample, verbose=True, editable_only=True)
+    original_meta = sample.get('scientific_metadata') or {}
+
+    original = dict(original_fields)
+    original['scientific_metadata'] = original_meta
 
     try:
         edited = term.open_editor_json(original)
@@ -436,16 +440,25 @@ def _edit_sample(sid, client, debug=False):
         logger.info("No changes.")
         return
 
-    changes = {k: v for k, v in edited.items() if k in valid_fields and v != original.get(k)}
+    field_changes = {k: v for k, v in edited.items() if k in valid_fields and v != original_fields.get(k)}
+    edited_meta = edited.get('scientific_metadata')
+    meta_changed = isinstance(edited_meta, dict) and edited_meta != original_meta
 
-    if not changes:
+    if not field_changes and not meta_changed:
         logger.info("No changes.")
         return
 
     try:
-        client.samples.update(sid, **changes)
+        if field_changes:
+            client.samples.update(sid, **field_changes)
+        if meta_changed:
+            client.samples.update_scientific_metadata(sid, edited_meta, overwrite=True)
+
+        diff_updated = dict(field_changes)
+        if meta_changed:
+            diff_updated['scientific_metadata'] = edited_meta
         term.header("Changes")
-        term.diff(original, changes)
+        term.diff(original, diff_updated)
     except Exception as e:
         logger.error(f"Error updating sample: {e}")
         if debug:

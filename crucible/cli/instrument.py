@@ -482,14 +482,18 @@ Examples:
 
 def _edit_instrument(uid, client, debug=False):
     """Core edit logic for an instrument - shared with top-level 'crucible edit' command."""
-    instrument = client.instruments.get(instrument_id=uid)
+    instrument = client.instruments.get(instrument_id=uid, include_metadata=True)
     if instrument is None:
         logger.error(f"Instrument not found: {uid}")
         sys.exit(1)
 
     from .schema import INSTRUMENT_FIELDS, ordered_dict
     valid_fields = set(_instrument_updatable_fields())
-    original = ordered_dict(INSTRUMENT_FIELDS, instrument, verbose=True, editable_only=True)
+    original_fields = ordered_dict(INSTRUMENT_FIELDS, instrument, verbose=True, editable_only=True)
+    original_meta = instrument.get('scientific_metadata') or {}
+
+    original = dict(original_fields)
+    original['scientific_metadata'] = original_meta
 
     try:
         edited = term.open_editor_json(original)
@@ -501,16 +505,25 @@ def _edit_instrument(uid, client, debug=False):
         logger.info("No changes.")
         return
 
-    changes = {k: v for k, v in edited.items() if k in valid_fields and v != original.get(k)}
+    field_changes = {k: v for k, v in edited.items() if k in valid_fields and v != original_fields.get(k)}
+    edited_meta = edited.get('scientific_metadata')
+    meta_changed = isinstance(edited_meta, dict) and edited_meta != original_meta
 
-    if not changes:
+    if not field_changes and not meta_changed:
         logger.info("No changes.")
         return
 
     try:
-        client.instruments.update(uid, **changes)
+        if field_changes:
+            client.instruments.update(uid, **field_changes)
+        if meta_changed:
+            client.instruments.update_scientific_metadata(uid, edited_meta, overwrite=True)
+
+        diff_updated = dict(field_changes)
+        if meta_changed:
+            diff_updated['scientific_metadata'] = edited_meta
         term.header("Changes")
-        term.diff(original, changes)
+        term.diff(original, diff_updated)
     except Exception as e:
         logger.error(f"Error updating instrument: {e}")
         if debug:

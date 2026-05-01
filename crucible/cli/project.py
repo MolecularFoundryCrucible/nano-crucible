@@ -645,14 +645,18 @@ Examples:
 
 def _edit_project(project_id, client, debug=False):
     """Core edit logic for a project - shared with top-level 'crucible edit' command."""
-    project = client.projects.get(project_id)
+    project = client.projects.get(project_id, include_metadata=True)
     if project is None:
         logger.error(f"Project not found: {project_id}")
         sys.exit(1)
 
     from .schema import PROJECT_FIELDS, ordered_dict
     valid_fields = set(_project_updatable_fields())
-    original = ordered_dict(PROJECT_FIELDS, project, verbose=True, editable_only=True)
+    original_fields = ordered_dict(PROJECT_FIELDS, project, verbose=True, editable_only=True)
+    original_meta = project.get('scientific_metadata') or {}
+
+    original = dict(original_fields)
+    original['scientific_metadata'] = original_meta
 
     try:
         edited = term.open_editor_json(original)
@@ -664,16 +668,25 @@ def _edit_project(project_id, client, debug=False):
         logger.info("No changes.")
         return
 
-    changes = {k: v for k, v in edited.items() if k in valid_fields and v != original.get(k)}
+    field_changes = {k: v for k, v in edited.items() if k in valid_fields and v != original_fields.get(k)}
+    edited_meta = edited.get('scientific_metadata')
+    meta_changed = isinstance(edited_meta, dict) and edited_meta != original_meta
 
-    if not changes:
+    if not field_changes and not meta_changed:
         logger.info("No changes.")
         return
 
     try:
-        client.projects.update(project_id, **changes)
+        if field_changes:
+            client.projects.update(project_id, **field_changes)
+        if meta_changed:
+            client.projects.update_scientific_metadata(project_id, edited_meta, overwrite=True)
+
+        diff_updated = dict(field_changes)
+        if meta_changed:
+            diff_updated['scientific_metadata'] = edited_meta
         term.header("Changes")
-        term.diff(original, changes)
+        term.diff(original, diff_updated)
     except Exception as e:
         logger.error(f"Error updating project: {e}")
         if debug:
