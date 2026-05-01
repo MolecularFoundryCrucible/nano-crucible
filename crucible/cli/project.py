@@ -331,9 +331,9 @@ def _execute_list(args):
                 (
                     term.project_link(p.get('project_id'),
                                       f"{_base}/{p.get('project_id')}" if _base else None),
-                    p.get('title') or '—',
-                    p.get('organization') or '—',
-                    _lead_name(p) or '—',
+                    p.get('title') or '-',
+                    p.get('organization') or '-',
+                    _lead_name(p) or '-',
                 )
                 for p in projects
             ]
@@ -511,9 +511,9 @@ def _execute_list_users(args):
             rows = []
             for u in users:
                 name_parts = [u.get('first_name') or '', u.get('last_name') or '']
-                name  = ' '.join(p for p in name_parts if p) or '—'
-                orcid = u.get('unique_id') or u.get('orcid') or '—'
-                email = u.get('email') or '—'
+                name  = ' '.join(p for p in name_parts if p) or '-'
+                orcid = u.get('unique_id') or u.get('orcid') or '-'
+                email = u.get('email') or '-'
                 rows.append((name, orcid, email))
             term.table(rows, ['Name', 'ORCID', 'Email'], max_widths=[25, 19, 35])
 

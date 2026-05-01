@@ -74,6 +74,23 @@ def fetch_api_label():
         return 'api: ?'
 
 
+def cast_value(value: str):
+    """Auto-cast a string value to int, float, bool, or string."""
+    if value.lower() == 'true':
+        return True
+    if value.lower() == 'false':
+        return False
+    try:
+        return int(value)
+    except ValueError:
+        pass
+    try:
+        return float(value)
+    except ValueError:
+        pass
+    return value
+
+
 def load_metadata(value: str) -> dict:
     """Parse a metadata arg: JSON string or path to a JSON file.
 

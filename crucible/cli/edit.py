@@ -31,7 +31,7 @@ Examples:
     parser.add_argument(
         'resource_id',
         metavar='ID',
-        help='Resource MFID (dataset or sample)'
+        help='Resource MFID (dataset, sample, or instrument)'
     )
 
     parser.set_defaults(func=execute)
@@ -52,6 +52,10 @@ def execute(args):
         elif resource_type == 'sample':
             from .sample import _edit_sample
             _edit_sample(args.resource_id, client, debug=getattr(args, 'debug', False))
+
+        elif resource_type == 'instrument':
+            from .instrument import _edit_instrument
+            _edit_instrument(args.resource_id, client, debug=getattr(args, 'debug', False))
 
         else:
             logger.error(f"Could not determine resource type for: {args.resource_id}")

@@ -222,7 +222,7 @@ class CrucibleClient:
             result['access_group_name'] = result['user_unique_id']
         return result
 
-    def get_resource_type(self, resource_id: str) -> dict:
+    def get_resource_type(self, resource_id: str) -> str:
         """
         Determine the type of a resource.
 

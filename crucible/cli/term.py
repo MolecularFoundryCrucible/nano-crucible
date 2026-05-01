@@ -96,7 +96,7 @@ def subheader(title: str) -> None:
 def field_printer(width: int = 14):
     """Return a ``_p(label, value)`` closure that prints aligned label:value rows."""
     def _p(label: str, value) -> None:
-        print(f"  {label:<{width}}{value if value not in (None, '') else '—'}")
+        print(f"  {label:<{width}}{value if value not in (None, '') else '-'}")
     return _p
 
 
@@ -206,7 +206,7 @@ def diff(original: dict, updated: dict) -> None:
     MAX_VAL = 60
 
     def _v(val):
-        s = str(val) if val not in (None, '') else '—'
+        s = str(val) if val not in (None, '') else '-'
         return s if len(s) <= MAX_VAL else s[:MAX_VAL - 1] + '…'
 
     key_w = max(len(k) for k in changes)
@@ -327,7 +327,7 @@ def table(rows: list, headers: list, max_widths: list | None = None) -> None:
     widths = [len(h) for h in headers]
     for row in rows:
         for i, cell in enumerate(row):
-            widths[i] = max(widths[i], _dlen(str(cell) if cell is not None else '—'))
+            widths[i] = max(widths[i], _dlen(str(cell) if cell is not None else '-'))
     if max_widths:
         widths = [min(w, m) for w, m in zip(widths, max_widths)]
 
@@ -337,7 +337,7 @@ def table(rows: list, headers: list, max_widths: list | None = None) -> None:
     for row in rows:
         parts = []
         for i, cell in enumerate(row):
-            s = str(cell) if cell is not None else '—'
+            s = str(cell) if cell is not None else '-'
             dw = _dlen(s)
             if dw > widths[i]:
                 s = _truncate_cell(s, widths[i])

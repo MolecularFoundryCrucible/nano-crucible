@@ -64,6 +64,8 @@ INSTRUMENT_FIELDS: List[FieldDef] = [
     FieldDef('owner',                      'Owner',         editable=True,  verbose=False),
     FieldDef('location',                   'Location',      editable=True,  verbose=False),
     FieldDef('description',                'Description',   editable=True,  verbose=False),
+    FieldDef('other_id',                   'Other ID',      editable=False, verbose=True),
+    FieldDef('other_id_source',            'Other ID Src',  editable=False, verbose=True),
     FieldDef('creation_time',              'Created',       editable=False, verbose=True),
     FieldDef('modification_time',          'Modified',      editable=False, verbose=True),
 ]

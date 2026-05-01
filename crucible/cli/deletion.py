@@ -41,7 +41,7 @@ def register_subcommand(subparsers):
 def _short_ts(ts):
     """YYYY-MM-DD — compact enough for a table column."""
     if not ts:
-        return '—'
+        return '-'
     from datetime import datetime, timezone
     try:
         dt = datetime.fromisoformat(str(ts).strip())
@@ -53,7 +53,7 @@ def _short_ts(ts):
 def _status_label(status):
     """Return a styled status string."""
     if not status:
-        return '—'
+        return '-'
     if not (hasattr(sys.stdout, 'isatty') and sys.stdout.isatty()):
         return status
     if status == 'pending':
@@ -255,9 +255,9 @@ def _execute_list(args):
         rows = [
             (
                 record.get('id'),
-                term.mfid_link(record.get('resource_id') or '') or '—',
-                record.get('resource_type') or '—',
-                record.get('resource_name') or '—',
+                term.mfid_link(record.get('resource_id') or '') or '-',
+                record.get('resource_type') or '-',
+                record.get('resource_name') or '-',
                 _status_label(record.get('status') or ''),
                 _short_ts(record.get('request_time')),
             )

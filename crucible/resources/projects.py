@@ -43,8 +43,8 @@ class ProjectOperations(BaseResource):
         Returns:
             Dict: Complete project information including embedded lead user
         """
-        params = {'include_metadata': True} if include_metadata else None
-        return self._request('get', f'/projects/{project_id}', params=params)
+        params = {'include_metadata': True} if include_metadata else {}
+        return self._request('get', f'/projects/{project_id}', params=params or None)
 
     def list(self, orcid: Optional[str] = None, include_metadata: bool = False,
              limit: int = DEFAULT_LIMIT, offset: int = 0) -> List[Dict]:

@@ -397,9 +397,9 @@ def _execute_list(args):
         rows = []
         for user in users:
             name_parts = [user.get('first_name') or '', user.get('last_name') or '']
-            name  = ' '.join(p for p in name_parts if p) or '—'
-            orcid = term.orcid_link(user.get('unique_id') or user.get('orcid')) or '—'
-            email = user.get('email') or '—'
+            name  = ' '.join(p for p in name_parts if p) or '-'
+            orcid = term.orcid_link(user.get('unique_id') or user.get('orcid')) or '-'
+            email = user.get('email') or '-'
             rows.append((name, orcid, email))
         term.table(rows, ['Name', 'ORCID', 'Email'], max_widths=[25, 19, 35])
 
@@ -561,9 +561,9 @@ def _execute_list_projects(args):
 
         rows = [
             (
-                p.get('project_id') or '—',
-                p.get('title') or '—',
-                p.get('organization') or '—',
+                p.get('project_id') or '-',
+                p.get('title') or '-',
+                p.get('organization') or '-',
             )
             for p in projects
         ]

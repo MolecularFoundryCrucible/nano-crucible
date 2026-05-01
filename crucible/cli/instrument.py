@@ -294,10 +294,10 @@ def _execute_list(args):
         else:
             rows = [
                 (
-                    i.get('instrument_name') or '—',
-                    i.get('unique_id') or '—',
-                    i.get('owner') or '—',
-                    i.get('location') or '—',
+                    i.get('instrument_name') or '-',
+                    i.get('unique_id') or '-',
+                    i.get('owner') or '-',
+                    i.get('location') or '-',
                 )
                 for i in instruments
             ]

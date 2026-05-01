@@ -359,10 +359,16 @@ try:
                 return
 
             current_word = '' if trailing_space else words[-1]
-            if not current_word.startswith('-'):
-                prev = words[-1] if trailing_space else (words[-2] if len(words) >= 2 else '')
+            prev = (words[-1] if trailing_space else words[-2]) if len(words) >= 2 else ''
+
+            if current_word and not current_word.startswith('-'):
+                # Mid-typing a positional value or flag value — no completions unless it's --orcid
                 if prev == '--orcid':
                     yield from self._yield_user_completions(current_word)
+                return
+
+            if not current_word and prev == '--orcid':
+                yield from self._yield_user_completions('')
                 return
 
             for flag in sub_parser._option_string_actions:

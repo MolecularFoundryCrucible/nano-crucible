@@ -334,8 +334,8 @@ Examples:
 
 def _execute_update(args):
     """Execute the 'sample update' subcommand."""
-    from pathlib import Path
     from crucible.client import CrucibleClient
+    from .helpers import cast_value
 
     has_set = bool(getattr(args, 'set_fields', None))
     has_metadata = bool(getattr(args, 'metadata', None))
@@ -359,7 +359,7 @@ def _execute_update(args):
                     f"Valid fields: {', '.join(sorted(valid_fields))}"
                 )
                 sys.exit(1)
-            updates[key] = value
+            updates[key] = cast_value(value)
 
     metadata_dict = None
     if has_metadata:
@@ -653,8 +653,8 @@ def _execute_list(args):
                 url = f"{_base}/{pid}/sample-graph/{uid}" if _base and uid and pid else None
                 return (
                     s.get('sample_name') or '(unnamed)',
-                    term.mfid_link(uid, url) if uid else '—',
-                    s.get('sample_type') or '—',
+                    term.mfid_link(uid, url) if uid else '-',
+                    s.get('sample_type') or '-',
                 )
 
             _by_name = lambda s: (s.get('sample_name') or '').lower()
@@ -949,8 +949,8 @@ def _execute_list_parents(args):
         if not parents:
             print(f"  {term.dim('No parent samples found.')}")
             return
-        rows = [(s.get('sample_name') or '(unnamed)', s.get('unique_id') or '—',
-                 s.get('sample_type') or '—') for s in parents]
+        rows = [(s.get('sample_name') or '(unnamed)', s.get('unique_id') or '-',
+                 s.get('sample_type') or '-') for s in parents]
         term.table(rows, ['Name', 'MFID', 'Type'], max_widths=[35, 26, 20])
     except Exception as e:
         logger.error(f"Error listing parent samples: {e}")
@@ -971,8 +971,8 @@ def _execute_list_children(args):
         if not children:
             print(f"  {term.dim('No child samples found.')}")
             return
-        rows = [(s.get('sample_name') or '(unnamed)', s.get('unique_id') or '—',
-                 s.get('sample_type') or '—') for s in children]
+        rows = [(s.get('sample_name') or '(unnamed)', s.get('unique_id') or '-',
+                 s.get('sample_type') or '-') for s in children]
         term.table(rows, ['Name', 'MFID', 'Type'], max_widths=[35, 26, 20])
     except Exception as e:
         logger.error(f"Error listing child samples: {e}")
@@ -993,8 +993,8 @@ def _execute_list_datasets(args):
         if not datasets:
             print(f"  {term.dim('No datasets linked.')}")
             return
-        rows = [(ds.get('dataset_name') or '(unnamed)', ds.get('unique_id') or '—',
-                 ds.get('measurement') or '—') for ds in datasets]
+        rows = [(ds.get('dataset_name') or '(unnamed)', ds.get('unique_id') or '-',
+                 ds.get('measurement') or '-') for ds in datasets]
         term.table(rows, ['Name', 'MFID', 'Measurement'], max_widths=[35, 26, 15])
     except Exception as e:
         logger.error(f"Error listing datasets: {e}")

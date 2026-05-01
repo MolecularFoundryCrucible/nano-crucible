@@ -653,6 +653,7 @@ Examples:
 def _execute_update(args):
     """Execute the 'dataset update' subcommand."""
     from crucible.client import CrucibleClient
+    from .helpers import cast_value
 
     has_set = bool(getattr(args, 'set_fields', None))
     has_metadata = bool(getattr(args, 'metadata', None))
@@ -677,25 +678,16 @@ def _execute_update(args):
                     f"Valid fields: {', '.join(sorted(valid_fields))}"
                 )
                 sys.exit(1)
-            updates[key] = _cast_value(value)
+            updates[key] = cast_value(value)
 
-    # Parse --metadata for scientific metadata
     metadata_dict = None
     if has_metadata:
-        metadata_path = Path(args.metadata)
-        if metadata_path.exists():
-            try:
-                with open(metadata_path, 'r') as f:
-                    metadata_dict = json.load(f)
-            except json.JSONDecodeError as e:
-                logger.error(f"Error: Invalid JSON in file {metadata_path}: {e}")
-                sys.exit(1)
-        else:
-            try:
-                metadata_dict = json.loads(args.metadata)
-            except json.JSONDecodeError:
-                logger.error(f"Error: '{args.metadata}' is not valid JSON and no such file exists.")
-                sys.exit(1)
+        from .helpers import load_metadata
+        try:
+            metadata_dict = load_metadata(args.metadata)
+        except ValueError as e:
+            logger.error(f"Error: {e}")
+            sys.exit(1)
 
     try:
         client = CrucibleClient()
@@ -1293,7 +1285,7 @@ def _execute_list_files(args):
             url   = links.get(name)
             size  = meta_by_name[name].get('size')
             label = term.hyperlink(term.cyan(name), url) if url else name
-            rows.append((label, term.fmt_size(size) if size is not None else '—'))
+            rows.append((label, term.fmt_size(size) if size is not None else '-'))
 
         term.table(rows, ['File', 'Size'], max_widths=[60, 10])
 
@@ -1361,7 +1353,7 @@ def _execute_search(args):
             print(f"  {term.dim('No results found.')}")
         else:
             for r in results:
-                mfid = r.get('dataset_mfid', '—')
+                mfid = r.get('dataset_mfid', '-')
                 print(f"  {term.cyan(mfid)}")
                 if args.verbose:
                     scimd = r.get('scientific_metadata', {})
@@ -1556,9 +1548,9 @@ def _execute_list(args):
                 url = f"{_base}/{pid}/dataset/{uid}" if _base and uid and pid else None
                 return (
                     ds.get('dataset_name') or '(unnamed)',
-                    term.mfid_link(uid, url) if uid else '—',
-                    ds.get('measurement') or '—',
-                    ds.get('session_name') or '—',
+                    term.mfid_link(uid, url) if uid else '-',
+                    ds.get('measurement') or '-',
+                    ds.get('session_name') or '-',
                 )
 
             _by_name = lambda ds: (ds.get('dataset_name') or '').lower()
@@ -1826,23 +1818,6 @@ def _execute_create(args):
             sys.exit(1)
 
 
-def _cast_value(value):
-    """Auto-cast a string value to int, float, bool, or string."""
-    if value.lower() == 'true':
-        return True
-    if value.lower() == 'false':
-        return False
-    try:
-        return int(value)
-    except ValueError:
-        pass
-    try:
-        return float(value)
-    except ValueError:
-        pass
-    return value
-
-
 def _execute_link(args):
     """Execute the 'dataset link' subcommand."""
     from crucible.client import CrucibleClient
@@ -1872,8 +1847,8 @@ def _execute_list_parents(args):
         if not parents:
             print(f"  {term.dim('No parent datasets found.')}")
             return
-        rows = [(ds.get('dataset_name') or '(unnamed)', ds.get('unique_id') or '—',
-                 ds.get('measurement') or '—') for ds in parents]
+        rows = [(ds.get('dataset_name') or '(unnamed)', ds.get('unique_id') or '-',
+                 ds.get('measurement') or '-') for ds in parents]
         term.table(rows, ['Name', 'MFID', 'Measurement'], max_widths=[35, 26, 15])
 
     except Exception as e:
@@ -1896,8 +1871,8 @@ def _execute_list_children(args):
         if not children:
             print(f"  {term.dim('No child datasets found.')}")
             return
-        rows = [(ds.get('dataset_name') or '(unnamed)', ds.get('unique_id') or '—',
-                 ds.get('measurement') or '—') for ds in children]
+        rows = [(ds.get('dataset_name') or '(unnamed)', ds.get('unique_id') or '-',
+                 ds.get('measurement') or '-') for ds in children]
         term.table(rows, ['Name', 'MFID', 'Measurement'], max_widths=[35, 26, 15])
 
     except Exception as e:
@@ -1920,8 +1895,8 @@ def _execute_list_samples(args):
         if not samples:
             print(f"  {term.dim('No samples linked.')}")
             return
-        rows = [(s.get('sample_name') or '(unnamed)', s.get('unique_id') or '—',
-                 s.get('sample_type') or '—') for s in samples]
+        rows = [(s.get('sample_name') or '(unnamed)', s.get('unique_id') or '-',
+                 s.get('sample_type') or '-') for s in samples]
         term.table(rows, ['Name', 'MFID', 'Type'], max_widths=[35, 26, 20])
 
     except Exception as e:
@@ -1944,8 +1919,8 @@ def _execute_parsers(args):
             (
                 name,
                 "built-in" if name in builtin_names else "installed",
-                getattr(cls, '_measurement', '—') or '—',
-                getattr(cls, '_data_format', None) or '—',
+                getattr(cls, '_measurement', '-') or '-',
+                getattr(cls, '_data_format', None) or '-',
             )
             for name, cls in sorted(all_parsers.items())
         ]
@@ -1956,7 +1931,7 @@ def _execute_parsers(args):
             (
                 name,
                 "built-in" if name in builtin_names else "installed",
-                getattr(cls, '_measurement', '—') or '—',
+                getattr(cls, '_measurement', '-') or '-',
             )
             for name, cls in sorted(all_parsers.items())
         ]
