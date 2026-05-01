@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from typing import List
 
 
+
 @dataclass(frozen=True)
 class FieldDef:
     key:      str   # API/model dict key
@@ -50,6 +51,30 @@ SAMPLE_FIELDS: List[FieldDef] = [
     FieldDef('timestamp',                  'Timestamp',     editable=True,  verbose=False),
     FieldDef('description',                'Description',   editable=True,  verbose=False),
     FieldDef('owner_orcid',                'Owner ORCID',   editable=False, verbose=True),
+    FieldDef('creation_time',              'Created',       editable=False, verbose=True),
+    FieldDef('modification_time',          'Modified',      editable=False, verbose=True),
+]
+
+INSTRUMENT_FIELDS: List[FieldDef] = [
+    FieldDef('instrument_name',            'Name',          editable=True,  verbose=False),
+    FieldDef('unique_id',                  'MFID',          editable=False, verbose=False),
+    FieldDef('instrument_type',            'Type',          editable=True,  verbose=False),
+    FieldDef('manufacturer',               'Manufacturer',  editable=True,  verbose=False),
+    FieldDef('model',                      'Model',         editable=True,  verbose=False),
+    FieldDef('owner',                      'Owner',         editable=True,  verbose=False),
+    FieldDef('location',                   'Location',      editable=True,  verbose=False),
+    FieldDef('description',                'Description',   editable=True,  verbose=False),
+    FieldDef('creation_time',              'Created',       editable=False, verbose=True),
+    FieldDef('modification_time',          'Modified',      editable=False, verbose=True),
+]
+
+PROJECT_FIELDS: List[FieldDef] = [
+    FieldDef('project_id',                 'ID',            editable=False, verbose=False),
+    FieldDef('title',                      'Title',         editable=True,  verbose=False),
+    FieldDef('organization',               'Organization',  editable=True,  verbose=False),
+    FieldDef('status',                     'Status',        editable=True,  verbose=False),
+    FieldDef('project_lead_email',         'Lead Email',    editable=True,  verbose=False),
+    FieldDef('project_lead_orcid',         'Lead ORCID',    editable=True,  verbose=True),
     FieldDef('creation_time',              'Created',       editable=False, verbose=True),
     FieldDef('modification_time',          'Modified',      editable=False, verbose=True),
 ]

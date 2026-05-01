@@ -46,8 +46,8 @@ class ProjectOperations(BaseResource):
         params = {'include_metadata': True} if include_metadata else None
         return self._request('get', f'/projects/{project_id}', params=params)
 
-    def list(self, orcid: Optional[str] = None, limit: int = DEFAULT_LIMIT,
-             offset: int = 0) -> List[Dict]:
+    def list(self, orcid: Optional[str] = None, include_metadata: bool = False,
+             limit: int = DEFAULT_LIMIT, offset: int = 0) -> List[Dict]:
         """List all accessible projects.
 
         Each project dict includes a ``lead`` key with the project lead's full
@@ -55,16 +55,19 @@ class ProjectOperations(BaseResource):
 
         Args:
             orcid (str, optional): Filter projects by those associated with a certain user
+            include_metadata (bool): Include scientific metadata in results
             limit (int): Maximum number of results to return (default: 100)
             offset (int): Starting position in the full result set (default: 0)
 
         Returns:
             List[Dict]: Project metadata including project_id, title, organization, lead
         """
+        params = {'include_metadata': True} if include_metadata else {}
         endpoint = f'/users/{orcid}/projects' if orcid else '/projects'
-        return self._paginate(endpoint, {}, limit, offset)
+        return self._paginate(endpoint, params, limit, offset)
 
-    def create(self, project: Union[Project, Dict]) -> Dict:
+    def create(self, project: Union[Project, Dict],
+               scientific_metadata: Optional[Dict] = None) -> Dict:
         """Create a new project.
 
         **Requires admin permissions.**
@@ -72,6 +75,7 @@ class ProjectOperations(BaseResource):
         Args:
             project: A Project model instance or a dict with project_id,
                      organization, and project_lead_email.
+            scientific_metadata (Dict, optional): Scientific metadata to attach after creation.
 
         Returns:
             Dict: Created project object
@@ -85,13 +89,43 @@ class ProjectOperations(BaseResource):
             ... )
             >>> result = client.projects.create(project)
         """
-        
         if isinstance(project, Project):
             project_details = project.model_dump(exclude_none=True)
         else:
             project_details = dict(project)
 
-        return self._request('post', "/projects", json=project_details)
+        result = self._request('post', "/projects", json=project_details)
+        if scientific_metadata:
+            self.add_scientific_metadata(result['project_id'], scientific_metadata)
+        return result
+
+    def add_scientific_metadata(self, project_id: str, metadata: Dict) -> Dict:
+        """Create scientific metadata for a project.
+
+        Args:
+            project_id (str): Project unique identifier
+            metadata (Dict): Scientific metadata dictionary
+
+        Returns:
+            Dict: Created metadata object
+        """
+        return self._request('post', f'/metadata/{project_id}', json=metadata)
+
+    def update_scientific_metadata(self, project_id: str, metadata: Dict,
+                                   overwrite: bool = False) -> Dict:
+        """Update scientific metadata for a project.
+
+        Args:
+            project_id (str): Project unique identifier
+            metadata (Dict): Scientific metadata dictionary
+            overwrite (bool): If True, replace all metadata (POST); if False, merge (PATCH)
+
+        Returns:
+            Dict: Updated metadata object
+        """
+        if overwrite:
+            return self._request('post', f'/metadata/{project_id}', json=metadata)
+        return self._request('patch', f'/metadata/{project_id}', json=metadata)
 
     def get_users(self, project_id: str, limit: int = DEFAULT_LIMIT,
                   offset: int = 0) -> List[Dict]:

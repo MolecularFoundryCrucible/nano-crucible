@@ -130,6 +130,13 @@ Examples:
     )
 
     parser.add_argument(
+        '--include-metadata',
+        action='store_true',
+        dest='include_metadata',
+        help='Include scientific metadata in results'
+    )
+
+    parser.add_argument(
         '-v', '--verbose',
         action='store_true',
         help='Verbose output'
@@ -244,6 +251,13 @@ Examples:
     )
 
     parser.add_argument(
+        '--metadata',
+        dest='metadata',
+        metavar='JSON',
+        help='Scientific metadata as JSON string or path to JSON file'
+    )
+
+    parser.add_argument(
         '-v', '--verbose',
         action='store_true',
         help='Verbose output'
@@ -349,20 +363,12 @@ def _execute_update(args):
 
     metadata_dict = None
     if has_metadata:
-        metadata_path = Path(args.metadata)
-        if metadata_path.exists():
-            try:
-                with open(metadata_path, 'r') as f:
-                    metadata_dict = json.load(f)
-            except json.JSONDecodeError as e:
-                logger.error(f"Error: Invalid JSON in file {metadata_path}: {e}")
-                sys.exit(1)
-        else:
-            try:
-                metadata_dict = json.loads(args.metadata)
-            except json.JSONDecodeError:
-                logger.error(f"Error: '{args.metadata}' is not valid JSON and no such file exists.")
-                sys.exit(1)
+        from .helpers import load_metadata
+        try:
+            metadata_dict = load_metadata(args.metadata)
+        except ValueError as e:
+            logger.error(f"Error: {e}")
+            sys.exit(1)
 
     try:
         client = CrucibleClient()
@@ -588,7 +594,9 @@ def _execute_list(args):
     try:
         import fnmatch
         client = CrucibleClient()
-        samples = client.samples.list(project_id=project_id, limit=args.limit, **filters)
+        samples = client.samples.list(project_id=project_id, limit=args.limit,
+                                         include_metadata=getattr(args, 'include_metadata', False),
+                                         **filters)
 
         # Client-side wildcard filtering on type
         if type_pattern:
@@ -870,6 +878,15 @@ def _execute_create(args):
                 except ValueError:
                     logger.error(f"Cannot parse date: {val!r}. Try 'today', '2024-01-15', or '2024-01-15 10:30'.")
 
+    metadata_dict = None
+    if getattr(args, 'metadata', None):
+        from .helpers import load_metadata
+        try:
+            metadata_dict = load_metadata(args.metadata)
+        except ValueError as e:
+            logger.error(str(e))
+            sys.exit(1)
+
     try:
         result = client.samples.create(
             sample_name=name,
@@ -877,6 +894,7 @@ def _execute_create(args):
             description=description,
             sample_type=sample_type,
             timestamp=timestamp,
+            scientific_metadata=metadata_dict,
         )
 
         logger.info("✓ Sample created")

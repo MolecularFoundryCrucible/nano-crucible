@@ -47,6 +47,7 @@ def register_subcommand(subparsers):
     _register_get(project_subparsers)
     _register_create(project_subparsers)
     _register_update(project_subparsers)
+    _register_edit(project_subparsers)
     _register_list_users(project_subparsers)
     _register_add_user(project_subparsers)
     _register_remove_user(project_subparsers)
@@ -66,6 +67,13 @@ def _register_list(subparsers):
         default=_config.default_limit,
         metavar='N',
         help=f'Maximum number of results to return (default: {_config.default_limit})'
+    )
+
+    parser.add_argument(
+        '--include-metadata',
+        action='store_true',
+        dest='include_metadata',
+        help='Include scientific metadata in results'
     )
 
     parser.add_argument(
@@ -172,6 +180,13 @@ Examples:
     )
 
     parser.add_argument(
+        '--metadata',
+        dest='metadata',
+        metavar='JSON',
+        help='Scientific metadata as JSON string or path to JSON file'
+    )
+
+    parser.add_argument(
         '-v', '--verbose',
         action='store_true',
         help='Verbose output'
@@ -266,6 +281,10 @@ Examples:
     parser.add_argument('--status',       dest='status',              metavar='STATUS', help='Project status')
     parser.add_argument('--lead-email',   dest='project_lead_email',  metavar='EMAIL',  help='Project lead email')
     parser.add_argument('--lead-orcid',   dest='project_lead_orcid',  metavar='ORCID',  help='Project lead ORCID')
+    parser.add_argument('--metadata',     dest='metadata',            metavar='JSON',
+                        help='Scientific metadata as JSON string or path to JSON file')
+    parser.add_argument('--overwrite',    action='store_true',
+                        help='Replace all existing scientific metadata instead of merging (only with --metadata)')
     parser.set_defaults(func=_execute_update)
 
 
@@ -295,7 +314,8 @@ def _execute_list(args):
     from crucible.client import CrucibleClient
     try:
         client = CrucibleClient()
-        projects = client.projects.list(limit=args.limit)
+        projects = client.projects.list(limit=args.limit,
+                                        include_metadata=getattr(args, 'include_metadata', False))
 
         try:
             from crucible.config import config
@@ -441,6 +461,15 @@ def _execute_create(args):
             val = input("Status (optional, press Enter to skip): ").strip()
             status = val or None
 
+    metadata_dict = None
+    if getattr(args, 'metadata', None):
+        from .helpers import load_metadata
+        try:
+            metadata_dict = load_metadata(args.metadata)
+        except ValueError as e:
+            logger.error(str(e))
+            sys.exit(1)
+
     try:
         from crucible.models import Project
         client = CrucibleClient()
@@ -455,7 +484,7 @@ def _execute_create(args):
             title=title,
             status=status,
         )
-        result = client.projects.create(project)
+        result = client.projects.create(project, scientific_metadata=metadata_dict)
 
         logger.info("✓ Project created")
         _show_project(result)
@@ -532,15 +561,35 @@ def _execute_update(args):
         'project_lead_orcid':  args.project_lead_orcid,
     }.items() if v is not None}
 
-    if not fields:
-        logger.error("No fields to update. Provide at least one of: --title, --organization, --status, --lead-email, --lead-orcid")
+    has_metadata = bool(getattr(args, 'metadata', None))
+
+    if not fields and not has_metadata:
+        logger.error("No fields to update. Provide at least one of: --title, --organization, --status, --lead-email, --lead-orcid, --metadata")
         sys.exit(1)
+
+    metadata_dict = None
+    if has_metadata:
+        from .helpers import load_metadata
+        try:
+            metadata_dict = load_metadata(args.metadata)
+        except ValueError as e:
+            logger.error(f"Error: {e}")
+            sys.exit(1)
 
     try:
         client = CrucibleClient()
-        result = client.projects.update(args.project_id, **fields)
-        logger.info("Project updated")
-        _show_project(result)
+
+        if fields:
+            result = client.projects.update(args.project_id, **fields)
+            logger.info("✓ Project updated")
+            _show_project(result)
+
+        if metadata_dict is not None:
+            overwrite = getattr(args, 'overwrite', False)
+            client.projects.update_scientific_metadata(args.project_id, metadata_dict, overwrite=overwrite)
+            action = "replaced" if overwrite else "updated"
+            logger.info(f"✓ Scientific metadata {action} for project {args.project_id}")
+
     except Exception as e:
         logger.error(f"Error updating project: {e}")
         if getattr(args, "debug", False):
@@ -562,3 +611,83 @@ def _execute_remove_user(args):
             import traceback
             traceback.print_exc()
         sys.exit(1)
+
+
+def _project_updatable_fields():
+    """Return ordered list of fields that can be updated on a project."""
+    from .schema import PROJECT_FIELDS, editable_keys
+    return editable_keys(PROJECT_FIELDS)
+
+
+def _register_edit(subparsers):
+    """Register the 'project edit' subcommand."""
+    parser = subparsers.add_parser(
+        'edit',
+        help='Edit project fields interactively',
+        description='Open project fields in $EDITOR and update on save',
+        formatter_class=term.ColorHelpFormatter,
+        epilog="""
+Examples:
+    crucible project edit my-project
+    EDITOR=vim crucible project edit my-project
+"""
+    )
+    pid_arg = parser.add_argument(
+        'project_id',
+        metavar='PROJECT_ID',
+        help='Project ID'
+    )
+    if ARGCOMPLETE_AVAILABLE:
+        pid_arg.completer = argcomplete.completers.SuppressCompleter()
+    parser.add_argument('-v', '--verbose', action='store_true', help='Verbose output')
+    parser.set_defaults(func=_execute_edit)
+
+
+def _edit_project(project_id, client, debug=False):
+    """Core edit logic for a project - shared with top-level 'crucible edit' command."""
+    project = client.projects.get(project_id)
+    if project is None:
+        logger.error(f"Project not found: {project_id}")
+        sys.exit(1)
+
+    from .schema import PROJECT_FIELDS, ordered_dict
+    valid_fields = set(_project_updatable_fields())
+    original = ordered_dict(PROJECT_FIELDS, project, verbose=True, editable_only=True)
+
+    try:
+        edited = term.open_editor_json(original)
+    except (RuntimeError, ValueError) as e:
+        logger.error(str(e))
+        sys.exit(1)
+
+    if edited is None:
+        logger.info("No changes.")
+        return
+
+    changes = {k: v for k, v in edited.items() if k in valid_fields and v != original.get(k)}
+
+    if not changes:
+        logger.info("No changes.")
+        return
+
+    try:
+        client.projects.update(project_id, **changes)
+        term.header("Changes")
+        term.diff(original, changes)
+    except Exception as e:
+        logger.error(f"Error updating project: {e}")
+        if debug:
+            import traceback
+            traceback.print_exc()
+        sys.exit(1)
+
+
+def _execute_edit(args):
+    """Execute the 'project edit' subcommand."""
+    from crucible.client import CrucibleClient
+    try:
+        client = CrucibleClient()
+    except Exception as e:
+        logger.error(f"Error connecting: {e}")
+        sys.exit(1)
+    _edit_project(args.project_id, client, debug=getattr(args, 'debug', False))

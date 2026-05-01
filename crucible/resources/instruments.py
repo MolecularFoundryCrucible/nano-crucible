@@ -67,7 +67,7 @@ class InstrumentOperations(BaseResource):
         results = self._paginate('/instruments', params, limit=1)
         return results[0] if results else None
 
-    def create(self, instrument) -> Dict:
+    def create(self, instrument, scientific_metadata: Optional[Dict] = None) -> Dict:
         """Create a new instrument, returning the existing one if it already exists.
 
         **Requires admin permissions.**
@@ -75,6 +75,7 @@ class InstrumentOperations(BaseResource):
         Args:
             instrument: Instrument model or dict with instrument details.
                         Required fields: instrument_name, owner, location.
+            scientific_metadata (Dict, optional): Scientific metadata to attach after creation.
 
         Returns:
             Dict: Created (or existing) instrument object
@@ -96,7 +97,10 @@ class InstrumentOperations(BaseResource):
                 )
                 return existing
 
-        return self._request('post', '/instruments', json=payload)
+        result = self._request('post', '/instruments', json=payload)
+        if scientific_metadata:
+            self.add_scientific_metadata(result['unique_id'], scientific_metadata)
+        return result
 
     def update(self, unique_id: str, **kwargs) -> Dict:
         """Partially update an instrument record.

@@ -46,6 +46,7 @@ def register_subcommand(subparsers):
     _register_get(instrument_subparsers)
     _register_create(instrument_subparsers)
     _register_update(instrument_subparsers)
+    _register_edit(instrument_subparsers)
 
 
 def _register_list(subparsers):
@@ -62,6 +63,13 @@ def _register_list(subparsers):
         default=_config.default_limit,
         metavar='N',
         help=f'Maximum number of results to return (default: {_config.default_limit})'
+    )
+
+    parser.add_argument(
+        '--include-metadata',
+        action='store_true',
+        dest='include_metadata',
+        help='Include scientific metadata in results'
     )
 
     parser.add_argument(
@@ -169,6 +177,12 @@ Examples:
         help='Instrument description (optional)'
     )
     parser.add_argument(
+        '--metadata',
+        dest='metadata',
+        metavar='JSON',
+        help='Scientific metadata as JSON string or path to JSON file'
+    )
+    parser.add_argument(
         '-v', '--verbose',
         action='store_true',
         help='Verbose output'
@@ -230,6 +244,15 @@ def _execute_create(args):
             val = input("Description (optional, press Enter to skip): ").strip()
             description = val or None
 
+    metadata_dict = None
+    if getattr(args, 'metadata', None):
+        from .helpers import load_metadata
+        try:
+            metadata_dict = load_metadata(args.metadata)
+        except ValueError as e:
+            logger.error(str(e))
+            sys.exit(1)
+
     try:
         from crucible.models import Instrument
         client = CrucibleClient()
@@ -244,7 +267,7 @@ def _execute_create(args):
             description=description,
         )
 
-        result = client.instruments.create(instrument)
+        result = client.instruments.create(instrument, scientific_metadata=metadata_dict)
 
         logger.info("✓ Instrument created")
         _show_instrument(result)
@@ -262,7 +285,8 @@ def _execute_list(args):
     from crucible.client import CrucibleClient
     try:
         client = CrucibleClient()
-        instruments = client.instruments.list(limit=args.limit)
+        instruments = client.instruments.list(limit=args.limit,
+                                              include_metadata=getattr(args, 'include_metadata', False))
 
         term.header(f"Instruments ({len(instruments)})")
         if not instruments:
@@ -377,8 +401,6 @@ Examples:
 
 def _execute_update(args):
     """Execute the 'instrument update' subcommand."""
-    import json
-    from pathlib import Path
     from crucible.client import CrucibleClient
 
     fields = {k: v for k, v in {
@@ -399,20 +421,12 @@ def _execute_update(args):
 
     metadata_dict = None
     if has_metadata:
-        metadata_path = Path(args.metadata)
-        if metadata_path.exists():
-            try:
-                with open(metadata_path, 'r') as f:
-                    metadata_dict = json.load(f)
-            except json.JSONDecodeError as e:
-                logger.error(f"Error: Invalid JSON in file {metadata_path}: {e}")
-                sys.exit(1)
-        else:
-            try:
-                metadata_dict = json.loads(args.metadata)
-            except json.JSONDecodeError:
-                logger.error(f"Error: '{args.metadata}' is not valid JSON and no such file exists.")
-                sys.exit(1)
+        from .helpers import load_metadata
+        try:
+            metadata_dict = load_metadata(args.metadata)
+        except ValueError as e:
+            logger.error(f"Error: {e}")
+            sys.exit(1)
 
     try:
         client = CrucibleClient()
@@ -434,3 +448,83 @@ def _execute_update(args):
             import traceback
             traceback.print_exc()
         sys.exit(1)
+
+
+def _instrument_updatable_fields():
+    """Return ordered list of fields that can be updated on an instrument."""
+    from .schema import INSTRUMENT_FIELDS, editable_keys
+    return editable_keys(INSTRUMENT_FIELDS)
+
+
+def _register_edit(subparsers):
+    """Register the 'instrument edit' subcommand."""
+    parser = subparsers.add_parser(
+        'edit',
+        help='Edit instrument fields interactively',
+        description='Open instrument fields in $EDITOR and update on save',
+        formatter_class=term.ColorHelpFormatter,
+        epilog="""
+Examples:
+    crucible instrument edit MFID001
+    EDITOR=vim crucible instrument edit MFID001
+"""
+    )
+    uid_arg = parser.add_argument(
+        'unique_id',
+        metavar='MFID',
+        help='Instrument unique ID (MFID)'
+    )
+    if ARGCOMPLETE_AVAILABLE:
+        uid_arg.completer = argcomplete.completers.SuppressCompleter()
+    parser.add_argument('-v', '--verbose', action='store_true', help='Verbose output')
+    parser.set_defaults(func=_execute_edit)
+
+
+def _edit_instrument(uid, client, debug=False):
+    """Core edit logic for an instrument - shared with top-level 'crucible edit' command."""
+    instrument = client.instruments.get(instrument_id=uid)
+    if instrument is None:
+        logger.error(f"Instrument not found: {uid}")
+        sys.exit(1)
+
+    from .schema import INSTRUMENT_FIELDS, ordered_dict
+    valid_fields = set(_instrument_updatable_fields())
+    original = ordered_dict(INSTRUMENT_FIELDS, instrument, verbose=True, editable_only=True)
+
+    try:
+        edited = term.open_editor_json(original)
+    except (RuntimeError, ValueError) as e:
+        logger.error(str(e))
+        sys.exit(1)
+
+    if edited is None:
+        logger.info("No changes.")
+        return
+
+    changes = {k: v for k, v in edited.items() if k in valid_fields and v != original.get(k)}
+
+    if not changes:
+        logger.info("No changes.")
+        return
+
+    try:
+        client.instruments.update(uid, **changes)
+        term.header("Changes")
+        term.diff(original, changes)
+    except Exception as e:
+        logger.error(f"Error updating instrument: {e}")
+        if debug:
+            import traceback
+            traceback.print_exc()
+        sys.exit(1)
+
+
+def _execute_edit(args):
+    """Execute the 'instrument edit' subcommand."""
+    from crucible.client import CrucibleClient
+    try:
+        client = CrucibleClient()
+    except Exception as e:
+        logger.error(f"Error connecting: {e}")
+        sys.exit(1)
+    _edit_instrument(args.unique_id, client, debug=getattr(args, 'debug', False))

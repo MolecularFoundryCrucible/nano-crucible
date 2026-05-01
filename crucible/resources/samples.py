@@ -118,6 +118,7 @@ class SampleOperations(BaseResource):
                owner_orcid: Optional[str] = None, owner_user_id: Optional[int] = None,
                project_id: Optional[str] = None, sample_type: Optional[str] = None,
                parents: List[Dict] = [], children: List[Dict] = [],
+               scientific_metadata: Optional[Dict] = None,
                # deprecated aliases (creation_time/modification_time are server-assigned)
                date_created: Optional[str] = None, creation_date: Optional[str] = None,
                owner_id: Optional[int] = None) -> Dict:
@@ -134,6 +135,7 @@ class SampleOperations(BaseResource):
             project_id (str, optional): Project ID (Name)
             parents (List[Dict], optional): Parent samples
             children (List[Dict], optional): Child samples
+            scientific_metadata (Dict, optional): Scientific metadata to attach after creation
 
         Returns:
             Dict: Created sample object
@@ -177,16 +179,16 @@ class SampleOperations(BaseResource):
             raise Exception('Please provide either a unique ID or a sample name for your sample')
 
         new_samp = self._request('post', "/samples", json=sample_info)
+        sid = new_samp['unique_id']
 
         for p in parents:
-            parent_id = p['unique_id']
-            child_id = new_samp['unique_id']
-            self._request('post', f"/samples/{parent_id}/children/{child_id}")
+            self._request('post', f"/samples/{p['unique_id']}/children/{sid}")
 
         for chd in children:
-            parent_id = new_samp['unique_id']
-            child_id = chd['unique_id']
-            self._request('post', f"/samples/{parent_id}/children/{child_id}")
+            self._request('post', f"/samples/{sid}/children/{chd['unique_id']}")
+
+        if scientific_metadata:
+            self.add_scientific_metadata(sid, scientific_metadata)
 
         return new_samp
 

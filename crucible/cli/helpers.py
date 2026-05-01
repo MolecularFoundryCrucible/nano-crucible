@@ -74,6 +74,32 @@ def fetch_api_label():
         return 'api: ?'
 
 
+def load_metadata(value: str) -> dict:
+    """Parse a metadata arg: JSON string or path to a JSON file.
+
+    Args:
+        value: Raw string from --metadata CLI argument.
+
+    Returns:
+        dict: Parsed metadata.
+
+    Raises:
+        ValueError: If the string is not valid JSON and no such file exists.
+    """
+    import json
+    from pathlib import Path
+    p = Path(value)
+    if p.exists():
+        try:
+            return json.loads(p.read_text())
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Invalid JSON in file {p}: {e}") from e
+    try:
+        return json.loads(value)
+    except json.JSONDecodeError:
+        raise ValueError(f"'{value}' is not valid JSON and no such file exists.")
+
+
 def show_scientific_metadata(sci_md):
     """Display scientific metadata dict under a subheader."""
     from . import term
