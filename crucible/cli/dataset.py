@@ -82,7 +82,9 @@ def _show_dataset(dataset, client, verbose=False, graph=False, include_metadata=
     _p("Timestamp",   term.fmt_ts(dataset.get('timestamp')))
     _p("Description", dataset.get('description'))
 
-    if verbose or graph:
+    dsid = dataset.get('unique_id')
+
+    if verbose:
         term.subheader("Ownership")
         pub = dataset.get('public')
         _p("Public",      "Yes" if pub else ("No" if pub is not None else None))
@@ -97,8 +99,6 @@ def _show_dataset(dataset, client, verbose=False, graph=False, include_metadata=
         term.subheader("Timing")
         _p("Created",  term.fmt_ts(dataset.get('creation_time')))
         _p("Modified", term.fmt_ts(dataset.get('modification_time')))
-
-        dsid = dataset.get('unique_id')
 
         if prefetched is not None:
             keywords = prefetched.get('keywords', [])
@@ -128,12 +128,12 @@ def _show_dataset(dataset, client, verbose=False, graph=False, include_metadata=
             term.subheader("Keywords")
             print(f"  {', '.join(words)}")
 
-        links, meta_by_name = _normalize_file_paths(link_map, af_list, dsid)
+        file_links, meta_by_name = _normalize_file_paths(link_map, af_list, dsid)
 
         if meta_by_name:
             term.subheader(f"Files ({len(meta_by_name)})")
             for name in sorted(meta_by_name):
-                url   = links.get(name)
+                url   = file_links.get(name)
                 size  = meta_by_name[name].get('size')
                 label = term.hyperlink(term.cyan(name), url) if url else name
                 sz    = f"  {term.dim(term.fmt_size(size))}" if size is not None else ''
@@ -144,7 +144,7 @@ def _show_dataset(dataset, client, verbose=False, graph=False, include_metadata=
 
     if graph:
         links_list = links if links is not None else dataset.get('links')
-        if links_list is None:
+        if not links_list:
             try:
                 links_list = client.get_links(dsid)
             except Exception:
