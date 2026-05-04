@@ -100,7 +100,7 @@ class DatasetOperations(BaseResource):
 
     def create(self, dataset, scientific_metadata: Optional[Dict] = None,
                keywords: Optional[List[str]] = None) -> Dict:
-        """Create a new dataset with metadata and optionally upload files.
+        """Create a new dataset record with scientific metadata and keywords.
 
         Args:
             dataset: Dataset object with dataset details
@@ -140,20 +140,14 @@ class DatasetOperations(BaseResource):
         return result
 
     # Associated Files Methods
-    def get_associated_files(self, dsid: str, limit: int = DEFAULT_LIMIT) -> List[Dict]:
-        """Get associated files for a dataset.
-
-        Args:
-            dsid (str): Dataset unique identifier
-            limit (int): Maximum number of results to return
-
-        Returns:
-            List[Dict]: File metadata with names, sizes, and hashes
-        """
-        return self._request('get', f'/datasets/{dsid}/associated_files')
-
     def add_file_to_dataset(self, dsid: str, file_path: str, ingestion_class: Optional[str] = None, wait_for_ingestion_response: bool = False) -> Dict:
-        """Add an associated file to a dataset.
+        """Add an associated file to a dataset. 
+           
+           The provided file will be uploaded to cloud storage,
+           linked to the dataset record, and ingested. 
+           
+           This function also calculates the size and sha256
+           hash of the file before uploading.
 
         Args:
             dsid (str): Dataset unique identifier
@@ -164,7 +158,6 @@ class DatasetOperations(BaseResource):
             Dict: Associated file record and Ingestion request.
         """
         from ..utils import checkhash
-
         # Calculate file metadata
         file_size = os.path.getsize(file_path)
         if file_size >= 1e8:
@@ -183,9 +176,8 @@ class DatasetOperations(BaseResource):
             'filename': upload_path,
             'size': file_size,
             'sha256_hash': file_hash,
-            'ingestion_class': ingestion_class
         }
-        response = self._request('post', f'/datasets/{dsid}/associated_files', json=associated_file_data)
+        response = self._request('post', f'/datasets/{dsid}/associated_files', json=associated_file_data, params = {'ingestion_class': ingestion_class})
         if wait_for_ingestion_response:
             ingestion_request = response.get('ingestion_request')
             status = self._client._wait_for_request_completion(dsid, ingestion_request['id'], 'ingest')
@@ -213,7 +205,20 @@ class DatasetOperations(BaseResource):
         logger.error(f"{file_path} is too large for HTTP upload via the Crucible API. Please upload manually.")
         return None
 
-    
+
+    def get_associated_files(self, dsid: str, limit: int = DEFAULT_LIMIT) -> List[Dict]:
+        """Get associated files for a dataset.
+
+        Args:
+            dsid (str): Dataset unique identifier
+            limit (int): Maximum number of results to return
+
+        Returns:
+            List[Dict]: File metadata with names, sizes, and hashes
+        """
+        return self._request('get', f'/datasets/{dsid}/associated_files')
+
+
     def update(self, dsid: str, **updates) -> Dict:
         """Update an existing dataset with new field values.
 
