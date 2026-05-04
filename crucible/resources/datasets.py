@@ -172,15 +172,15 @@ class DatasetOperations(BaseResource):
         
         file_hash = checkhash(file_path)
         filename = os.path.basename(file_path)
-
+        
         # upload
-        upload_status = self._upload_file(dsid, file_path)
-        if upload_status is None:
-            raise RuntimeError(f"Failed to upload {file_path}. File may be too large. ")
+        upload_path = self._upload_file(dsid, file_path)
+        if upload_path is None:
+            raise RuntimeError(f"Failed to upload {file_path}.")
         
         # add associated file record to database + request ingestion
         associated_file_data = {
-            'filename': filename,
+            'filename': upload_path,
             'size': file_size,
             'sha256_hash': file_hash,
             'ingestion_class': ingestion_class
@@ -191,6 +191,7 @@ class DatasetOperations(BaseResource):
             status = self._client._wait_for_request_completion(dsid, ingestion_request['id'], 'ingest')
 
         return response
+
 
     def _upload_file(self, dsid: str, file_path: str) -> Dict:
         """Upload a file to a dataset.
@@ -205,9 +206,9 @@ class DatasetOperations(BaseResource):
         logger.debug(f"Uploading file {file_path}...")
         with open(file_path, 'rb') as f:
             fname = os.path.basename(file_path)
-            files = [('files', (fname, f, 'application/octet-stream'))]
-            added_af = self._request('post', f'/datasets/{dsid}/upload', files=files)
-            return added_af
+            file_obj = [('files', (fname, f, 'application/octet-stream'))]
+            uploaded_file = self._request('post', f'/datasets/{dsid}/upload', files=file_obj)
+            return uploaded_file
             
         logger.error(f"{file_path} is too large for HTTP upload via the Crucible API. Please upload manually.")
         return None
@@ -572,8 +573,9 @@ class DatasetOperations(BaseResource):
         else:
             raise ValueError(f"Unsupported request_type: {request_type}")
 
-    def update_ingestion_status(self, dsid: str, reqid: str, status: str,
-                               timezone: str = "America/Los_Angeles"):
+    def update_ingestion_status(self, dsid: str, reqid: str, status: str, 
+                                ingestion_githash: str, ingestion_class: str,
+                                timezone: str = "America/Los_Angeles"):
         """Update the status of a dataset ingestion request.
 
         **Requires admin permissions.**
@@ -589,14 +591,15 @@ class DatasetOperations(BaseResource):
         """
         from ..utils import get_tz_isoformat
 
+        patch_json = {'ingestion_githash': ingestion_githash, 
+                      'ingestion_class': ingestion_class}
+        
         if status == "complete":
             completion_time = get_tz_isoformat(timezone)
-            patch_json = {"id": reqid,
-                        "status": status,
-                        "time_completed": completion_time}
+            patch_json.update({"id": reqid, "status": status,
+                        "time_completed": completion_time})
         else:
-            patch_json = {"id": reqid,
-                        "status": status}
+            patch_json.update({"id": reqid, "status": status})
 
         return self._request('patch', f'/datasets/{dsid}/ingest/{reqid}', json=patch_json)
 
