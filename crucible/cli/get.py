@@ -10,6 +10,7 @@ and delegates to the appropriate display function.
 import sys
 import logging
 from . import term
+from ..config import config as _config
 
 logger = logging.getLogger(__name__)
 
@@ -41,10 +42,12 @@ Examples:
         help='Show all fields'
     )
     parser.add_argument(
-        '--graph',
-        action='store_true',
-        help='Also show linked resources, parents, and children'
+        '--no-graph',
+        action='store_false',
+        dest='graph',
+        help='Exclude linked resources, parents, and children'
     )
+    parser.set_defaults(graph=True)
     parser.add_argument(
         '--include-metadata',
         action='store_true',
@@ -75,8 +78,8 @@ def execute(args):
     from crucible.client import CrucibleClient
     output = getattr(args, 'output', None)
     verbose = getattr(args, 'verbose', False)
-    graph = getattr(args, 'graph', False)
-    include_metadata = output == 'json' or getattr(args, 'include_metadata', False)
+    graph = getattr(args, 'graph', True)
+    include_metadata = output == 'json' or getattr(args, 'include_metadata', False) or _config.include_metadata
 
     try:
         client   = CrucibleClient()

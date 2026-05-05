@@ -169,10 +169,12 @@ def _register_get(subparsers):
     )
 
     parser.add_argument(
-        '--graph',
-        action='store_true',
-        help='Also show linked datasets, parents, and children'
+        '--no-graph',
+        action='store_false',
+        dest='graph',
+        help='Exclude linked datasets, parents, and children'
     )
+    parser.set_defaults(graph=True)
 
     parser.add_argument(
         '--include-metadata',
@@ -722,10 +724,6 @@ def _show_sample(sample, client, verbose=False, graph=False, include_metadata=Fa
     _p("Timestamp",   term.fmt_ts(sample.get('timestamp')))
     _p("Description", sample.get('description'))
 
-    if include_metadata:
-        from .helpers import show_scientific_metadata
-        show_scientific_metadata(sample.get('scientific_metadata'))
-
     if verbose or graph:
         term.subheader("Ownership")
         _p("Owner ORCID", term.orcid_link(sample.get('owner_orcid')))
@@ -778,6 +776,10 @@ def _show_sample(sample, client, verbose=False, graph=False, include_metadata=Fa
             print(f"  {term.mfid_link(uid, url)}  {c.get('name') or '(unnamed)'}")
         if not child_samples:
             print(f"  {term.dim('(none)')}")
+
+    if include_metadata:
+        from .helpers import show_scientific_metadata
+        show_scientific_metadata(sample.get('scientific_metadata'))
 
 
 def _execute_get(args):

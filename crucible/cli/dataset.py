@@ -139,9 +139,6 @@ def _show_dataset(dataset, client, verbose=False, graph=False, include_metadata=
                 sz    = f"  {term.dim(term.fmt_size(size))}" if size is not None else ''
                 print(f"  {label}{sz}")
 
-    if include_metadata:
-        _show_scientific_metadata(dataset.get('scientific_metadata'))
-
     if graph:
         links_list = links if links is not None else dataset.get('links')
         if not links_list:
@@ -151,39 +148,41 @@ def _show_dataset(dataset, client, verbose=False, graph=False, include_metadata=
                 links_list = None
         if links_list is None:
             print(f"  {term.dim('⚠  Could not fetch links.')}")
-            return
+        else:
+            proj            = dataset.get('project_id') or ''
+            linked_samples  = [l for l in links_list if l.get('relationship') == 'associated'
+                               and l.get('resource_type') == 'sample']
+            parent_datasets = [l for l in links_list if l.get('relationship') == 'parent'
+                               and l.get('resource_type') == 'dataset']
+            child_datasets  = [l for l in links_list if l.get('relationship') == 'child'
+                               and l.get('resource_type') == 'dataset']
 
-        proj            = dataset.get('project_id') or ''
-        linked_samples  = [l for l in links_list if l.get('relationship') == 'associated'
-                           and l.get('resource_type') == 'sample']
-        parent_datasets = [l for l in links_list if l.get('relationship') == 'parent'
-                           and l.get('resource_type') == 'dataset']
-        child_datasets  = [l for l in links_list if l.get('relationship') == 'child'
-                           and l.get('resource_type') == 'dataset']
+            term.subheader(f"Linked Samples ({len(linked_samples)})")
+            for s in linked_samples:
+                uid = s['unique_id']
+                url = f"{_base}/{proj}/sample-graph/{uid}" if _base and proj else None
+                print(f"  {term.mfid_link(uid, url)}  {s.get('name') or '(unnamed)'}")
+            if not linked_samples:
+                print(f"  {term.dim('(none)')}")
 
-        term.subheader(f"Linked Samples ({len(linked_samples)})")
-        for s in linked_samples:
-            uid = s['unique_id']
-            url = f"{_base}/{proj}/sample-graph/{uid}" if _base and proj else None
-            print(f"  {term.mfid_link(uid, url)}  {s.get('name') or '(unnamed)'}")
-        if not linked_samples:
-            print(f"  {term.dim('(none)')}")
+            term.subheader(f"Parents ({len(parent_datasets)})")
+            for p in parent_datasets:
+                uid = p['unique_id']
+                url = f"{_base}/{proj}/dataset/{uid}" if _base and proj else None
+                print(f"  {term.mfid_link(uid, url)}  {p.get('name') or '(unnamed)'}")
+            if not parent_datasets:
+                print(f"  {term.dim('(none)')}")
 
-        term.subheader(f"Parents ({len(parent_datasets)})")
-        for p in parent_datasets:
-            uid = p['unique_id']
-            url = f"{_base}/{proj}/dataset/{uid}" if _base and proj else None
-            print(f"  {term.mfid_link(uid, url)}  {p.get('name') or '(unnamed)'}")
-        if not parent_datasets:
-            print(f"  {term.dim('(none)')}")
+            term.subheader(f"Children ({len(child_datasets)})")
+            for c in child_datasets:
+                uid = c['unique_id']
+                url = f"{_base}/{proj}/dataset/{uid}" if _base and proj else None
+                print(f"  {term.mfid_link(uid, url)}  {c.get('name') or '(unnamed)'}")
+            if not child_datasets:
+                print(f"  {term.dim('(none)')}")
 
-        term.subheader(f"Children ({len(child_datasets)})")
-        for c in child_datasets:
-            uid = c['unique_id']
-            url = f"{_base}/{proj}/dataset/{uid}" if _base and proj else None
-            print(f"  {term.mfid_link(uid, url)}  {c.get('name') or '(unnamed)'}")
-        if not child_datasets:
-            print(f"  {term.dim('(none)')}")
+    if include_metadata:
+        _show_scientific_metadata(dataset.get('scientific_metadata'))
 
 try:
     import mfid
@@ -388,10 +387,12 @@ def _register_get(subparsers):
     )
 
     parser.add_argument(
-        '--graph',
-        action='store_true',
-        help='Also show linked samples, parents, and children'
+        '--no-graph',
+        action='store_false',
+        dest='graph',
+        help='Exclude linked samples, parents, and children'
     )
+    parser.set_defaults(graph=True)
 
     parser.add_argument(
         '-o', '--output',
