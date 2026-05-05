@@ -797,7 +797,7 @@ def _execute_get(args):
         from .helpers import cache_resource
         cache_resource(getattr(args, '_shell_state', None), client, sample, 'sample',
                        args.sample_id, verbose=getattr(args, 'verbose', False),
-                       graph=graph)
+                       graph=graph, include_metadata=include_metadata)
         if output == 'json':
             print(json.dumps(sample, indent=2, default=str))
         else:

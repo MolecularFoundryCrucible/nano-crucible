@@ -594,7 +594,9 @@ class CrucibleShell:
             elif rtype == 'sample':
                 from .sample import _show_sample
                 _show_sample(data, self.client, verbose=last['verbose'],
-                             graph=last['graph'], links=links)
+                             graph=last['graph'],
+                             include_metadata=last.get('include_metadata', False),
+                             links=links)
         except Exception as e:
             logger.error(f"Error rendering resource: {e}")
 
