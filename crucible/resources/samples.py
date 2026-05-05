@@ -117,6 +117,7 @@ class SampleOperations(BaseResource):
                description: Optional[str] = None, timestamp: Optional[str] = None,
                owner_orcid: Optional[str] = None, owner_user_id: Optional[int] = None,
                project_id: Optional[str] = None, sample_type: Optional[str] = None,
+               public: Optional[bool] = None,
                parents: List[Dict] = [], children: List[Dict] = [],
                scientific_metadata: Optional[Dict] = None,
                # deprecated aliases (creation_time/modification_time are server-assigned)
@@ -174,6 +175,8 @@ class SampleOperations(BaseResource):
             "project_id": project_id,
             "timestamp": timestamp,
         }
+        if public is not None:
+            sample_info["public"] = public
 
         if unique_id is None and sample_name is None:
             raise Exception('Please provide either a unique ID or a sample name for your sample')

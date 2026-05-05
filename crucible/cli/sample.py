@@ -253,6 +253,13 @@ Examples:
     )
 
     parser.add_argument(
+        '--public',
+        action='store_true',
+        default=False,
+        help='Make sample publicly visible (default: private)'
+    )
+
+    parser.add_argument(
         '--metadata',
         dest='metadata',
         metavar='JSON',
@@ -909,6 +916,7 @@ def _execute_create(args):
             description=description,
             sample_type=sample_type,
             timestamp=timestamp,
+            public=True if args.public else None,
             scientific_metadata=metadata_dict,
         )
 

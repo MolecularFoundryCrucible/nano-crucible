@@ -96,8 +96,10 @@ class DatasetOperations(BaseResource):
 
 
     def create(self, dataset, scientific_metadata: Optional[Dict] = None,
-               keywords: Optional[List[str]] = None, 
+               keywords: Optional[List[str]] = None,
                files_to_upload: Optional[List[str]] = None,
+               ingestor: Optional[str] = None,
+               verbose: bool = False,
                wait_for_ingestion_response: bool = False) -> Dict:
         """Create a new dataset record with scientific metadata and keywords.
 
@@ -139,7 +141,7 @@ class DatasetOperations(BaseResource):
 
         for file in files_to_upload:
             logger.debug(f'Adding {file} to dataset {dsid}')
-            self.add_file_to_dataset(dsid, file, ingestion_class = None, wait_for_ingestion_response = wait_for_ingestion_response)
+            self.add_file_to_dataset(dsid, file, ingestion_class=ingestor, wait_for_ingestion_response=wait_for_ingestion_response)
 
         result = {"created_record": new_ds_record, "scientific_metadata_record": scimd, "dsid": dsid}
         return result
