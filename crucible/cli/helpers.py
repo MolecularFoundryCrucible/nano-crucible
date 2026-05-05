@@ -124,10 +124,10 @@ def show_scientific_metadata(sci_md):
         return
     term.subheader(f"Scientific Metadata ({len(sci_md)} fields)")
     max_key = max(len(k) for k in sci_md)
-    for k, v in sci_md.items():
+    for k, v in sorted(sci_md.items()):
         if isinstance(v, dict):
             print(f"  {k}:")
-            for kk, vv in v.items():
+            for kk, vv in sorted(v.items()):
                 print(f"    {kk}: {vv}")
         elif isinstance(v, list) and len(v) > 8:
             print(f"  {k:<{max_key}}  <list with {len(v)} items>")
