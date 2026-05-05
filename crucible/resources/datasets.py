@@ -590,7 +590,7 @@ class DatasetOperations(BaseResource):
             raise ValueError(f"Unsupported request_type: {request_type}")
 
     def update_ingestion_status(self, dsid: str, reqid: str, status: str, 
-                                ingestion_githash: str, ingestion_class: str,
+                                ingestion_githash: str = None, ingestion_class: str = None,
                                 timezone: str = "America/Los_Angeles"):
         """Update the status of a dataset ingestion request.
 
