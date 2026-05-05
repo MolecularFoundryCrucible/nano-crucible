@@ -564,7 +564,12 @@ class DatasetOperations(BaseResource):
         """
         return self._request('post', f'/datasets/{dsid}/keywords', params={'keyword': keyword})
 
-    # Request Status Methods
+
+    # Ingestion Request / Status Methods
+    def get_ingestion_requests(self, dsid, limit: int = DEFAULT_LIMIT) -> List[Dict]:
+        return self._request('get', f'/datasets/{dsid}/ingest')
+    
+
     def get_request_status(self, dsid: str, reqid: str, request_type: str) -> Dict:
         """Get the status of any type of request.
 
@@ -585,7 +590,7 @@ class DatasetOperations(BaseResource):
             raise ValueError(f"Unsupported request_type: {request_type}")
 
     def update_ingestion_status(self, dsid: str, reqid: str, status: str, 
-                                ingestion_githash: str, ingestion_class: str,
+                                ingestion_githash: str = None, ingestion_class: str = None,
                                 timezone: str = "America/Los_Angeles"):
         """Update the status of a dataset ingestion request.
 
