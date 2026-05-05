@@ -292,7 +292,9 @@ def open_editor_json(data: dict) -> dict | None:
         return None
 
     try:
-        return json.loads(edited_text)
+        # strip trailing commas before closing braces/brackets (common editor mistake)
+        cleaned = re.sub(r',\s*([}\]])', r'\1', edited_text)
+        return json.loads(cleaned)
     except json.JSONDecodeError as e:
         raise ValueError(f"Invalid JSON: {e}") from e
 

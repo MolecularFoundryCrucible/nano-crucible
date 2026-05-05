@@ -205,19 +205,35 @@ try:
                 # Complete the first positional MFID from recently visited resources.
                 if trailing_space and len(words) == 1:
                     prefix = ''
+                    for uid, name, rtype in self._state.get('recent_mfids', []):
+                        if uid.startswith(prefix):
+                            icon = _ENTITY_ICONS.get(rtype, '<ansibrightblack>[?]</ansibrightblack>')
+                            yield Completion(
+                                uid + ' ',
+                                start_position=-len(prefix),
+                                display=_HTML(f'<b>{_html.escape(uid)}</b>'),
+                                display_meta=_HTML(f'{icon} <ansibrightblack>{_html.escape(name)}</ansibrightblack>'),
+                            )
+                    return
                 elif not trailing_space and len(words) == 2 and not words[1].startswith('-'):
                     prefix = words[1]
-                else:
-                    return  # ID already filled — nothing more to complete
-                for uid, name, rtype in self._state.get('recent_mfids', []):
-                    if uid.startswith(prefix):
-                        icon = _ENTITY_ICONS.get(rtype, '<ansibrightblack>[?]</ansibrightblack>')
-                        yield Completion(
-                            uid + ' ',
-                            start_position=-len(prefix),
-                            display=_HTML(f'<b>{_html.escape(uid)}</b>'),
-                            display_meta=_HTML(f'{icon} <ansibrightblack>{_html.escape(name)}</ansibrightblack>'),
-                        )
+                    for uid, name, rtype in self._state.get('recent_mfids', []):
+                        if uid.startswith(prefix):
+                            icon = _ENTITY_ICONS.get(rtype, '<ansibrightblack>[?]</ansibrightblack>')
+                            yield Completion(
+                                uid + ' ',
+                                start_position=-len(prefix),
+                                display=_HTML(f'<b>{_html.escape(uid)}</b>'),
+                                display_meta=_HTML(f'{icon} <ansibrightblack>{_html.escape(name)}</ansibrightblack>'),
+                            )
+                    return
+                # ID already filled — complete flags from the top-level parser
+                parser = self._top.get(resource)
+                if parser:
+                    current_word = '' if trailing_space else words[-1]
+                    for flag in parser._option_string_actions:
+                        if flag.startswith(current_word):
+                            yield Completion(flag + ' ', start_position=-len(current_word))
                 return
 
             if resource == 'user' and len(words) >= 2:
