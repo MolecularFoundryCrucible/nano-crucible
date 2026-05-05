@@ -564,7 +564,12 @@ class DatasetOperations(BaseResource):
         """
         return self._request('post', f'/datasets/{dsid}/keywords', params={'keyword': keyword})
 
-    # Request Status Methods
+
+    # Ingestion Request / Status Methods
+    def get_ingestion_requests(self, dsid, limit: int = DEFAULT_LIMIT) -> List[Dict]:
+        return self._request('get', f'/datasets/{dsid}/ingest')
+    
+
     def get_request_status(self, dsid: str, reqid: str, request_type: str) -> Dict:
         """Get the status of any type of request.
 
