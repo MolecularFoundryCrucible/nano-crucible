@@ -60,6 +60,11 @@ Examples:
         metavar='FORMAT',
         help='Output format: json (always includes scientific metadata)'
     )
+    parser.add_argument(
+        '--qr',
+        action='store_true',
+        help='Print a QR code of the MFID after displaying the resource'
+    )
 
     parser.set_defaults(func=execute)
 
@@ -114,6 +119,10 @@ def execute(args):
         else:
             logger.error(f"Unknown resource type '{resource_type}' for: {args.resource_id}")
             sys.exit(1)
+
+        if getattr(args, 'qr', False):
+            from .qr import print_qr
+            print_qr(args.resource_id)
 
     except Exception as e:
         logger.error(f"Error retrieving {args.resource_id}: {e}")

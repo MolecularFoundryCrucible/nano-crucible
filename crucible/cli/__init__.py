@@ -171,7 +171,7 @@ Examples:
     # Import subcommands
     from . import (
         dataset, sample, project, instrument, user,  # Resource commands
-        upload, completion, config as config_cmd, open as open_cmd, link, unlink, whoami, cache, download, get, edit, status, deletion, tree, cast  # Utility commands
+        upload, completion, config as config_cmd, open as open_cmd, link, unlink, whoami, cache, download, get, edit, status, deletion, tree, cast, qr  # Utility commands
     )
 
     # Register resource commands (new structure)
@@ -197,6 +197,7 @@ Examples:
     deletion.register_subcommand(subparsers)
     tree.register_subcommand(subparsers)
     cast.register_subcommand(subparsers)
+    qr.register_subcommand(subparsers)
 
     # Enable shell completion if argcomplete is available
     if ARGCOMPLETE_AVAILABLE:
