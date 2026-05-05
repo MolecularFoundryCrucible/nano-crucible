@@ -32,16 +32,35 @@ Examples:
 
 
 def print_qr(mfid):
-    """Print a QR code for mfid to the terminal. Returns False on error."""
+    """Print a centered, labelled QR code for mfid. Returns False on error."""
     try:
         import qrcode
     except ImportError:
         logger.error("qrcode package not installed. Run: pip install qrcode")
         return False
+
+    import io, os
     qr = qrcode.QRCode(border=1)
     qr.add_data(mfid)
     qr.make(fit=True)
-    qr.print_ascii(invert=True)
+
+    buf = io.StringIO()
+    qr.print_ascii(out=buf, invert=True)
+    lines = buf.getvalue().splitlines()
+
+    try:
+        term_width = os.get_terminal_size().columns
+    except OSError:
+        term_width = 80
+
+    qr_width = max(len(l) for l in lines) if lines else 0
+    pad = ' ' * max(0, (term_width - qr_width) // 2)
+
+    term.subheader("QR Code")
+    print()
+    for line in lines:
+        print(pad + line)
+    print(pad + term.dim(mfid))
     return True
 
 
