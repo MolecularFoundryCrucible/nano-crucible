@@ -286,7 +286,7 @@ def _execute_list(args):
     try:
         client = CrucibleClient()
         instruments = client.instruments.list(limit=args.limit,
-                                              include_metadata=getattr(args, 'include_metadata', False))
+                                              include_metadata=getattr(args, 'include_metadata', False) or _config.include_metadata)
 
         term.header(f"Instruments ({len(instruments)})")
         if not instruments:
@@ -339,7 +339,7 @@ def _show_instrument(instrument, include_metadata=False):
 def _execute_get(args):
     """Execute the 'instrument get' subcommand."""
     from crucible.client import CrucibleClient
-    include_metadata = getattr(args, 'include_metadata', False)
+    include_metadata = getattr(args, 'include_metadata', False) or _config.include_metadata
     try:
         client = CrucibleClient()
 

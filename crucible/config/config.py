@@ -41,6 +41,8 @@ class Config:
         'editor':             {'env': 'CRUCIBLE_EDITOR',             'ini': 'editor',             'section': 'display'},
         'sample_group_by':    {'env': 'CRUCIBLE_SAMPLE_GROUP_BY',    'ini': 'sample_group_by',    'section': 'display'},
         'dataset_group_by':   {'env': 'CRUCIBLE_DATASET_GROUP_BY',   'ini': 'dataset_group_by',   'section': 'display'},
+        'include_metadata':   {'env': 'CRUCIBLE_INCLUDE_METADATA',   'ini': 'include_metadata',   'section': 'display'},
+        'include_links':      {'env': 'CRUCIBLE_INCLUDE_LINKS',      'ini': 'include_links',      'section': 'display'},
         # [network] – timeouts and pagination
         'connect_timeout':    {'env': 'CRUCIBLE_CONNECT_TIMEOUT',    'ini': 'connect_timeout',    'section': 'network'},
         'read_timeout':       {'env': 'CRUCIBLE_READ_TIMEOUT',       'ini': 'read_timeout',       'section': 'network'},
@@ -205,6 +207,19 @@ class Config:
     def dataset_group_by(self):
         """Default group-by field for 'crucible dataset list' (e.g. 'measurement', 'session')."""
         return self._data.get('dataset_group_by')
+
+    def _parse_bool(self, key: str) -> bool:
+        return self._data.get(key, 'false').lower() in ('true', '1', 'yes')
+
+    @property
+    def include_metadata(self) -> bool:
+        """Include scientific metadata by default in get/list commands."""
+        return self._parse_bool('include_metadata')
+
+    @property
+    def include_links(self) -> bool:
+        """Include parent/child/associated links by default in get commands."""
+        return self._parse_bool('include_links')
 
     @property
     def connect_timeout(self) -> int:
@@ -432,7 +447,13 @@ def create_config_file(api_key, api_url=None, cache_dir=None,
         f.write("# sample_group_by = type\n\n")
 
         f.write("# Default group-by for 'crucible dataset list'  (measurement, session, format, instrument)\n")
-        f.write("# dataset_group_by = measurement\n")
+        f.write("# dataset_group_by = measurement\n\n")
+
+        f.write("# Show scientific metadata by default in get/list commands (true/false)\n")
+        f.write("# include_metadata = false\n\n")
+
+        f.write("# Show parent/child/associated links by default in get commands (true/false)\n")
+        f.write("# include_links = false\n")
 
         # ── [network] ────────────────────────────────────────────────────────
         f.write("\n[network]\n")

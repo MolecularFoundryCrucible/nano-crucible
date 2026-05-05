@@ -1584,12 +1584,12 @@ def _execute_get(args):
     """Execute the 'dataset get' subcommand."""
     from crucible.client import CrucibleClient
     output = getattr(args, 'output', None)
-    include_metadata = output == 'json' or getattr(args, 'include_metadata', False)
+    include_metadata = output == 'json' or getattr(args, 'include_metadata', False) or _config.include_metadata
     try:
         client = CrucibleClient()
         graph   = getattr(args, 'graph', False)
         dataset = client.datasets.get(args.dataset_id, include_metadata=include_metadata,
-                                      include_links=graph)
+                                      include_links=graph or _config.include_links)
         if dataset is None:
             logger.error(f"Dataset not found: {args.dataset_id}")
             sys.exit(1)

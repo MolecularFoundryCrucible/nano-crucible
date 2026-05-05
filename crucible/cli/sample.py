@@ -608,7 +608,7 @@ def _execute_list(args):
         import fnmatch
         client = CrucibleClient()
         samples = client.samples.list(project_id=project_id, limit=args.limit,
-                                         include_metadata=getattr(args, 'include_metadata', False),
+                                         include_metadata=getattr(args, 'include_metadata', False) or _config.include_metadata,
                                          **filters)
 
         # Client-side wildcard filtering on type
@@ -785,11 +785,11 @@ def _execute_get(args):
     import json
     from crucible.client import CrucibleClient
     output = getattr(args, 'output', None)
-    include_metadata = output == 'json' or getattr(args, 'include_metadata', False)
+    include_metadata = output == 'json' or getattr(args, 'include_metadata', False) or _config.include_metadata
     try:
         graph  = getattr(args, 'graph', False)
         client = CrucibleClient()
-        sample = client.samples.get(args.sample_id, include_links=graph,
+        sample = client.samples.get(args.sample_id, include_links=graph or _config.include_links,
                                     include_metadata=include_metadata)
         if sample is None:
             logger.error(f"Sample not found: {args.sample_id}")

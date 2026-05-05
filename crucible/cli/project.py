@@ -385,7 +385,7 @@ def _show_project(project, include_metadata=False):
 def _execute_get(args):
     """Execute the 'project get' subcommand."""
     from crucible.client import CrucibleClient
-    include_metadata = getattr(args, 'include_metadata', False)
+    include_metadata = getattr(args, 'include_metadata', False) or _config.include_metadata
     try:
         client = CrucibleClient()
         project = client.projects.get(args.project_id,
