@@ -149,7 +149,7 @@ class CrucibleClient:
         while req_info['status'] in ['requested', 'started']:
             time.sleep(sleep_interval)
             req_info = self._get_request_status(dsid, reqid, request_type)
-            logger.debug(f"Current status: {req_info['status']}")
+            logger.info(f"Current status: {req_info['status']}")
 
         logger.info(f"Request completed with status: {req_info['status']}")
         return req_info
