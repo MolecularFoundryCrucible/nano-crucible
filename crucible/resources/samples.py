@@ -275,7 +275,7 @@ class SampleOperations(BaseResource):
         Returns:
             Dict: Created metadata object
         """
-        return self._request('post', f'/metadata/{sample_id}', json=metadata)
+        return self._request('post', f'/resources/{sample_id}/metadata', json=metadata)
 
     def update_scientific_metadata(self, sample_id: str, metadata: Dict,
                                    overwrite: bool = False) -> Dict:
@@ -290,8 +290,8 @@ class SampleOperations(BaseResource):
             Dict: Updated metadata object
         """
         if overwrite:
-            return self._request('post', f'/metadata/{sample_id}', json=metadata)
-        return self._request('patch', f'/metadata/{sample_id}', json=metadata)
+            return self._request('post', f'/resources/{sample_id}/metadata', json=metadata)
+        return self._request('patch', f'/resources/{sample_id}/metadata', json=metadata)
 
     def add_dataset(self, sample_id: str, dataset_id: str) -> Dict:
         """Link a dataset to this sample.

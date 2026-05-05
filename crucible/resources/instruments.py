@@ -127,7 +127,7 @@ class InstrumentOperations(BaseResource):
         Returns:
             Dict: Created metadata object
         """
-        return self._request('post', f'/metadata/{instrument_id}', json=metadata)
+        return self._request('post', f'/resources/{instrument_id}/metadata', json=metadata)
 
     def update_scientific_metadata(self, instrument_id: str, metadata: Dict,
                                    overwrite: bool = False) -> Dict:
@@ -142,8 +142,8 @@ class InstrumentOperations(BaseResource):
             Dict: Updated metadata object
         """
         if overwrite:
-            return self._request('post', f'/metadata/{instrument_id}', json=metadata)
-        return self._request('patch', f'/metadata/{instrument_id}', json=metadata)
+            return self._request('post', f'/resources/{instrument_id}/metadata', json=metadata)
+        return self._request('patch', f'/resources/{instrument_id}/metadata', json=metadata)
 
     def get_or_create(self, instrument_name: str, location: Optional[str] = None,
                      instrument_owner: Optional[str] = None) -> Dict:

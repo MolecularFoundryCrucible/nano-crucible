@@ -430,7 +430,7 @@ class DatasetOperations(BaseResource):
         Returns:
             Dict: Scientific metadata containing experimental parameters and settings
         """
-        return self._request('get', f'/datasets/{dsid}/scientific_metadata')
+        return self._request('get', f'/resources/{dsid}/metadata')
 
     def add_scientific_metadata(self, dsid: str, metadata: Dict) -> Dict:
         """Create scientific metadata for a dataset.
@@ -442,7 +442,7 @@ class DatasetOperations(BaseResource):
         Returns:
             Dict: Created metadata object
         """
-        return self._request('post', f'/metadata/{dsid}', json=metadata)
+        return self._request('post', f'/resources/{dsid}/metadata', json=metadata)
 
     def update_scientific_metadata(self, dsid: str, metadata: Dict, overwrite: bool = False) -> Dict:
         """Update scientific metadata for a dataset.
@@ -456,8 +456,8 @@ class DatasetOperations(BaseResource):
             Dict: Updated metadata object
         """
         if overwrite:
-            return self._request('post', f'/metadata/{dsid}', json=metadata)
-        return self._request('patch', f'/metadata/{dsid}', json=metadata)
+            return self._request('post', f'/resources/{dsid}/metadata', json=metadata)
+        return self._request('patch', f'/resources/{dsid}/metadata', json=metadata)
 
     def search_scientific_metadata(self, q: str, limit: Optional[int] = None) -> List[Dict]:
         """Perform a ranked full-text search on scientific metadata.
@@ -480,7 +480,7 @@ class DatasetOperations(BaseResource):
         params = {"q": q}
         if limit is not None:
             params["limit"] = limit
-        return self._request('get', '/scientific_metadata/search', params=params)
+        return self._request('get', '/resources/metadata/search', params=params)
 
     # Thumbnail Methods
     def get_thumbnails(self, dsid: str, limit: int = DEFAULT_LIMIT) -> List[Dict]:

@@ -109,7 +109,7 @@ class ProjectOperations(BaseResource):
         Returns:
             Dict: Created metadata object
         """
-        return self._request('post', f'/metadata/{project_id}', json=metadata)
+        return self._request('post', f'/resources/{project_id}/metadata', json=metadata)
 
     def update_scientific_metadata(self, project_id: str, metadata: Dict,
                                    overwrite: bool = False) -> Dict:
@@ -124,8 +124,8 @@ class ProjectOperations(BaseResource):
             Dict: Updated metadata object
         """
         if overwrite:
-            return self._request('post', f'/metadata/{project_id}', json=metadata)
-        return self._request('patch', f'/metadata/{project_id}', json=metadata)
+            return self._request('post', f'/resources/{project_id}/metadata', json=metadata)
+        return self._request('patch', f'/resources/{project_id}/metadata', json=metadata)
 
     def get_users(self, project_id: str, limit: int = DEFAULT_LIMIT,
                   offset: int = 0) -> List[Dict]:
