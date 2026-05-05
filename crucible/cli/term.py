@@ -89,8 +89,8 @@ def header(title: str, width: int = 44) -> None:
 
 
 def subheader(title: str) -> None:
-    """Print a dim sub-section label with a leading blank line."""
-    print(f"\n  {dim(title)}")
+    """Print a bold sub-section label with a leading blank line."""
+    print(f"\n  {dim('─')}  {bold(title)}")
 
 
 def field_printer(width: int = 14):
