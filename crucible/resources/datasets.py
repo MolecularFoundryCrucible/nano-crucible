@@ -6,19 +6,16 @@ Dataset resource operations for Crucible API.
 Provides organized access to dataset-related API endpoints.
 """
 
-from fileinput import filename
 import os
 import re
 import fnmatch
 import logging
-import subprocess
 import requests
 from typing import Optional, List, Dict
 
 # internal modules
 from .base import BaseResource
-from ..constants import DEFAULT_LIMIT, API_PAGE_MAX
-from ..utils import check_small_files
+from ..constants import DEFAULT_LIMIT
 from ..utils.deprecation import _deprecated
 
 # set up logging
@@ -100,8 +97,8 @@ class DatasetOperations(BaseResource):
 
     def create(self, dataset, scientific_metadata: Optional[Dict] = None,
                keywords: Optional[List[str]] = None, 
-               files_to_upload: Optional[List[str]] = [],
-               wait_for_ingestion_response = False) -> Dict:
+               files_to_upload: Optional[List[str]] = None,
+               wait_for_ingestion_response: bool = False) -> Dict:
         """Create a new dataset record with scientific metadata and keywords.
 
         Args:
@@ -116,6 +113,8 @@ class DatasetOperations(BaseResource):
 
         if keywords is None:
             keywords = []
+        if files_to_upload is None:
+            files_to_upload = []
 
         dataset_details = dataset.model_dump()
 
@@ -127,7 +126,7 @@ class DatasetOperations(BaseResource):
 
         # add scientific metadata
         scimd = None
-        if scientific_metadata is not None:
+        if scientific_metadata:
             logger.debug(f'Adding scientific metadata record for {dsid}')
             scimd = self.add_scientific_metadata(dsid, scientific_metadata)
 
