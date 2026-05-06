@@ -51,14 +51,15 @@ class SampleOperations(BaseResource):
         return self._parse(raw) if raw is not None else None
 
     def list(self, dataset_id: Optional[str] = None, parent_id: Optional[str] = None,
-             include_metadata: bool = False, limit: int = DEFAULT_LIMIT,
-             offset: int = 0, **kwargs) -> List[Dict]:
+             include_metadata: bool = False, include_links: bool = False,
+             limit: int = DEFAULT_LIMIT, offset: int = 0, **kwargs) -> List[Dict]:
         """List samples with optional filtering and automatic pagination.
 
         Args:
             dataset_id (str, optional): Get samples from specific dataset
             parent_id (str, optional): Get child samples from parent (deprecated)
             include_metadata (bool): Include scientific metadata in results
+            include_links (bool): Include linked resources (parents, children, associated) per sample
             limit (int): Maximum total results to return (default: 100). Requests
                          above API_PAGE_MAX (1000) are handled transparently via
                          parallel pagination.
@@ -71,6 +72,8 @@ class SampleOperations(BaseResource):
         params = {k: v for k, v in kwargs.items() if v is not None}
         if include_metadata:
             params['include_metadata'] = True
+        if include_links:
+            params['include_links'] = True
         if dataset_id:
             endpoint = f"/datasets/{dataset_id}/samples"
         elif parent_id:

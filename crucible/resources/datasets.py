@@ -66,7 +66,8 @@ class DatasetOperations(BaseResource):
 
 
     def list(self, sample_id: Optional[str] = None, include_metadata: bool = False,
-             limit: int = DEFAULT_LIMIT, offset: int = 0, **kwargs) -> List[Dict]:
+             include_links: bool = False, limit: int = DEFAULT_LIMIT,
+             offset: int = 0, **kwargs) -> List[Dict]:
         """List datasets with optional filtering and automatic pagination.
 
         Args:
@@ -76,6 +77,7 @@ class DatasetOperations(BaseResource):
                          parallel pagination.
             offset (int): Starting position in the full result set (default: 0)
             include_metadata (bool): Include scientific metadata in results
+            include_links (bool): Include linked resources (parents, children, associated) per dataset
             **kwargs: Query parameters for filtering. Supported fields include:
                         keyword, unique_id, public, dataset_name, file_to_upload, owner_orcid,
                         project_id, instrument_name, source_folder, timestamp,
@@ -90,6 +92,8 @@ class DatasetOperations(BaseResource):
         params = {k: v for k, v in kwargs.items() if v is not None}
         if include_metadata:
             params['include_metadata'] = True
+        if include_links:
+            params['include_links'] = True
         endpoint = f'/samples/{sample_id}/datasets' if sample_id else '/datasets'
         raw = self._paginate(endpoint, params, limit, offset)
         return [self._parse(d) for d in raw]
