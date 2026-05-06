@@ -579,7 +579,12 @@ class CrucibleShell:
         try:
             rtype = last['type']
             data  = last['data']
-            links = self._resolve_future(last, '_links_future', []) if last.get('graph') else None
+            if not last.get('graph'):
+                links = None
+            elif '_links_future' in last:
+                links = self._resolve_future(last, '_links_future', None)
+            else:
+                links = data.get('links')
             if rtype == 'dataset':
                 from .dataset import _show_dataset
                 prefetched = {

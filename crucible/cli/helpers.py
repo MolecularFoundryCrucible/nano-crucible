@@ -168,18 +168,19 @@ def cache_resource(shell_state, client, data, rtype, resource_id, **flags):
         recent.appendleft((resource_id, name, rtype))
 
     if rtype == 'dataset':
-        pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix='prefetch')
+        pool = ThreadPoolExecutor(max_workers=3, thread_name_prefix='prefetch')
         futures = {
-            '_links_future':    pool.submit(client.get_links, resource_id),
             '_keywords_future': pool.submit(client.datasets.get_keywords, resource_id),
             '_files_future':    pool.submit(client.datasets.get_associated_files, resource_id),
             '_dl_links_future': pool.submit(client.datasets.get_download_links, resource_id),
         }
+        if not data.get('links'):
+            futures['_links_future'] = pool.submit(client.get_links, resource_id)
     elif rtype == 'sample':
-        pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix='prefetch')
-        futures = {
-            '_links_future': pool.submit(client.get_links, resource_id),
-        }
+        futures = {}
+        if not data.get('links'):
+            pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix='prefetch')
+            futures['_links_future'] = pool.submit(client.get_links, resource_id)
     else:
         futures = {}
 
