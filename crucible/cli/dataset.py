@@ -1193,6 +1193,17 @@ Examples:
         metavar='FILE',
         help='File(s) to upload (supports glob patterns like *.csv)'
     )
+    parser.add_argument(
+        '--ingestor',
+        default=None,
+        metavar='CLASS',
+        help='Ingestion class to use (default: auto-detected from file format)'
+    )
+    parser.add_argument(
+        '--wait',
+        action='store_true',
+        help='Wait for ingestion to complete before returning'
+    )
     parser.set_defaults(func=_execute_add_file)
 
 
@@ -1224,11 +1235,16 @@ def _execute_add_file(args):
     try:
         client = CrucibleClient()
 
+        ingestor = getattr(args, 'ingestor', None)
+        wait     = getattr(args, 'wait', False)
+
         term.header(f"Add Files  {dsid}")
         rows = []
         for fpath in files:
             print(f"  Uploading {fpath.name} ...", flush=True)
-            client.datasets.upload_file(dsid, str(fpath))
+            client.datasets.add_file_to_dataset(dsid, str(fpath),
+                                                ingestion_class=ingestor,
+                                                wait_for_ingestion_response=wait)
             rows.append((fpath.name, term.fmt_size(fpath.stat().st_size), '✓'))
 
         print()
