@@ -120,9 +120,10 @@ def load_metadata(value: str) -> dict:
 def show_scientific_metadata(sci_md):
     """Display scientific metadata dict under a subheader."""
     from . import term
+    term.subheader(f"Scientific Metadata ({len(sci_md) if sci_md else 0} fields)")
     if not sci_md:
+        print(f"  {term.dim('(none)')}")
         return
-    term.subheader(f"Scientific Metadata ({len(sci_md)} fields)")
     max_key = max(len(k) for k in sci_md)
     for k, v in sorted(sci_md.items()):
         if isinstance(v, dict):
