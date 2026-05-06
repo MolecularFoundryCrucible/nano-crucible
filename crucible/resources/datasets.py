@@ -301,9 +301,15 @@ class DatasetOperations(BaseResource):
         try:
             return self._request('get', f"/datasets/{dsid}/download_links")
         except requests.exceptions.HTTPError as e:
-            if e.response is not None and e.response.status_code in (502, 503, 504):
-                logger.warning(f"Could not retrieve download links for {dsid}: {e.response.status_code} {e.response.reason}. The server may be temporarily unavailable.")
-                return {}
+            if e.response is not None:
+                if e.response.status_code == 404:
+                    detail = e.response.json().get('detail', '')
+                    if 'No files found' in detail:
+                        logger.debug(f"No files in storage for dataset {dsid}")
+                        return {}
+                if e.response.status_code in (502, 503, 504):
+                    logger.warning(f"Could not retrieve download links for {dsid}: {e.response.status_code} {e.response.reason}. The server may be temporarily unavailable.")
+                    return {}
             raise
 
     def _fetch_files(self, dsid: str, output_dir: str,
