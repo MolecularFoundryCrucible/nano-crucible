@@ -432,67 +432,6 @@ class DatasetOperations(BaseResource):
                           wait_for_ingestion_response=wait_for_ingestion_response)
 
     # Scientific Metadata Methods
-    def get_scientific_metadata(self, dsid: str) -> Dict:
-        """Get scientific metadata for a dataset.
-
-        Args:
-            dsid (str): Dataset unique identifier
-
-        Returns:
-            Dict: Scientific metadata containing experimental parameters and settings
-        """
-        return self._request('get', f'/resources/{dsid}/metadata')
-
-    def add_scientific_metadata(self, dsid: str, metadata: Dict) -> Dict:
-        """Create scientific metadata for a dataset.
-
-        Args:
-            dsid (str): Dataset unique identifier
-            metadata (Dict): Scientific metadata dictionary
-
-        Returns:
-            Dict: Created metadata object
-        """
-        return self._request('post', f'/resources/{dsid}/metadata', json=metadata)
-
-    def update_scientific_metadata(self, dsid: str, metadata: Dict, overwrite: bool = False) -> Dict:
-        """Update scientific metadata for a dataset.
-
-        Args:
-            dsid (str): Dataset unique identifier
-            metadata (Dict): Scientific metadata dictionary
-            overwrite (bool): If True, replace all metadata (POST); if False, merge with existing (PATCH)
-
-        Returns:
-            Dict: Updated metadata object
-        """
-        if overwrite:
-            return self._request('post', f'/resources/{dsid}/metadata', json=metadata)
-        return self._request('patch', f'/resources/{dsid}/metadata', json=metadata)
-
-    def search_scientific_metadata(self, q: str, limit: Optional[int] = None) -> List[Dict]:
-        """Perform a ranked full-text search on scientific metadata.
-
-        Uses PostgreSQL full-text search on the server to find and rank
-        datasets whose scientific metadata matches the query string.
-
-        Args:
-            q (str): Plain-text search query (e.g. "temperature", "XRD silicon").
-            limit (int, optional): Maximum number of records to return.
-                If omitted, default of 50 is used. Max is 200.
-
-        Returns:
-            List[Dict]: Matching scientific metadata records, ranked by relevance.
-
-        Example:
-            >>> results = client.datasets.search_scientific_metadata("thermal conductivity")
-            >>> results = client.datasets.search_scientific_metadata("thermal conductivity", limit=25)
-        """
-        params = {"q": q}
-        if limit is not None:
-            params["limit"] = limit
-        return self._request('get', '/resources/metadata/search', params=params)
-
     # Thumbnail Methods
     def get_thumbnails(self, dsid: str, limit: int = DEFAULT_LIMIT) -> List[Dict]:
         """Get thumbnails for a dataset.

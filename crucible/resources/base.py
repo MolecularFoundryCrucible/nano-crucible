@@ -66,3 +66,37 @@ class BaseResource:
                 items.extend(page)
 
         return items[:need]
+
+    def search_scientific_metadata(self, q: str, limit: int = None) -> list:
+        """Full-text search across scientific metadata of all accessible resources.
+
+        Results are ranked by relevance and may include datasets or samples.
+        Each result contains 'unique_id' (the resource MFID) and 'scientific_metadata'.
+
+        Args:
+            q: Plain-text search query (English-language stemmed).
+            limit: Max results to return (default 50, max 200).
+        """
+        params = {"q": q}
+        if limit is not None:
+            params["limit"] = limit
+        return self._request('get', '/resources/metadata/search', params=params)
+
+    def get_scientific_metadata(self, resource_id: str) -> dict:
+        """Get scientific metadata for a resource."""
+        return self._request('get', f'/resources/{resource_id}/metadata')
+
+    def add_scientific_metadata(self, resource_id: str, metadata: dict) -> dict:
+        """Create scientific metadata for a resource."""
+        return self._request('post', f'/resources/{resource_id}/metadata', json=metadata)
+
+    def update_scientific_metadata(self, resource_id: str, metadata: dict,
+                                   overwrite: bool = False) -> dict:
+        """Update scientific metadata for a resource.
+
+        Args:
+            overwrite: If True, replace all metadata (POST); if False, merge with existing (PATCH)
+        """
+        if overwrite:
+            return self._request('post', f'/resources/{resource_id}/metadata', json=metadata)
+        return self._request('patch', f'/resources/{resource_id}/metadata', json=metadata)

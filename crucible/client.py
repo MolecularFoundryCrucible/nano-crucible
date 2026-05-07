@@ -273,6 +273,18 @@ class CrucibleClient:
         else:
             raise ValueError(f"Unknown or unsupported resource type: {resource_type}")
 
+    def search_scientific_metadata(self, q: str, limit: int = None) -> list:
+        """Full-text search across scientific metadata of all accessible resources.
+
+        Results are ranked by relevance and may include datasets or samples.
+        Each result contains 'unique_id' (the resource MFID) and 'scientific_metadata'.
+
+        Args:
+            q: Plain-text search query (English-language stemmed).
+            limit: Max results to return (default 50, max 200).
+        """
+        return self.datasets.search_scientific_metadata(q, limit=limit)
+
     def get_links(self, resource_id: str) -> list:
         """Return immediate links for any resource (dataset or sample).
 

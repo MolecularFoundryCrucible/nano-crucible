@@ -271,34 +271,6 @@ class SampleOperations(BaseResource):
 
         return upd_samp
 
-    def add_scientific_metadata(self, sample_id: str, metadata: Dict) -> Dict:
-        """Create scientific metadata for a sample.
-
-        Args:
-            sample_id (str): Sample unique identifier
-            metadata (Dict): Scientific metadata dictionary
-
-        Returns:
-            Dict: Created metadata object
-        """
-        return self._request('post', f'/resources/{sample_id}/metadata', json=metadata)
-
-    def update_scientific_metadata(self, sample_id: str, metadata: Dict,
-                                   overwrite: bool = False) -> Dict:
-        """Update scientific metadata for a sample.
-
-        Args:
-            sample_id (str): Sample unique identifier
-            metadata (Dict): Scientific metadata dictionary
-            overwrite (bool): If True, replace all metadata (POST); if False, merge with existing (PATCH)
-
-        Returns:
-            Dict: Updated metadata object
-        """
-        if overwrite:
-            return self._request('post', f'/resources/{sample_id}/metadata', json=metadata)
-        return self._request('patch', f'/resources/{sample_id}/metadata', json=metadata)
-
     def add_dataset(self, sample_id: str, dataset_id: str) -> Dict:
         """Link a dataset to this sample.
 
