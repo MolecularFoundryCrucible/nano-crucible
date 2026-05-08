@@ -27,67 +27,69 @@ class FileOperations(BaseResource):
     All methods take a dataset unique ID (dsid) as their first argument.
     """
 
-    # Upload Methods
+    #%% Upload Methods
 
     def add_file_to_dataset(self, dsid: str, file_path: str,
                             ingestion_class: Optional[str] = None,
                             wait_for_ingestion_response: bool = False) -> Dict:
-        """Add an associated file to a dataset.
-
-        Automatically routes to chunked GCS upload for files >= 100 MB.
+        """Upload a file to a dataset and request ingestion.
 
         Args:
             dsid: Dataset unique identifier
             file_path: Local path to the file
-            ingestion_class: Ingestion class (e.g. 'ApiUploadIngestor').
-                If None, the server selects one based on file format.
+            ingestion_class: Ingestion class for the worker (e.g. 'lammps', 'nexus').
+                Defaults to the server-side default if omitted.
             wait_for_ingestion_response: Block until ingestion completes.
 
         Returns:
-            Dict: Associated file record and ingestion request.
+            Dict: {'associated_file': AssociatedFileRead, 'ingestion_request': IngestionRequest}
         """
-        return self.upload_large_file(dsid, file_path,
-                                      ingestion_class=ingestion_class,
-                                      wait_for_ingestion_response=wait_for_ingestion_response)
+        # get file information
+        file_size = os.path.getsize(file_path)
+        filename = os.path.basename(file_path)
+        
+        # run file upload
+        file_record = self._upload_file_gcs(dsid, file_path)
+        
+        # Trigger ingestion — use the stored filename from the response (full GCS path)
+        stored_filename = file_record.get('filename', filename)
+        ingest_params = {'filename': stored_filename, 'file_size': file_size}
+        if ingestion_class:
+            ingest_params['ingestion_class'] = ingestion_class
+            
+        logger.info(f"Requesting ingestion for {stored_filename}"
+                    + (f" (class={ingestion_class})" if ingestion_class else ""))
+        
+        ingestion_request = self._request('post', f'/datasets/{dsid}/ingest',
+                                          params=ingest_params)
+        
+        logger.debug(f"Ingestion request created: id={ingestion_request.get('id')}, "
+                     f"status={ingestion_request.get('status')}")
 
-        # Legacy small-file path via direct POST (kept for reference)
-        # file_size = os.path.getsize(file_path)
-        # from ..utils import checkhash
-        # file_hash = checkhash(file_path)
-        # upload_path = self._upload_file(dsid, file_path)
-        # if upload_path is None:
-        #     raise RuntimeError(f"Failed to upload {file_path}.")
-        # associated_file_data = {
-        #     'filename': upload_path,
-        #     'size': file_size,
-        #     'sha256_hash': file_hash,
-        # }
-        # response = self._request('post', f'/datasets/{dsid}/associated_files',
-        #                          json=associated_file_data,
-        #                          params={'ingestion_class': ingestion_class})
-        # if wait_for_ingestion_response:
-        #     ingestion_request = response.get('ingestion_request')
-        #     self._client._wait_for_request_completion(dsid, ingestion_request['id'], 'ingest')
-        # return response
+        if wait_for_ingestion_response and ingestion_request:
+            self._client._wait_for_request_completion(dsid, ingestion_request['id'], 'ingest')
+            
+        return {'associated_file': file_record, 'ingestion_request': ingestion_request}
 
-    def upload_large_file(self, dsid: str, file_path: str,
-                          ingestion_class: Optional[str] = None,
-                          wait_for_ingestion_response: bool = False) -> Dict:
+
+    def _upload_file_gcs(self, dsid: str, file_path: str) -> Dict:
         """Upload a file to a dataset using resumable GCS chunked upload.
-
-        Suitable for files of any size. Automatically resumes interrupted uploads.
+        
+        Automatically resumes interrupted uploads.
 
         Args:
             dsid: Dataset unique identifier
             file_path: Local path to the file
-            ingestion_class: Ingestion class to use after upload.
-            wait_for_ingestion_response: Block until ingestion completes.
 
         Returns:
-            Dict: Associated file record and ingestion request.
+            Dict: AssociatedFile record for the uploaded file.
         """
         import hashlib
-        _256K = 256 * 1024
+        import base64
+        import struct
+        import google_crc32c
+        _256K    = 256 * 1024
+        _MIN_CHUNK = 32 * 1024 * 1024  # 32 MiB floor - overrides server hint for throughput
         _MAX_RETRIES = 3
 
         file_size = os.path.getsize(file_path)
@@ -95,24 +97,19 @@ class FileOperations(BaseResource):
 
         logger.info(f"Uploading {filename} ({file_size / 1024**2:.1f} MB) to dataset {dsid}")
 
-        # Compute sha256 without loading the whole file into RAM
-        h = hashlib.sha256()
-        with open(file_path, 'rb') as f:
-            for block in iter(lambda: f.read(8 * 1024 * 1024), b''):
-                h.update(block)
-        sha256_hash = h.hexdigest()
-        logger.debug(f"sha256={sha256_hash}")
-
         # Initiate resumable upload session
         init = self._request('post', f'/datasets/{dsid}/upload/initiate',
                              json={'filename': filename, 'size': file_size})
         upload_id  = init['upload_id']
         uri        = init['resumable_uri']
-        raw_hint   = init.get('chunk_size_hint', 8 * 1024 * 1024)
-        # GCS requires chunks to be multiples of 256 KiB (except the last)
-        chunk_size = max((raw_hint // _256K) * _256K, _256K)
+        raw_hint   = init.get('chunk_size_hint', _MIN_CHUNK)
+        # Use the larger of server hint and our minimum; align to GCS 256 KiB boundary
+        chunk_size = max((max(raw_hint, _MIN_CHUNK) // _256K) * _256K, _256K)
 
-        logger.debug(f"Chunked upload initiated: upload_id={upload_id}, chunk_size={chunk_size}")
+        logger.debug(f"Chunked upload initiated: upload_id={upload_id}, chunk_size={chunk_size >> 20} MiB")
+
+        # SHA256 computed incrementally during upload - no separate pre-pass needed
+        h = hashlib.sha256()
 
         # Upload chunks directly to GCS (no Crucible auth needed)
         with open(file_path, 'rb') as f:
@@ -123,20 +120,24 @@ class FileOperations(BaseResource):
                 chunk_end = offset + len(chunk) - 1
 
                 for attempt in range(_MAX_RETRIES):
+                    crc_b64 = base64.b64encode(struct.pack(">I", google_crc32c.value(chunk))).decode()
                     resp = requests.put(
                         uri,
                         data=chunk,
                         headers={
                             'Content-Range': f'bytes {offset}-{chunk_end}/{file_size}',
                             'Content-Length': str(len(chunk)),
+                            'x-goog-hash': f'crc32c={crc_b64}',
                         },
                         timeout=120,
                     )
                     if resp.status_code in (200, 201):
+                        h.update(chunk)
                         logger.debug("Chunked upload complete")
                         offset = file_size
                         break
                     elif resp.status_code == 308:
+                        h.update(chunk)
                         offset = chunk_end + 1
                         logger.debug(f"Chunk accepted, offset={offset}/{file_size}")
                         break
@@ -148,57 +149,37 @@ class FileOperations(BaseResource):
                                 f"GCS chunk upload failed after {_MAX_RETRIES} attempts "
                                 f"(status {resp.status_code}): {resp.text}"
                             )
-                        # Query GCS for confirmed offset and retry from there
+                        # Query GCS for confirmed offset; hash only the accepted portion
                         probe = requests.put(uri,
                                              headers={'Content-Range': f'bytes */{file_size}'},
                                              timeout=30)
-                        if probe.status_code == 308 and 'Range' in probe.headers:
+                        if probe.status_code in (200, 201):
+                            h.update(chunk)
+                            offset = file_size
+                            break
+                        elif probe.status_code == 308 and 'Range' in probe.headers:
                             last_byte = int(probe.headers['Range'].split('-')[1])
+                            accepted = last_byte + 1 - offset
+                            if accepted > 0:
+                                h.update(chunk[:accepted])
                             offset = last_byte + 1
                         f.seek(offset)
                         chunk = f.read(chunk_size)
                         chunk_end = offset + len(chunk) - 1
+
+        sha256_hash = h.hexdigest()
+        logger.debug(f"sha256={sha256_hash}")
 
         # Register the AssociatedFile record
         logger.info(f"Completing upload for {filename} (upload_id={upload_id})")
         file_record = self._request('post', f'/datasets/{dsid}/upload/complete',
                                     json={'upload_id': upload_id, 'sha256_hash': sha256_hash})
 
-        # Trigger ingestion — use the stored filename from the response (full GCS path)
-        stored_filename = file_record.get('filename', filename)
-        ingest_params = {'filename': stored_filename, 'file_size': file_size}
-        if ingestion_class:
-            ingest_params['ingestion_class'] = ingestion_class
-        logger.info(f"Requesting ingestion for {stored_filename}"
-                    + (f" (class={ingestion_class})" if ingestion_class else ""))
-        ingestion_request = self._request('post', f'/datasets/{dsid}/ingest',
-                                          params=ingest_params)
-        logger.debug(f"Ingestion request created: id={ingestion_request.get('id')}, "
-                     f"status={ingestion_request.get('status')}")
+        return file_record
 
-        if wait_for_ingestion_response and ingestion_request:
-            self._client._wait_for_request_completion(dsid, ingestion_request['id'], 'ingest')
+    #%% Download Methods
 
-        return {'associated_file': file_record, 'ingestion_request': ingestion_request}
-
-    def _upload_file(self, dsid: str, file_path: str) -> Optional[str]:
-        """Upload a small file via direct POST (legacy path, kept for backward compat).
-
-        For new code prefer add_file_to_dataset() which auto-routes based on size.
-        """
-        logger.debug(f"Uploading file {file_path}...")
-        with open(file_path, 'rb') as f:
-            fname = os.path.basename(file_path)
-            file_obj = [('files', (fname, f, 'application/octet-stream'))]
-            result = self._request('post', f'/datasets/{dsid}/upload', files=file_obj)
-        # Endpoint returns a list of uploaded paths; we upload one file at a time
-        if isinstance(result, list):
-            return result[0] if result else None
-        return result
-
-    # Download Methods
-
-    def get_associated_files(self, dsid: str, limit: int = DEFAULT_LIMIT) -> List[Dict]:
+    def get_associated_files(self, dsid: str) -> List[Dict]:
         """Get associated files for a dataset.
 
         Args:
@@ -209,6 +190,7 @@ class FileOperations(BaseResource):
             List[Dict]: File metadata with names, sizes, and hashes
         """
         return self._request('get', f'/datasets/{dsid}/associated_files')
+
 
     def get_download_links(self, dsid: str) -> Dict:
         """Get signed download URLs for all files in a dataset.
@@ -315,7 +297,6 @@ class FileOperations(BaseResource):
                                      include=include, exclude=exclude)
 
     # Thumbnail Methods
-
     def get_thumbnails(self, dsid: str, limit: int = DEFAULT_LIMIT) -> List[Dict]:
         """Get thumbnails for a dataset.
 

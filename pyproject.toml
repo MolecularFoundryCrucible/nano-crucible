@@ -43,6 +43,7 @@ dependencies = [
     "configupdater>=3.0",
     "mfid>=1.0.0",
     "pyyaml>=6.0",
+    "google-crc32c>=1.1.0",
 ]
 
 [project.optional-dependencies]
