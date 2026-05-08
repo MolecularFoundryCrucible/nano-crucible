@@ -84,6 +84,12 @@ class SampleOperations(BaseResource):
         raw = self._paginate(endpoint, params, limit, offset)
         return [self._parse(s) for s in raw]
 
+    def count(self, **kwargs) -> int:
+        """Return the total number of samples matching the given filters without fetching items."""
+        params = {k: v for k, v in kwargs.items() if v is not None}
+        result = self._request('get', '/samples', params={**params, 'limit': 1, 'offset': 0})
+        return result['total']
+
     def list_parents(self, sample_id: str, limit: int = DEFAULT_LIMIT,
                      offset: int = 0, **kwargs) -> List[Dict]:
         """List the parents of a given sample with optional filtering.

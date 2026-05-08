@@ -25,7 +25,7 @@ class BaseResource:
         self._request = client._request  # Delegate HTTP requests to main client
 
     def _paginate(self, endpoint: str, params: dict,
-                  limit: int, offset: int = 0) -> list:
+                  limit, offset: int = 0) -> list:
         """Fetch all matching records from a paginated envelope endpoint.
 
         Fires the first request to get the total count, then fetches all
@@ -35,22 +35,22 @@ class BaseResource:
         Args:
             endpoint: API path (e.g. '/datasets')
             params:   Query parameters (must NOT include 'limit' or 'offset')
-            limit:    Maximum number of records to return (user-facing limit)
+            limit:    Maximum number of records to return. Pass None to fetch all.
             offset:   Starting position in the full result set
 
         Returns:
-            list: Raw item dicts, up to limit items
+            list: Raw item dicts, up to limit items (or all items if limit is None)
         """
         from concurrent.futures import ThreadPoolExecutor
         from ..constants import API_PAGE_MAX
 
-        page_size = min(limit, API_PAGE_MAX)
+        page_size = API_PAGE_MAX
         first = self._request('get', endpoint,
                               params={**params, 'limit': page_size, 'offset': offset})
         total = first['total']
         items = list(first['items'])
 
-        need = min(total - offset, limit)
+        need = total - offset if limit is None else min(total - offset, limit)
         if len(items) >= need:
             return items[:need]
 

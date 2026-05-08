@@ -7,6 +7,7 @@ Provides organized access to different resource types (datasets, samples, etc.)
 while maintaining backward compatibility with the original flat API.
 """
 
+from .files import FileOperations
 from .datasets import DatasetOperations
 from .samples import SampleOperations
 from .projects import ProjectOperations
@@ -15,4 +16,4 @@ from .instruments import InstrumentOperations
 from .deletion import DeletionOperations
 from .graphs import GraphOperations
 
-__all__ = ['DatasetOperations', 'SampleOperations', 'ProjectOperations', 'UserOperations', 'InstrumentOperations', 'DeletionOperations', 'GraphOperations']
+__all__ = ['FileOperations', 'DatasetOperations', 'SampleOperations', 'ProjectOperations', 'UserOperations', 'InstrumentOperations', 'DeletionOperations', 'GraphOperations']

@@ -6,27 +6,24 @@ Dataset resource operations for Crucible API.
 Provides organized access to dataset-related API endpoints.
 """
 
-import os
-import re
-import fnmatch
 import logging
-import requests
 from typing import Optional, List, Dict
 
 # internal modules
-from .base import BaseResource
+from .files import FileOperations
 from ..constants import DEFAULT_LIMIT
 from ..utils.deprecation import _deprecated
 
 # set up logging
 logger = logging.getLogger(__name__)
 
-#%%
 
-class DatasetOperations(BaseResource):
+class DatasetOperations(FileOperations):
     """Dataset-related API operations.
 
     Access via: client.datasets.get(), client.datasets.list(), etc.
+    File operations (upload, download, thumbnails, ingestion) are inherited
+    from FileOperations and also available via client.files.*.
     """
 
     @staticmethod
@@ -98,6 +95,12 @@ class DatasetOperations(BaseResource):
         raw = self._paginate(endpoint, params, limit, offset)
         return [self._parse(d) for d in raw]
 
+    def count(self, **kwargs) -> int:
+        """Return the total number of datasets matching the given filters without fetching items."""
+        params = {k: v for k, v in kwargs.items() if v is not None}
+        result = self._request('get', '/datasets', params={**params, 'limit': 1, 'offset': 0})
+        return result['total']
+
 
     def create(self, dataset, scientific_metadata: Optional[Dict] = None,
                keywords: Optional[List[str]] = None,
@@ -149,86 +152,6 @@ class DatasetOperations(BaseResource):
 
         result = {"created_record": new_ds_record, "scientific_metadata_record": scimd, "dsid": dsid}
         return result
-
-    # Associated Files Methods
-    def add_file_to_dataset(self, dsid: str, file_path: str, ingestion_class: Optional[str] = None, wait_for_ingestion_response: bool = False) -> Dict:
-        """Add an associated file to a dataset. 
-           
-           The provided file will be uploaded to cloud storage,
-           linked to the dataset record, and ingested. 
-           
-           This function also calculates the size and sha256
-           hash of the file before uploading.
-
-        Args:
-            dsid (str): Dataset unique identifier
-            file_path (str): Path to file (for calculating metadata)
-            ingestion_class (str, optional): Ingestion class to use for this file (e.g. 'ApiUploadIngestor') If None, ingestors will be scanned to find a match based on file format.
-
-        Returns:
-            Dict: Associated file record and Ingestion request.
-        """
-        from ..utils import checkhash
-        # Calculate file metadata
-        file_size = os.path.getsize(file_path)
-        if file_size >= 1e8:
-            raise RuntimeError(f"File {file_path} is too large for API upload ({file_size} bytes).")
-        
-        file_hash = checkhash(file_path)
-        filename = os.path.basename(file_path)
-        
-        # upload
-        upload_path = self._upload_file(dsid, file_path)
-        if upload_path is None:
-            raise RuntimeError(f"Failed to upload {file_path}.")
-        
-        # add associated file record to database + request ingestion
-        associated_file_data = {
-            'filename': upload_path,
-            'size': file_size,
-            'sha256_hash': file_hash,
-        }
-        response = self._request('post', f'/datasets/{dsid}/associated_files', json=associated_file_data, params = {'ingestion_class': ingestion_class})
-        if wait_for_ingestion_response:
-            ingestion_request = response.get('ingestion_request')
-            status = self._client._wait_for_request_completion(dsid, ingestion_request['id'], 'ingest')
-
-        return response
-
-
-    def _upload_file(self, dsid: str, file_path: str) -> Dict:
-        """Upload a file to a dataset.
-
-        Args:
-            dsid (str): Dataset unique identifier
-            file_path (str): Local path to file to upload
-
-        Returns:
-            Dict: Upload response
-        """
-        logger.debug(f"Uploading file {file_path}...")
-        with open(file_path, 'rb') as f:
-            fname = os.path.basename(file_path)
-            file_obj = [('files', (fname, f, 'application/octet-stream'))]
-            uploaded_file = self._request('post', f'/datasets/{dsid}/upload', files=file_obj)
-            return uploaded_file
-            
-        logger.error(f"{file_path} is too large for HTTP upload via the Crucible API. Please upload manually.")
-        return None
-
-
-    def get_associated_files(self, dsid: str, limit: int = DEFAULT_LIMIT) -> List[Dict]:
-        """Get associated files for a dataset.
-
-        Args:
-            dsid (str): Dataset unique identifier
-            limit (int): Maximum number of results to return
-
-        Returns:
-            List[Dict]: File metadata with names, sizes, and hashes
-        """
-        return self._request('get', f'/datasets/{dsid}/associated_files')
-
 
     def update(self, dsid: str, **updates) -> Dict:
         """Update an existing dataset with new field values.
@@ -288,114 +211,6 @@ class DatasetOperations(BaseResource):
         params = {"group_name": group_name, "read": read, "write": write}
         return self._request('post', f'/datasets/{dsid}/access_groups', params=params)
 
-    def get_download_links(self, dsid: str) -> Dict:
-        """Get the download links for files in a given dataset.
-
-        URLs will be valid for 1 hour and can be shared with other people.
-        While the URL is active, anyone with the URL will be able to access the file.
-
-        Args:
-            dsid (str): Dataset unique identifier
-
-        Returns:
-            Dict: Each item in the dictionary is a key, value pair
-                  where the key is the filepath of a file in the dataset,
-                  and the value is the corresponding signed url.
-        """
-        try:
-            return self._request('get', f"/datasets/{dsid}/download_links")
-        except requests.exceptions.HTTPError as e:
-            if e.response is not None:
-                if e.response.status_code == 404:
-                    detail = e.response.json().get('detail', '')
-                    if 'No files found' in detail:
-                        logger.debug(f"No files in storage for dataset {dsid}")
-                        return {}
-                if e.response.status_code in (502, 503, 504):
-                    logger.warning(f"Could not retrieve download links for {dsid}: {e.response.status_code} {e.response.reason}. The server may be temporarily unavailable.")
-                    return {}
-            raise
-
-    def _fetch_files(self, dsid: str, output_dir: str,
-                     overwrite_existing: bool = True,
-                     include: Optional[List[str]] = None,
-                     exclude: Optional[List[str]] = None) -> List[str]:
-        """Download files for a dataset into output_dir. Returns list of downloaded paths."""
-        import tempfile
-
-        download_urls = self.get_download_links(dsid)
-
-        files = download_urls
-        if include:
-            files = {k: v for k, v in files.items()
-                     if any(fnmatch.fnmatch(k, p) for p in include)}
-        if exclude:
-            files = {k: v for k, v in files.items()
-                     if not any(fnmatch.fnmatch(k, p) for p in exclude)}
-
-        downloads = []
-        for fname, signed_url in files.items():
-            download_path = os.path.join(output_dir, fname)
-            if overwrite_existing is False and os.path.exists(download_path):
-                downloads.append(download_path)
-                continue
-            os.makedirs(os.path.dirname(download_path), exist_ok=True)
-            response = self._client._session.get(signed_url, stream=True)
-            response.raise_for_status()
-            # Write to a temp file in the same directory, then atomically rename
-            # to avoid leaving corrupt files if the download is interrupted.
-            tmp_fd, tmp_path = tempfile.mkstemp(dir=os.path.dirname(download_path))
-            try:
-                with os.fdopen(tmp_fd, 'wb') as f:
-                    for chunk in response.iter_content(chunk_size=1024 * 1024):
-                        f.write(chunk)
-                os.replace(tmp_path, download_path)
-            except Exception:
-                os.unlink(tmp_path)
-                raise
-            downloads.append(download_path)
-
-        return downloads
-
-    def download(self, dsid: str, file_name: Optional[str] = None,
-                 output_dir: Optional[str] = 'crucible-downloads',
-                 overwrite_existing: bool = True,
-                 no_record: bool = False,
-                 include: Optional[List[str]] = None,
-                 exclude: Optional[List[str]] = None) -> List[str]:
-        """Download dataset files.
-
-        Args:
-            dsid (str): Dataset unique identifier
-            file_name (str, optional): Deprecated. Use include=['pattern'] with glob syntax.
-            output_dir (str, optional): Directory to save files (default: 'crucible-downloads/')
-            overwrite_existing (bool): Overwrite existing files (default: True)
-            include (list, optional): Glob patterns — only download matching files
-            exclude (list, optional): Glob patterns — skip matching files
-
-        Returns:
-            List[str]: List of downloaded file paths (including record.json)
-        """
-        if file_name is not None:
-            import warnings
-            warnings.warn(
-                "The 'file_name' parameter is deprecated. Use include=['pattern'] with glob "
-                "syntax instead (e.g. include=['*.h5']). Note: file_name used regex fullmatch; "
-                "glob syntax differs.",
-                DeprecationWarning, stacklevel=2,
-            )
-            # Apply regex filter now to produce an explicit filename list,
-            # then pass as include so client.download() doesn't need to know about regex.
-            download_urls = self.get_download_links(dsid)
-            file_regex = fr"({file_name})"
-            matched = [k for k in download_urls if re.fullmatch(file_regex, k)]
-            include = matched  # exact names are valid glob literals
-
-        return self._client.download(dsid, output_dir=output_dir, no_files=False,
-                                     no_record=no_record,
-                                     overwrite_existing=overwrite_existing,
-                                     include=include, exclude=exclude)
-
     @_deprecated("create() with files_to_upload parameter")
     def create_from_files(self, dataset, files_to_upload: List[str],
                          scientific_metadata: Optional[Dict] = None,
@@ -431,61 +246,6 @@ class DatasetOperations(BaseResource):
                           ingestor=ingestor,
                           wait_for_ingestion_response=wait_for_ingestion_response)
 
-    # Scientific Metadata Methods
-    # Thumbnail Methods
-    def get_thumbnails(self, dsid: str, limit: int = DEFAULT_LIMIT) -> List[Dict]:
-        """Get thumbnails for a dataset.
-
-        Args:
-            dsid (str): Dataset unique identifier
-            limit (int): Maximum number of results to return
-
-        Returns:
-            List[Dict]: Thumbnail objects with base64-encoded images
-        """
-        return self._request('get', f'/datasets/{dsid}/thumbnails')
-
-    def add_thumbnail(self, dsid: str, image, thumbnail_name: Optional[str] = None) -> Dict:
-        """Add a thumbnail to a dataset.
-
-        Args:
-            dsid (str): Dataset unique identifier
-            image: Image to use as thumbnail. Accepts:
-                - str or Path: path to an image file or a base64-encoded image string
-                - PIL.Image.Image: PIL image object
-                - matplotlib.figure.Figure: matplotlib figure
-                - numpy.ndarray: array of shape (H, W) or (H, W, C)
-            thumbnail_name (str, optional): Display name. Defaults to the filename
-                for file paths, or the dataset ID for in-memory objects.
-
-        Returns:
-            Dict: Created thumbnail object
-        """
-        import base64
-        from ..utils import data2thumbnail, is_base64
-
-        if is_base64(image):
-            thumbnail_data = {
-                'thumbnail_name': thumbnail_name or f"{dsid}_thumbnail",
-                'thumbnail_b64str': image,
-            }
-            return self._request('post', f'/datasets/{dsid}/thumbnails', json=thumbnail_data)
-
-        png_path = data2thumbnail(image)
-
-        if thumbnail_name is None:
-            thumbnail_name = os.path.basename(png_path)
-
-        with open(png_path, 'rb') as f:
-            thumbnail_b64str = base64.b64encode(f.read()).decode('utf-8')
-
-        thumbnail_data = {
-            'thumbnail_name': thumbnail_name,
-            'thumbnail_b64str': thumbnail_b64str,
-        }
-        return self._request('post', f'/datasets/{dsid}/thumbnails', json=thumbnail_data)
-
-
     # Keyword Methods
     def get_keywords(self, dsid: Optional[str] = None, limit: int = DEFAULT_LIMIT) -> List[Dict]:
         """List keywords, optionally filtered by dataset.
@@ -514,60 +274,6 @@ class DatasetOperations(BaseResource):
         """
         return self._request('post', f'/datasets/{dsid}/keywords', params={'keyword': keyword})
 
-
-    # Ingestion Request / Status Methods
-    def get_ingestion_requests(self, dsid, limit: int = DEFAULT_LIMIT) -> List[Dict]:
-        return self._request('get', f'/datasets/{dsid}/ingest')
-    
-
-    def get_request_status(self, dsid: str, reqid: str, request_type: str) -> Dict:
-        """Get the status of any type of request.
-
-        Args:
-            dsid (str): Dataset unique identifier
-            reqid (str): Request ID
-            request_type (str): Type of request ('ingest' or 'scicat_update')
-
-        Returns:
-            Dict: Request status information
-
-        Raises:
-            ValueError: If unsupported request_type is provided
-        """
-        if request_type == 'ingest':
-            return self._request('get', f'/datasets/{dsid}/ingest/{reqid}')
-        else:
-            raise ValueError(f"Unsupported request_type: {request_type}")
-
-    def update_ingestion_status(self, dsid: str, reqid: str, status: str, 
-                                ingestion_githash: str = None, ingestion_class: str = None,
-                                timezone: str = "America/Los_Angeles"):
-        """Update the status of a dataset ingestion request.
-
-        **Requires admin permissions.**
-
-        Args:
-            dsid (str): Dataset unique identifier
-            reqid (str): Request ID for the ingestion
-            status (str): New status ('complete', 'in_progress', 'failed')
-            timezone (str): Timezone for completion time
-
-        Returns:
-            requests.Response: HTTP response from the update request
-        """
-        from ..utils import get_tz_isoformat
-
-        patch_json = {'ingestion_githash': ingestion_githash, 
-                      'ingestion_class': ingestion_class}
-        
-        if status == "complete":
-            completion_time = get_tz_isoformat(timezone)
-            patch_json.update({"id": reqid, "status": status,
-                        "time_completed": completion_time})
-        else:
-            patch_json.update({"id": reqid, "status": status})
-
-        return self._request('patch', f'/datasets/{dsid}/ingest/{reqid}', json=patch_json)
 
     # Dataset Linking Methods
     def add_sample(self, dataset_id: str, sample_id: str) -> Dict:
