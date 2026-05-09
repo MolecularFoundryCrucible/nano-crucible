@@ -3,8 +3,8 @@
 """
 Deletion request operations for the Crucible API.
 
-Provides the soft-deletion workflow: users submit deletion requests,
-admins approve or reject them via /deletion_requests endpoints.
+Provides the soft-deletion workflow: users submit deletion requests via
+POST /resources/{id}/delete, admins approve or reject them via /deletion_requests endpoints.
 """
 
 from typing import Dict, List, Optional
@@ -34,10 +34,10 @@ class DeletionOperations(BaseResource):
         Returns:
             Dict: The created DeletionRequest record.
         """
-        params = {"resource_id": resource_id}
+        params = {}
         if reason is not None:
             params["reason"] = reason
-        raw = self._request("post", "/deletion_requests", params=params)
+        raw = self._request("post", f"/resources/{resource_id}/delete", params=params or None)
         return self._parse(raw)
 
     def list(self, status: Optional[str] = None, limit: int = DEFAULT_LIMIT,

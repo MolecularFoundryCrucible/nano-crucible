@@ -131,50 +131,38 @@ class CrucibleClient:
             logger.warning(f"Failed to parse JSON response from {url}: {e}")
             return response
     
-    def _wait_for_request_completion(self, dsid: str, reqid: str, request_type: str,
-                                  sleep_interval: int = 1) -> Dict:
+    def _wait_for_request_completion(self, reqid: str, sleep_interval: int = 1) -> Dict:
         """Wait for a request to complete by polling its status.
 
         Args:
-            dsid (str): Dataset ID
             reqid (str): Request ID
-            request_type (str): Type of request ('ingest' or 'scicat_update')
             sleep_interval (int): Seconds between status checks
 
         Returns:
             Dict: Final request status information
         """
-        req_info = self._get_request_status(dsid, reqid, request_type)
-        logger.info(f"Waiting for {request_type} request to complete...")
+        req_info = self._get_request_status(reqid)
+        logger.info(f"Waiting for ingestion request to complete...")
 
         while req_info['status'] in ['requested', 'started']:
             time.sleep(sleep_interval)
-            req_info = self._get_request_status(dsid, reqid, request_type)
+            req_info = self._get_request_status(reqid)
             logger.info(f"Current status: {req_info['status']}")
 
         logger.info(f"Request completed with status: {req_info['status']}")
         return req_info
     
-    def _get_request_status(self, dsid: str, reqid: str, request_type: str) -> Dict:
+    def _get_request_status(self, reqid: str) -> Dict:
         """Get the status of any type of request.
 
         Args:
-            dsid (str): Dataset ID
             reqid (str): Request ID
-            request_type (str): Type of request ('ingest' or 'scicat_update')
 
         Returns:
             Dict: Request status information
-
-        Raises:
-            ValueError: If unsupported request_type is provided
         """
-        if request_type == 'ingest':
-            return self._request('get', f'/datasets/{dsid}/ingest/{reqid}')
-        elif request_type == 'scicat_update':
-            return self._request('get', f'/datasets/{dsid}/scicat_update/{reqid}')
-        else:
-            raise ValueError(f"Unsupported request_type: {request_type}")
+        return self._request('get', f'/ingestion_requests/{reqid}')
+
     
     #%% GENERIC METHODS
 
@@ -716,7 +704,7 @@ class CrucibleClient:
     @_deprecated("client.datasets.update_ingestion_status()")
     def update_ingestion_status(self, dsid: str, reqid: str, status: str, timezone: str = "America/Los_Angeles"):
         """Backward compatible: Use client.datasets.update_ingestion_status() instead."""
-        return self.datasets.update_ingestion_status(dsid, reqid, status, timezone=timezone)
+        return self.datasets.update_ingestion_status(reqid, status, timezone=timezone)
 
     @_removed("SciCat upload status functionality has been removed from the Crucible API.")
     def update_scicat_upload_status(self, dsid: str, reqid: str, status: str, timezone: str = "America/Los_Angeles"):

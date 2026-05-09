@@ -53,6 +53,7 @@ class FileOperations(BaseResource):
         
         # Trigger ingestion — use the stored filename from the response (full GCS path)
         stored_filename = file_record.get('filename', filename)
+        file_id = file_record.get('mfid')
         ingest_params = {'filename': stored_filename, 'file_size': file_size}
         if ingestion_class:
             ingest_params['ingestion_class'] = ingestion_class
@@ -60,14 +61,13 @@ class FileOperations(BaseResource):
         logger.info(f"Requesting ingestion for {stored_filename}"
                     + (f" (class={ingestion_class})" if ingestion_class else ""))
         
-        ingestion_request = self._request('post', f'/datasets/{dsid}/ingest',
-                                          params=ingest_params)
+        ingestion_request = self._request('post', f'/datasets/{dsid}/files/{file_id}/ingest', params=ingest_params)
         
         logger.debug(f"Ingestion request created: id={ingestion_request.get('id')}, "
                      f"status={ingestion_request.get('status')}")
 
         if wait_for_ingestion_response and ingestion_request:
-            self._client._wait_for_request_completion(dsid, ingestion_request['id'], 'ingest')
+            self._client._wait_for_request_completion(ingestion_request['id'])
             
         return {'associated_file': file_record, 'ingestion_request': ingestion_request}
 
@@ -189,7 +189,7 @@ class FileOperations(BaseResource):
         Returns:
             List[Dict]: File metadata with names, sizes, and hashes
         """
-        return self._request('get', f'/datasets/{dsid}/associated_files')
+        return self._request('get', f'/datasets/{dsid}/files')
 
 
     def get_download_links(self, dsid: str) -> Dict:
@@ -353,24 +353,17 @@ class FileOperations(BaseResource):
 
     def get_ingestion_requests(self, dsid: str, limit: int = DEFAULT_LIMIT) -> List[Dict]:
         """Get ingestion requests for a dataset."""
-        return self._request('get', f'/datasets/{dsid}/ingest')
+        return self._request('get', f'/ingestion_requests', params = {'dataset_id': dsid})
 
-    def get_request_status(self, dsid: str, reqid: str, request_type: str) -> Dict:
+    def get_request_status(self, reqid: str) -> Dict:
         """Get the status of an ingestion request.
-
         Args:
-            dsid: Dataset unique identifier
             reqid: Request ID
-            request_type: Type of request ('ingest')
-
-        Returns:
-            Dict: Request status information
         """
-        if request_type == 'ingest':
-            return self._request('get', f'/datasets/{dsid}/ingest/{reqid}')
-        raise ValueError(f"Unsupported request_type: {request_type}")
+        return self._request('get', f'/ingestion_requests/{reqid}')
 
-    def update_ingestion_status(self, dsid: str, reqid: str, status: str,
+
+    def update_ingestion_status(self, reqid: str, status: str,
                                 ingestion_githash: str = None,
                                 ingestion_class: str = None,
                                 timezone: str = "America/Los_Angeles") -> Dict:
@@ -379,7 +372,6 @@ class FileOperations(BaseResource):
         **Requires admin permissions.**
 
         Args:
-            dsid: Dataset unique identifier
             reqid: Request ID
             status: New status ('complete', 'in_progress', 'failed')
             timezone: Timezone for completion timestamp
@@ -398,4 +390,4 @@ class FileOperations(BaseResource):
         else:
             patch_json.update({"id": reqid, "status": status})
 
-        return self._request('patch', f'/datasets/{dsid}/ingest/{reqid}', json=patch_json)
+        return self._request('patch', f'/ingestion_requests/{reqid}', json=patch_json)
