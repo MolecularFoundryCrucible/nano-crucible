@@ -353,7 +353,7 @@ class FileOperations(BaseResource):
 
     def get_ingestion_requests(self, dsid: str, limit: int = DEFAULT_LIMIT) -> List[Dict]:
         """Get ingestion requests for a dataset."""
-        return self._request('get', f'/ingestion_requests', params = {'dataset_id': dsid})
+        return self._request('get', f'/ingestion_requests', params = {'dataset_mfid': dsid})
 
     def get_request_status(self, reqid: str) -> Dict:
         """Get the status of an ingestion request.
