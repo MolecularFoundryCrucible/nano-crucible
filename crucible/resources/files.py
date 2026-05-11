@@ -88,21 +88,22 @@ class FileOperations(BaseResource):
         import base64
         import struct
         import google_crc32c
-        _256K    = 256 * 1024
+        _256K      = 256 * 1024
         _MIN_CHUNK = 32 * 1024 * 1024  # 32 MiB floor - overrides server hint for throughput
         _MAX_RETRIES = 3
 
         file_size = os.path.getsize(file_path)
-        filename = os.path.basename(file_path)
+        filename  = os.path.basename(file_path)
 
         logger.info(f"Uploading {filename} ({file_size / 1024**2:.1f} MB) to dataset {dsid}")
 
-        # Pre-compute SHA256 so the server can short-circuit if the file already exists
-        pre_h = hashlib.sha256()
+        # Single pre-pass: SHA256 sent to /initiate for server-side dedup;
+        # reused at /complete - CRC32C per chunk covers transport integrity.
+        h = hashlib.sha256()
         with open(file_path, 'rb') as f:
-            for block in iter(lambda: f.read(8 * 1024 * 1024), b''):
-                pre_h.update(block)
-        sha256_hash = pre_h.hexdigest()
+            for block in iter(lambda: f.read(_MIN_CHUNK), b''):
+                h.update(block)
+        sha256_hash = h.hexdigest()
         logger.debug(f"sha256={sha256_hash}")
 
         # Initiate resumable upload session; server returns existing_file if hash matches
@@ -120,9 +121,6 @@ class FileOperations(BaseResource):
         chunk_size = max((max(raw_hint, _MIN_CHUNK) // _256K) * _256K, _256K)
 
         logger.debug(f"Chunked upload initiated: upload_id={upload_id}, chunk_size={chunk_size >> 20} MiB")
-
-        # SHA256 recomputed incrementally during upload to confirm all chunks arrived intact
-        h = hashlib.sha256()
 
         # Upload chunks directly to GCS (no Crucible auth needed)
         with open(file_path, 'rb') as f:
@@ -145,12 +143,10 @@ class FileOperations(BaseResource):
                         timeout=120,
                     )
                     if resp.status_code in (200, 201):
-                        h.update(chunk)
                         logger.debug("Chunked upload complete")
                         offset = file_size
                         break
                     elif resp.status_code == 308:
-                        h.update(chunk)
                         offset = chunk_end + 1
                         logger.debug(f"Chunk accepted, offset={offset}/{file_size}")
                         break
@@ -162,25 +158,19 @@ class FileOperations(BaseResource):
                                 f"GCS chunk upload failed after {_MAX_RETRIES} attempts "
                                 f"(status {resp.status_code}): {resp.text}"
                             )
-                        # Query GCS for confirmed offset; hash only the accepted portion
+                        # Query GCS for confirmed offset and retry from there
                         probe = requests.put(uri,
                                              headers={'Content-Range': f'bytes */{file_size}'},
                                              timeout=30)
                         if probe.status_code in (200, 201):
-                            h.update(chunk)
                             offset = file_size
                             break
                         elif probe.status_code == 308 and 'Range' in probe.headers:
                             last_byte = int(probe.headers['Range'].split('-')[1])
-                            accepted = last_byte + 1 - offset
-                            if accepted > 0:
-                                h.update(chunk[:accepted])
                             offset = last_byte + 1
                         f.seek(offset)
                         chunk = f.read(chunk_size)
                         chunk_end = offset + len(chunk) - 1
-
-        sha256_hash = h.hexdigest()
 
         # Register the AssociatedFile record
         logger.info(f"Completing upload for {filename} (upload_id={upload_id})")
