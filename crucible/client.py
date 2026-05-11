@@ -563,7 +563,6 @@ class CrucibleClient:
         return self.datasets.create(dataset,
                                    scientific_metadata=scientific_metadata,
                                    keywords=keywords,
-                                   get_user_info_function=get_user_info_function,
                                    verbose=verbose)
 
     @_deprecated("client.datasets.create()")
@@ -580,7 +579,6 @@ class CrucibleClient:
         return self.datasets.create(dataset,
                                    scientific_metadata=scientific_metadata,
                                    keywords=keywords,
-                                   get_user_info_function=get_user_info_function,
                                    verbose=verbose,
                                    files_to_upload=files_to_upload,
                                    ingestor=ingestor,
@@ -610,12 +608,6 @@ class CrucibleClient:
         return self.datasets.update(dsid, **updates)
 
 
-    @_deprecated("client.datasets.upload_file()")
-    def upload_dataset_file(self, dsid: str, file_path: str, verbose=True) -> Dict:
-        """Backward compatible: Use client.datasets.upload_file() instead."""
-        return self.datasets.upload_file(dsid, file_path, verbose=verbose)
-
-
     @_deprecated("client.datasets.get_download_links()")
     def get_dataset_download_links(self, dsid: str):
         """Backward compatible: Use client.datasets.get_download_links() instead."""
@@ -629,15 +621,6 @@ class CrucibleClient:
         return self.datasets.download(dsid, file_name=file_name,
                                      output_dir=output_dir,
                                      overwrite_existing=overwrite_existing)
-        
-    @_deprecated("client.datasets.request_ingestion()")
-    def request_ingestion(self, dsid: str, file_to_upload: Optional[str] = None,
-                         ingestion_class: Optional[str] = None,
-                         wait_for_response: bool = False) -> Dict:
-        """Backward compatible: Use client.datasets.request_ingestion() instead."""
-        return self.datasets.request_ingestion(dsid, file_to_upload=file_to_upload,
-                                              ingestion_class=ingestion_class,
-                                              wait_for_response=wait_for_response)
 
     @_removed("SciCat upload functionality has been removed from the Crucible API.")
     def request_scicat_upload(self, dsid: str, wait_for_response: bool = False, overwrite_data: bool = False) -> Dict:
@@ -672,11 +655,6 @@ class CrucibleClient:
     def get_associated_files(self, dsid: str, limit: int = DEFAULT_LIMIT) -> List[Dict]:
         """Backward compatible: Use client.datasets.get_associated_files() instead."""
         return self.datasets.get_associated_files(dsid, limit=limit)
-
-    @_deprecated("client.datasets.add_associated_file()")
-    def add_associated_file(self, dsid: str, file_path: str, filename: str = None) -> Dict:
-        """Backward compatible: Use client.datasets.add_associated_file() instead."""
-        return self.datasets.add_associated_file(dsid, file_path, filename=filename)
     
     @_deprecated("client.datasets.get_keywords()")
     def get_keywords(self, dsid: str = None, limit: int = DEFAULT_LIMIT) -> List[Dict]:
