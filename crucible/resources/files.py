@@ -189,9 +189,8 @@ class FileOperations(BaseResource):
 
         return file_record
 
-    #%% Download Methods
 
-    def get_associated_files(self, dsid: str) -> List[Dict]:
+    def get_associated_files(self, dsid: str, limit: int = DEFAULT_LIMIT) -> List[Dict]:
         """Get associated files for a dataset.
 
         Args:
@@ -203,7 +202,7 @@ class FileOperations(BaseResource):
         """
         return self._request('get', f'/datasets/{dsid}/files')
 
-
+  #%% Download Methods
     def get_download_links(self, dsid: str) -> Dict:
         """Get signed download URLs for all files in a dataset.
 
@@ -362,7 +361,6 @@ class FileOperations(BaseResource):
         return self._request('post', f'/datasets/{dsid}/thumbnails', json=thumbnail_data)
 
     # Ingestion Methods
-
     def get_ingestion_requests(self, dsid: str, limit: int = DEFAULT_LIMIT) -> List[Dict]:
         """Get ingestion requests for a dataset."""
         return self._request('get', f'/ingestion_requests', params = {'dataset_id': dsid})
