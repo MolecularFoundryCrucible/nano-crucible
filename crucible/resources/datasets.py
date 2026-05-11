@@ -240,7 +240,6 @@ class DatasetOperations(FileOperations):
         return self.create(dataset=dataset,
                           scientific_metadata=scientific_metadata,
                           keywords=keywords,
-                          get_user_info_function=get_user_info_function,
                           verbose=verbose,
                           files_to_upload=files_to_upload,
                           ingestor=ingestor,
