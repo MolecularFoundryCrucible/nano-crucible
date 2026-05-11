@@ -53,6 +53,7 @@ class FileOperations(BaseResource):
         
         # Trigger ingestion — use the stored filename from the response (full GCS path)
         stored_filename = file_record.get('filename', filename)
+        file_id = file_record.get('mfid')
         ingest_params = {'filename': stored_filename, 'file_size': file_size}
         if ingestion_class:
             ingest_params['ingestion_class'] = ingestion_class
@@ -60,14 +61,13 @@ class FileOperations(BaseResource):
         logger.info(f"Requesting ingestion for {stored_filename}"
                     + (f" (class={ingestion_class})" if ingestion_class else ""))
         
-        ingestion_request = self._request('post', f'/datasets/{dsid}/ingest',
-                                          params=ingest_params)
+        ingestion_request = self._request('post', f'/datasets/{dsid}/files/{file_id}/ingest', params=ingest_params)
         
         logger.debug(f"Ingestion request created: id={ingestion_request.get('id')}, "
                      f"status={ingestion_request.get('status')}")
 
         if wait_for_ingestion_response and ingestion_request:
-            self._client._wait_for_request_completion(dsid, ingestion_request['id'], 'ingest')
+            self._client._wait_for_request_completion(ingestion_request['id'])
             
         return {'associated_file': file_record, 'ingestion_request': ingestion_request}
 
@@ -97,9 +97,22 @@ class FileOperations(BaseResource):
 
         logger.info(f"Uploading {filename} ({file_size / 1024**2:.1f} MB) to dataset {dsid}")
 
-        # Initiate resumable upload session
+        # Pre-compute SHA256 so the server can short-circuit if the file already exists
+        pre_h = hashlib.sha256()
+        with open(file_path, 'rb') as f:
+            for block in iter(lambda: f.read(8 * 1024 * 1024), b''):
+                pre_h.update(block)
+        sha256_hash = pre_h.hexdigest()
+        logger.debug(f"sha256={sha256_hash}")
+
+        # Initiate resumable upload session; server returns existing_file if hash matches
         init = self._request('post', f'/datasets/{dsid}/upload/initiate',
-                             json={'filename': filename, 'size': file_size})
+                             json={'filename': filename, 'size': file_size, 'sha256_hash': sha256_hash})
+
+        if init.get('existing_file', None) is not None:
+            logger.info(f"File {filename} already exists in dataset {dsid}, skipping upload")
+            return init['existing_file']
+
         upload_id  = init['upload_id']
         uri        = init['resumable_uri']
         raw_hint   = init.get('chunk_size_hint', _MIN_CHUNK)
@@ -108,7 +121,7 @@ class FileOperations(BaseResource):
 
         logger.debug(f"Chunked upload initiated: upload_id={upload_id}, chunk_size={chunk_size >> 20} MiB")
 
-        # SHA256 computed incrementally during upload - no separate pre-pass needed
+        # SHA256 recomputed incrementally during upload to confirm all chunks arrived intact
         h = hashlib.sha256()
 
         # Upload chunks directly to GCS (no Crucible auth needed)
@@ -168,7 +181,6 @@ class FileOperations(BaseResource):
                         chunk_end = offset + len(chunk) - 1
 
         sha256_hash = h.hexdigest()
-        logger.debug(f"sha256={sha256_hash}")
 
         # Register the AssociatedFile record
         logger.info(f"Completing upload for {filename} (upload_id={upload_id})")
@@ -189,7 +201,7 @@ class FileOperations(BaseResource):
         Returns:
             List[Dict]: File metadata with names, sizes, and hashes
         """
-        return self._request('get', f'/datasets/{dsid}/associated_files')
+        return self._request('get', f'/datasets/{dsid}/files')
 
 
     def get_download_links(self, dsid: str) -> Dict:
@@ -353,24 +365,17 @@ class FileOperations(BaseResource):
 
     def get_ingestion_requests(self, dsid: str, limit: int = DEFAULT_LIMIT) -> List[Dict]:
         """Get ingestion requests for a dataset."""
-        return self._request('get', f'/datasets/{dsid}/ingest')
+        return self._request('get', f'/ingestion_requests', params = {'dataset_id': dsid})
 
-    def get_request_status(self, dsid: str, reqid: str, request_type: str) -> Dict:
+    def get_request_status(self, reqid: str) -> Dict:
         """Get the status of an ingestion request.
-
         Args:
-            dsid: Dataset unique identifier
             reqid: Request ID
-            request_type: Type of request ('ingest')
-
-        Returns:
-            Dict: Request status information
         """
-        if request_type == 'ingest':
-            return self._request('get', f'/datasets/{dsid}/ingest/{reqid}')
-        raise ValueError(f"Unsupported request_type: {request_type}")
+        return self._request('get', f'/ingestion_requests/{reqid}')
 
-    def update_ingestion_status(self, dsid: str, reqid: str, status: str,
+
+    def update_ingestion_status(self, reqid: str, status: str,
                                 ingestion_githash: str = None,
                                 ingestion_class: str = None,
                                 timezone: str = "America/Los_Angeles") -> Dict:
@@ -379,7 +384,6 @@ class FileOperations(BaseResource):
         **Requires admin permissions.**
 
         Args:
-            dsid: Dataset unique identifier
             reqid: Request ID
             status: New status ('complete', 'in_progress', 'failed')
             timezone: Timezone for completion timestamp
@@ -398,4 +402,4 @@ class FileOperations(BaseResource):
         else:
             patch_json.update({"id": reqid, "status": status})
 
-        return self._request('patch', f'/datasets/{dsid}/ingest/{reqid}', json=patch_json)
+        return self._request('patch', f'/ingestion_requests/{reqid}', json=patch_json)
