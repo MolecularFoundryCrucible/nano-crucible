@@ -33,16 +33,24 @@ class UserOperations(BaseResource):
             Dict: User profile with unique_id, name, email, is_service_account
 
         Raises:
-            ValueError: If neither orcid nor email is provided
+            ValueError: If neither orcid nor email is provided, no user is found,
+                or email matches multiple accounts (use ORCID in that case).
 
         Note:
-            If both are provided, orcid takes precedence.
+            ORCID is the canonical user identifier. Email is not guaranteed unique -
+            if both are provided, orcid takes precedence.
         """
         if orcid:
             return self._request('get', f'/users/{orcid}')
         elif email:
-            result = self._request('get', '/users', params={"email": email})
-            return result[-1] if result else None
+            matches = self._paginate('/users', {'email': email, 'permissive': False})
+            if not matches:
+                raise ValueError(f"No user found with email: {email}")
+            if len(matches) > 1:
+                raise ValueError(
+                    f"Multiple users match email '{email}' - use ORCID to identify unambiguously"
+                )
+            return matches[0]
         else:
             raise ValueError('please provide orcid or email')
 

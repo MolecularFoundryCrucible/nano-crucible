@@ -7,6 +7,9 @@ Provides shared functionality for all resource operation classes.
 """
 
 
+from ..constants import DEFAULT_LIMIT
+
+
 class BaseResource:
     """Base class for resource-specific operations.
 
@@ -25,7 +28,7 @@ class BaseResource:
         self._request = client._request  # Delegate HTTP requests to main client
 
     def _paginate(self, endpoint: str, params: dict,
-                  limit, offset: int = 0) -> list:
+                  limit: int = DEFAULT_LIMIT, offset: int = 0) -> list:
         """Fetch all matching records from a paginated envelope endpoint.
 
         Fires the first request to get the total count, then fetches all

@@ -543,6 +543,7 @@ def _execute_add_user(args):
         sys.exit(1)
 
     try:
+        import requests as _req
         client = CrucibleClient()
         client.projects.add_user(orcid=orcid, project_id=args.project_id, email=email)
 
@@ -556,6 +557,17 @@ def _execute_add_user(args):
 
         logger.info(f"\n✓ {name} added to project {args.project_id} successfully!")
 
+    except _req.exceptions.HTTPError as e:
+        if e.response is not None and e.response.status_code == 404:
+            identifier = orcid or email
+            logger.error(f"Not found: check that '{identifier}' has a Crucible account "
+                         f"and that project '{args.project_id}' exists")
+        else:
+            logger.error(f"Error adding user to project: {e}")
+        if getattr(args, "debug", False):
+            import traceback
+            traceback.print_exc()
+        sys.exit(1)
     except Exception as e:
         logger.error(f"Error adding user to project: {e}")
         if getattr(args, "debug", False):
