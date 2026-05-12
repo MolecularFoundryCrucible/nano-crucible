@@ -297,11 +297,12 @@ def _register_remove_user(subparsers):
     parser = subparsers.add_parser(
         'remove-user',
         help='Remove a user from a project',
-        description='Remove a user from a project (requires admin permissions)',
+        description='Remove a user from a project by ORCID or email (requires admin permissions)',
         formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
-    crucible project remove-user my-project 0000-0002-1825-0097
+    crucible project remove-user my-project --orcid 0000-0002-1825-0097
+    crucible project remove-user my-project --email user@lbl.gov
 """
     )
     project_id_arg = parser.add_argument(
@@ -309,7 +310,9 @@ Examples:
     )
     if ARGCOMPLETE_AVAILABLE:
         project_id_arg.completer = argcomplete.completers.SuppressCompleter()
-    parser.add_argument('orcid', metavar='ORCID', help='User ORCID identifier')
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument('--orcid', metavar='ORCID', help='User ORCID identifier')
+    group.add_argument('--email', metavar='EMAIL', help='User email address')
     parser.set_defaults(func=_execute_remove_user)
 
 
@@ -516,7 +519,7 @@ def _execute_list_users(args):
             for u in users:
                 name_parts = [u.get('first_name') or '', u.get('last_name') or '']
                 name  = ' '.join(p for p in name_parts if p) or '-'
-                orcid = u.get('unique_id') or u.get('orcid') or '-'
+                orcid = u.get('orcid') or u.get('unique_id') or '-'
                 email = u.get('email') or '-'
                 rows.append((name, orcid, email))
             term.table(rows, ['Name', 'ORCID', 'Email'], max_widths=[25, 19, 35])
@@ -627,11 +630,36 @@ def _execute_update(args):
 
 def _execute_remove_user(args):
     """Execute the 'project remove-user' subcommand."""
+    import requests as _req
     from crucible.client import CrucibleClient
+
+    orcid = getattr(args, 'orcid', None)
+    email = getattr(args, 'email', None)
+
     try:
         client = CrucibleClient()
-        client.projects.remove_user(args.project_id, args.orcid)
-        logger.info(f"Removed {args.orcid} from project '{args.project_id}'")
+
+        try:
+            user = client.users.get(orcid=orcid, email=email)
+            first = user.get('first_name') or ''
+            last  = user.get('last_name') or ''
+            name  = ' '.join(p for p in (first, last) if p) or orcid or email
+        except Exception:
+            name = orcid or email
+
+        client.projects.remove_user(args.project_id, orcid=orcid, email=email)
+        logger.info(f"Removed {name} from project '{args.project_id}'")
+
+    except _req.exceptions.HTTPError as e:
+        if e.response is not None and e.response.status_code == 404:
+            identifier = orcid or email
+            logger.error(f"Not found: check that '{identifier}' is a member of '{args.project_id}'")
+        else:
+            logger.error(f"Error removing user from project: {e}")
+        if getattr(args, "debug", False):
+            import traceback
+            traceback.print_exc()
+        sys.exit(1)
     except Exception as e:
         logger.error(f"Error removing user from project: {e}")
         if getattr(args, "debug", False):

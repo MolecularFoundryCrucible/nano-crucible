@@ -158,18 +158,30 @@ class ProjectOperations(BaseResource):
         """
         return self._request('patch', f'/projects/{project_id}', json=kwargs)
 
-    def remove_user(self, project_id: str, orcid: str) -> Dict:
+    def remove_user(self, project_id: str, orcid: Optional[str] = None,
+                    email: Optional[str] = None) -> Dict:
         """Remove a user from a project.
 
         **Requires admin permissions.**
 
+        Provide either ``orcid`` or ``email`` to identify the user.
+        When ``email`` is given, the ORCID is resolved automatically.
+
         Args:
             project_id (str): Unique project identifier
-            orcid (str): User's ORCID identifier
+            orcid (str, optional): User's ORCID identifier
+            email (str, optional): User's email address (alternative to orcid)
 
         Returns:
             Dict: Response message
         """
+        if not orcid and not email:
+            raise ValueError("provide either orcid or email")
+        if not orcid:
+            user = self._client.users.get(email=email)
+            orcid = user.get('orcid') or user.get('unique_id')
+            if not orcid:
+                raise ValueError(f"could not resolve ORCID for email: {email}")
         return self._request('delete', f'/projects/{project_id}/users/{orcid}')
 
     def add_user(self, orcid: Optional[str] = None, project_id: str = None,
@@ -193,7 +205,7 @@ class ProjectOperations(BaseResource):
             raise ValueError("provide either orcid or email")
         if not orcid:
             user = self._client.users.get(email=email)
-            orcid = user.get('unique_id') or user.get('orcid')
+            orcid = user.get('orcid') or user.get('unique_id')
             if not orcid:
                 raise ValueError(f"could not resolve ORCID for email: {email}")
         return self._request('post', f'/projects/{project_id}/users/{orcid}')
