@@ -172,20 +172,31 @@ class ProjectOperations(BaseResource):
         """
         return self._request('delete', f'/projects/{project_id}/users/{orcid}')
 
-    def add_user(self, orcid: str, project_id: str) -> List[Dict]:
+    def add_user(self, orcid: Optional[str] = None, project_id: str = None,
+                email: Optional[str] = None) -> List[Dict]:
         """Add a user to a project.
 
         **Requires admin permissions.**
 
+        Provide either ``orcid`` or ``email`` to identify the user.
+        When ``email`` is given, the ORCID is resolved automatically.
+
         Args:
-            orcid (str): User's ORCID identifier
+            orcid (str, optional): User's ORCID identifier
             project_id (str): Unique project identifier
+            email (str, optional): User's email address (alternative to orcid)
 
         Returns:
             List[Dict]: Updated list of project users
         """
-        updated_project_users = self._request('post', f'/projects/{project_id}/users/{orcid}')
-        return updated_project_users
+        if not orcid and not email:
+            raise ValueError("provide either orcid or email")
+        if not orcid:
+            user = self._client.users.get(email=email)
+            orcid = user.get('unique_id') or user.get('orcid')
+            if not orcid:
+                raise ValueError(f"could not resolve ORCID for email: {email}")
+        return self._request('post', f'/projects/{project_id}/users/{orcid}')
 
     def get_or_create(self, project_id: str, get_project_info_function=_build_project_from_args,
                      **kwargs) -> Dict:

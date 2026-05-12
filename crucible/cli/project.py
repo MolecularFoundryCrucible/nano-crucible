@@ -227,12 +227,12 @@ def _register_add_user(subparsers):
     parser = subparsers.add_parser(
         'add-user',
         help='Add a user to a project',
-        description='Add a user to a project by ORCID (requires admin permissions)',
+        description='Add a user to a project by ORCID or email (requires admin permissions)',
         formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     crucible project add-user my-project --orcid 0000-0002-1825-0097
-    crucible project add-user lammps-test --orcid 0000-0001-2345-6789
+    crucible project add-user my-project --email user@lbl.gov
 """
     )
 
@@ -241,15 +241,19 @@ Examples:
         metavar='PROJECT_ID',
         help='Project ID'
     )
-    # Disable file completion for project_id
     if ARGCOMPLETE_AVAILABLE:
         project_id_arg.completer = argcomplete.completers.SuppressCompleter()
 
-    parser.add_argument(
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument(
         '--orcid',
-        required=True,
         metavar='ORCID',
         help='User ORCID identifier (format: 0000-0000-0000-000X)'
+    )
+    group.add_argument(
+        '--email',
+        metavar='EMAIL',
+        help='User email address'
     )
 
     parser.add_argument(
@@ -529,17 +533,28 @@ def _execute_add_user(args):
     """Execute the 'project add-user' subcommand."""
     import re
     from crucible.client import CrucibleClient
-    # Validate ORCID format
-    if not re.match(r'^\d{4}-\d{4}-\d{4}-\d{3}[0-9X]$', args.orcid):
-        logger.error(f"Invalid ORCID format: {args.orcid}")
+
+    orcid = getattr(args, 'orcid', None)
+    email = getattr(args, 'email', None)
+
+    if orcid and not re.match(r'^\d{4}-\d{4}-\d{4}-\d{3}[0-9X]$', orcid):
+        logger.error(f"Invalid ORCID format: {orcid}")
         logger.error("Expected format: 0000-0000-0000-000X")
         sys.exit(1)
 
     try:
         client = CrucibleClient()
-        client.projects.add_user(args.orcid, args.project_id)
+        client.projects.add_user(orcid=orcid, project_id=args.project_id, email=email)
 
-        logger.info(f"\n✓ User {args.orcid} added to project {args.project_id} successfully!")
+        try:
+            user = client.users.get(orcid=orcid, email=email)
+            first = user.get('first_name') or ''
+            last  = user.get('last_name') or ''
+            name  = ' '.join(p for p in (first, last) if p) or orcid or email
+        except Exception:
+            name = orcid or email
+
+        logger.info(f"\n✓ {name} added to project {args.project_id} successfully!")
 
     except Exception as e:
         logger.error(f"Error adding user to project: {e}")

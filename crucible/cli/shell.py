@@ -655,10 +655,28 @@ class CrucibleShell:
                 return True
             project_id = parts[1].strip()
             try:
+                import requests as _req
+                from crucible.client import CrucibleClient
+                project = CrucibleClient().projects.get(project_id)
+                if project is None:
+                    logger.error(f"Project not found: {project_id}")
+                    return True
+            except _req.exceptions.HTTPError as e:
+                if e.response is not None and e.response.status_code in (403, 404):
+                    logger.error(f"Project '{project_id}' not found or not accessible")
+                else:
+                    logger.error(f"Cannot access project '{project_id}': {e}")
+                return True
+            except Exception as e:
+                logger.error(f"Cannot access project '{project_id}': {e}")
+                return True
+            try:
                 from crucible.cli.config import set_config_value
                 set_config_value('current_project', project_id)
                 set_config_value('current_session', '')
-                print(f"Switched to project: {project_id}")
+                title = project.get('title') or ''
+                label = f"{project_id} - {title}" if title else project_id
+                print(f"Switched to project: {label}")
                 self.state['project'] = project_id
                 self.state['session'] = ''
             except Exception as e:

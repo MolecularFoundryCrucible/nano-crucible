@@ -180,39 +180,79 @@ class FileOperations(BaseResource):
         return file_record
 
 
-    def get_associated_files(self, dsid: str, limit: int = DEFAULT_LIMIT) -> List[Dict]:
+    def list_files(self, limit: int = DEFAULT_LIMIT) -> List[Dict]:
+        """List all files across all accessible datasets.
+
+        Args:
+            limit: Maximum number of results
+
+        Returns:
+            List[Dict]: File records (mfid, filename, storage_path, size, sha256_hash)
+        """
+        return self._paginate('/files', {}, limit=limit)
+
+    def get_associated_files(self, dsid: str) -> List[Dict]:
         """Get associated files for a dataset.
 
         Args:
             dsid: Dataset unique identifier
-            limit: Maximum number of results to return
 
         Returns:
-            List[Dict]: File metadata with names, sizes, and hashes
+            List[Dict]: File records (mfid, filename, storage_path, size, sha256_hash).
+                storage_path is null until the file has been ingested.
         """
         return self._request('get', f'/datasets/{dsid}/files')
 
-  #%% Download Methods
-    def get_download_links(self, dsid: str) -> Dict:
-        """Get signed download URLs for all files in a dataset.
+    def get_file(self, file_id: str) -> Dict:
+        """Get metadata for a single associated file.
 
-        URLs are valid for 1 hour and can be shared freely.
+        Args:
+            file_id: File MFID
+
+        Returns:
+            Dict: File record (mfid, filename, storage_path, size, sha256_hash)
+        """
+        return self._request('get', f'/files/{file_id}')
+
+    def get_download_link(self, file_id: str) -> str:
+        """Get a signed download URL for a single file.
+
+        Prefer this over get_download_links() when the user requests a specific
+        file — avoids signing all files in the dataset.
+
+        Args:
+            file_id: File MFID
+
+        Returns:
+            str: Signed URL valid for 1 hour, no auth required.
+
+        Raises:
+            HTTPError 404: File has not been ingested yet.
+        """
+        result = self._request('get', f'/files/{file_id}/download_link')
+        return result['url']
+
+    #%% Download Methods
+
+    def get_download_links(self, dsid: str) -> Dict:
+        """Get signed download URLs for all ingested files in a dataset.
+
+        URLs are valid for 1 hour, require no auth, and are safe to share.
 
         Args:
             dsid: Dataset unique identifier
 
         Returns:
-            Dict: Mapping of file path → signed URL. Empty dict if no files.
+            Dict: Mapping of file MFID → signed URL. Only includes ingested files.
+                Empty dict if no ingested files found.
         """
         try:
             return self._request('get', f"/datasets/{dsid}/download_links")
         except requests.exceptions.HTTPError as e:
             if e.response is not None:
                 if e.response.status_code == 404:
-                    detail = e.response.json().get('detail', '')
-                    if 'No files found' in detail:
-                        logger.debug(f"No files in storage for dataset {dsid}")
-                        return {}
+                    logger.debug(f"No ingested files in storage for dataset {dsid}")
+                    return {}
                 if e.response.status_code in (502, 503, 504):
                     logger.warning(f"Could not retrieve download links for {dsid}: "
                                    f"{e.response.status_code} {e.response.reason}. "
@@ -227,27 +267,44 @@ class FileOperations(BaseResource):
         """Download files for a dataset into output_dir. Returns list of downloaded paths."""
         import tempfile
 
-        download_urls = self.get_download_links(dsid)
+        all_files = self.get_associated_files(dsid)
 
-        files = download_urls
+        # Only ingested files have a storage_path and are downloadable
+        prefix_sp = f'mf-storage-prod/{dsid}/'
+        ingested = [f for f in all_files if f.get('storage_path')]
+
+        def _bare_name(f: Dict) -> str:
+            sp = f.get('storage_path', '')
+            return sp[len(prefix_sp):] if sp.startswith(prefix_sp) else os.path.basename(sp)
+
         if include:
-            files = {k: v for k, v in files.items()
-                     if any(fnmatch.fnmatch(k, p) for p in include)}
+            ingested = [f for f in ingested if any(fnmatch.fnmatch(_bare_name(f), p) for p in include)]
         if exclude:
-            files = {k: v for k, v in files.items()
-                     if not any(fnmatch.fnmatch(k, p) for p in exclude)}
+            ingested = [f for f in ingested if not any(fnmatch.fnmatch(_bare_name(f), p) for p in exclude)]
+
+        if not ingested:
+            return []
+
+        # Bulk-fetch signed URLs; keys are MFIDs
+        link_map = self.get_download_links(dsid)
 
         downloads = []
-        for fname, signed_url in files.items():
-            download_path = os.path.join(output_dir, fname)
+        for file_meta in ingested:
+            name       = _bare_name(file_meta)
+            signed_url = link_map.get(file_meta.get('mfid'))
+            if not signed_url:
+                logger.warning(f"No download URL for {name}, skipping")
+                continue
+
+            download_path = os.path.join(output_dir, name)
             if not overwrite_existing and os.path.exists(download_path):
                 downloads.append(download_path)
                 continue
+
             os.makedirs(os.path.dirname(download_path), exist_ok=True)
             response = self._client._session.get(signed_url, stream=True)
             response.raise_for_status()
-            # Write to a temp file then atomically rename to avoid corrupt files
-            # if the download is interrupted.
+            # Write to a temp file then atomically rename to avoid corrupt partial files
             tmp_fd, tmp_path = tempfile.mkstemp(dir=os.path.dirname(download_path))
             try:
                 with os.fdopen(tmp_fd, 'wb') as f:
@@ -288,8 +345,11 @@ class FileOperations(BaseResource):
                 "glob syntax differs.",
                 DeprecationWarning, stacklevel=2,
             )
-            download_urls = self.get_download_links(dsid)
-            matched = [k for k in download_urls if re.fullmatch(fr"({file_name})", k)]
+            all_files = self.get_associated_files(dsid)
+            matched = [os.path.basename(f.get('storage_path') or f.get('filename', ''))
+                       for f in all_files
+                       if re.fullmatch(fr"({file_name})",
+                                       os.path.basename(f.get('storage_path') or f.get('filename', '')))]
             include = matched
 
         return self._client.download(dsid, output_dir=output_dir, no_files=False,
@@ -351,9 +411,23 @@ class FileOperations(BaseResource):
         return self._request('post', f'/datasets/{dsid}/thumbnails', json=thumbnail_data)
 
     # Ingestion Methods
-    def get_ingestion_requests(self, dsid: str, limit: int = DEFAULT_LIMIT) -> List[Dict]:
-        """Get ingestion requests for a dataset."""
-        return self._request('get', f'/ingestion_requests', params = {'dataset_id': dsid})
+
+    def get_ingestion_requests(self, dsid: Optional[str] = None,
+                               file_id: Optional[str] = None,
+                               limit: int = DEFAULT_LIMIT) -> List[Dict]:
+        """Get ingestion requests, optionally filtered by dataset or file.
+
+        Args:
+            dsid: Filter by dataset ID
+            file_id: Filter by file MFID
+            limit: Maximum number of results
+        """
+        params = {}
+        if dsid:
+            params['dataset_id'] = dsid
+        if file_id:
+            params['file_id'] = file_id
+        return self._request('get', '/ingestion_requests', params=params or None)
 
     def get_request_status(self, reqid: str) -> Dict:
         """Get the status of an ingestion request.

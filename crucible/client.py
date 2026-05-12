@@ -652,9 +652,14 @@ class CrucibleClient:
         return self.datasets.add_thumbnail(dsid, file_path, thumbnail_name=thumbnail_name)
     
     @_deprecated("client.datasets.get_associated_files()")
-    def get_associated_files(self, dsid: str, limit: int = DEFAULT_LIMIT) -> List[Dict]:
+    def get_associated_files(self, dsid: str, **kwargs) -> List[Dict]:
         """Backward compatible: Use client.datasets.get_associated_files() instead."""
-        return self.datasets.get_associated_files(dsid, limit=limit)
+        return self.datasets.get_associated_files(dsid)
+
+    @_deprecated("client.datasets.add_associated_file()")
+    def add_associated_file(self, dsid: str, file_path: str, filename: str = None) -> Dict:
+        """Backward compatible: Use client.datasets.add_associated_file() instead."""
+        return self.datasets.add_associated_file(dsid, file_path, filename=filename)
     
     @_deprecated("client.datasets.get_keywords()")
     def get_keywords(self, dsid: str = None, limit: int = DEFAULT_LIMIT) -> List[Dict]:

@@ -16,21 +16,32 @@ logger = logging.getLogger(__name__)
 from . import term
 
 
-def _normalize_file_paths(link_map, af_list, dsid):
-    """Normalize paths from get_download_links and get_associated_files to bare filenames."""
-    prefix_dl = dsid + '/'
-    prefix_af = 'api-uploads/'
-    links = {
-        (k[len(prefix_dl):] if k.startswith(prefix_dl) else k): v
-        for k, v in link_map.items()
-    }
-    meta_by_name = {}
-    for m in af_list:
-        fname = m.get('filename') or m.get('name', '')
-        if fname.startswith(prefix_af):
-            fname = fname[len(prefix_af):]
-        meta_by_name[fname] = m
-    return links, meta_by_name
+def _build_file_display(af_list, link_map, dsid):
+    """Build display entries for a dataset's files.
+
+    Returns list of dicts with keys: name, size, url (None if not ingested), ingested.
+    link_map is {mfid: signed_url} from get_download_links.
+    """
+    import os as _os
+    prefix_sp = f'mf-storage-prod/{dsid}/'
+    result = []
+    for f in af_list:
+        mfid         = f.get('mfid')
+        storage_path = f.get('storage_path') or ''
+        if storage_path.startswith(prefix_sp):
+            name     = storage_path[len(prefix_sp):]
+            ingested = True
+        else:
+            staging  = f.get('filename') or ''
+            name     = _os.path.basename(staging) or mfid
+            ingested = False
+        result.append({
+            'name':     name,
+            'size':     f.get('size'),
+            'url':      link_map.get(mfid) if ingested else None,
+            'ingested': ingested,
+        })
+    return result
 
 
 def _show_scientific_metadata(sci_md):
@@ -128,15 +139,17 @@ def _show_dataset(dataset, client, verbose=False, graph=False, include_metadata=
             term.subheader("Keywords")
             print(f"  {', '.join(words)}")
 
-        file_links, meta_by_name = _normalize_file_paths(link_map, af_list, dsid)
+        file_display = _build_file_display(af_list, link_map, dsid)
 
-        if meta_by_name:
-            term.subheader(f"Files ({len(meta_by_name)})")
-            for name in sorted(meta_by_name):
-                url   = file_links.get(name)
-                size  = meta_by_name[name].get('size')
-                label = term.hyperlink(term.cyan(name), url) if url else name
-                sz    = f"  {term.dim(term.fmt_size(size))}" if size is not None else ''
+        if file_display:
+            term.subheader(f"Files ({len(file_display)})")
+            for item in sorted(file_display, key=lambda x: x['name']):
+                name = item['name']
+                sz   = f"  {term.dim(term.fmt_size(item['size']))}" if item['size'] is not None else ''
+                if item['ingested']:
+                    label = term.hyperlink(term.cyan(name), item['url']) if item['url'] else term.cyan(name)
+                else:
+                    label = f"{term.dim(name)} {term.yellow('(pending ingestion)')}"
                 print(f"  {label}{sz}")
 
     if graph:
@@ -1285,28 +1298,26 @@ def _execute_list_files(args):
             meta_list  = f_meta.result()
             link_map   = f_links.result()   # {filepath: signed_url}
 
-        links, meta_by_name = _normalize_file_paths(link_map, meta_list, dsid)
+        file_display = _build_file_display(meta_list, link_map, dsid)
 
-        # Only show files tracked in associated_files — filters out server-internal
-        # files (ingest records, etc.) that appear in download_links but aren't
-        # user files.
-        all_names = sorted(meta_by_name)
-
-        term.header(f"Files · {dsid} ({len(all_names)})")
-        if not all_names:
+        term.header(f"Files · {dsid} ({len(file_display)})")
+        if not file_display:
             print(f"  {term.dim('No files found.')}")
             return
 
         rows = []
-        for name in all_names:
-            url   = links.get(name)
-            size  = meta_by_name[name].get('size')
-            label = term.hyperlink(term.cyan(name), url) if url else name
-            rows.append((label, term.fmt_size(size) if size is not None else '-'))
+        for item in sorted(file_display, key=lambda x: x['name']):
+            name = item['name']
+            size = term.fmt_size(item['size']) if item['size'] is not None else '-'
+            if item['ingested']:
+                label = term.hyperlink(term.cyan(name), item['url']) if item['url'] else term.cyan(name)
+            else:
+                label = f"{term.dim(name)} {term.yellow('(pending)')}"
+            rows.append((label, size))
 
         term.table(rows, ['File', 'Size'], max_widths=[60, 10])
 
-        if links:
+        if any(item['ingested'] for item in file_display):
             print(f"\n  {term.dim('Download links are valid for 1 hour.')}")
 
     except Exception as e:

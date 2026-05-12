@@ -170,7 +170,7 @@ Examples:
 
     # Import subcommands
     from . import (
-        dataset, sample, project, instrument, user,  # Resource commands
+        dataset, sample, project, instrument, user, file as file_cmd,  # Resource commands
         upload, completion, config as config_cmd, open as open_cmd, link, unlink, whoami, cache, download, get, edit, status, deletion, tree, cast, qr  # Utility commands
     )
 
@@ -180,6 +180,7 @@ Examples:
     project.register_subcommand(subparsers)
     instrument.register_subcommand(subparsers)
     user.register_subcommand(subparsers)
+    file_cmd.register_subcommand(subparsers)
 
     # Register utility commands (backward compatibility)
     upload.register_subcommand(subparsers)
