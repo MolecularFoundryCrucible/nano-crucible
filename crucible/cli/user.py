@@ -182,7 +182,7 @@ def _show_user(user):
 
     name_parts = [user.get('first_name') or '', user.get('last_name') or '']
     full_name = ' '.join(p for p in name_parts if p) or None
-    uid = user.get('unique_id') or user.get('orcid')
+    uid = user.get('orcid') or user.get('unique_id')
 
     term.header("User")
     _p("Name",    full_name)

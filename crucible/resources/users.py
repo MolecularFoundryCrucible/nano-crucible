@@ -102,16 +102,17 @@ class UserOperations(BaseResource):
         """
         from ..models import User
         if isinstance(user, User):
-            user_info = user.model_dump(exclude_none=True, exclude={'id'})
+            user_data = user.model_dump(exclude_none=True, exclude={'id'})
             user_projects = project_ids or []
         else:
-            # backward compat: dict with optional 'projects' key
-            user_info = dict(user)
-            user_projects = user_info.pop("projects", project_ids or [])
+            user_data = dict(user)
+            user_projects = user_data.pop("projects", project_ids or [])
 
-        return self._request('post', "/users",
-                             json={"user_info": user_info,
-                                   "project_ids": user_projects})
+        # API expects 'orcid', not 'unique_id'
+        if 'unique_id' in user_data:
+            user_data['orcid'] = user_data.pop('unique_id')
+
+        return self._request('post', "/users", json={**user_data, "project_ids": user_projects})
 
     def list_datasets(self, orcid: str) -> List[str]:
         """List dataset IDs accessible to a user.
