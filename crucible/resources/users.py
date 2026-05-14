@@ -112,7 +112,7 @@ class UserOperations(BaseResource):
         if 'unique_id' in user_data:
             user_data['orcid'] = user_data.pop('unique_id')
 
-        return self._request('post', "/users", json={**user_data, "project_ids": user_projects})
+        return self._request('post', "/users", json={"user_info": user_data, "project_ids": user_projects})
 
     def list_datasets(self, orcid: str) -> List[str]:
         """List dataset IDs accessible to a user.
@@ -185,7 +185,7 @@ class UserOperations(BaseResource):
         Args:
             orcid (str): User ORCID identifier
             **kwargs: Fields to update. Accepted: first_name, last_name,
-                      email.
+                      email, is_service_account.
 
         Returns:
             Dict: Updated user object
