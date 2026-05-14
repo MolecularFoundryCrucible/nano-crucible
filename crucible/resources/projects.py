@@ -203,11 +203,9 @@ class ProjectOperations(BaseResource):
         """
         if not orcid and not email:
             raise ValueError("provide either orcid or email")
-        if not orcid:
-            user = self._client.users.get(email=email)
-            orcid = user.get('orcid') or user.get('unique_id')
-            if not orcid:
-                raise ValueError(f"could not resolve ORCID for email: {email}")
+        if email and not orcid:
+            return self._request('post', f'/projects/{project_id}/users/me',
+                                 params={'email': email})
         return self._request('post', f'/projects/{project_id}/users/{orcid}')
 
     def get_or_create(self, project_id: str, get_project_info_function=_build_project_from_args,

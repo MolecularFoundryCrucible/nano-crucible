@@ -548,15 +548,17 @@ def _execute_add_user(args):
     try:
         import requests as _req
         client = CrucibleClient()
-        client.projects.add_user(orcid=orcid, project_id=args.project_id, email=email)
+        users = client.projects.add_user(orcid=orcid, project_id=args.project_id, email=email)
 
-        try:
-            user = client.users.get(orcid=orcid, email=email)
-            first = user.get('first_name') or ''
-            last  = user.get('last_name') or ''
-            name  = ' '.join(p for p in (first, last) if p) or orcid or email
-        except Exception:
-            name = orcid or email
+        name = orcid or email
+        if isinstance(users, list):
+            match = next((u for u in users if
+                          (orcid and (u.get('orcid') or u.get('unique_id')) == orcid) or
+                          (email and u.get('email') == email)), None)
+            if match:
+                first = match.get('first_name') or ''
+                last  = match.get('last_name') or ''
+                name  = ' '.join(p for p in (first, last) if p) or name
 
         logger.info(f"\n✓ {name} added to project {args.project_id} successfully!")
 
