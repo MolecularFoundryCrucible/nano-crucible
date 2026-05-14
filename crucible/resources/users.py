@@ -192,6 +192,15 @@ class UserOperations(BaseResource):
         """
         return self._request('patch', f'/users/{orcid}', json=kwargs)
 
+    def get_api_key(self) -> str:
+        """Return the caller's own Crucible API key.
+
+        Returns:
+            str: The caller's API key
+        """
+        result = self._request('get', '/account/apikey')
+        return result['api_key']
+
     def remove_from_access_group(self, orcid: str, group_name: str) -> Dict:
         """Remove a user from an access group.
 
