@@ -13,6 +13,7 @@ class Sample(BaseModel):
     unique_id: Optional[str] = None
     sample_name: Optional[str] = None
     sample_type: Optional[str] = None
+    public: Optional[bool] = False
     owner_orcid: Optional[str] = None
     # timestamp: user-settable date; accepts legacy 'date_created' from the API
     # until the server-side rename is complete

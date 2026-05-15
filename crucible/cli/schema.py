@@ -47,6 +47,7 @@ SAMPLE_FIELDS: List[FieldDef] = [
     FieldDef('sample_name',                'Name',          editable=True,  verbose=False),
     FieldDef('unique_id',                  'MFID',          editable=False, verbose=False),
     FieldDef('sample_type',                'Type',          editable=True,  verbose=False),
+    FieldDef('public',                     'Public',        editable=True,  verbose=False),
     FieldDef('project_id',                 'Project',       editable=True,  verbose=False),
     FieldDef('timestamp',                  'Timestamp',     editable=True,  verbose=False),
     FieldDef('description',                'Description',   editable=True,  verbose=False),
