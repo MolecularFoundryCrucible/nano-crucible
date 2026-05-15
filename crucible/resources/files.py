@@ -43,6 +43,7 @@ class FileOperations(BaseResource):
 
         Returns:
             Dict: {'associated_file': AssociatedFileRead, 'ingestion_request': IngestionRequest}
+                AssociatedFileRead includes: mfid, filename, storage_path, size, sha256_hash, dataset_mfid
         """
         # get file information
         file_size = os.path.getsize(file_path)
@@ -189,7 +190,7 @@ class FileOperations(BaseResource):
             sha256_hash: Filter by SHA-256 hex digest
 
         Returns:
-            List[Dict]: File records (mfid, filename, storage_path, size, sha256_hash)
+            List[Dict]: File records (mfid, filename, storage_path, size, sha256_hash, dataset_mfid)
         """
         params = {}
         if sha256_hash:
@@ -203,7 +204,7 @@ class FileOperations(BaseResource):
             dsid: Dataset unique identifier
 
         Returns:
-            List[Dict]: File records (mfid, filename, storage_path, size, sha256_hash).
+            List[Dict]: File records (mfid, filename, storage_path, size, sha256_hash, dataset_mfid).
                 storage_path is null until the file has been ingested.
         """
         return self._request('get', f'/datasets/{dsid}/files')
@@ -215,7 +216,7 @@ class FileOperations(BaseResource):
             file_id: File MFID
 
         Returns:
-            Dict: File record (mfid, filename, storage_path, size, sha256_hash)
+            Dict: File record (mfid, filename, storage_path, size, sha256_hash, dataset_mfid)
         """
         return self._request('get', f'/files/{file_id}')
 

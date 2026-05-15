@@ -80,13 +80,14 @@ def _execute_list(args):
 
         rows = []
         for f in files:
-            name    = _bare_name(f)
-            size    = term.fmt_size(f.get('size')) if f.get('size') is not None else '-'
-            mfid    = f.get('mfid', '')
-            status  = term.green('ingested') if f.get('storage_path') else term.yellow('pending')
-            rows.append((term.cyan(name), size, term.dim(mfid), status))
+            name         = _bare_name(f)
+            size         = term.fmt_size(f.get('size')) if f.get('size') is not None else '-'
+            mfid         = f.get('mfid', '')
+            dataset_mfid = f.get('dataset_mfid', '')
+            status       = term.green('ingested') if f.get('storage_path') else term.yellow('pending')
+            rows.append((term.cyan(name), size, term.dim(mfid), term.dim(dataset_mfid), status))
 
-        term.table(rows, ['File', 'Size', 'MFID', 'Status'], max_widths=[40, 10, 30, 10])
+        term.table(rows, ['File', 'Size', 'MFID', 'Dataset', 'Status'], max_widths=[40, 10, 30, 30, 10])
 
     except Exception as e:
         logger.error(f"Error: {e}")
@@ -121,10 +122,11 @@ def _execute_get(args):
 
         _p = term.field_printer(12)
         term.header("File")
-        _p("MFID",   f.get('mfid'))
-        _p("Name",   _bare_name(f))
-        _p("Size",   term.fmt_size(f.get('size')))
-        _p("SHA256", f.get('sha256_hash'))
+        _p("MFID",    f.get('mfid'))
+        _p("Dataset", f.get('dataset_mfid'))
+        _p("Name",    _bare_name(f))
+        _p("Size",    term.fmt_size(f.get('size')))
+        _p("SHA256",  f.get('sha256_hash'))
 
         if f.get('storage_path'):
             _p("Status", term.green("Ingested"))
