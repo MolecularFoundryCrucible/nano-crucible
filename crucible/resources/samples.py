@@ -124,25 +124,25 @@ class SampleOperations(BaseResource):
 
     def create(self, unique_id: Optional[str] = None, sample_name: Optional[str] = None,
                description: Optional[str] = None, timestamp: Optional[str] = None,
-               owner_orcid: Optional[str] = None, owner_user_id: Optional[int] = None,
+               owner_orcid: Optional[str] = None,
                project_id: Optional[str] = None, sample_type: Optional[str] = None,
                public: Optional[bool] = None,
                parents: List[Dict] = [], children: List[Dict] = [],
                scientific_metadata: Optional[Dict] = None,
                # deprecated aliases (creation_time/modification_time are server-assigned)
                date_created: Optional[str] = None, creation_date: Optional[str] = None,
-               owner_id: Optional[int] = None) -> Dict:
+               owner_id: Optional[int] = None,
+               owner_user_id: Optional[int] = None) -> Dict:
         """Add a new sample with optional parent-child relationships.
 
         Args:
-            unique_id (str, optional): Unique sample identifier
             sample_name (str, optional): Human-readable sample name
             sample_type (str, optional): Category of sample (for filtering)
             description (str, optional): Sample description
             timestamp (str, optional): User-defined timestamp
             owner_orcid (str, optional): Owner's ORCID
-            owner_user_id (int, optional): Owner's user ID
-            project_id (str, optional): Project ID (Name)
+            project_id (str, optional): Project ID
+            public (bool, optional): Whether the sample is publicly visible
             parents (List[Dict], optional): Parent samples
             children (List[Dict], optional): Child samples
             scientific_metadata (Dict, optional): Scientific metadata to attach after creation
@@ -166,29 +166,27 @@ class SampleOperations(BaseResource):
                 "creation_time is now assigned server-side.",
                 DeprecationWarning, stacklevel=2
             )
-        if owner_id is not None:
+        if owner_id is not None or owner_user_id is not None:
             warnings.warn(
-                "Parameter 'owner_id' is deprecated; use 'owner_user_id' instead.",
+                "Parameters 'owner_id'/'owner_user_id' are deprecated and ignored; "
+                "use 'owner_orcid' instead.",
                 DeprecationWarning, stacklevel=2
             )
-            if owner_user_id is None:
-                owner_user_id = owner_id
+
+        if unique_id is None and sample_name is None:
+            raise Exception('Please provide either a unique ID or a sample name for your sample')
 
         sample_info = {
-            "unique_id": unique_id,
             "sample_name": sample_name,
             "sample_type": sample_type,
             "owner_orcid": owner_orcid,
-            "owner_user_id": owner_user_id,
             "description": description,
             "project_id": project_id,
             "timestamp": timestamp,
         }
         if public is not None:
             sample_info["public"] = public
-
-        if unique_id is None and sample_name is None:
-            raise Exception('Please provide either a unique ID or a sample name for your sample')
+        sample_info = {k: v for k, v in sample_info.items() if v is not None}
 
         new_samp = self._request('post', "/samples", json=sample_info)
         sid = new_samp['unique_id']
@@ -206,12 +204,14 @@ class SampleOperations(BaseResource):
 
     def update(self, unique_id: str, sample_name: Optional[str] = None,
                description: Optional[str] = None, timestamp: Optional[str] = None,
-               owner_orcid: Optional[str] = None, owner_user_id: Optional[int] = None,
+               owner_orcid: Optional[str] = None,
                project_id: Optional[str] = None, sample_type: Optional[str] = None,
+               public: Optional[bool] = None,
                parents: List[Dict] = [], children: List[Dict] = [],
                # deprecated aliases (creation_time/modification_time are server-assigned)
                date_created: Optional[str] = None, creation_date: Optional[str] = None,
-               owner_id: Optional[int] = None) -> Dict:
+               owner_id: Optional[int] = None,
+               owner_user_id: Optional[int] = None) -> Dict:
         """Update an existing sample.
 
         Args:
@@ -221,8 +221,8 @@ class SampleOperations(BaseResource):
             description (str, optional): Sample description
             timestamp (str, optional): User-defined timestamp
             owner_orcid (str, optional): Owner's ORCID
-            owner_user_id (int, optional): Owner's user ID
-            project_id (str, optional): Project ID (Name)
+            public (bool, optional): Whether the sample is publicly visible
+            project_id (str, optional): Project ID
             parents (List[Dict], optional): Parent samples to link
             children (List[Dict], optional): Child samples to link
 
@@ -242,20 +242,18 @@ class SampleOperations(BaseResource):
                 "creation_time is now assigned server-side.",
                 DeprecationWarning, stacklevel=2
             )
-        if owner_id is not None:
+        if owner_id is not None or owner_user_id is not None:
             warnings.warn(
-                "Parameter 'owner_id' is deprecated; use 'owner_user_id' instead.",
+                "Parameters 'owner_id'/'owner_user_id' are deprecated and ignored; "
+                "use 'owner_orcid' instead.",
                 DeprecationWarning, stacklevel=2
             )
-            if owner_user_id is None:
-                owner_user_id = owner_id
 
         sample_info = {
-            "unique_id": unique_id,
             "sample_name": sample_name,
             "owner_orcid": owner_orcid,
-            "owner_user_id": owner_user_id,
             "sample_type": sample_type,
+            "public": public,
             "description": description,
             "project_id": project_id,
             "timestamp": timestamp,
