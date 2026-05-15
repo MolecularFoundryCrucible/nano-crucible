@@ -52,11 +52,16 @@ def _register_list(subparsers):
 Examples:
     crucible file list
     crucible file list --limit 50
+    crucible file list --sha256 abc123...
 """,
     )
     parser.add_argument(
         '--limit', type=int, default=100, metavar='N',
         help='Maximum number of files to return (default: 100)',
+    )
+    parser.add_argument(
+        '--sha256', metavar='HASH',
+        help='Filter by SHA-256 hex digest',
     )
     parser.set_defaults(func=_execute_list)
 
@@ -66,7 +71,7 @@ def _execute_list(args):
     from crucible.client import CrucibleClient
     try:
         client = CrucibleClient()
-        files = client.datasets.list_files(limit=args.limit)
+        files = client.datasets.list_files(limit=args.limit, sha256_hash=args.sha256)
 
         term.header(f"Files ({len(files)})")
         if not files:

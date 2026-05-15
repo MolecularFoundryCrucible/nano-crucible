@@ -180,16 +180,21 @@ class FileOperations(BaseResource):
         return file_record
 
 
-    def list_files(self, limit: int = DEFAULT_LIMIT) -> List[Dict]:
+    def list_files(self, limit: int = DEFAULT_LIMIT,
+                   sha256_hash: Optional[str] = None) -> List[Dict]:
         """List all files across all accessible datasets.
 
         Args:
             limit: Maximum number of results
+            sha256_hash: Filter by SHA-256 hex digest
 
         Returns:
             List[Dict]: File records (mfid, filename, storage_path, size, sha256_hash)
         """
-        return self._paginate('/files', {}, limit=limit)
+        params = {}
+        if sha256_hash:
+            params['sha256_hash'] = sha256_hash
+        return self._paginate('/files', params, limit=limit)
 
     def get_associated_files(self, dsid: str) -> List[Dict]:
         """Get associated files for a dataset.
