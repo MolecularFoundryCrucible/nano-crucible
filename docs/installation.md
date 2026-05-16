@@ -20,7 +20,7 @@ pip install nano-crucible[parsers]
 # Interactive shell with tab-completion
 pip install nano-crucible[shell]
 
-# Everything
+# Everything (recommended)
 pip install nano-crucible[all]
 ```
 

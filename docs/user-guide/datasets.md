@@ -1,5 +1,7 @@
-# Working with Datasets
+# Dataset Model
+# TODO - list all the features here
 
+# Working with Datasets
 ## Creating a dataset
 
 Pass a `Dataset` model and optional files to `client.datasets.create()`:
@@ -30,6 +32,8 @@ result = client.datasets.create(
     files_to_upload=["file1.dat", "file2.dat", "thumbnail.png"],
 )
 ```
+# TODO - Whats actually happening when you call create
+
 
 ## Retrieving a dataset
 
@@ -72,6 +76,7 @@ Add files to an existing dataset:
 client.datasets.upload_file("ds-abc123", "additional_file.dat")
 client.datasets.add_associated_file("ds-abc123", "notes.pdf")
 ```
+# TODO - This is outdated now
 
 ## Scientific metadata
 
@@ -90,6 +95,8 @@ meta = client.datasets.get_scientific_metadata("ds-abc123")
 # Search across all datasets
 results = client.datasets.search_scientific_metadata("temperature", limit=20)
 ```
+
+# todo - add info about when it overrides vs. appends
 
 ## Keywords
 
@@ -139,3 +146,6 @@ client.datasets.delete("ds-abc123")
 
 !!! note
     Calling `delete()` submits a deletion request — it does not immediately remove the resource. An admin must approve the request before the dataset is deleted.
+
+
+# todo in general - add more info about any chained processes happening + what happens at client vs. api level

@@ -18,6 +18,11 @@ print(client.whoami())
 ```
 
 ---
+## Create a project
+
+
+## Add a friend to your project
+
 
 ## Create a dataset
 
@@ -26,7 +31,7 @@ All fields are optional — you can create a bare dataset record and fill in met
 ```python
 from crucible.models import Dataset
 
-# Minimal: creates a record with just a unique_id
+# Minimal: creates an empty record with just a unique_id
 dataset = client.datasets.create(Dataset())
 print(dataset["unique_id"])
 ```
@@ -38,7 +43,8 @@ dataset = client.datasets.create(
     dataset=Dataset(
         dataset_name="XRD measurement",
         measurement="X-ray diffraction",
-        instrument_name="Beamline 12.3.2",
+        data_type="X-ray diffraction xy file",
+        instrument_name="Rigaku_XRD",
         project_id="my-project",
     ),
     files_to_upload=["xrd_data.xy"],
@@ -110,6 +116,12 @@ client.download("DATASET_ID", output_dir="./downloads")
 The same operations are available from the terminal:
 
 ```bash
+# Create a project
+crucible project create
+
+# Add a user to your project (user account must already exist)
+crucible project add-user --email USER_EMAIL
+
 # Create a dataset with a file
 crucible dataset create -i xrd_data.xy -n "XRD measurement" -m "X-ray diffraction" -pid my-project
 

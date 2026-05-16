@@ -1,7 +1,6 @@
 # Working with Samples
 
 ## Creating a sample
-
 ```python
 sample = client.samples.create(
     sample_name="Au nanoparticles batch 7",
