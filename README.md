@@ -15,7 +15,7 @@ Crucible is the centralized data infrastructure for the [Molecular Foundry](http
 
 ## ✨ Features
 
-### 🐍 Python API
+### Python API
 
 - **Dataset Management**: Create, query, update, and download datasets
 - **Sample Tracking**: Manage samples with hierarchical relationships and provenance
@@ -124,10 +124,6 @@ result = client.datasets.create(
 print(f"Dataset created: {result['dsid']}")
 ```
 
-**📓 For complete examples, see the tutorial notebooks:**
-- [**Main Tutorial**](examples/crucible_tutorial.ipynb) - Creating datasets, samples, linking, and downloading
-- [**Project Management**](examples/crucible_project_management.ipynb) - Managing projects and users (admin)
-
 ### Command-Line Interface
 
 ```bash
@@ -152,16 +148,6 @@ crucible sample add-dataset SAMPLE_ID -d DATASET_ID
 # Open a resource in your browser
 crucible open DATASET_ID
 ```
-
-**📖 For complete CLI documentation, see [cli/README.md](crucible/cli/README.md)**
-
-## 📖 Documentation
-
-- **Tutorial Notebooks**: See [examples/](examples/) - Comprehensive Jupyter notebooks with runnable examples
-  - [Main Tutorial](examples/crucible_tutorial.ipynb) - Datasets, samples, linking, downloading
-  - [Project Management](examples/crucible_project_management.ipynb) - Projects and users (admin)
-- **CLI Documentation**: See [cli/README.md](crucible/cli/README.md) - Complete command-line reference
-- **Parser Documentation**: See [parsers/README.md](crucible/parsers/README.md) - Custom data format parsers
 
 ## 🤝 Contributing
 
