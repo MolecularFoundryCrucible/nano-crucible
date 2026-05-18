@@ -77,10 +77,10 @@ print(f"Dataset: {dataset['unique_id']}")
 
 | Object | What it represents |
 |---|---|
-| [**Project**](models/project.md) | Projects are primarily used as an access control layer for organizing datasets and samples and regulating which users are authorized to access them. Roughly maps to a user proposal at a user facility. |
-| [**Dataset**](models/dataset.md) | The primary data object: Datasets represent the experimental parameters required to repeat an experiment or process as well as raw data files that provide additional information or contain the results of the experiment. Datasets can include associated files, thumbnail images, flexible nested json as scientific metadata, and relationships with other datasets or samples. 
-| [**Sample**](models/sample.md) | The physical or computational material that was studied. Samples form parent-child hierarchies to capture provenance (boule → wafer → thin film) and link to datasets that capture each experimental or analytical method performed on the sample.  Samples may also include flexible nested json to capture observed properties of the sample itself such as solubility or physical location.  
-| [**Instrument**](models/instrument.md) | The physical equipment from which a dataset originated. Instruments are shared across projects, but intended to represent individual machines rather than equipment classes, for example two TEM's of the same make and model would be represented by separate entries. |
+| [**Project**](user-guide/projects.md) | Projects are primarily used as an access control layer for organizing datasets and samples and regulating which users are authorized to access them. Roughly maps to a user proposal at a user facility. |
+| [**Dataset**](user-guide/datasets.md) | The primary data object: Datasets represent the experimental parameters required to repeat an experiment or process as well as raw data files that provide additional information or contain the results of the experiment. Datasets can include associated files, thumbnail images, flexible nested json as scientific metadata, and relationships with other datasets or samples. 
+| [**Sample**](user-guide/samples.md) | The physical or computational material that was studied. Samples form parent-child hierarchies to capture provenance (boule → wafer → thin film) and link to datasets that capture each experimental or analytical method performed on the sample.  Samples may also include flexible nested json to capture observed properties of the sample itself such as solubility or physical location.  
+| [**Instrument**](user-guide/instruments.md) | The physical equipment from which a dataset originated. Instruments are shared across projects, but intended to represent individual machines rather than equipment classes, for example two TEM's of the same make and model would be represented by separate entries. |
 
 ---
 

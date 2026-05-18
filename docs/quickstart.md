@@ -20,8 +20,35 @@ print(client.whoami())
 ---
 ## Create a project
 
+**Requires admin permissions.**
+
+```python
+from crucible.models import Project
+
+project = client.projects.create(Project(
+    project_id="my-project",
+    organization="LBNL",
+    project_lead_orcid="0000-0001-2345-6789",
+))
+
+print(project["project_id"])
+```
+
+---
 
 ## Add a friend to your project
+
+**Requires admin permissions.**
+
+```python
+# By email
+client.projects.add_user(project_id="my-project", email="friend@lbl.gov")
+
+# Or by ORCID
+client.projects.add_user(project_id="my-project", orcid="0000-0001-2345-6789")
+```
+
+---
 
 
 ## Create a dataset

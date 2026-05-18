@@ -1,3 +1,26 @@
+# Sample Model
+
+| Field | Description | Settable |
+|---|---|---|
+| `sample_name` | Human-readable name for the sample | create, update |
+| `sample_type` | Category or type of sample (used for filtering) | create, update |
+| `project_id` | Project this sample belongs to | create, update |
+| `description` | Free-text description of the sample | create, update |
+| `timestamp` | Date associated with the sample (ISO 8601 format) | create, update |
+| `public` | Whether the sample is publicly accessible (default: `False`) | create, update |
+| `owner_orcid` | Sample owner — defaults to the authenticated user | create, update |
+| `unique_id` | System-assigned MFID identifier | server-assigned |
+| `creation_time` | When the record was created | server-assigned |
+| `modification_time` | When the record was last modified | server-assigned |
+
+### Relationships
+
+| Relationship | Key(s) | Description |
+|---|---|---|
+| **Scientific metadata** | `scientific_metadata` in `create()`; `metadata` in `add_scientific_metadata()` / `update_scientific_metadata()` | A free-form JSON object for sample-specific properties (e.g. solubility, physical location). |
+| **Datasets** | `dataset_id` in `add_dataset(sample_id, dataset_id)` | A sample can be linked to one or more datasets, and a dataset to one or more samples — capturing which material was measured. |
+| **Parent/child samples** | `parent_id`, `child_id` in `link(parent_id, child_id)`; also accepted in `create()` | Samples form hierarchies to represent provenance (e.g. boule → wafer → thin film). |
+
 # Working with Samples
 
 ## Creating a sample

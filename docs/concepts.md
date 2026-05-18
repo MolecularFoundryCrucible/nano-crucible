@@ -7,7 +7,7 @@ Crucible organizes scientific data around four types of objects. Understanding h
 ## Users
 Users can be people or service accounts with access to Crucible. Users can be members of access groups and projects. To create a user profile, an ORCID account is required.  Crucible API keys are required for working with the Crucible API locally.  API keys can be generated at https://crucible.lbl.gov/api/v2/user_apikey.  
 
-If your integration requires a service account with elevated privileges, please join the discord and submit a request for a service account. 
+If your integration requires a service account with elevated privileges, please join [Discord](https://discord.gg/Wrepphsgbx) and submit a request for a service account. 
 
 
 ## Projects
@@ -16,12 +16,12 @@ A **project** is the top-level organizational unit. Projects commonly map to res
 
 Projects serve two primary purposes:
 
-1. **Organization** — datasets and samples belong to a project, making them easier to find and filter.
+1. **Organization** — resources belong to a project, making them easier to find and filter.
 2. **Access control** — all members of a project can read the datasets and samples within it. Adding a user to a project grants them access to all associated data.
 
 Every dataset and sample must belong to a project. The `project_id` is a short, human-readable identifier chosen at creation time (e.g., `MFP12345`).
 
-[Project model →](models/project.md) | [Project management guide →](user-guide/projects.md)
+[Project management guide →](user-guide/projects.md)
 
 ---
 
@@ -29,8 +29,8 @@ Every dataset and sample must belong to a project. The `project_id` is a short, 
 
 A **dataset** is the core data object in Crucible. It can combine:
 
-- **Files** — the actual measurement data (optional; a dataset record can exist simply as a set of structured and unstructured metadata without any attached files). 
-- **Structured metadata** — measurement (industry standard terminology that reflects the scientific intention of the experiment performed, eg. Raman Spectroscopy), data_type (institutionally specific terminology that reflects the expected organization of the collected data to inform how it can be used downstream, eg. ScopeFoundry H5 file), instrument (corresponds to the name of the instrument used to collect/generated the data as it exists in the Crucible data platform), session_name (optional name used to tag datasets that are contextualized by being collected as part of the same session), timestamp (the time/date when the data was collected in isoformat), data_format (generally the file type or extension, eg. h5). Other information about the dataset such as creation_time, modification_time, and download path will be generated and recorded on the server side. 
+- **Files** — the actual measurement data (optional).
+- **Structured metadata** — general attributes collected about each dataset regardless of data type, such as `measurement`, `data_type`, `instrument_name`, `session_name`, `timestamp`, and `data_format`. Other information such as `creation_time`, `modification_time`, and download path will be generated and recorded on the server side.
 - **Scientific metadata** — free-form key-value pairs for experiment-specific parameters, notes, and comments that are considered necessary for reproducibility and provenance. The structure is intentionally flexible to accommodate a variety of use cases and reduce input burden for experimentalists as well as allow adaptibility over time. However, it is recommended to standardize the structure of the scientific data for specific data types within a project or organization to promote higher quality data curation and enable downstream analytics. 
 - **Keywords** — searchable tags associated with each dataset
 - **Thumbnails** - Small, low resolution images to represent the results or underlying data in the dataset. 
@@ -68,7 +68,7 @@ Instruments are shared across projects and exist independently of any single pro
 
 If an instrument already exists in Crucible, reference it by name in your datasets. If not, create it first with `client.instruments.create()` — the method returns the existing record if one with that name already exists.
 
-[Instrument model →](models/instrument.md)
+[Working with instruments →](user-guide/instruments.md)
 
 ---
 

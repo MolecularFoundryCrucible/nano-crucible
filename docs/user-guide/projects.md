@@ -1,3 +1,17 @@
+# Project Model
+
+| Field | Description | Settable |
+|---|---|---|
+| `project_id` | Short, unique identifier chosen at creation time (e.g. `MFP12345`) | create |
+| `organization` | Free-text institution or group name (e.g. `"LBNL"`, `"Stanford"`) | create, update |
+| `title` | Human-readable project title | create, update |
+| `status` | Project status (e.g. `"active"`) | create, update |
+| `project_lead_orcid` | ORCID of the project lead — must correspond to an existing Crucible user | create |
+| `project_lead_name` | Project lead's name — populated by the server from the lead's ORCID | server-assigned |
+| `project_lead_email` | Project lead's email — populated by the server from the lead's ORCID | server-assigned |
+| `creation_time` | When the record was created | server-assigned |
+| `modification_time` | When the record was last modified | server-assigned |
+
 # Project Management
 
 ## Listing projects
