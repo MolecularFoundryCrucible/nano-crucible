@@ -727,6 +727,7 @@ def _show_sample(sample, client, verbose=False, graph=False, include_metadata=Fa
     _p("Name",        sample.get('sample_name') or '(unnamed)')
     _p("MFID",        _s_link(sample))
     _p("Type",        sample.get('sample_type'))
+    _p("Public",      "yes" if sample.get('public') else "no")
     _p("Project",     sample.get('project_id'))
     _p("Timestamp",   term.fmt_ts(sample.get('timestamp')))
     _p("Description", sample.get('description'))

@@ -91,8 +91,12 @@ class DatasetOperations(FileOperations):
             params['include_metadata'] = True
         if include_links:
             params['include_links'] = True
-        endpoint = f'/samples/{sample_id}/datasets' if sample_id else '/datasets'
-        raw = self._paginate(endpoint, params, limit, offset)
+        if sample_id:
+            if limit:
+                params['limit'] = limit
+            raw = self._request('get', f'/samples/{sample_id}/datasets', params=params)
+        else:
+            raw = self._paginate('/datasets', params, limit, offset)
         return [self._parse(d) for d in raw]
 
     def count(self, **kwargs) -> int:
