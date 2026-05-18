@@ -1,8 +1,45 @@
+/* nano-crucible theme: custom Material palette
+ * Material's `primary: custom` / `accent: custom` only takes effect when ALL
+ * the matching CSS variables are defined. Setting only --md-*-fg-color leaves
+ * text-on-primary, hover backgrounds, and the slate (dark) scheme unstyled. */
+
 :root {
-  --md-primary-fg-color:        #5BA4B4;
-  --md-primary-fg-color--light: #7BBDCA;
-  --md-primary-fg-color--dark:  #4A8FA0;
-  --md-accent-fg-color:         #5BA4B4;
+  /* Brand palette */
+  --crucible-teal:        #5BA4B4;
+  --crucible-teal-light:  #7BBDCA;
+  --crucible-teal-dark:   #4A8FA0;
+}
+
+/* Light scheme */
+[data-md-color-scheme="default"] {
+  --md-primary-fg-color:              var(--crucible-teal);
+  --md-primary-fg-color--light:       var(--crucible-teal-light);
+  --md-primary-fg-color--dark:        var(--crucible-teal-dark);
+  --md-primary-bg-color:              #ffffff;
+  --md-primary-bg-color--light:       hsla(0, 0%, 100%, 0.7);
+
+  --md-accent-fg-color:               var(--crucible-teal-dark);
+  --md-accent-fg-color--transparent:  rgba(91, 164, 180, 0.1);
+  --md-accent-bg-color:               #ffffff;
+  --md-accent-bg-color--light:        hsla(0, 0%, 100%, 0.7);
+
+  --md-typeset-a-color:               var(--crucible-teal-dark);
+}
+
+/* Dark scheme (slate) */
+[data-md-color-scheme="slate"] {
+  --md-primary-fg-color:              var(--crucible-teal-dark);
+  --md-primary-fg-color--light:       var(--crucible-teal);
+  --md-primary-fg-color--dark:        #2F5C66;
+  --md-primary-bg-color:              #ffffff;
+  --md-primary-bg-color--light:       hsla(0, 0%, 100%, 0.7);
+
+  --md-accent-fg-color:               var(--crucible-teal-light);
+  --md-accent-fg-color--transparent:  rgba(123, 189, 202, 0.15);
+  --md-accent-bg-color:               #ffffff;
+  --md-accent-bg-color--light:        hsla(0, 0%, 100%, 0.7);
+
+  --md-typeset-a-color:               var(--crucible-teal-light);
 }
 
 .md-grid {
