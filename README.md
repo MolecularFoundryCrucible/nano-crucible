@@ -27,8 +27,19 @@ Crucible is the centralized data infrastructure for the [Molecular Foundry](http
 - **`crucible config`**: One-time setup and configuration management
 - **`crucible dataset`**: Create, list, update, and manage datasets
 - **`crucible sample`**: Create, list, and manage samples with relationships
+- **`crucible file`**: List, inspect, and download files attached to datasets
+- **`crucible instrument`**: Create, list, and update instruments
 - **`crucible project`**: Manage projects and users (admin)
 - **`crucible open`**: Open resources in the Crucible Web Explorer with one command
+
+## 🆕 What's New in 2.1.1
+
+- **API v2 by default**: `CrucibleClient` now targets `https://crucible.lbl.gov/api/v2`. v1 still works but emits a `DeprecationWarning` — run `crucible config set api_url https://crucible.lbl.gov/api/v2` to upgrade.
+- **`crucible file` subcommand**: list, inspect, and download files attached to datasets, with lookup by `dataset_mfid` or SHA-256 hash.
+- **Chunked GCS uploads**: large files upload in 32 MiB chunks with per-chunk CRC32C and incremental SHA-256, verified at `/complete`.
+- **Public samples**: `Sample.public` is now a first-class field and `crucible sample create --public` is supported.
+- **Email-based user lookup**: `crucible project add-user` / `remove-user` accept emails directly — no client-side ORCID resolution needed.
+- **Richer display**: linked resources surfaced above metadata, alphabetized scientific metadata, MFID labels, and centered QR codes.
 
 ## 📦 Installation
 
@@ -75,14 +86,14 @@ First, configure your API credentials:
 crucible config init
 ```
 
-Get your API key at: [https://crucible.lbl.gov/api/v1/user_apikey](https://crucible.lbl.gov/api/v1/user_apikey)
+Get your API key at: [https://crucible.lbl.gov/api/v2/user_apikey](https://crucible.lbl.gov/api/v2/user_apikey)
 
 **Alternative (without terminal access)**: Initialize the client directly with your credentials:
 
 ```python
 from crucible import CrucibleClient
 client = CrucibleClient(
-    api_url="https://crucible.lbl.gov/api/v1",
+    api_url="https://crucible.lbl.gov/api/v2",
     api_key="your-api-key-here"
 )
 ```
@@ -167,7 +178,8 @@ This project is licensed under the BSD-3-Clause License - see the [LICENSE](LICE
 
 ## 🔗 Links
 
-- **Crucible API**: [https://crucible.lbl.gov/api/v1](https://crucible.lbl.gov/api/v1)
+- **Crucible API**: [https://crucible.lbl.gov/api/v2](https://crucible.lbl.gov/api/v2)
+- **Documentation**: [https://MolecularFoundryCrucible.github.io/nano-crucible/](https://MolecularFoundryCrucible.github.io/nano-crucible/)
 - **Crucible Web Interface**: [https://crucible-graph-explorer-776258882599.us-central1.run.app](https://crucible-graph-explorer-776258882599.us-central1.run.app)
 
 ## 💬 Support

@@ -75,13 +75,12 @@ class DatasetOperations(FileOperations):
             offset (int): Starting position in the full result set (default: 0)
             include_metadata (bool): Include scientific metadata in results
             include_links (bool): Include linked resources (parents, children, associated) per dataset
-            **kwargs: Query parameters for filtering. Supported fields include:
-                        keyword, unique_id, public, dataset_name, file_to_upload, owner_orcid,
-                        project_id, instrument_name, source_folder, timestamp,
-                        size, data_format, data_type, measurement, session_name, sha256_hash_file_to_upload
-
-            Note:   Filters expect exact matches (case sensitive) except for keywords.
-                    Keywords are case insensitive and match substrings.
+            **kwargs (Any): Query parameters for filtering. Supported fields include:
+                keyword, unique_id, public, dataset_name, file_to_upload, owner_orcid,
+                project_id, instrument_name, source_folder, timestamp,
+                size, data_format, data_type, measurement, session_name, sha256_hash_file_to_upload.
+                Filters expect exact matches (case sensitive) except for keywords;
+                keywords are case insensitive and match substrings.
 
         Returns:
             List[Dict]: Dataset objects matching filter criteria
@@ -115,7 +114,7 @@ class DatasetOperations(FileOperations):
         """Create a new dataset record with scientific metadata and keywords.
 
         Args:
-            dataset: Dataset object with dataset details
+            dataset (Dataset): Dataset object with dataset details
             scientific_metadata (dict, optional): Scientific metadata
             keywords (list, optional): Keywords to associate with dataset
         Returns:
@@ -162,7 +161,7 @@ class DatasetOperations(FileOperations):
 
         Args:
             dsid (str): Dataset unique identifier
-            **updates: Fields to update (e.g., dataset_name="New Name", public=True)
+            **updates (Any): Fields to update (e.g., dataset_name="New Name", public=True)
 
         Returns:
             Dict: Updated dataset object
@@ -338,7 +337,7 @@ class DatasetOperations(FileOperations):
             parent_dataset_id (str): The unique ID of the dataset for which you want to find the children
             limit (int): Maximum number of results to return
             offset (int): Starting position in the full result set (default: 0)
-            **kwargs: Query parameters for filtering datasets
+            **kwargs (Any): Query parameters for filtering datasets
 
         Returns:
             List[Dict]: Children datasets
@@ -354,7 +353,7 @@ class DatasetOperations(FileOperations):
             child_dataset_id (str): The unique ID of the dataset for which you want to find the parents
             limit (int): Maximum number of results to return
             offset (int): Starting position in the full result set (default: 0)
-            **kwargs: Query parameters for filtering datasets
+            **kwargs (Any): Query parameters for filtering datasets
 
         Returns:
             List[Dict]: Parent datasets
