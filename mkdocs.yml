@@ -65,16 +65,11 @@ nav:
   - Installation: installation.md
   - Quick Start: quickstart.md
   - Core Concepts: concepts.md
-  - Data Models:
-    - Overview: models/index.md
-    - Project: models/project.md
-    - Dataset: models/dataset.md
-    - Sample: models/sample.md
-    - Instrument: models/instrument.md
   - User Guide:
     - Working with Datasets: user-guide/datasets.md
     - Working with Samples: user-guide/samples.md
     - Project Management: user-guide/projects.md
+    - Working with Instruments: user-guide/instruments.md
     - Linking Resources: user-guide/linking.md
     - Downloading Data: user-guide/downloading.md
     - Scientific Metadata: user-guide/scientific-metadata.md

@@ -62,7 +62,7 @@ The project management tutorial covers administrative operations (**requires adm
    ```
 
    You'll need:
-   - **For main tutorial**: Regular API key from https://crucible.lbl.gov/api/v1/user_apikey
+   - **For main tutorial**: Regular API key from https://crucible.lbl.gov/api/v2/user_apikey
    - **For project management tutorial**: Admin API key
    - Access to project `crucible-demo` (or update the PROJECT_ID variable)
 
@@ -70,7 +70,7 @@ The project management tutorial covers administrative operations (**requires adm
    ```python
    from crucible import CrucibleClient
    client = CrucibleClient(
-       api_url="https://crucible.lbl.gov/api/v1",
+       api_url="https://crucible.lbl.gov/api/v2",
        api_key="your-api-key-here"
    )
    ```

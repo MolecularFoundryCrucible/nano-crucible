@@ -44,7 +44,7 @@ Datasets can be linked to each other in parent-child relationships to represent 
 
 Files are the raw data objects attached to a dataset. Zero or more files may be added; each is stored in cloud storage and triggers an ingestion process to parse metadata and generate thumbnails. Files cannot exist independently of a dataset record.
 
-[Working with files and ingestion →](user-guide/datasets.md#uploading-additional-files)
+[Working with files and ingestion →](user-guide/datasets.md#adding-files-to-a-dataset)
 
 ---
 

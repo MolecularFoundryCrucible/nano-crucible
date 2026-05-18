@@ -298,7 +298,7 @@ def get_api_url():
     Priority order:
     1. CRUCIBLE_API_URL environment variable
     2. api_url from ~/.config/nano-crucible/config.ini
-    3. Default: https://crucible.lbl.gov/api/v1
+    3. Default: https://crucible.lbl.gov/api/v2
 
     Returns:
         str: The API URL
