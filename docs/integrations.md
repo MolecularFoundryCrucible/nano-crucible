@@ -15,7 +15,7 @@
 ### Sample Creators - custom web based apps to add samples with specific metadata structures or anticipated relationship trees
  Explore: https://crucible.lbl.gov/sample-creators
  Contribute: https://github.com/MolecularFoundryCrucible/sample-creators
- Request: Contact us on Discord (#TODO - link)!
+ Request: Contact us on [Discord](https://discord.gg/Wrepphsgbx)!
 
 ## Crucible Upload UI - Locally deployable UI for uploading folders of data or individual files and printing QR code labels.
  This repository was originally developed specifically for TEM session data. Feel free to download as is or fork and customize to your instrument needs! PRs welcomed. 
@@ -29,7 +29,7 @@ We have intentionally developed the scientific metadata field to be flexible and
         - Pass the files to `client.datasets.create()` as files to upload. Each file will be added to the dataset and the ingestion process will update with parsed metadata and thumbnails where relevant. 
         - Use the client to `add_file_to_dataset` for each file you want to add, loosens the constraint that files need to be known and present at the time of dataset creation - ingestion process parses the metadata and updates the dataset
     2. Metadata is available in output files but no ingestion class supports the data type
-        - Develop or Request an ingestion class for your data type (# todo: Github (link), Discord (link))
+        - Develop or Request an ingestion class for your data type ([GitHub](https://github.com/MolecularFoundryCrucible/crucible-ingestion), [Discord](https://discord.gg/Wrepphsgbx))
         - Parse the files locally and upload parsed information as json using the python client. Use the client to `add_file_to_dataset`. 
     3. Metadata is not captured in output files from the instrument
         - Create forms, Jupyter notebooks, or UI's to capure this information and upload via the API during dataset creation or using `client.datasets.update()`

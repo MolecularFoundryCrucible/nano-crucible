@@ -41,18 +41,10 @@ Datasets can be linked to each other in parent-child relationships to represent 
 [Working with datasets →](user-guide/datasets.md)
 
 ## Files
-# todo - is this the right spot for this info and should we reformat it / should we split ingestion requests to their own category
-Files records in the database reflect the file objects associated with the dataset. Files may not exist independent of a dataset record. Zero or more files may be added to a dataset. When a file is added to a dataset, several events occur. 1. The file is uploaded to a cloud storage location 2. A SQL record for the file is created with a relationship to the dataset record. 3. An ingestion request is sent to the backend server. 
 
-Data type specific ingestion classes exist to parse scientific metadata and/or structured metadata from the files and generate thumbnails from the data. If an ingestion class is specified at the time a file is added to the dataset, that ingestion class will be used to parse the file. If no ingestion class is specified, the available ingestion classes will be scanned (from most to least specific) to determine if there is an ingestion class is available that supports the provided file type. If no ingestor is found then no metadata or thumbnails will be parsed from the file. 
+Files are the raw data objects attached to a dataset. Zero or more files may be added; each is stored in cloud storage and triggers an ingestion process to parse metadata and generate thumbnails. Files cannot exist independently of a dataset record.
 
-Different ingestors will apply custom logic to update dataset records, but existing information will not be overwritten by an ingestor.  If a user provides dataset attributes during the dataset creation, these values will persist regardless of the ingestion processes requested by adding files to the dataset. Ingestion processes will append newly parsed key,value pairs to the scientific metadata dictionary, but will update values for existing keys if a new parsed value is found. Users may update the dataset record using the python client or CLI if they wish to overwrite existing attributes. Additionally, the client can be used to update or replace the scientific_metadata dictionary. 
-
-Files are guaranteed to be unique within a dataset based on their sha256_hash identity. If a user adds a file to a dataset twice and the hash has not changed, the file will not be reuploaded and a duplicate record will not be created. The ingestion will be re-requested to ensure that the metadata is successfully parsed. #TODO - is this idempotency
-
-Currently, if two files with the same file path/name but different sha256 hashes are added to the same dataset, the upload will proceed but **replace the original file in cloud storage**. A new associated file record will be created with a unique mfid and the newly calculated sha256 hash. The previous associated record will still exist, but the storage path and download link will point to the new file.  **We are actively working on an updated logic to address this.** 
-
-If an ingestion class does not exist for your data types, please reach out on our discord channel or consider contributing to our open source crucible-ingestion repository!
+[Working with files and ingestion →](user-guide/datasets.md#uploading-additional-files)
 
 ---
 

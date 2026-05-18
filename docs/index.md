@@ -38,7 +38,8 @@ project = client.projects.create(Project(
 ))
 
 # Add a user to your project
-# TODO - ADD
+client.projects.add_user(project_id=project["project_id"], email="user@lbl.gov")
+# or by ORCID: client.projects.add_user(project_id=project["project_id"], orcid="0000-0001-2345-6789")
 
 # Create a sample
 sample = client.samples.create(
@@ -46,7 +47,7 @@ sample = client.samples.create(
     sample_type="nanoparticle suspension",
     project_id=project["project_id"],
 )
-# TODO - more information about the fields that can be added when creating a sample are documented here(link) link to user-guide/samples.md
+# More information about the fields that can be added when creating a sample are documented [here](user-guide/samples.md)
 
 # Upload a dataset and link it to the sample
 dataset = client.datasets.create(
@@ -64,7 +65,7 @@ dataset = client.datasets.create(
 # Link the dataset to the sample
 client.samples.add_dataset(sample["unique_id"], dataset["unique_id"])
 
-# TODO - more information about creating datasets is documented here(link)
+# More information about creating datasets is documented [here](user-guide/datasets.md)
 
 print(f"Sample:  {sample['unique_id']}")
 print(f"Dataset: {dataset['unique_id']}")
