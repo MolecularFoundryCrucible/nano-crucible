@@ -97,3 +97,7 @@ Thumbs.db
 # Project-specific
 tutorial_data/
 pycrucible/test-data/
+
+# MkDocs build output
+site/
+mnotes

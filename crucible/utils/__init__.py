@@ -9,7 +9,7 @@ io          : File I/O, hashing, time, and image helpers
 deprecation : API lifecycle decorators (_deprecated, _removed)
 """
 
-from .io import run_shell, checkhash, get_tz_isoformat, check_small_files, data2thumbnail, parse_timestamp
+from .io import run_shell, checkhash, get_tz_isoformat, check_small_files, is_base64, data2thumbnail, parse_timestamp
 from .deprecation import _deprecated, _removed
 
 __all__ = [
@@ -19,6 +19,7 @@ __all__ = [
     'get_tz_isoformat',
     'parse_timestamp',
     'check_small_files',
+    'is_base64',
     'data2thumbnail',
     # deprecation
     '_deprecated',

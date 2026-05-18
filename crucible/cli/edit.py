@@ -9,6 +9,7 @@ and opens the appropriate fields in $EDITOR.
 
 import sys
 import logging
+from . import term
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +20,7 @@ def register_subcommand(subparsers):
         'edit',
         help='Edit a resource by MFID (auto-detects type)',
         description='Edit a dataset or sample — resource type is detected automatically.',
-        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     crucible edit 0td7evvtg5wb90005k1j97ak94
@@ -30,7 +31,7 @@ Examples:
     parser.add_argument(
         'resource_id',
         metavar='ID',
-        help='Resource MFID (dataset or sample)'
+        help='Resource MFID (dataset, sample, or instrument)'
     )
 
     parser.set_defaults(func=execute)
@@ -51,6 +52,10 @@ def execute(args):
         elif resource_type == 'sample':
             from .sample import _edit_sample
             _edit_sample(args.resource_id, client, debug=getattr(args, 'debug', False))
+
+        elif resource_type == 'instrument':
+            from .instrument import _edit_instrument
+            _edit_instrument(args.resource_id, client, debug=getattr(args, 'debug', False))
 
         else:
             logger.error(f"Could not determine resource type for: {args.resource_id}")

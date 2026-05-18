@@ -19,15 +19,16 @@ logger = logging.getLogger(__name__)
 
 class BaseParser:
 
-    _measurement = "base"
+    _measurement = None
     _data_format = None
+    _data_type = None
     _instrument_name = None
 
     def __init__(self, files_to_upload=None, project_id=None, owner_orcid=None,
                  metadata=None, keywords=None, mfid=None,
                  measurement=None, dataset_name=None,
                  session_name=None, public=False, instrument_name=None,
-                 data_format=None, timestamp=None):
+                 data_format=None, data_type=None, timestamp=None):
         """
         Initialize the parser with dataset properties.
 
@@ -49,6 +50,8 @@ class BaseParser:
             measurement = self._measurement
         if data_format is None:
             data_format = self._data_format
+        if data_type is None:
+            data_type = self._data_type
         if instrument_name is None:
             instrument_name = self._instrument_name
 
@@ -70,6 +73,7 @@ class BaseParser:
         self.public          = public
         self.instrument_name = instrument_name
         self.data_format     = data_format
+        self.data_type       = data_type
         self.source_folder   = os.getcwd()
         self.thumbnail       = None
 
@@ -249,6 +253,7 @@ class BaseParser:
             public         = self.public,
             instrument_name = self.instrument_name,
             data_format    = self.data_format,
+            data_type      = self.data_type,
             source_folder  = self.source_folder,
         )
 

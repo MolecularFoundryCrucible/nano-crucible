@@ -34,12 +34,15 @@ class Config:
         'api_url':            {'env': 'CRUCIBLE_API_URL',            'ini': 'api_url',            'section': 'crucible'},
         'graph_explorer_url': {'env': 'CRUCIBLE_GRAPH_EXPLORER_URL', 'ini': 'graph_explorer_url', 'section': 'crucible'},
         'current_project':    {'env': 'CRUCIBLE_CURRENT_PROJECT',    'ini': 'current_project',    'section': 'crucible'},
+        'current_session':    {'env': 'CRUCIBLE_CURRENT_SESSION',    'ini': 'current_session',    'section': 'crucible'},
         # [cache]
         'cache_dir':          {'env': 'CRUCIBLE_CACHE_DIR',          'ini': 'cache_dir',          'section': 'cache'},
         # [display] – UI preferences
         'editor':             {'env': 'CRUCIBLE_EDITOR',             'ini': 'editor',             'section': 'display'},
         'sample_group_by':    {'env': 'CRUCIBLE_SAMPLE_GROUP_BY',    'ini': 'sample_group_by',    'section': 'display'},
         'dataset_group_by':   {'env': 'CRUCIBLE_DATASET_GROUP_BY',   'ini': 'dataset_group_by',   'section': 'display'},
+        'include_metadata':   {'env': 'CRUCIBLE_INCLUDE_METADATA',   'ini': 'include_metadata',   'section': 'display'},
+        'include_links':      {'env': 'CRUCIBLE_INCLUDE_LINKS',      'ini': 'include_links',      'section': 'display'},
         # [network] – timeouts and pagination
         'connect_timeout':    {'env': 'CRUCIBLE_CONNECT_TIMEOUT',    'ini': 'connect_timeout',    'section': 'network'},
         'read_timeout':       {'env': 'CRUCIBLE_READ_TIMEOUT',       'ini': 'read_timeout',       'section': 'network'},
@@ -116,15 +119,18 @@ class Config:
             )
         return key
 
+    # Default API URL for this release. Bumped on major API version changes.
+    DEFAULT_API_URL = 'https://crucible.lbl.gov/api/v2'
+
     @property
     def api_url(self):
         """
         Get the Crucible API URL.
 
         Returns:
-            str: The API URL (defaults to https://crucible.lbl.gov/api/v1)
+            str: The API URL (defaults to the version-appropriate built-in default)
         """
-        return self._data.get('api_url', 'https://crucible.lbl.gov/api/v1')
+        return self._data.get('api_url', self.DEFAULT_API_URL)
 
     @property
     def cache_dir(self):
@@ -170,6 +176,16 @@ class Config:
         return self._data.get('current_project')
 
     @property
+    def current_session(self):
+        """
+        Get the current/default session name.
+
+        Returns:
+            str or None: The current session name if configured, None otherwise
+        """
+        return self._data.get('current_session') or None
+
+    @property
     def editor(self):
         """
         Get the preferred editor for interactive editing commands.
@@ -191,6 +207,19 @@ class Config:
     def dataset_group_by(self):
         """Default group-by field for 'crucible dataset list' (e.g. 'measurement', 'session')."""
         return self._data.get('dataset_group_by')
+
+    def _parse_bool(self, key: str) -> bool:
+        return self._data.get(key, 'false').lower() in ('true', '1', 'yes')
+
+    @property
+    def include_metadata(self) -> bool:
+        """Include scientific metadata by default in get/list commands."""
+        return self._parse_bool('include_metadata')
+
+    @property
+    def include_links(self) -> bool:
+        """Include parent/child/associated links by default in get commands."""
+        return self._parse_bool('include_links')
 
     @property
     def connect_timeout(self) -> int:
@@ -369,7 +398,6 @@ def create_config_file(api_key, api_url=None, cache_dir=None,
     config_dir.mkdir(parents=True, exist_ok=True)
     config_file = config_dir / "config.ini"
 
-    default_api_url             = 'https://crucible.lbl.gov/api/v1'
     default_cache_dir           = str(user_cache_dir("nano-crucible"))
     default_graph_explorer_url  = 'https://crucible-graph-explorer-776258882599.us-central1.run.app'
 
@@ -381,7 +409,11 @@ def create_config_file(api_key, api_url=None, cache_dir=None,
         f.write(f"api_key = {api_key}\n\n")
 
         f.write("# Crucible API endpoint URL\n")
-        f.write(f"api_url = {api_url or default_api_url}\n\n")
+        f.write("# Leave unset to use the built-in default for this client version.\n")
+        if api_url:
+            f.write(f"api_url = {api_url}\n\n")
+        else:
+            f.write(f"# api_url = {Config.DEFAULT_API_URL}\n\n")
 
         f.write("# Crucible Graph Explorer URL\n")
         f.write(f"graph_explorer_url = {graph_explorer_url or default_graph_explorer_url}\n\n")
@@ -415,7 +447,13 @@ def create_config_file(api_key, api_url=None, cache_dir=None,
         f.write("# sample_group_by = type\n\n")
 
         f.write("# Default group-by for 'crucible dataset list'  (measurement, session, format, instrument)\n")
-        f.write("# dataset_group_by = measurement\n")
+        f.write("# dataset_group_by = measurement\n\n")
+
+        f.write("# Show scientific metadata by default in get/list commands (true/false)\n")
+        f.write("# include_metadata = false\n\n")
+
+        f.write("# Show parent/child/associated links by default in get commands (true/false)\n")
+        f.write("# include_links = false\n")
 
         # ── [network] ────────────────────────────────────────────────────────
         f.write("\n[network]\n")

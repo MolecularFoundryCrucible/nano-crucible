@@ -21,58 +21,59 @@ class UserOperations(BaseResource):
     """
 
     def get(self, orcid: Optional[str] = None, email: Optional[str] = None) -> Dict:
-        """Get user details by ORCID or email.
+        """Get user details by unique ID (ORCID for real users) or email.
 
         **Requires admin permissions.**
 
         Args:
-            orcid (str, optional): ORCID identifier (format: 0000-0000-0000-000X)
+            orcid (str, optional): User unique ID (ORCID for real users)
             email (str, optional): User's email address
 
         Returns:
-            Dict: User profile with orcid, name, email, timestamps
+            Dict: User profile with unique_id, name, email, is_service_account
 
         Raises:
-            ValueError: If neither orcid nor email is provided
+            ValueError: If neither orcid nor email is provided, no user is found,
+                or email matches multiple accounts (use ORCID in that case).
 
         Note:
-            If both orcid and email are provided, only orcid will be used.
+            ORCID is the canonical user identifier. Email is not guaranteed unique -
+            if both are provided, orcid takes precedence.
         """
         if orcid:
             return self._request('get', f'/users/{orcid}')
         elif email:
-            params = {"email": email}
-            result = self._request('get', '/users', params=params)
-            if not result:
-                params = {"lbl_email": email}
-                result = self._request('get', '/users', params=params)
-            if len(result) > 0:
-                return result[-1]
-            else:
-                return None
+            matches = self._paginate('/users', {'email': email, 'permissive': False})
+            if not matches:
+                raise ValueError(f"No user found with email: {email}")
+            if len(matches) > 1:
+                raise ValueError(
+                    f"Multiple users match email '{email}' - use ORCID to identify unambiguously"
+                )
+            return matches[0]
         else:
             raise ValueError('please provide orcid or email')
 
-    def list(self, limit: int = DEFAULT_LIMIT, **kwargs) -> List[Dict]:
+    def list(self, limit: int = DEFAULT_LIMIT, offset: int = 0, **kwargs) -> List[Dict]:
         """List all users in the system.
 
         **Requires admin permissions.**
 
         Args:
             limit (int): Maximum number of results to return (default: 100)
+            offset (int): Starting position in the full result set (default: 0)
             **kwargs: Additional query parameters for filtering
 
         Returns:
-            List[Dict]: List of user objects with orcid, name, email, timestamps
+            List[Dict]: List of user objects with unique_id, name, email, is_service_account
 
         Example:
             >>> users = client.users.list(limit=50)
             >>> for user in users:
             ...     print(f"{user['first_name']} {user['last_name']} ({user['orcid']})")
         """
-        params = kwargs
-        params['limit'] = limit
-        users = self._request('get', '/users', params=params)
+        params = {k: v for k, v in kwargs.items() if v is not None}
+        users = self._paginate('/users', params, limit, offset)
         return sorted(users, key=lambda u: u.get('id') or 0)
 
     def create(self, user, project_ids=None) -> Dict:
@@ -86,7 +87,7 @@ class UserOperations(BaseResource):
         Args:
             user: User model or dict with user information.
                   Required fields: first_name, last_name, orcid.
-                  Optional: email, lbl_email, employee_number.
+                  Optional: email, is_service_account.
                   If a dict, may include a 'projects' key (list of project IDs)
                   as an alternative to the project_ids parameter.
             project_ids (list, optional): Project IDs to associate with the user.
@@ -101,16 +102,17 @@ class UserOperations(BaseResource):
         """
         from ..models import User
         if isinstance(user, User):
-            user_info = user.model_dump(exclude_none=True, exclude={'id'})
+            user_data = user.model_dump(exclude_none=True, exclude={'id'})
             user_projects = project_ids or []
         else:
-            # backward compat: dict with optional 'projects' key
-            user_info = dict(user)
-            user_projects = user_info.pop("projects", project_ids or [])
+            user_data = dict(user)
+            user_projects = user_data.pop("projects", project_ids or [])
 
-        return self._request('post', "/users",
-                             json={"user_info": user_info,
-                                   "project_ids": user_projects})
+        # API expects 'orcid', not 'unique_id'
+        if 'unique_id' in user_data:
+            user_data['orcid'] = user_data.pop('unique_id')
+
+        return self._request('post', "/users", json={"user_info": user_data, "project_ids": user_projects})
 
     def list_datasets(self, orcid: str) -> List[str]:
         """List dataset IDs accessible to a user.
@@ -175,45 +177,40 @@ class UserOperations(BaseResource):
         """
         return self._request('get', f'/users/{orcid}/projects')
 
-    def get_or_create(self, orcid: str, get_user_info_function, **kwargs) -> Dict:
-        """Get an existing user or create a new one if they don't exist.
+    def update(self, orcid: str, **kwargs) -> Dict:
+        """Partially update a user record.
 
         **Requires admin permissions.**
 
         Args:
-            orcid (str): ORCID of the user
-            get_user_info_function (callable): Function to retrieve user info if not found.
-                                              Should accept orcid (str) and return a dictionary
-                                              with keys: 'first_name', 'last_name', 'orcid',
-                                              'email' (optional), 'lbl_email' (optional),
-                                              'projects' (optional list of project IDs)
-            **kwargs: Additional arguments to pass to get_user_info_function
+            orcid (str): User ORCID identifier
+            **kwargs: Fields to update. Accepted: first_name, last_name,
+                      email, is_service_account.
 
         Returns:
-            Dict: User information (existing or newly created)
-
-        Raises:
-            ValueError: If user info cannot be found or created
-
-        Example:
-            >>> def get_user_from_api(orcid):
-            ...     # Fetch user info from external API
-            ...     return {
-            ...         "first_name": "Jane",
-            ...         "last_name": "Doe",
-            ...         "orcid": orcid,
-            ...         "email": "jane@example.com",
-            ...         "projects": ["project1"]
-            ...     }
-            >>> user = client.users.get_or_create("0000-0000-0000-0000", get_user_from_api)
+            Dict: Updated user object
         """
-        user = self.get(orcid)
-        if user:
-            return user
+        return self._request('patch', f'/users/{orcid}', json=kwargs)
 
-        user_info = get_user_info_function(orcid, **kwargs)
-        if user_info:
-            user = self.create(user_info)
-            return user
-        else:
-            raise ValueError(f"User info for {orcid} not found in database or using the get_user_info_function")
+    def get_api_key(self) -> str:
+        """Return the caller's own Crucible API key.
+
+        Returns:
+            str: The caller's API key
+        """
+        result = self._request('get', '/account/apikey')
+        return result['api_key']
+
+    def remove_from_access_group(self, orcid: str, group_name: str) -> Dict:
+        """Remove a user from an access group.
+
+        **Requires admin permissions.**
+
+        Args:
+            orcid (str): User ORCID identifier
+            group_name (str): Name of the access group
+
+        Returns:
+            Dict: Response message
+        """
+        return self._request('delete', f'/users/{orcid}/access_groups/{group_name}')

@@ -9,6 +9,8 @@ and delegates to the appropriate display function.
 
 import sys
 import logging
+from . import term
+from ..config import config as _config
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +21,7 @@ def register_subcommand(subparsers):
         'get',
         help='Get a resource by MFID (auto-detects type)',
         description='Retrieve a dataset or sample — resource type is detected automatically.',
-        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     crucible get 0td7evvtg5wb90005k1j97ak94
@@ -40,15 +42,31 @@ Examples:
         help='Show all fields'
     )
     parser.add_argument(
-        '--graph',
-        action='store_true',
-        help='Also show linked resources, parents, and children'
+        '--no-graph',
+        action='store_false',
+        dest='graph',
+        help='Exclude linked resources, parents, and children'
     )
+    parser.set_defaults(graph=True)
     parser.add_argument(
         '--include-metadata',
         action='store_true',
         dest='include_metadata',
-        help='Include scientific metadata (datasets only)'
+        help='Include scientific metadata'
+    )
+
+    parser.add_argument(
+        '-o', '--output',
+        dest='output',
+        choices=['json'],
+        default=None,
+        metavar='FORMAT',
+        help='Output format: json (always includes scientific metadata)'
+    )
+    parser.add_argument(
+        '--qr',
+        action='store_true',
+        help='Print a QR code of the MFID after displaying the resource'
     )
 
     parser.set_defaults(func=execute)
@@ -56,35 +74,58 @@ Examples:
 
 def execute(args):
     """Execute the top-level get command."""
+    import json
     from crucible.client import CrucibleClient
+    output = getattr(args, 'output', None)
     verbose = getattr(args, 'verbose', False)
-    graph = getattr(args, 'graph', False)
-    include_metadata = getattr(args, 'include_metadata', False)
+    graph = getattr(args, 'graph', True)
+    include_metadata = output == 'json' or getattr(args, 'include_metadata', False) or _config.include_metadata
 
     try:
-        client = CrucibleClient()
-        resource_type = client.get_resource_type(args.resource_id)
+        client   = CrucibleClient()
+        resource = client.get(args.resource_id, include_metadata=include_metadata,
+                              include_links=graph)
+        if resource is None:
+            logger.error(f"Resource not found: {args.resource_id}")
+            sys.exit(1)
+
+        resource_type = resource.get('resource_type')
+        shell_state   = getattr(args, '_shell_state', None)
+
+        from .helpers import cache_resource
+        cache_resource(shell_state, client, resource, resource_type, args.resource_id,
+                       verbose=verbose, graph=graph, include_metadata=include_metadata)
 
         if resource_type == 'dataset':
             from .dataset import _show_dataset
-            dataset = client.datasets.get(args.resource_id, include_metadata=include_metadata)
-            if dataset is None:
-                logger.error(f"Dataset not found: {args.resource_id}")
-                sys.exit(1)
-            _show_dataset(dataset, client, verbose=verbose, graph=graph,
-                          include_metadata=include_metadata)
+            if output == 'json':
+                print(json.dumps(resource, indent=2, default=str))
+            else:
+                _show_dataset(resource, client, verbose=verbose, graph=graph,
+                              include_metadata=include_metadata)
 
         elif resource_type == 'sample':
             from .sample import _show_sample
-            sample = client.samples.get(args.resource_id)
-            if sample is None:
-                logger.error(f"Sample not found: {args.resource_id}")
-                sys.exit(1)
-            _show_sample(sample, client, verbose=verbose, graph=graph)
+            if output == 'json':
+                print(json.dumps(resource, indent=2, default=str))
+            else:
+                _show_sample(resource, client, verbose=verbose, graph=graph,
+                             include_metadata=include_metadata)
+
+        elif resource_type == 'instrument':
+            from .instrument import _show_instrument
+            if output == 'json':
+                print(json.dumps(resource, indent=2, default=str))
+            else:
+                _show_instrument(resource, include_metadata=include_metadata)
 
         else:
-            logger.error(f"Could not determine resource type for: {args.resource_id}")
+            logger.error(f"Unknown resource type '{resource_type}' for: {args.resource_id}")
             sys.exit(1)
+
+        if getattr(args, 'qr', False):
+            from .qr import print_qr
+            print_qr(args.resource_id)
 
     except Exception as e:
         logger.error(f"Error retrieving {args.resource_id}: {e}")

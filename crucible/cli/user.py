@@ -40,10 +40,12 @@ def register_subcommand(subparsers):
     # Register individual user commands
     _register_get(user_subparsers)
     _register_create(user_subparsers)
+    _register_update(user_subparsers)
     _register_list(user_subparsers)
     _register_list_datasets(user_subparsers)
     _register_check_access(user_subparsers)
     _register_list_access_groups(user_subparsers)
+    _register_remove_access_group(user_subparsers)
     _register_list_projects(user_subparsers)
 
 
@@ -53,7 +55,7 @@ def _register_get(subparsers):
         'get',
         help='Get user by ORCID or email',
         description='Retrieve user information (requires admin permissions)',
-        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     crucible user get --orcid 0000-0002-1825-0097
@@ -88,7 +90,7 @@ def _register_create(subparsers):
         'create',
         help='Create a new user',
         description='Add a new user to Crucible (requires admin permissions)',
-        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     # Interactive mode (prompts for input)
@@ -129,13 +131,6 @@ Examples:
     )
 
     parser.add_argument(
-        '--lbl-email',
-        dest='lbl_email',
-        metavar='EMAIL',
-        help='LBL email address (optional)'
-    )
-
-    parser.add_argument(
         '--projects', '-p',
         metavar='IDS',
         help='Comma-separated list of project IDs to associate with user (optional)'
@@ -156,7 +151,7 @@ def _register_list(subparsers):
         'list',
         help='List all users',
         description='List all users in the system (requires admin permissions)',
-        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     crucible user list
@@ -183,21 +178,19 @@ Examples:
 
 def _show_user(user):
     """Display user fields."""
-    W = 16
-
-    def _p(label, value):
-        print(f"  {label:<{W}}{value if value not in (None, '') else '—'}")
+    _p = term.field_printer(16)
 
     name_parts = [user.get('first_name') or '', user.get('last_name') or '']
     full_name = ' '.join(p for p in name_parts if p) or None
+    uid = user.get('orcid') or user.get('unique_id')
 
     term.header("User")
-    _p("Name",            full_name)
-    _p("ORCID",           term.orcid_link(user.get('orcid')))
-    _p("Email",           user.get('email'))
-    _p("LBL Email",       user.get('lbl_email'))
-    _p("Employee Number", user.get('employee_number'))
-    _p("ID",              user.get('id'))
+    _p("Name",    full_name)
+    _p("ORCID",   term.orcid_link(uid))
+    _p("Email",   user.get('email'))
+    if user.get('is_service_account'):
+        _p("Type", "service account")
+    _p("ID",      user.get('id'))
 
 
 def _execute_get(args):
@@ -234,7 +227,6 @@ def _execute_create(args):
     first_name = args.first_name
     last_name = args.last_name
     email = args.email
-    lbl_email = args.lbl_email
     projects = args.projects
 
     interactive = orcid is None or first_name is None or last_name is None
@@ -247,7 +239,6 @@ def _execute_create(args):
         while True:
             orcid = input("ORCID (format: 0000-0000-0000-000X): ").strip()
             if orcid:
-                # Validate ORCID format
                 if re.match(r'^\d{4}-\d{4}-\d{4}-\d{3}[0-9X]$', orcid):
                     break
                 else:
@@ -283,14 +274,6 @@ def _execute_create(args):
                 else:
                     logger.warning("Invalid email format. Skipping.")
 
-        if lbl_email is None:
-            lbl_email_input = input("LBL Email (optional, press Enter to skip): ").strip()
-            if lbl_email_input:
-                if re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', lbl_email_input):
-                    lbl_email = lbl_email_input
-                else:
-                    logger.warning("Invalid email format. Skipping.")
-
         if projects is None:
             projects_input = input("Project IDs (comma-separated, optional, press Enter to skip): ").strip()
             if projects_input:
@@ -301,11 +284,10 @@ def _execute_create(args):
         client = CrucibleClient()
 
         user = User(
-            orcid=orcid,
+            unique_id=orcid,
             first_name=first_name,
             last_name=last_name,
             email=email or None,
-            lbl_email=lbl_email or None,
         )
         project_ids = [p.strip() for p in projects.split(',')] if projects else []
         result = client.users.create(user, project_ids=project_ids)
@@ -318,6 +300,84 @@ def _execute_create(args):
         if getattr(args, "debug", False):
             import traceback
             traceback.print_exc()
+        sys.exit(1)
+
+
+def _register_update(subparsers):
+    """Register the 'user update' subcommand."""
+    parser = subparsers.add_parser(
+        'update',
+        help='Update a user record',
+        description='Partially update a user record (requires admin permissions)',
+        formatter_class=term.ColorHelpFormatter,
+        epilog="""
+Examples:
+    crucible user update 0000-0002-1825-0097 --first-name Jane
+    crucible user update 0000-0002-1825-0097 --email jane@example.com --last-name Smith
+"""
+    )
+    parser.add_argument('orcid', metavar='ORCID', help='User ORCID identifier')
+    parser.add_argument('--first-name',       dest='first_name',       metavar='NAME',  help='First name')
+    parser.add_argument('--last-name',        dest='last_name',        metavar='NAME',  help='Last name')
+    parser.add_argument('--email',            dest='email',            metavar='EMAIL', help='Email address')
+    parser.add_argument('--service-account',    dest='is_service_account', action='store_true',
+                        help='Mark as a service account')
+    parser.add_argument('--no-service-account', dest='is_service_account', action='store_false',
+                        help='Unmark as a service account')
+    parser.set_defaults(func=_execute_update, is_service_account=None)
+
+
+def _execute_update(args):
+    """Execute the 'user update' subcommand."""
+    from crucible.client import CrucibleClient
+
+    fields = {k: v for k, v in {
+        'first_name':       args.first_name,
+        'last_name':        args.last_name,
+        'email':            args.email,
+        'is_service_account': args.is_service_account,
+    }.items() if v is not None}
+
+    if not fields:
+        logger.error("No fields to update. Provide at least one of: --first-name, --last-name, --email, --service-account, --no-service-account")
+        sys.exit(1)
+
+    try:
+        client = CrucibleClient()
+        result = client.users.update(args.orcid, **fields)
+        logger.info("User updated")
+        _show_user(result)
+    except Exception as e:
+        logger.error(f"Error updating user: {e}")
+        sys.exit(1)
+
+
+def _register_remove_access_group(subparsers):
+    """Register the 'user remove-access-group' subcommand."""
+    parser = subparsers.add_parser(
+        'remove-access-group',
+        help='Remove a user from an access group',
+        description='Remove a user from an access group (requires admin permissions)',
+        formatter_class=term.ColorHelpFormatter,
+        epilog="""
+Examples:
+    crucible user remove-access-group 0000-0002-1825-0097 my-group
+"""
+    )
+    parser.add_argument('orcid',      metavar='ORCID', help='User ORCID identifier')
+    parser.add_argument('group_name', metavar='GROUP', help='Access group name')
+    parser.set_defaults(func=_execute_remove_access_group)
+
+
+def _execute_remove_access_group(args):
+    """Execute the 'user remove-access-group' subcommand."""
+    from crucible.client import CrucibleClient
+    try:
+        client = CrucibleClient()
+        client.users.remove_from_access_group(args.orcid, args.group_name)
+        logger.info(f"Removed {args.orcid} from access group '{args.group_name}'")
+    except Exception as e:
+        logger.error(f"Error removing user from access group: {e}")
         sys.exit(1)
 
 
@@ -337,9 +397,9 @@ def _execute_list(args):
         rows = []
         for user in users:
             name_parts = [user.get('first_name') or '', user.get('last_name') or '']
-            name  = ' '.join(p for p in name_parts if p) or '—'
-            orcid = user.get('orcid') or '—'
-            email = user.get('email') or user.get('lbl_email') or '—'
+            name  = ' '.join(p for p in name_parts if p) or '-'
+            orcid = term.orcid_link(user.get('unique_id') or user.get('orcid')) or '-'
+            email = user.get('email') or '-'
             rows.append((name, orcid, email))
         term.table(rows, ['Name', 'ORCID', 'Email'], max_widths=[25, 19, 35])
 
@@ -357,7 +417,7 @@ def _register_list_datasets(subparsers):
         'list-datasets',
         help='List datasets accessible to a user',
         description='List dataset IDs the user has access to (requires admin permissions)',
-        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     crucible user list-datasets 0000-0002-1825-0097
@@ -374,7 +434,7 @@ def _register_check_access(subparsers):
         'check-access',
         help='Check user access to a dataset',
         description='Check read/write permissions for a user on a specific dataset (requires admin permissions)',
-        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     crucible user check-access 0000-0002-1825-0097 0tcbwt4cp9x1z000bazhkv5gkg
@@ -393,7 +453,7 @@ def _register_list_access_groups(subparsers):
         'list-access-groups',
         help='List access groups for a user',
         description="List the access groups a user belongs to",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
+        formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     crucible user list-access-groups 0000-0002-1825-0097
@@ -411,7 +471,7 @@ def _register_list_projects(subparsers):
         'list-projects',
         help='List projects for a user',
         description='List projects a user is associated with',
-        formatter_class=argparse.RawDescriptionHelpFormatter,
+        formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     crucible user list-projects 0000-0002-1825-0097
@@ -451,9 +511,7 @@ def _execute_check_access(args):
         client = CrucibleClient()
         perms = client.users.check_dataset_access(args.orcid, args.dataset_id)
 
-        W = 8
-        def _p(label, value):
-            print(f"  {label:<{W}}{value}")
+        _p = term.field_printer(14)
 
         term.header(f"Access · {args.dataset_id}")
         _p("Read",  "yes" if perms.get('read')  else "no")
@@ -503,9 +561,9 @@ def _execute_list_projects(args):
 
         rows = [
             (
-                p.get('project_id') or '—',
-                p.get('title') or '—',
-                p.get('organization') or '—',
+                p.get('project_id') or '-',
+                p.get('title') or '-',
+                p.get('organization') or '-',
             )
             for p in projects
         ]

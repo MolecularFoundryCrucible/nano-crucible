@@ -9,6 +9,7 @@ Opens the Graph Explorer home page or a specific resource by mfid.
 import sys
 import webbrowser
 import logging
+from . import term
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +19,7 @@ def register_subcommand(subparsers):
         'open',
         help='Open a Crucible resource in the browser',
         description='Open the Graph Explorer or a specific resource by mfid',
-        formatter_class=lambda prog: __import__('argparse').RawDescriptionHelpFormatter(prog, max_help_position=35),
+        formatter_class=lambda prog: term.ColorHelpFormatter(prog, max_help_position=35),
         epilog="""
 Examples:
     # Open the Graph Explorer home page
@@ -63,18 +64,14 @@ def execute(args):
         # No mfid -> open root URL
         url = graph_explorer_url
     else:
-        # mfid provided -> get resource with automatic type detection
         try:
-            resource_type = config.client.get_resource_type(mfid)
-            resource = config.client.get(mfid, resource_type=resource_type)
+            resource = config.client.get(mfid)
         except Exception as e:
             logger.error(f"Resource '{mfid}' not found: {e}")
             sys.exit(1)
 
-        # Map resource type to URL path
+        resource_type = resource.get("resource_type")
         dtype = "sample-graph" if resource_type == "sample" else "dataset"
-
-        # Extract project ID
         project_id = resource.get("project_id")
         if not project_id:
             logger.error(f"Resource '{mfid}' has no project_id")

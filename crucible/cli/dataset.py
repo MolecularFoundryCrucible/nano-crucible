@@ -16,34 +16,43 @@ logger = logging.getLogger(__name__)
 from . import term
 
 
-def _show_scientific_metadata(sci_md_wrapper):
-    """Display scientific metadata, unwrapping the API envelope."""
-    if not sci_md_wrapper:
-        return
-    actual = sci_md_wrapper.get('scientific_metadata') if isinstance(sci_md_wrapper, dict) else sci_md_wrapper
-    if not actual:
-        term.subheader("Scientific Metadata")
-        print("  (empty)")
-        return
-    term.subheader(f"Scientific Metadata ({len(actual)} fields)")
-    max_key = max(len(k) for k in actual)
-    for k, v in actual.items():
-        if isinstance(v, dict):
-            print(f"  {k}:")
-            for kk, vv in v.items():
-                print(f"    {kk}: {vv}")
-        elif isinstance(v, list) and len(v) > 8:
-            print(f"  {k:<{max_key}}  <list with {len(v)} items>")
+def _build_file_display(af_list, link_map, dsid):
+    """Build display entries for a dataset's files.
+
+    Returns list of dicts with keys: name, size, url (None if not ingested), ingested.
+    link_map is {mfid: signed_url} from get_download_links.
+    """
+    import os as _os
+    prefix_sp = f'mf-storage-prod/{dsid}/'
+    result = []
+    for f in af_list:
+        mfid         = f.get('mfid')
+        storage_path = f.get('storage_path') or ''
+        if storage_path.startswith(prefix_sp):
+            name     = storage_path[len(prefix_sp):]
+            ingested = True
         else:
-            print(f"  {k:<{max_key}}  {v}")
+            staging  = f.get('filename') or ''
+            name     = _os.path.basename(staging) or mfid
+            ingested = False
+        result.append({
+            'name':     name,
+            'size':     f.get('size'),
+            'url':      link_map.get(mfid) if ingested else None,
+            'ingested': ingested,
+        })
+    return result
 
 
-def _show_dataset(dataset, client, verbose=False, graph=False, include_metadata=False):
+def _show_scientific_metadata(sci_md):
+    """Display scientific metadata. Delegates to helpers.show_scientific_metadata."""
+    from .helpers import show_scientific_metadata
+    show_scientific_metadata(sci_md)
+
+
+def _show_dataset(dataset, client, verbose=False, graph=False, include_metadata=False, links=None, prefetched=None):
     """Display dataset fields. Extracted for reuse by top-level 'crucible get'."""
-    W = 14
-
-    def _p(label, value):
-        print(f"  {label:<{W}}{value if value not in (None, '') else '—'}")
+    _p = term.field_printer(14)
 
     try:
         from crucible.config import config
@@ -61,67 +70,132 @@ def _show_dataset(dataset, client, verbose=False, graph=False, include_metadata=
 
     term.header("Dataset")
 
+    dr = dataset.get('deletion_request')
+    if dr:
+        status = dr.get('status', '')
+        reason = dr.get('reason') or ''
+        rid    = dr.get('id', '')
+        color  = term.yellow if status == 'pending' else term.red
+        msg    = color(f"⚠  Deletion {status}")
+        if reason:
+            msg += f'  "{reason}"'
+        if rid:
+            msg += '  ' + term.dim(f"(request #{rid})")
+        print(f"  {msg}")
+
     _p("Name",        dataset.get('dataset_name') or '(unnamed)')
     _p("MFID",        _ds_link(dataset))
     _p("Measurement", dataset.get('measurement'))
+    _p("Data Type",   dataset.get('data_type'))
     _p("Session",     dataset.get('session_name'))
     _p("Instrument",  dataset.get('instrument_name'))
     _p("Project",     dataset.get('project_id'))
     _p("Timestamp",   term.fmt_ts(dataset.get('timestamp')))
     _p("Description", dataset.get('description'))
 
-    if verbose or graph:
+    dsid = dataset.get('unique_id')
+
+    if verbose:
         term.subheader("Ownership")
         pub = dataset.get('public')
         _p("Public",      "Yes" if pub else ("No" if pub is not None else None))
         _p("Owner ORCID", term.orcid_link(dataset.get('owner_orcid')))
-        _p("Owner ID",    dataset.get('owner_user_id'))
 
         term.subheader("File")
-        _p("Data Format",   dataset.get('data_format'))
-        _p("Size",          term.fmt_size(dataset.get('size')))
-        _p("Instrument ID", dataset.get('instrument_id'))
-        _p("Source",        dataset.get('source_folder'))
-        _p("JSON Link",     dataset.get('json_link'))
+        _p("Data Format", dataset.get('data_format'))
+        _p("Size",        term.fmt_size(dataset.get('size')))
+        _p("Source",      dataset.get('source_folder'))
         _p("SHA256",        dataset.get('sha256_hash_file_to_upload'))
 
         term.subheader("Timing")
         _p("Created",  term.fmt_ts(dataset.get('creation_time')))
         _p("Modified", term.fmt_ts(dataset.get('modification_time')))
 
-        dsid = dataset.get('unique_id')
-        keywords = client.datasets.get_keywords(dsid)
+        if prefetched is not None:
+            keywords = prefetched.get('keywords', [])
+            af_list  = prefetched.get('af_list', [])
+            link_map = prefetched.get('link_map', {})
+        else:
+            from concurrent.futures import ThreadPoolExecutor
+            with ThreadPoolExecutor(max_workers=3) as pool:
+                f_kw    = pool.submit(client.datasets.get_keywords, dsid)
+                f_meta  = pool.submit(client.datasets.get_associated_files, dsid)
+                f_links = pool.submit(client.datasets.get_download_links, dsid)
+                try:
+                    keywords = f_kw.result()
+                except Exception:
+                    keywords = []
+                try:
+                    af_list = f_meta.result()
+                except Exception:
+                    af_list = []
+                try:
+                    link_map = f_links.result()
+                except Exception:
+                    link_map = {}
+
         if keywords:
             words = [kw.get('keyword', kw) if isinstance(kw, dict) else kw for kw in keywords]
             term.subheader("Keywords")
             print(f"  {', '.join(words)}")
 
-    if include_metadata:
-        _show_scientific_metadata(dataset.get('scientific_metadata'))
+        file_display = _build_file_display(af_list, link_map, dsid)
+
+        if file_display:
+            term.subheader(f"Files ({len(file_display)})")
+            for item in sorted(file_display, key=lambda x: x['name']):
+                name = item['name']
+                sz   = f"  {term.dim(term.fmt_size(item['size']))}" if item['size'] is not None else ''
+                if item['ingested']:
+                    label = term.hyperlink(term.cyan(name), item['url']) if item['url'] else term.cyan(name)
+                else:
+                    label = f"{term.dim(name)} {term.yellow('(pending ingestion)')}"
+                print(f"  {label}{sz}")
 
     if graph:
-        dsid = dataset.get('unique_id')
+        links_list = links if links is not None else dataset.get('links')
+        if not links_list:
+            try:
+                links_list = client.get_links(dsid)
+            except Exception:
+                links_list = None
+        if links_list is None:
+            print(f"  {term.dim('⚠  Could not fetch links.')}")
+        else:
+            proj            = dataset.get('project_id') or ''
+            linked_samples  = [l for l in links_list if l.get('relationship') == 'associated'
+                               and l.get('resource_type') == 'sample']
+            parent_datasets = [l for l in links_list if l.get('relationship') == 'parent'
+                               and l.get('resource_type') == 'dataset']
+            child_datasets  = [l for l in links_list if l.get('relationship') == 'child'
+                               and l.get('resource_type') == 'dataset']
 
-        samples = client.samples.list(dataset_id=dsid)
-        term.subheader(f"Linked Samples ({len(samples)})")
-        for s in samples:
-            print(f"  {_s_link(s)}  {s.get('sample_name') or '(unnamed)'}")
-        if not samples:
-            print(f"  {term.dim('(none)')}")
+            term.subheader(f"Linked Samples ({len(linked_samples)})")
+            for s in linked_samples:
+                uid = s['unique_id']
+                url = f"{_base}/{proj}/sample-graph/{uid}" if _base and proj else None
+                print(f"  {term.mfid_link(uid, url)}  {s.get('name') or '(unnamed)'}")
+            if not linked_samples:
+                print(f"  {term.dim('(none)')}")
 
-        parents = client.datasets.list_parents(dsid)
-        term.subheader(f"Parents ({len(parents)})")
-        for p in parents:
-            print(f"  {_ds_link(p)}  {p.get('dataset_name') or '(unnamed)'}")
-        if not parents:
-            print(f"  {term.dim('(none)')}")
+            term.subheader(f"Parents ({len(parent_datasets)})")
+            for p in parent_datasets:
+                uid = p['unique_id']
+                url = f"{_base}/{proj}/dataset/{uid}" if _base and proj else None
+                print(f"  {term.mfid_link(uid, url)}  {p.get('name') or '(unnamed)'}")
+            if not parent_datasets:
+                print(f"  {term.dim('(none)')}")
 
-        children = client.datasets.list_children(dsid)
-        term.subheader(f"Children ({len(children)})")
-        for c in children:
-            print(f"  {_ds_link(c)}  {c.get('dataset_name') or '(unnamed)'}")
-        if not children:
-            print(f"  {term.dim('(none)')}")
+            term.subheader(f"Children ({len(child_datasets)})")
+            for c in child_datasets:
+                uid = c['unique_id']
+                url = f"{_base}/{proj}/dataset/{uid}" if _base and proj else None
+                print(f"  {term.mfid_link(uid, url)}  {c.get('name') or '(unnamed)'}")
+            if not child_datasets:
+                print(f"  {term.dim('(none)')}")
+
+    if include_metadata:
+        _show_scientific_metadata(dataset.get('scientific_metadata'))
 
 try:
     import mfid
@@ -165,6 +239,7 @@ def register_subcommand(subparsers):
     _register_get(dataset_subparsers)
     _register_create(dataset_subparsers)
     _register_update(dataset_subparsers)
+    _register_delete(dataset_subparsers)
     _register_edit(dataset_subparsers)
     _register_link(dataset_subparsers)
     _register_add_sample(dataset_subparsers)
@@ -175,6 +250,7 @@ def register_subcommand(subparsers):
     _register_list_samples(dataset_subparsers)
     _register_download(dataset_subparsers)
     _register_add_file(dataset_subparsers)
+    _register_list_files(dataset_subparsers)
     _register_search(dataset_subparsers)
     _register_add_keyword(dataset_subparsers)
     _register_list_keywords(dataset_subparsers)
@@ -188,7 +264,7 @@ def _register_list(subparsers):
         'list',
         help='List datasets',
         description='List datasets, with optional filters',
-        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     crucible dataset list -pid my-project
@@ -236,6 +312,14 @@ Examples:
         dest='data_format',
         metavar='FORMAT',
         help='Filter by data format (exact match)'
+    )
+
+    parser.add_argument(
+        '--data-type',
+        default=None,
+        dest='data_type',
+        metavar='TYPE',
+        help='Filter by data type (exact match)'
     )
 
     parser.add_argument(
@@ -316,9 +400,20 @@ def _register_get(subparsers):
     )
 
     parser.add_argument(
-        '--graph',
-        action='store_true',
-        help='Also show linked samples, parents, and children'
+        '--no-graph',
+        action='store_false',
+        dest='graph',
+        help='Exclude linked samples, parents, and children'
+    )
+    parser.set_defaults(graph=True)
+
+    parser.add_argument(
+        '-o', '--output',
+        dest='output',
+        choices=['json'],
+        default=None,
+        metavar='FORMAT',
+        help='Output format: json (always includes scientific metadata)'
     )
 
     parser.set_defaults(func=_execute_get)
@@ -332,7 +427,7 @@ def _register_create(subparsers):
         'create',
         help='Create and upload a new dataset',
         description='Parse and upload dataset files to Crucible',
-        formatter_class=lambda prog: __import__('argparse').RawDescriptionHelpFormatter(prog, max_help_position=35),
+        formatter_class=lambda prog: term.ColorHelpFormatter(prog, max_help_position=35),
         epilog="""
 Examples:
     # Preview what would be uploaded (dry run)
@@ -482,6 +577,15 @@ Examples:
         help='Data format type (optional)'
     )
 
+    # Data type
+    parser.add_argument(
+        '--data-type',
+        dest='data_type',
+        default=None,
+        metavar='TYPE',
+        help='Data type (optional)'
+    )
+
     # Timestamp
     parser.add_argument(
         '--timestamp',
@@ -516,12 +620,9 @@ Examples:
 
 
 def _dataset_updatable_fields():
-    """Return sorted list of fields that can be updated on a dataset (derived from Dataset model)."""
-    from ..models import Dataset
-    # Exclude server-managed / identifier fields
-    _readonly = {'unique_id', 'owner_user_id', 'size', 'sha256_hash_file_to_upload',
-                 'creation_time', 'modification_time'}
-    return sorted(set(Dataset.model_fields.keys()) - _readonly)
+    """Return ordered list of fields that can be updated on a dataset."""
+    from .schema import DATASET_FIELDS, editable_keys
+    return editable_keys(DATASET_FIELDS)
 
 
 def _register_update(subparsers):
@@ -545,7 +646,7 @@ def _register_update(subparsers):
         'update',
         help='Update dataset fields or scientific metadata',
         description='Update fields or scientific metadata of an existing dataset',
-        formatter_class=argparse.RawDescriptionHelpFormatter,
+        formatter_class=term.ColorHelpFormatter,
         epilog=f"""
 Updatable fields (use --set):
     {', '.join(fields)}
@@ -566,6 +667,7 @@ Examples:
 def _execute_update(args):
     """Execute the 'dataset update' subcommand."""
     from crucible.client import CrucibleClient
+    from .helpers import cast_value
 
     has_set = bool(getattr(args, 'set_fields', None))
     has_metadata = bool(getattr(args, 'metadata', None))
@@ -590,25 +692,16 @@ def _execute_update(args):
                     f"Valid fields: {', '.join(sorted(valid_fields))}"
                 )
                 sys.exit(1)
-            updates[key] = _cast_value(value)
+            updates[key] = cast_value(value)
 
-    # Parse --metadata for scientific metadata
     metadata_dict = None
     if has_metadata:
-        metadata_path = Path(args.metadata)
-        if metadata_path.exists():
-            try:
-                with open(metadata_path, 'r') as f:
-                    metadata_dict = json.load(f)
-            except json.JSONDecodeError as e:
-                logger.error(f"Error: Invalid JSON in file {metadata_path}: {e}")
-                sys.exit(1)
-        else:
-            try:
-                metadata_dict = json.loads(args.metadata)
-            except json.JSONDecodeError:
-                logger.error(f"Error: '{args.metadata}' is not valid JSON and no such file exists.")
-                sys.exit(1)
+        from .helpers import load_metadata
+        try:
+            metadata_dict = load_metadata(args.metadata)
+        except ValueError as e:
+            logger.error(f"Error: {e}")
+            sys.exit(1)
 
     try:
         client = CrucibleClient()
@@ -635,13 +728,51 @@ def _execute_update(args):
         sys.exit(1)
 
 
+def _register_delete(subparsers):
+    """Register the 'dataset delete' subcommand."""
+    parser = subparsers.add_parser(
+        'delete',
+        help='Delete a dataset',
+        description='Permanently delete a dataset (irreversible). Prompts for confirmation unless -y is given.',
+        formatter_class=term.ColorHelpFormatter,
+        epilog="""
+Examples:
+    crucible dataset delete DATASET_ID
+    crucible dataset delete DATASET_ID -y
+"""
+    )
+    parser.add_argument('dataset_id', metavar='DATASET_ID', help='Dataset unique ID to delete')
+    parser.add_argument('-y', '--yes', action='store_true', help='Skip confirmation prompt')
+    parser.set_defaults(func=_execute_delete)
+
+
+def _execute_delete(args):
+    """Execute the 'dataset delete' subcommand."""
+    from crucible.client import CrucibleClient
+    if not args.yes:
+        confirm = input(f"Delete dataset {args.dataset_id}? This cannot be undone. [y/N] ").strip().lower()
+        if confirm != 'y':
+            print("Aborted.")
+            return
+    try:
+        client = CrucibleClient()
+        client.datasets.delete(args.dataset_id)
+        logger.info(f"✓ Deleted dataset {args.dataset_id}")
+    except Exception as e:
+        logger.error(f"Error deleting dataset: {e}")
+        if getattr(args, "debug", False):
+            import traceback
+            traceback.print_exc()
+        sys.exit(1)
+
+
 def _register_edit(subparsers):
     """Register the 'dataset edit' subcommand."""
     parser = subparsers.add_parser(
         'edit',
         help='Edit dataset fields interactively',
         description='Open dataset fields in $EDITOR and update on save. Scientific metadata is included as a top-level key.',
-        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     crucible dataset edit DATASET_ID
@@ -666,8 +797,9 @@ def _edit_dataset(dsid, client, debug=False):
         logger.error(f"Dataset not found: {dsid}")
         sys.exit(1)
 
+    from .schema import DATASET_FIELDS, ordered_dict
     valid_fields = set(_dataset_updatable_fields())
-    original_fields = {k: dataset.get(k) for k in sorted(valid_fields)}
+    original_fields = ordered_dict(DATASET_FIELDS, dataset, verbose=True, editable_only=True)
     original_meta = dataset.get('scientific_metadata') or {}
 
     original = dict(original_fields)
@@ -762,7 +894,7 @@ def _register_add_sample(subparsers):
         'add-sample',
         help='Link a sample to a dataset',
         description='Associate a sample with a dataset',
-        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     crucible dataset add-sample DATASET_ID --sample SAMPLE_ID
@@ -779,7 +911,7 @@ def _execute_add_sample(args):
     from crucible.client import CrucibleClient
     try:
         client = CrucibleClient()
-        result = client.datasets.add_sample(args.dataset_id, args.sample)
+        client.datasets.add_sample(args.dataset_id, args.sample)
 
         logger.info(f"✓ Linked sample {args.sample} to dataset {args.dataset_id}")
 
@@ -797,7 +929,7 @@ def _register_remove_sample(subparsers):
         'remove-sample',
         help='Unlink a sample from a dataset',
         description='Remove the association between a dataset and a sample (requires admin)',
-        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     crucible dataset remove-sample DATASET_ID --sample SAMPLE_ID
@@ -829,7 +961,7 @@ def _register_remove_child(subparsers):
         'remove-child',
         help='Unlink a child dataset from a parent dataset',
         description='Remove the parent-child relationship between two datasets (requires admin)',
-        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     crucible dataset remove-child PARENT_ID --child CHILD_ID
@@ -861,7 +993,7 @@ def _register_list_parents(subparsers):
         'list-parents',
         help='List parent datasets',
         description='List parent datasets of a given dataset',
-        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     crucible dataset list-parents DATASET_ID
@@ -881,7 +1013,7 @@ def _register_list_children(subparsers):
         'list-children',
         help='List child datasets',
         description='List child datasets derived from a given dataset',
-        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     crucible dataset list-children DATASET_ID
@@ -901,7 +1033,7 @@ def _register_list_samples(subparsers):
         'list-samples',
         help='List samples linked to a dataset',
         description='Show all samples associated with a given dataset',
-        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     crucible dataset list-samples DATASET_ID
@@ -920,7 +1052,7 @@ def _register_download(subparsers):
         'download',
         help='Download dataset files',
         description='Download files from a Crucible dataset',
-        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     # Download all files into ./crucible-downloads/<dataset_id>/
@@ -1045,7 +1177,7 @@ def _register_add_file(subparsers):
         'add-file',
         help='Upload file(s) to an existing dataset',
         description='Upload one or more files to an existing dataset without re-creating it',
-        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     # Add a single file
@@ -1073,6 +1205,17 @@ Examples:
         required=True,
         metavar='FILE',
         help='File(s) to upload (supports glob patterns like *.csv)'
+    )
+    parser.add_argument(
+        '--ingestor',
+        default=None,
+        metavar='CLASS',
+        help='Ingestion class to use (default: auto-detected from file format)'
+    )
+    parser.add_argument(
+        '--wait',
+        action='store_true',
+        help='Wait for ingestion to complete before returning'
     )
     parser.set_defaults(func=_execute_add_file)
 
@@ -1105,18 +1248,80 @@ def _execute_add_file(args):
     try:
         client = CrucibleClient()
 
+        ingestor = getattr(args, 'ingestor', None)
+        wait     = getattr(args, 'wait', False)
+
         term.header(f"Add Files  {dsid}")
         rows = []
         for fpath in files:
             print(f"  Uploading {fpath.name} ...", flush=True)
-            client.datasets.upload_file(dsid, str(fpath))
+            client.datasets.add_file_to_dataset(dsid, str(fpath),
+                                                ingestion_class=ingestor,
+                                                wait_for_ingestion_response=wait)
             rows.append((fpath.name, term.fmt_size(fpath.stat().st_size), '✓'))
 
         print()
-        term.table(rows, ['File', 'Size', ''])
+        term.table(rows, ['File', 'Size', ''], max_widths=[60, 10, 4])
 
     except Exception as e:
         logger.error(f"Error uploading file(s): {e}")
+        if getattr(args, 'debug', False):
+            import traceback
+            traceback.print_exc()
+        sys.exit(1)
+
+
+def _register_list_files(subparsers):
+    """Register the 'dataset list-files' subcommand."""
+    parser = subparsers.add_parser(
+        'list-files',
+        help='List files in a dataset with download links',
+        description='Show all files associated with a dataset. File names are '
+                    'clickable download links (valid for 1 hour) in supporting terminals.',
+    )
+    parser.add_argument('dataset_id', metavar='DATASET_ID', help='Dataset unique ID')
+    parser.set_defaults(func=_execute_list_files)
+
+
+def _execute_list_files(args):
+    """Execute the 'dataset list-files' subcommand."""
+    from crucible.client import CrucibleClient
+    try:
+        client = CrucibleClient()
+        dsid = args.dataset_id
+
+        # Fetch metadata (size, hash) and signed download URLs in parallel
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            f_meta  = pool.submit(client.datasets.get_associated_files, dsid)
+            f_links = pool.submit(client.datasets.get_download_links, dsid)
+            meta_list  = f_meta.result()
+            link_map   = f_links.result()   # {filepath: signed_url}
+
+        file_display = _build_file_display(meta_list, link_map, dsid)
+
+        term.header(f"Files · {dsid} ({len(file_display)})")
+        if not file_display:
+            print(f"  {term.dim('No files found.')}")
+            return
+
+        rows = []
+        for item in sorted(file_display, key=lambda x: x['name']):
+            name = item['name']
+            size = term.fmt_size(item['size']) if item['size'] is not None else '-'
+            if item['ingested']:
+                label = term.hyperlink(term.cyan(name), item['url']) if item['url'] else term.cyan(name)
+            else:
+                label = f"{term.dim(name)} {term.yellow('(pending)')}"
+            rows.append((label, size))
+
+        term.table(rows, ['File', 'Size'], max_widths=[60, 10])
+
+        if any(item['ingested'] for item in file_display):
+            print(f"\n  {term.dim('Download links are valid for 1 hour.')}")
+
+    except Exception as e:
+        logger.error(f"Error listing files: {e}")
         if getattr(args, 'debug', False):
             import traceback
             traceback.print_exc()
@@ -1129,7 +1334,7 @@ def _register_search(subparsers):
         'search',
         help='Search datasets by scientific metadata',
         description='Full-text search across scientific metadata of all datasets',
-        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     crucible dataset search "thermal conductivity"
@@ -1176,7 +1381,7 @@ def _execute_search(args):
             print(f"  {term.dim('No results found.')}")
         else:
             for r in results:
-                mfid = r.get('dataset_mfid', '—')
+                mfid = r.get('dataset_mfid', '-')
                 print(f"  {term.cyan(mfid)}")
                 if args.verbose:
                     scimd = r.get('scientific_metadata', {})
@@ -1202,7 +1407,7 @@ def _register_add_keyword(subparsers):
         'add-keyword',
         help='Add a keyword to a dataset',
         description='Associate a keyword tag with an existing dataset',
-        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     crucible dataset add-keyword DATASET_ID silicon
@@ -1221,7 +1426,7 @@ def _execute_add_keyword(args):
     from crucible.client import CrucibleClient
     try:
         client = CrucibleClient()
-        result = client.datasets.add_keyword(args.dataset_id, args.keyword)
+        client.datasets.add_keyword(args.dataset_id, args.keyword)
 
         logger.info(f"✓ Keyword '{args.keyword}' added to {args.dataset_id}")
 
@@ -1281,7 +1486,7 @@ def _register_parsers(subparsers):
         'parsers',
         help='List available dataset parsers',
         description='Show all available dataset parsers, including those installed via third-party packages',
-        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     crucible dataset parsers
@@ -1320,6 +1525,8 @@ def _execute_list(args):
         filters['session_name'] = args.session
     if args.data_format:
         filters['data_format'] = args.data_format
+    if args.data_type:
+        filters['data_type'] = args.data_type
     if args.instrument_name:
         filters['instrument_name'] = args.instrument_name
 
@@ -1369,9 +1576,9 @@ def _execute_list(args):
                 url = f"{_base}/{pid}/dataset/{uid}" if _base and uid and pid else None
                 return (
                     ds.get('dataset_name') or '(unnamed)',
-                    term.mfid_link(uid, url) if uid else '—',
-                    ds.get('measurement') or '—',
-                    ds.get('session_name') or '—',
+                    term.mfid_link(uid, url) if uid else '-',
+                    ds.get('measurement') or '-',
+                    ds.get('session_name') or '-',
                 )
 
             _by_name = lambda ds: (ds.get('dataset_name') or '').lower()
@@ -1404,17 +1611,27 @@ def _execute_list(args):
 def _execute_get(args):
     """Execute the 'dataset get' subcommand."""
     from crucible.client import CrucibleClient
-    include_metadata = getattr(args, 'include_metadata', False)
+    output = getattr(args, 'output', None)
+    include_metadata = output == 'json' or getattr(args, 'include_metadata', False) or _config.include_metadata
     try:
         client = CrucibleClient()
-        dataset = client.datasets.get(args.dataset_id, include_metadata=include_metadata)
+        graph   = getattr(args, 'graph', False)
+        dataset = client.datasets.get(args.dataset_id, include_metadata=include_metadata,
+                                      include_links=graph or _config.include_links)
         if dataset is None:
             logger.error(f"Dataset not found: {args.dataset_id}")
             sys.exit(1)
-        _show_dataset(dataset, client,
-                      verbose=getattr(args, 'verbose', False),
-                      graph=getattr(args, 'graph', False),
-                      include_metadata=include_metadata)
+        from .helpers import cache_resource
+        cache_resource(getattr(args, '_shell_state', None), client, dataset, 'dataset',
+                       args.dataset_id, verbose=getattr(args, 'verbose', False),
+                       graph=getattr(args, 'graph', False), include_metadata=include_metadata)
+        if output == 'json':
+            print(json.dumps(dataset, indent=2, default=str))
+        else:
+            _show_dataset(dataset, client,
+                          verbose=getattr(args, 'verbose', False),
+                          graph=graph,
+                          include_metadata=include_metadata)
     except Exception as e:
         logger.error(f"Error retrieving dataset: {e}")
         if getattr(args, "debug", False):
@@ -1545,6 +1762,7 @@ def _execute_create(args):
             public=args.public,
             instrument_name=args.instrument_name,
             data_format=args.data_format,
+            data_type=args.data_type,
             timestamp=timestamp,
         )
     except Exception as e:
@@ -1560,9 +1778,7 @@ def _execute_create(args):
         parser.measurement = None
 
     # Display dataset information
-    W = 14
-    def _p(label, value):
-        print(f"  {label:<{W}}{value if value not in (None, '') else '—'}")
+    _p = term.field_printer(14)
 
     term.header("Dataset")
     proj_label = f"{project_id} {term.dim('(from config)')}" if project_from_config else project_id
@@ -1571,6 +1787,7 @@ def _execute_create(args):
     _p("Name",        parser.dataset_name)
     _p("Measurement", parser.measurement or term.dim("(server assigns)"))
     _p("Data format", parser.data_format)
+    _p("Data type",   parser.data_type)
     _p("Session",     parser.session_name)
     _p("Timestamp",   parser.timestamp)
     _p("Public",      "yes" if parser.public else "no")
@@ -1629,29 +1846,12 @@ def _execute_create(args):
             sys.exit(1)
 
 
-def _cast_value(value):
-    """Auto-cast a string value to int, float, bool, or string."""
-    if value.lower() == 'true':
-        return True
-    if value.lower() == 'false':
-        return False
-    try:
-        return int(value)
-    except ValueError:
-        pass
-    try:
-        return float(value)
-    except ValueError:
-        pass
-    return value
-
-
 def _execute_link(args):
     """Execute the 'dataset link' subcommand."""
     from crucible.client import CrucibleClient
     try:
         client = CrucibleClient()
-        result = client.datasets.link_parent_child(args.parent, args.child)
+        client.datasets.link_parent_child(args.parent, args.child)
 
         logger.info(f"✓ Linked dataset {args.child} as child of {args.parent}")
 
@@ -1668,14 +1868,15 @@ def _execute_list_parents(args):
     from crucible.client import CrucibleClient
     try:
         client = CrucibleClient()
-        parents = client.datasets.list_parents(args.dataset_id, limit=args.limit)
+        parents = sorted(client.datasets.list_parents(args.dataset_id, limit=args.limit),
+                         key=lambda ds: (ds.get('dataset_name') or '').lower())
 
         term.header(f"Parent Datasets · {args.dataset_id} ({len(parents)})")
         if not parents:
             print(f"  {term.dim('No parent datasets found.')}")
             return
-        rows = [(ds.get('dataset_name') or '(unnamed)', ds.get('unique_id') or '—',
-                 ds.get('measurement') or '—') for ds in parents]
+        rows = [(ds.get('dataset_name') or '(unnamed)', ds.get('unique_id') or '-',
+                 ds.get('measurement') or '-') for ds in parents]
         term.table(rows, ['Name', 'MFID', 'Measurement'], max_widths=[35, 26, 15])
 
     except Exception as e:
@@ -1691,14 +1892,15 @@ def _execute_list_children(args):
     from crucible.client import CrucibleClient
     try:
         client = CrucibleClient()
-        children = client.datasets.list_children(args.dataset_id, limit=args.limit)
+        children = sorted(client.datasets.list_children(args.dataset_id, limit=args.limit),
+                          key=lambda ds: (ds.get('dataset_name') or '').lower())
 
         term.header(f"Child Datasets · {args.dataset_id} ({len(children)})")
         if not children:
             print(f"  {term.dim('No child datasets found.')}")
             return
-        rows = [(ds.get('dataset_name') or '(unnamed)', ds.get('unique_id') or '—',
-                 ds.get('measurement') or '—') for ds in children]
+        rows = [(ds.get('dataset_name') or '(unnamed)', ds.get('unique_id') or '-',
+                 ds.get('measurement') or '-') for ds in children]
         term.table(rows, ['Name', 'MFID', 'Measurement'], max_widths=[35, 26, 15])
 
     except Exception as e:
@@ -1714,14 +1916,15 @@ def _execute_list_samples(args):
     from crucible.client import CrucibleClient
     try:
         client = CrucibleClient()
-        samples = client.samples.list(dataset_id=args.dataset_id, limit=args.limit)
+        samples = sorted(client.samples.list(dataset_id=args.dataset_id, limit=args.limit),
+                         key=lambda s: (s.get('sample_name') or '').lower())
 
         term.header(f"Samples · {args.dataset_id} ({len(samples)})")
         if not samples:
             print(f"  {term.dim('No samples linked.')}")
             return
-        rows = [(s.get('sample_name') or '(unnamed)', s.get('unique_id') or '—',
-                 s.get('sample_type') or '—') for s in samples]
+        rows = [(s.get('sample_name') or '(unnamed)', s.get('unique_id') or '-',
+                 s.get('sample_type') or '-') for s in samples]
         term.table(rows, ['Name', 'MFID', 'Type'], max_widths=[35, 26, 20])
 
     except Exception as e:
@@ -1744,8 +1947,8 @@ def _execute_parsers(args):
             (
                 name,
                 "built-in" if name in builtin_names else "installed",
-                getattr(cls, '_measurement', '—') or '—',
-                getattr(cls, '_data_format', None) or '—',
+                getattr(cls, '_measurement', '-') or '-',
+                getattr(cls, '_data_format', None) or '-',
             )
             for name, cls in sorted(all_parsers.items())
         ]
@@ -1756,7 +1959,7 @@ def _execute_parsers(args):
             (
                 name,
                 "built-in" if name in builtin_names else "installed",
-                getattr(cls, '_measurement', '—') or '—',
+                getattr(cls, '_measurement', '-') or '-',
             )
             for name, cls in sorted(all_parsers.items())
         ]
@@ -1770,7 +1973,7 @@ def _register_ingestors(subparsers):
         'ingestors',
         help='List available server-side ingestors',
         description='Show all known server-side ingestor classes',
-        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     crucible dataset ingestors

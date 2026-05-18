@@ -49,6 +49,16 @@ class CrucibleClient:
         self.api_url = api_url.rstrip('/')
         self.api_key = api_key
 
+        if '/api/v1' in self.api_url:
+            import warnings
+            from .config.config import Config as _Cfg
+            warnings.warn(
+                f"You are connected to Crucible API v1 which is deprecated. "
+                f"Update with: crucible config set api_url {_Cfg.DEFAULT_API_URL}",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+
         # Session with automatic retry on transient server/network errors
         retry = Retry(
             total            = 3,
@@ -64,12 +74,17 @@ class CrucibleClient:
         self._session.mount("http://", adapter)
 
         # Initialize resource operations
-        from .resources import DatasetOperations, SampleOperations, ProjectOperations, UserOperations, InstrumentOperations
+        from .resources import FileOperations, DatasetOperations, SampleOperations, \
+        ProjectOperations, UserOperations, InstrumentOperations, DeletionOperations, GraphOperations
+
+        self.files = FileOperations(self)
         self.datasets = DatasetOperations(self)
         self.samples = SampleOperations(self)
         self.projects = ProjectOperations(self)
         self.users = UserOperations(self)
         self.instruments = InstrumentOperations(self)
+        self.deletions = DeletionOperations(self)
+        self.graphs = GraphOperations(self)
     
     def _request(self, method: str, endpoint: str, **kwargs) -> Any:
         """Make an HTTP request to the API.
@@ -116,63 +131,87 @@ class CrucibleClient:
             logger.warning(f"Failed to parse JSON response from {url}: {e}")
             return response
     
-    def _wait_for_request_completion(self, dsid: str, reqid: str, request_type: str,
-                                  sleep_interval: int = 5) -> Dict:
+    def _wait_for_request_completion(self, reqid: str, sleep_interval: int = 1) -> Dict:
         """Wait for a request to complete by polling its status.
 
         Args:
-            dsid (str): Dataset ID
             reqid (str): Request ID
-            request_type (str): Type of request ('ingest' or 'scicat_update')
             sleep_interval (int): Seconds between status checks
 
         Returns:
             Dict: Final request status information
         """
-        req_info = self._get_request_status(dsid, reqid, request_type)
-        logger.info(f"Waiting for {request_type} request to complete...")
+        req_info = self._get_request_status(reqid)
+        logger.info(f"Waiting for ingestion request to complete...")
 
         while req_info['status'] in ['requested', 'started']:
             time.sleep(sleep_interval)
-            req_info = self._get_request_status(dsid, reqid, request_type)
-            logger.debug(f"Current status: {req_info['status']}")
+            req_info = self._get_request_status(reqid)
+            logger.info(f"Current status: {req_info['status']}")
 
         logger.info(f"Request completed with status: {req_info['status']}")
         return req_info
     
-    def _get_request_status(self, dsid: str, reqid: str, request_type: str) -> Dict:
+    def _get_request_status(self, reqid: str) -> Dict:
         """Get the status of any type of request.
 
         Args:
-            dsid (str): Dataset ID
             reqid (str): Request ID
-            request_type (str): Type of request ('ingest' or 'scicat_update')
 
         Returns:
             Dict: Request status information
-
-        Raises:
-            ValueError: If unsupported request_type is provided
         """
-        if request_type == 'ingest':
-            return self._request('get', f'/datasets/{dsid}/ingest/{reqid}')
-        elif request_type == 'scicat_update':
-            return self._request('get', f'/datasets/{dsid}/scicat_update/{reqid}')
-        else:
-            raise ValueError(f"Unsupported request_type: {request_type}")
+        return self._request('get', f'/ingestion_requests/{reqid}')
+
     
     #%% GENERIC METHODS
+
+    def live(self) -> Dict:
+        """Check whether the API process is running (no DB check, no auth).
+
+        Returns:
+            Dict: {"status": "ok"}
+        """
+        import requests as _requests
+        url = f"{self.api_url}/health/live"
+        timeout = (self._config.connect_timeout, self._config.read_timeout)
+        resp = _requests.get(url, timeout=timeout)
+        resp.raise_for_status()
+        return resp.json()
+
+    def health(self) -> Dict:
+        """Check API and database health without requiring authentication.
+
+        Returns:
+            Dict: {"status": "ok"|"degraded", "db": "ok"|"error",
+                   "db_ms": float|None, "version": str|None}
+                  Raises requests.exceptions.ConnectionError if the host is unreachable.
+        """
+        import requests as _requests
+        url = f"{self.api_url}/health/ready"
+        timeout = (self._config.connect_timeout, self._config.read_timeout)
+        resp = _requests.get(url, timeout=timeout)
+        return resp.json()
 
     def whoami(self) -> Dict:
         """Return account info for the current API key.
 
         Returns:
-            Dict: access_group_name (ORCID), access_group_ids, and user_info
-                  with full user profile fields.
+            Dict: user_unique_id, access_group_ids, and user_info with full
+                  user profile fields.
         """
-        return self._request('get', '/account')
+        result = self._request('get', '/account')
+        # Normalize field renames introduced in API v2 so callers work against
+        # both API versions without separate handling.
+        user_info = result.get('user_info') or {}
+        is_service = user_info.get('is_service_account', False)
+        if not is_service and 'orcid' not in user_info and 'unique_id' in user_info:
+            user_info['orcid'] = user_info['unique_id']
+        if 'user_unique_id' in result and 'access_group_name' not in result:
+            result['access_group_name'] = result['user_unique_id']
+        return result
 
-    def get_resource_type(self, resource_id: str) -> dict:
+    def get_resource_type(self, resource_id: str) -> str:
         """
         Determine the type of a resource.
 
@@ -182,44 +221,74 @@ class CrucibleClient:
         Returns:
             str: resource_type
         """
-        response = self._request('get', f"/idtype/{resource_id}")
-        return response.get('resource_type') or response['object_type']
+        response = self._request('get', f"/resources/{resource_id}")
+        return response['resource_type']
 
     def get(self, resource_id: str, resource_type: str = None,
-            include_metadata: bool = False) -> Dict:
+            include_metadata: bool = False, include_links: bool = False) -> Dict:
         """
         Get a resource by ID with automatic type detection.
 
-        Automatically determines if the resource is a sample or dataset
-        and returns the appropriate data.
-
         Args:
             resource_id (str): The unique identifier (mfid) of the resource
-            resource_type (str, optional): Resource type ('sample' or 'dataset').
+            resource_type (str, optional): Resource type ('sample', 'dataset', 'instrument').
                                           If not provided, will be auto-detected.
+            include_metadata (bool): Include scientific metadata
+            include_links (bool): Include immediate parent/child/associated links
 
         Returns:
-            Dict: Resource data (sample or dataset)
+            Dict: Resource data
 
         Raises:
             ValueError: If resource type is unknown or not supported
-
-        Example:
-            >>> resource = client.get('abc123')
-            >>> print(resource['project_id'])
-
-            >>> # Skip detection if you already know the type
-            >>> resource = client.get('abc123', resource_type='sample')
         """
         if resource_type is None:
-            resource_type = self.get_resource_type(resource_id)
+            params = {}
+            if include_links:
+                params['include_links'] = True
+            if include_metadata:
+                params['include_metadata'] = True
+            return self._request('get', f"/resources/{resource_id}", params=params or None)
 
         if resource_type == "sample":
-            return self.samples.get(resource_id)
+            return self.samples.get(resource_id, include_links=include_links,
+                                    include_metadata=include_metadata)
         elif resource_type == "dataset":
-            return self.datasets.get(resource_id, include_metadata=include_metadata)
+            return self.datasets.get(resource_id, include_metadata=include_metadata,
+                                     include_links=include_links)
+        elif resource_type == "instrument":
+            return self.instruments.get(instrument_id=resource_id,
+                                        include_metadata=include_metadata)
         else:
             raise ValueError(f"Unknown or unsupported resource type: {resource_type}")
+
+    def search_scientific_metadata(self, q: str, limit: int = None) -> list:
+        """Full-text search across scientific metadata of all accessible resources.
+
+        Results are ranked by relevance and may include datasets or samples.
+        Each result contains 'unique_id' (the resource MFID) and 'scientific_metadata'.
+
+        Args:
+            q: Plain-text search query (English-language stemmed).
+            limit: Max results to return (default 50, max 200).
+        """
+        return self.datasets.search_scientific_metadata(q, limit=limit)
+
+    def get_links(self, resource_id: str) -> list:
+        """Return immediate links for any resource (dataset or sample).
+
+        Hits GET /resources/{id}/links and returns a flat list of link dicts:
+            [{"unique_id": "...", "resource_type": "dataset|sample",
+              "name": "...", "relationship": "parent|child|associated"}, ...]
+
+        Args:
+            resource_id (str): Dataset or sample unique identifier
+
+        Returns:
+            list: Link objects, or empty list if none
+        """
+        result = self._request('get', f"/resources/{resource_id}/links")
+        return result or []
 
     def link(self, parent_id: str, child_id: str) -> Dict:
         """
@@ -281,9 +350,10 @@ class CrucibleClient:
     def unlink(self, id_a: str, id_b: str) -> Dict:
         """Unlink two resources with automatic type detection.
 
-        Only dataset-sample unlinking is supported by the API.
-        Parent-child relationships (dataset-dataset, sample-sample) cannot
-        be removed via the API.
+        Automatically determines resource types and removes the appropriate link:
+        - Both datasets: Removes parent-child dataset relationship
+        - Both samples: Removes parent-child sample relationship
+        - Dataset + sample: Removes dataset-sample link
 
         Args:
             id_a (str): First resource unique identifier (dataset or sample)
@@ -293,8 +363,7 @@ class CrucibleClient:
             Dict: Deletion confirmation
 
         Raises:
-            ValueError: If the combination is not a dataset-sample pair, or if
-                        the resource types cannot be determined.
+            ValueError: If resource types cannot be determined or combination is invalid.
         """
         type_a = self.get_resource_type(id_a)
         type_b = self.get_resource_type(id_b)
@@ -494,7 +563,6 @@ class CrucibleClient:
         return self.datasets.create(dataset,
                                    scientific_metadata=scientific_metadata,
                                    keywords=keywords,
-                                   get_user_info_function=get_user_info_function,
                                    verbose=verbose)
 
     @_deprecated("client.datasets.create()")
@@ -511,7 +579,6 @@ class CrucibleClient:
         return self.datasets.create(dataset,
                                    scientific_metadata=scientific_metadata,
                                    keywords=keywords,
-                                   get_user_info_function=get_user_info_function,
                                    verbose=verbose,
                                    files_to_upload=files_to_upload,
                                    ingestor=ingestor,
@@ -541,12 +608,6 @@ class CrucibleClient:
         return self.datasets.update(dsid, **updates)
 
 
-    @_deprecated("client.datasets.upload_file()")
-    def upload_dataset_file(self, dsid: str, file_path: str, verbose=True) -> Dict:
-        """Backward compatible: Use client.datasets.upload_file() instead."""
-        return self.datasets.upload_file(dsid, file_path, verbose=verbose)
-
-
     @_deprecated("client.datasets.get_download_links()")
     def get_dataset_download_links(self, dsid: str):
         """Backward compatible: Use client.datasets.get_download_links() instead."""
@@ -560,15 +621,6 @@ class CrucibleClient:
         return self.datasets.download(dsid, file_name=file_name,
                                      output_dir=output_dir,
                                      overwrite_existing=overwrite_existing)
-        
-    @_deprecated("client.datasets.request_ingestion()")
-    def request_ingestion(self, dsid: str, file_to_upload: Optional[str] = None,
-                         ingestion_class: Optional[str] = None,
-                         wait_for_response: bool = False) -> Dict:
-        """Backward compatible: Use client.datasets.request_ingestion() instead."""
-        return self.datasets.request_ingestion(dsid, file_to_upload=file_to_upload,
-                                              ingestion_class=ingestion_class,
-                                              wait_for_response=wait_for_response)
 
     @_removed("SciCat upload functionality has been removed from the Crucible API.")
     def request_scicat_upload(self, dsid: str, wait_for_response: bool = False, overwrite_data: bool = False) -> Dict:
@@ -600,9 +652,9 @@ class CrucibleClient:
         return self.datasets.add_thumbnail(dsid, file_path, thumbnail_name=thumbnail_name)
     
     @_deprecated("client.datasets.get_associated_files()")
-    def get_associated_files(self, dsid: str, limit: int = DEFAULT_LIMIT) -> List[Dict]:
+    def get_associated_files(self, dsid: str, **kwargs) -> List[Dict]:
         """Backward compatible: Use client.datasets.get_associated_files() instead."""
-        return self.datasets.get_associated_files(dsid, limit=limit)
+        return self.datasets.get_associated_files(dsid)
 
     @_deprecated("client.datasets.add_associated_file()")
     def add_associated_file(self, dsid: str, file_path: str, filename: str = None) -> Dict:
@@ -635,7 +687,7 @@ class CrucibleClient:
     @_deprecated("client.datasets.update_ingestion_status()")
     def update_ingestion_status(self, dsid: str, reqid: str, status: str, timezone: str = "America/Los_Angeles"):
         """Backward compatible: Use client.datasets.update_ingestion_status() instead."""
-        return self.datasets.update_ingestion_status(dsid, reqid, status, timezone=timezone)
+        return self.datasets.update_ingestion_status(reqid, status, timezone=timezone)
 
     @_removed("SciCat upload status functionality has been removed from the Crucible API.")
     def update_scicat_upload_status(self, dsid: str, reqid: str, status: str, timezone: str = "America/Los_Angeles"):
@@ -685,8 +737,3 @@ class CrucibleClient:
     def add_user(self, user_info: Dict) -> Dict:
         """Backward compatible: Use client.users.create() instead."""
         return self.users.create(user_info)
-
-    @_deprecated("client.users.get_or_create()")
-    def get_or_add_user(self, orcid, get_user_info_function, **kwargs):
-        """Backward compatible: Use client.users.get_or_create() instead."""
-        return self.users.get_or_create(orcid, get_user_info_function, **kwargs)

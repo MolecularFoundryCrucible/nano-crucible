@@ -56,7 +56,7 @@ def register_subcommand(subparsers):
         'config',
         help='Manage crucible configuration',
         description='View and modify crucible configuration settings',
-        formatter_class=lambda prog: __import__('argparse').RawDescriptionHelpFormatter(prog, max_help_position=35),
+        formatter_class=lambda prog: term.ColorHelpFormatter(prog, max_help_position=35),
         epilog="""
 Examples:
     # Interactive setup wizard
@@ -201,15 +201,16 @@ def cmd_init(args):
 
     # Get API key
     print("\n1. Crucible API Key (required)")
-    print("   Get your key from: https://crucible.lbl.gov/api/v1/user_apikey")
+    print("   Get your key from: https://crucible.lbl.gov/api/v2/user_apikey")
     api_key = input("   API Key: ").strip()
     if not api_key:
         print("Error: API key is required")
         sys.exit(1)
 
     # Get API URL
+    from crucible.config.config import Config as _Cfg
     print("\n2. Crucible API URL (optional)")
-    print("   Press Enter to use default: https://crucible.lbl.gov/api/v1")
+    print(f"   Press Enter to use the built-in default ({_Cfg.DEFAULT_API_URL})")
     api_url = input("   API URL: ").strip()
     if not api_url:
         api_url = None
@@ -256,9 +257,7 @@ def cmd_show(args):
     """Show current configuration."""
     from crucible.config import config
 
-    W = 22
-    def _p(label, value):
-        print(f"  {label:<{W}}{value if value not in (None, '') else '—'}")
+    _p = term.field_printer(22)
 
     term.header("Configuration")
 
@@ -351,52 +350,53 @@ def cmd_get(args):
         sys.exit(1)
 
 
-def cmd_set(args):
-    """Set a configuration value, preserving comments."""
-    import configparser
+def set_config_value(key, value):
+    """Write a single config key=value to the INI file and reload.
+
+    Uses configupdater so all comments and formatting in the file are
+    preserved exactly.
+
+    Shared by ``cmd_set`` and the interactive-shell ``use`` built-in.
+    Returns (section, config_file_path).
+    """
+    from configupdater import ConfigUpdater
     from crucible.config import config
     from crucible.config.config import Config
 
-    key = args.key
-    value = args.value
-
-    # Determine the correct INI section for this key
     mapping = Config._CONFIG_MAP[key]
-    section  = mapping['section']
-    ini_key  = mapping['ini']
+    section = mapping['section']
+    ini_key = mapping['ini']
 
-    # Load or create config file
     config_file = config.config_file_path
     config_file.parent.mkdir(parents=True, exist_ok=True)
 
-    # Trick: Set comment_prefixes to something extremely unlikely (like '~~~')
-    # This makes # and ; lines be treated as keys without values instead of comments
-    # Combined with allow_no_value=True, comments are preserved when writing!
-    parser = configparser.ConfigParser(comment_prefixes=('~~~',), allow_no_value=True)
-
+    updater = ConfigUpdater()
     if config_file.exists():
-        parser.read(config_file)
+        updater.read(str(config_file))
 
-    # Ensure the target section exists (and also [crucible] for legacy compat)
-    if 'crucible' not in parser:
-        parser['crucible'] = {}
-    if section not in parser:
-        parser[section] = {}
+    # Ensure the target section exists.
+    if not updater.has_section(section):
+        updater.add_section(section)
 
-    # If this key exists in the legacy [crucible] section under a different
-    # section now, remove it there to avoid duplicate resolution confusion.
-    if section != 'crucible' and 'crucible' in parser and ini_key in parser['crucible']:
-        del parser['crucible'][ini_key]
+    # Set the value (adds the key if it doesn't exist yet).
+    updater[section][ini_key] = value
 
-    parser[section][ini_key] = value
+    # Remove stale entry from legacy flat [crucible] section if the canonical
+    # home for this key is a different section.
+    if section != 'crucible' and updater.has_section('crucible'):
+        if updater.has_option('crucible', ini_key):
+            updater.remove_option('crucible', ini_key)
 
-    # Write back (comments preserved!)
-    with open(config_file, 'w') as f:
-        parser.write(f)
-
-    # Reload config
+    config_file.write_text(str(updater))
     config.reload()
+    return section, config_file
 
+
+def cmd_set(args):
+    """Set a configuration value, preserving comments."""
+    key   = args.key
+    value = args.value
+    section, config_file = set_config_value(key, value)
     print(f"✓ Set {key} = {value}  (in [{section}])")
     print(f"✓ Saved to {config_file}")
 

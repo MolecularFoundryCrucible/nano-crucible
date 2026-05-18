@@ -1,0 +1,192 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Shared CLI helper utilities.
+
+Functions here are used across multiple CLI modules (dataset, sample, get,
+shell, keybindings, etc.) and don't belong in term.py (display-only) or
+shell.py (which would create circular imports).
+"""
+
+from concurrent.futures import ThreadPoolExecutor
+
+
+def fetch_projects(client):
+    """Return [(project_id, title), ...] for all accessible projects."""
+    try:
+        return [(p.get('project_id', ''), p.get('title') or '-')
+                for p in client.projects.list() if p.get('project_id')]
+    except Exception:
+        return []
+
+
+def fetch_deletions(client):
+    """Return pending deletion requests, or None if the user lacks permission."""
+    try:
+        return client.deletions.list(status='pending')
+    except Exception:
+        return None
+
+
+def fetch_user_label(client, whoami_info=None):
+    """Return a display name for the authenticated user.
+
+    Pass whoami_info to skip a redundant API call when the caller already
+    has the result of client.whoami().
+    """
+    try:
+        info = whoami_info if whoami_info is not None else client.whoami()
+        user = info.get('user_info', {})
+        name = f"{user.get('first_name', '')} {user.get('last_name', '')}".strip()
+        return name or info.get('user_unique_id') or '?'
+    except Exception:
+        return '?'
+
+
+def fetch_current_project():
+    """Return the current project ID from config, or a placeholder."""
+    try:
+        from crucible.config import config
+        return config.current_project or '(no project set)'
+    except Exception:
+        return '?'
+
+
+def fetch_current_session():
+    """Return the current session name from config, or empty string."""
+    try:
+        from crucible.config import config
+        return config.current_session or ''
+    except Exception:
+        return ''
+
+
+def fetch_api_label():
+    """Return 'api: <last-path-segment>' derived from the configured api_url."""
+    try:
+        from urllib.parse import urlparse
+        from crucible.config import config
+        parsed = urlparse(config.api_url or '')
+        parts  = [p for p in parsed.path.split('/') if p]
+        label  = parts[-1] if parts else (parsed.netloc or '?')
+        return f"api: {label}"
+    except Exception:
+        return 'api: ?'
+
+
+def cast_value(value: str):
+    """Auto-cast a string value to int, float, bool, or string."""
+    if value.lower() == 'true':
+        return True
+    if value.lower() == 'false':
+        return False
+    try:
+        return int(value)
+    except ValueError:
+        pass
+    try:
+        return float(value)
+    except ValueError:
+        pass
+    return value
+
+
+def load_metadata(value: str) -> dict:
+    """Parse a metadata arg: JSON string or path to a JSON file.
+
+    Args:
+        value: Raw string from --metadata CLI argument.
+
+    Returns:
+        dict: Parsed metadata.
+
+    Raises:
+        ValueError: If the string is not valid JSON and no such file exists.
+    """
+    import json
+    from pathlib import Path
+    p = Path(value)
+    if p.exists():
+        try:
+            return json.loads(p.read_text())
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Invalid JSON in file {p}: {e}") from e
+    try:
+        return json.loads(value)
+    except json.JSONDecodeError:
+        raise ValueError(f"'{value}' is not valid JSON and no such file exists.")
+
+
+def show_scientific_metadata(sci_md):
+    """Display scientific metadata dict under a subheader."""
+    from . import term
+    term.subheader(f"Scientific Metadata ({len(sci_md) if sci_md else 0} fields)")
+    if not sci_md:
+        print(f"  {term.dim('(none)')}")
+        return
+    max_key = max(len(k) for k in sci_md)
+    for k, v in sorted(sci_md.items()):
+        if isinstance(v, dict):
+            print(f"  {k}:")
+            for kk, vv in sorted(v.items()):
+                print(f"    {kk}: {vv}")
+        elif isinstance(v, list) and len(v) > 8:
+            print(f"  {k:<{max_key}}  <list with {len(v)} items>")
+        else:
+            print(f"  {k:<{max_key}}  {v}")
+
+
+def cache_resource(shell_state, client, data, rtype, resource_id, **flags):
+    """Cache a fetched resource in the shell state and start background prefetches.
+
+    For datasets, prefetches links, keywords, associated files, and download
+    links in parallel so Alt+V / Alt+G can re-render without extra API calls.
+    For samples, only links are prefetched.
+
+    Args:
+        shell_state: The shell's mutable state dict (args._shell_state), or
+                     None when running outside the interactive shell.
+        client:      CrucibleClient instance.
+        data:        The fetched resource dict.
+        rtype:       Resource type string, 'dataset' or 'sample'.
+        resource_id: MFID of the resource.
+        **flags:     Additional keys stored in last_resource (verbose, graph,
+                     include_metadata, etc.).
+    """
+    if shell_state is None:
+        return
+
+    # Track recently visited MFIDs for shell tab completion.
+    recent = shell_state.get('recent_mfids')
+    if recent is not None:
+        name_key = {'dataset': 'dataset_name', 'sample': 'sample_name',
+                    'instrument': 'instrument_name'}.get(rtype, 'name')
+        name = data.get(name_key) or ''
+        for i, (uid, _, _) in enumerate(recent):
+            if uid == resource_id:
+                del recent[i]
+                break
+        recent.appendleft((resource_id, name, rtype))
+
+    if rtype == 'dataset':
+        pool = ThreadPoolExecutor(max_workers=3, thread_name_prefix='prefetch')
+        futures = {
+            '_keywords_future': pool.submit(client.datasets.get_keywords, resource_id),
+            '_files_future':    pool.submit(client.datasets.get_associated_files, resource_id),
+            '_dl_links_future': pool.submit(client.datasets.get_download_links, resource_id),
+        }
+        if not data.get('links'):
+            futures['_links_future'] = pool.submit(client.get_links, resource_id)
+    elif rtype == 'sample':
+        futures = {}
+        if not data.get('links'):
+            pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix='prefetch')
+            futures['_links_future'] = pool.submit(client.get_links, resource_id)
+    else:
+        futures = {}
+
+    if futures:
+        pool.shutdown(wait=False)
+    shell_state['last_resource'] = {
+        'data': data, 'type': rtype, **futures, **flags
+    }

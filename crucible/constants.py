@@ -4,7 +4,8 @@
 Package-wide constants for the Crucible API client.
 """
 
-DEFAULT_LIMIT = 100   # maximum results to return per API request
+DEFAULT_LIMIT = 100   # default page size for list requests
+API_PAGE_MAX  = 1000  # server hard cap per request
 
 AVAILABLE_INGESTORS = [
     'ApiUploadIngestor',

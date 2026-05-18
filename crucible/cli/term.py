@@ -14,6 +14,8 @@ from datetime import datetime, timezone
 
 # Strips ANSI SGR sequences (\033[...m) and OSC 8 hyperlinks (\033]8;...\007)
 _ANSI_RE = re.compile(r'\033(?:\[[0-9;]*m|\][^\007\033]*(?:\007|\033\\))')
+# Matches a full OSC 8 hyperlink: \033]8;;URL\007TEXT\033]8;;\007
+_OSC8_RE = re.compile(r'\033\]8;;([^\007]*)\007(.*?)\033\]8;;\007', re.DOTALL)
 
 def _dlen(s: str) -> int:
     """Visible display length of *s*, ignoring ANSI/OSC escape sequences."""
@@ -34,36 +36,44 @@ def bold(s: str) -> str:
 def cyan(s: str) -> str:
     return f"\033[36m{s}\033[0m" if _tty() else s
 
-def orcid_link(orcid: str) -> str | None:
-    """
-    Render an ORCID in cyan, optionally as a clickable link to https://orcid.org/.
+def green(s: str) -> str:
+    return f"\033[32m{s}\033[0m" if _tty() else s
 
-    Returns ``None`` for falsy input so callers can render it as ``—``.
-    """
+def yellow(s: str) -> str:
+    return f"\033[33m{s}\033[0m" if _tty() else s
+
+def red(s: str) -> str:
+    return f"\033[31m{s}\033[0m" if _tty() else s
+
+def hyperlink(text: str, url: str | None) -> str:
+    """Wrap *text* in an OSC 8 clickable hyperlink when stdout is a TTY."""
+    if url and _tty():
+        return f"\033]8;;{url}\007{text}\033]8;;\007"
+    return text
+
+
+def orcid_link(orcid: str) -> str | None:
+    """Render an ORCID in cyan as a clickable link to https://orcid.org/."""
     if not orcid:
         return None
-    url = f"https://orcid.org/{orcid}"
-    colored = cyan(orcid)
-    if _tty():
-        return f"\033]8;;{url}\007{colored}\033]8;;\007"
-    return colored
+    return hyperlink(cyan(orcid), f"https://orcid.org/{orcid}")
+
+
+def project_link(pid: str, url: str | None = None) -> str | None:
+    """Render a project ID in cyan, optionally as a clickable OSC 8 hyperlink."""
+    if not pid:
+        return None
+    return hyperlink(cyan(pid), url)
 
 
 def mfid_link(uid: str, url: str | None = None) -> str | None:
-    """
-    Render an MFID in cyan, optionally as a clickable OSC 8 hyperlink.
+    """Render an MFID in cyan, optionally as a clickable OSC 8 hyperlink.
 
     Returns ``None`` for falsy *uid* so callers can render it as ``—``.
-    When *url* is provided and stdout is a TTY, the text becomes clickable
-    in terminals that support OSC 8 (iTerm2, kitty, GNOME Terminal ≥ 3.26,
-    Windows Terminal, etc.).
     """
     if not uid:
         return None
-    colored = cyan(uid)
-    if url and _tty():
-        return f"\033]8;;{url}\007{colored}\033]8;;\007"
-    return colored
+    return hyperlink(cyan(uid), url)
 
 def dim(s: str) -> str:
     return f"\033[2m{s}\033[0m" if _tty() else s
@@ -79,51 +89,88 @@ def header(title: str, width: int = 44) -> None:
 
 
 def subheader(title: str) -> None:
-    """Print a dim sub-section label with a leading blank line."""
-    print(f"\n  {dim(title)}")
+    """Print a bold sub-section label with a leading blank line."""
+    print(f"\n  {dim('─')}  {bold(title)}")
+
+
+def field_printer(width: int = 14):
+    """Return a ``_p(label, value)`` closure that prints aligned label:value rows."""
+    def _p(label: str, value) -> None:
+        print(f"  {label:<{width}}{value if value not in (None, '') else '-'}")
+    return _p
 
 
 # ── Formatters ─────────────────────────────────────────────────────────────────
 
+def _rel(delta) -> str:
+    """Human-readable relative label for a timedelta."""
+    days = delta.days
+    if days < 0:
+        return 'in the future'
+    if days == 0:
+        h = delta.seconds // 3600
+        m = (delta.seconds % 3600) // 60
+        return f"{h}h ago" if h else (f"{m}m ago" if m > 1 else "just now")
+    if days == 1:
+        return 'yesterday'
+    if days < 30:
+        return f"{days}d ago"
+    if days < 365:
+        return f"{days // 30}mo ago"
+    return f"{days // 365}y ago"
+
+
 def fmt_ts(ts) -> str | None:
     """
-    Format an ISO timestamp as ``YYYY-MM-DD HH:MM  ±HH:MM  (relative)``.
+    Format a timestamp for display.
+
+    Handles:
+      - ISO 8601 strings  → ``YYYY-MM-DD HH:MM  ±HH:MM  (relative)``
+      - ``YYYYMMDD_am/pm``→ ``YYYY-MM-DD AM/PM  (relative)``
+      - ``YYYYMMDD``      → ``YYYY-MM-DD  (relative)``
+      - Anything else     → returned as-is
 
     Returns ``None`` for falsy input so callers can render it as ``—``.
     """
     if not ts:
         return None
+
+    s = str(ts).strip()
+    dt = None
+    abs_str = None
+
+    # ── Strategy 1: ISO 8601 ─────────────────────────────────────────────────
     try:
-        dt = datetime.fromisoformat(str(ts))
+        dt = datetime.fromisoformat(s)
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
-        now = datetime.now(tz=dt.tzinfo)
-        delta = now - dt
-        days = delta.days
-
         abs_str = dt.strftime('%Y-%m-%d %H:%M')
         tz_s = dt.strftime('%z')
         if tz_s:
             abs_str += f"  {tz_s[:3]}:{tz_s[3:]}"
-
-        if days < 0:
-            rel = 'in the future'
-        elif days == 0:
-            h = delta.seconds // 3600
-            m = (delta.seconds % 3600) // 60
-            rel = f"{h}h ago" if h else (f"{m}m ago" if m > 1 else "just now")
-        elif days == 1:
-            rel = 'yesterday'
-        elif days < 30:
-            rel = f"{days}d ago"
-        elif days < 365:
-            rel = f"{days // 30}mo ago"
-        else:
-            rel = f"{days // 365}y ago"
-
-        return f"{abs_str}  {dim(f'({rel})')}"
     except (ValueError, TypeError):
-        return str(ts)
+        pass
+
+    # ── Strategy 2: YYYYMMDD[_am|_pm] ───────────────────────────────────────
+    if dt is None:
+        m = re.match(r'^(\d{4})(\d{2})(\d{2})(?:_(am|pm))?$', s.lower())
+        if m:
+            y, mo, d, ampm = m.groups()
+            try:
+                hour = 12 if ampm == 'pm' else 0
+                dt = datetime(int(y), int(mo), int(d), hour, 0, 0,
+                              tzinfo=timezone.utc)
+                abs_str = f"{y}-{mo}-{d}"
+                if ampm:
+                    abs_str += f" {ampm.upper()}"
+            except ValueError:
+                pass
+
+    if dt is None:
+        return s  # unrecognised format — return raw
+
+    now = datetime.now(tz=dt.tzinfo or timezone.utc)
+    return f"{abs_str}  {dim(f'({_rel(now - dt)})')}"
 
 
 def fmt_size(size) -> str | None:
@@ -159,7 +206,7 @@ def diff(original: dict, updated: dict) -> None:
     MAX_VAL = 60
 
     def _v(val):
-        s = str(val) if val not in (None, '') else '—'
+        s = str(val) if val not in (None, '') else '-'
         return s if len(s) <= MAX_VAL else s[:MAX_VAL - 1] + '…'
 
     key_w = max(len(k) for k in changes)
@@ -245,12 +292,29 @@ def open_editor_json(data: dict) -> dict | None:
         return None
 
     try:
-        return json.loads(edited_text)
+        # strip trailing commas before closing braces/brackets (common editor mistake)
+        cleaned = re.sub(r',\s*([}\]])', r'\1', edited_text)
+        return json.loads(cleaned)
     except json.JSONDecodeError as e:
         raise ValueError(f"Invalid JSON: {e}") from e
 
 
 # ── Table renderer ─────────────────────────────────────────────────────────────
+
+def _truncate_cell(s: str, width: int) -> str:
+    """Truncate *s* to *width* visible chars, preserving OSC 8 hyperlinks."""
+    m = _OSC8_RE.search(s)
+    if m:
+        url  = m.group(1)
+        plain = _ANSI_RE.sub('', s)        # visible text only
+        if len(plain) > width - 1:
+            plain = plain[:width - 1] + '…'
+        colored = cyan(plain)
+        if url and _tty():
+            return f"\033]8;;{url}\007{colored}\033]8;;\007"
+        return colored
+    # No OSC 8 — strip ANSI and truncate plainly
+    return _ANSI_RE.sub('', s)[:width - 1] + '…'
 
 def table(rows: list, headers: list, max_widths: list | None = None) -> None:
     """
@@ -265,7 +329,7 @@ def table(rows: list, headers: list, max_widths: list | None = None) -> None:
     widths = [len(h) for h in headers]
     for row in rows:
         for i, cell in enumerate(row):
-            widths[i] = max(widths[i], _dlen(str(cell) if cell is not None else '—'))
+            widths[i] = max(widths[i], _dlen(str(cell) if cell is not None else '-'))
     if max_widths:
         widths = [min(w, m) for w, m in zip(widths, max_widths)]
 
@@ -275,13 +339,64 @@ def table(rows: list, headers: list, max_widths: list | None = None) -> None:
     for row in rows:
         parts = []
         for i, cell in enumerate(row):
-            s = str(cell) if cell is not None else '—'
+            s = str(cell) if cell is not None else '-'
             dw = _dlen(s)
             if dw > widths[i]:
-                # Only truncate plain strings — don't cut inside escape sequences
-                if dw == len(s):
-                    s = s[:widths[i] - 1] + '…'
-                else:
-                    s = _ANSI_RE.sub('', s)[:widths[i] - 1] + '…'
+                s = _truncate_cell(s, widths[i])
             parts.append(s + ' ' * (widths[i] - _dlen(s)))
         print("  " + "  ".join(parts).rstrip())
+
+
+# ── Colored argparse help formatter ────────────────────────────────────────────
+
+import argparse as _argparse
+
+# Section headings generated by argparse: 'options:', 'commands:', 'positional arguments:', …
+_HELP_HEADING_RE = re.compile(r'^[a-z][a-z ]*:$')
+# Flag names: -f, --flag, --my-flag
+_HELP_FLAG_RE    = re.compile(r'-{1,2}[a-zA-Z][\w-]*')
+# Metavar placeholders: FILE, ID, MFID (2+ uppercase chars)
+_HELP_META_RE    = re.compile(r'\b[A-Z][A-Z_0-9]+\b')
+
+
+class ColorHelpFormatter(_argparse.RawDescriptionHelpFormatter):
+    """RawDescriptionHelpFormatter with ANSI highlights (TTY only).
+
+    Colors are applied after argparse finishes formatting, so column alignment
+    is unaffected by escape sequences.
+    """
+
+    def format_help(self):
+        import os as _os
+        text = super().format_help()
+        # Use os.isatty(1) rather than sys.stdout.isatty() — prompt_toolkit
+        # wraps sys.stdout in a proxy that reports isatty()=False even on a
+        # real terminal, so we check the file descriptor directly.
+        try:
+            is_tty = _os.isatty(1)
+        except Exception:
+            is_tty = _tty()
+        if not is_tty:
+            return text
+
+        out = []
+        for line in text.split('\n'):
+            stripped = line.rstrip()
+
+            # Section headings: 'options:', 'commands:', 'positional arguments:', …
+            if _HELP_HEADING_RE.match(stripped):
+                out.append(bold(stripped))
+                continue
+
+            # Bold the 'usage:' prefix
+            if stripped.startswith('usage:'):
+                line = bold('usage') + ':' + stripped[6:]
+
+            # Bold+cyan flags, dim metavars — on usage line and indented option lines
+            if stripped.startswith('usage:') or (line.startswith('  ') and '-' in line):
+                line = _HELP_FLAG_RE.sub(lambda m: bold(cyan(m.group())), line)
+                line = _HELP_META_RE.sub(lambda m: dim(m.group()), line)
+
+            out.append(line)
+
+        return '\n'.join(out)

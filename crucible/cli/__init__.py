@@ -55,6 +55,36 @@ except ImportError:
     ARGCOMPLETE_AVAILABLE = False
 
 
+import re as _re
+from . import term
+
+_RETRY_TOTAL_RE  = _re.compile(r'Retry\(total=(\d+)')
+_RETRY_REASON_RE = _re.compile(r"'(\w*Error)[:(]")
+
+class _CleanRetryFilter(logging.Filter):
+    """Reformat urllib3 retry warnings into a single readable line."""
+
+    _REASONS = {
+        'ReadTimeoutError':    'timed out',
+        'ConnectTimeoutError': 'connection timed out',
+        'NewConnectionError':  'could not connect',
+        'ConnectionError':     'connection error',
+        'ProtocolError':       'protocol error',
+    }
+
+    def filter(self, record):
+        msg = record.getMessage()
+        if 'Retrying' not in msg:
+            return True
+        m_total  = _RETRY_TOTAL_RE.search(msg)
+        m_reason = _RETRY_REASON_RE.search(msg)
+        remaining = m_total.group(1)  if m_total  else '?'
+        reason    = self._REASONS.get(m_reason.group(1) if m_reason else '', 'error')
+        record.msg  = f'  ↻  {reason.capitalize()} — retrying ({remaining} left)'
+        record.args = ()
+        return True
+
+
 def setup_logging(debug=False):
     """
     Configure logging for CLI usage.
@@ -63,15 +93,25 @@ def setup_logging(debug=False):
         debug (bool): If True (--debug flag), set level to DEBUG; otherwise INFO
     """
     level = logging.DEBUG if debug else logging.INFO
-    logging.basicConfig(
-        level=level,
-        format='%(message)s',  # Clean output for CLI
-        handlers=[
-            logging.StreamHandler(sys.stderr)  # Standard for CLI tools
-        ]
-    )
-    # The crucible package logger has an explicit INFO level set at import time;
-    # override it so --debug reaches crucible.client and other submodules.
+    root = logging.getLogger()
+
+    if not root.handlers:
+        # First call — set up the handler from scratch.
+        handler = logging.StreamHandler(sys.stderr)
+        handler.setFormatter(logging.Formatter('%(message)s'))
+        handler.addFilter(_CleanRetryFilter())
+        root.addHandler(handler)
+
+    # Root logger stays at INFO so third-party libraries (asyncio, urllib3, …)
+    # don't flood output with their own DEBUG messages.
+    # The handler is set to DEBUG so it doesn't filter crucible's debug records.
+    root.setLevel(logging.INFO)
+    for h in root.handlers:
+        h.setLevel(logging.DEBUG)
+        if not any(isinstance(f, _CleanRetryFilter) for f in h.filters):
+            h.addFilter(_CleanRetryFilter())
+
+    # Only the crucible logger switches between INFO and DEBUG.
     logging.getLogger('crucible').setLevel(level)
 
 
@@ -80,7 +120,7 @@ def main():
     parser = argparse.ArgumentParser(
         prog='crucible',
         description='Crucible API command-line interface',
-        formatter_class=argparse.RawDescriptionHelpFormatter,
+        formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     # Configuration
@@ -130,8 +170,8 @@ Examples:
 
     # Import subcommands
     from . import (
-        dataset, sample, project, instrument, user,  # Resource commands
-        upload, completion, config as config_cmd, open as open_cmd, link, unlink, whoami, cache, download, get, edit  # Utility commands
+        dataset, sample, project, instrument, user, file as file_cmd,  # Resource commands
+        upload, completion, config as config_cmd, open as open_cmd, link, unlink, whoami, cache, download, get, edit, status, deletion, tree, cast, qr  # Utility commands
     )
 
     # Register resource commands (new structure)
@@ -140,6 +180,7 @@ Examples:
     project.register_subcommand(subparsers)
     instrument.register_subcommand(subparsers)
     user.register_subcommand(subparsers)
+    file_cmd.register_subcommand(subparsers)
 
     # Register utility commands (backward compatibility)
     upload.register_subcommand(subparsers)
@@ -153,6 +194,11 @@ Examples:
     download.register_subcommand(subparsers)
     get.register_subcommand(subparsers)
     edit.register_subcommand(subparsers)
+    status.register_subcommand(subparsers)
+    deletion.register_subcommand(subparsers)
+    tree.register_subcommand(subparsers)
+    cast.register_subcommand(subparsers)
+    qr.register_subcommand(subparsers)
 
     # Enable shell completion if argcomplete is available
     if ARGCOMPLETE_AVAILABLE:
@@ -167,18 +213,23 @@ Examples:
     # Configure logging once for the entire CLI
     setup_logging(debug=getattr(args, 'debug', False))
 
-    # If no command specified, show help
+    # If no command specified, start interactive shell
     if args.command is None:
-        parser.print_help()
-        sys.exit(1)
+        from .shell import run as _run_shell
+        _run_shell(parser)
+        return
 
     # Execute the command
     # Each subcommand module should have added a 'func' attribute via set_defaults()
-    if hasattr(args, 'func'):
-        args.func(args)
-    else:
-        parser.print_help()
-        sys.exit(1)
+    try:
+        if hasattr(args, 'func'):
+            args.func(args)
+        else:
+            parser.print_help()
+            sys.exit(1)
+    except KeyboardInterrupt:
+        print("\nCancelled.")
+        sys.exit(130)
 
 
 if __name__ == '__main__':

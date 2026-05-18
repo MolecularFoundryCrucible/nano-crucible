@@ -9,7 +9,7 @@ Provides organized access to sample-related API endpoints.
 import logging
 from typing import Optional, List, Dict
 from .base import BaseResource
-from ..constants import DEFAULT_LIMIT
+from ..constants import DEFAULT_LIMIT, API_PAGE_MAX
 
 logger = logging.getLogger(__name__)
 
@@ -30,94 +30,122 @@ class SampleOperations(BaseResource):
         from ..models import Sample
         return Sample.model_validate(raw).model_dump()
 
-    def get(self, sample_id: str) -> Dict:
+    def get(self, sample_id: str, include_links: bool = False,
+            include_metadata: bool = False) -> Dict:
         """Get sample information by ID.
 
         Args:
             sample_id (str): Sample unique identifier
+            include_links (bool): Whether to include immediate parent/child/associated links
+            include_metadata (bool): Whether to include scientific metadata
 
         Returns:
-            Dict: Sample information with associated datasets
+            Dict: Sample information with optional links and metadata
         """
-        raw = self._request('get', f"/samples/{sample_id}")
+        params = {}
+        if include_links:
+            params['include_links'] = True
+        if include_metadata:
+            params['include_metadata'] = True
+        raw = self._request('get', f"/samples/{sample_id}", params=params or None)
         return self._parse(raw) if raw is not None else None
 
     def list(self, dataset_id: Optional[str] = None, parent_id: Optional[str] = None,
-             limit: int = DEFAULT_LIMIT, **kwargs) -> List[Dict]:
-        """List samples with optional filtering.
+             include_metadata: bool = False, include_links: bool = False,
+             limit: int = DEFAULT_LIMIT, offset: int = 0, **kwargs) -> List[Dict]:
+        """List samples with optional filtering and automatic pagination.
 
         Args:
             dataset_id (str, optional): Get samples from specific dataset
             parent_id (str, optional): Get child samples from parent (deprecated)
-            limit (int): Maximum number of results to return (default: 100)
+            include_metadata (bool): Include scientific metadata in results
+            include_links (bool): Include linked resources (parents, children, associated) per sample
+            limit (int): Maximum total results to return (default: 100). Requests
+                         above API_PAGE_MAX (1000) are handled transparently via
+                         parallel pagination.
+            offset (int): Starting position in the full result set (default: 0)
             **kwargs: Query parameters for filtering samples
 
         Returns:
             List[Dict]: Sample information
         """
-        params = {**kwargs}
+        params = {k: v for k, v in kwargs.items() if v is not None}
+        if include_metadata:
+            params['include_metadata'] = True
+        if include_links:
+            params['include_links'] = True
         if dataset_id:
-            result = self._request('get', f"/datasets/{dataset_id}/samples", params=params)
+            endpoint = f"/datasets/{dataset_id}/samples"
         elif parent_id:
             logger.warning('Using parent_id with list() is deprecated. Please use list_children() instead.')
-            result = self._request('get', f"/samples/{parent_id}/children", params=params)
+            endpoint = f"/samples/{parent_id}/children"
         else:
-            result = self._request('get', f"/samples", params=params)
-        return [self._parse(s) for s in result] if result else []
+            endpoint = "/samples"
+        raw = self._paginate(endpoint, params, limit, offset)
+        return [self._parse(s) for s in raw]
 
-    def list_parents(self, sample_id: str, limit: int = DEFAULT_LIMIT, **kwargs) -> List[Dict]:
+    def count(self, **kwargs) -> int:
+        """Return the total number of samples matching the given filters without fetching items."""
+        params = {k: v for k, v in kwargs.items() if v is not None}
+        result = self._request('get', '/samples', params={**params, 'limit': 1, 'offset': 0})
+        return result['total']
+
+    def list_parents(self, sample_id: str, limit: int = DEFAULT_LIMIT,
+                     offset: int = 0, **kwargs) -> List[Dict]:
         """List the parents of a given sample with optional filtering.
 
         Args:
             sample_id (str): The unique ID of the sample for which you want to find the parents
             limit (int): Maximum number of results to return (default: 100)
+            offset (int): Starting position in the full result set (default: 0)
             **kwargs: Query parameters for filtering samples
 
         Returns:
             List[Dict]: Parent samples
         """
-        params = {**kwargs}
-        params['limit'] = limit
-        result = self._request('get', f"/samples/{sample_id}/parents", params=params)
-        return result
+        params = {k: v for k, v in kwargs.items() if v is not None}
+        return self._paginate(f"/samples/{sample_id}/parents", params, limit, offset)
 
-    def list_children(self, sample_id: str, limit: int = DEFAULT_LIMIT, **kwargs) -> List[Dict]:
+    def list_children(self, sample_id: str, limit: int = DEFAULT_LIMIT,
+                      offset: int = 0, **kwargs) -> List[Dict]:
         """List the children of a given sample with optional filtering.
 
         Args:
             sample_id (str): The unique ID of the sample for which you want to find the children
             limit (int): Maximum number of results to return (default: 100)
+            offset (int): Starting position in the full result set (default: 0)
             **kwargs: Query parameters for filtering samples
 
         Returns:
             List[Dict]: Children samples
         """
-        params = {**kwargs}
-        params['limit'] = limit
-        result = self._request('get', f"/samples/{sample_id}/children", params=params)
-        return result
+        params = {k: v for k, v in kwargs.items() if v is not None}
+        return self._paginate(f"/samples/{sample_id}/children", params, limit, offset)
 
     def create(self, unique_id: Optional[str] = None, sample_name: Optional[str] = None,
                description: Optional[str] = None, timestamp: Optional[str] = None,
-               owner_orcid: Optional[str] = None, owner_user_id: Optional[int] = None,
+               owner_orcid: Optional[str] = None,
                project_id: Optional[str] = None, sample_type: Optional[str] = None,
+               public: Optional[bool] = None,
                parents: List[Dict] = [], children: List[Dict] = [],
+               scientific_metadata: Optional[Dict] = None,
                # deprecated aliases (creation_time/modification_time are server-assigned)
                date_created: Optional[str] = None, creation_date: Optional[str] = None,
-               owner_id: Optional[int] = None) -> Dict:
+               owner_id: Optional[int] = None,
+               owner_user_id: Optional[int] = None) -> Dict:
         """Add a new sample with optional parent-child relationships.
 
         Args:
-            unique_id (str, optional): Unique sample identifier
             sample_name (str, optional): Human-readable sample name
             sample_type (str, optional): Category of sample (for filtering)
             description (str, optional): Sample description
             timestamp (str, optional): User-defined timestamp
             owner_orcid (str, optional): Owner's ORCID
-            owner_user_id (int, optional): Owner's user ID
-            project_id (str, optional): Project ID (Name)
+            project_id (str, optional): Project ID
+            public (bool, optional): Whether the sample is publicly visible
             parents (List[Dict], optional): Parent samples
             children (List[Dict], optional): Child samples
+            scientific_metadata (Dict, optional): Scientific metadata to attach after creation
 
         Returns:
             Dict: Created sample object
@@ -138,50 +166,52 @@ class SampleOperations(BaseResource):
                 "creation_time is now assigned server-side.",
                 DeprecationWarning, stacklevel=2
             )
-        if owner_id is not None:
+        if owner_id is not None or owner_user_id is not None:
             warnings.warn(
-                "Parameter 'owner_id' is deprecated; use 'owner_user_id' instead.",
+                "Parameters 'owner_id'/'owner_user_id' are deprecated and ignored; "
+                "use 'owner_orcid' instead.",
                 DeprecationWarning, stacklevel=2
             )
-            if owner_user_id is None:
-                owner_user_id = owner_id
-
-        sample_info = {
-            "unique_id": unique_id,
-            "sample_name": sample_name,
-            "sample_type": sample_type,
-            "owner_orcid": owner_orcid,
-            "owner_user_id": owner_user_id,
-            "description": description,
-            "project_id": project_id,
-            "timestamp": timestamp,
-        }
 
         if unique_id is None and sample_name is None:
             raise Exception('Please provide either a unique ID or a sample name for your sample')
 
+        sample_info = {
+            "sample_name": sample_name,
+            "sample_type": sample_type,
+            "owner_orcid": owner_orcid,
+            "description": description,
+            "project_id": project_id,
+            "timestamp": timestamp,
+        }
+        if public is not None:
+            sample_info["public"] = public
+        sample_info = {k: v for k, v in sample_info.items() if v is not None}
+
         new_samp = self._request('post', "/samples", json=sample_info)
+        sid = new_samp['unique_id']
 
         for p in parents:
-            parent_id = p['unique_id']
-            child_id = new_samp['unique_id']
-            self._request('post', f"/samples/{parent_id}/children/{child_id}")
+            self._request('post', f"/samples/{p['unique_id']}/children/{sid}")
 
         for chd in children:
-            parent_id = new_samp['unique_id']
-            child_id = chd['unique_id']
-            self._request('post', f"/samples/{parent_id}/children/{child_id}")
+            self._request('post', f"/samples/{sid}/children/{chd['unique_id']}")
+
+        if scientific_metadata:
+            self.add_scientific_metadata(sid, scientific_metadata)
 
         return new_samp
 
     def update(self, unique_id: str, sample_name: Optional[str] = None,
                description: Optional[str] = None, timestamp: Optional[str] = None,
-               owner_orcid: Optional[str] = None, owner_user_id: Optional[int] = None,
+               owner_orcid: Optional[str] = None,
                project_id: Optional[str] = None, sample_type: Optional[str] = None,
+               public: Optional[bool] = None,
                parents: List[Dict] = [], children: List[Dict] = [],
                # deprecated aliases (creation_time/modification_time are server-assigned)
                date_created: Optional[str] = None, creation_date: Optional[str] = None,
-               owner_id: Optional[int] = None) -> Dict:
+               owner_id: Optional[int] = None,
+               owner_user_id: Optional[int] = None) -> Dict:
         """Update an existing sample.
 
         Args:
@@ -191,8 +221,8 @@ class SampleOperations(BaseResource):
             description (str, optional): Sample description
             timestamp (str, optional): User-defined timestamp
             owner_orcid (str, optional): Owner's ORCID
-            owner_user_id (int, optional): Owner's user ID
-            project_id (str, optional): Project ID (Name)
+            public (bool, optional): Whether the sample is publicly visible
+            project_id (str, optional): Project ID
             parents (List[Dict], optional): Parent samples to link
             children (List[Dict], optional): Child samples to link
 
@@ -212,20 +242,18 @@ class SampleOperations(BaseResource):
                 "creation_time is now assigned server-side.",
                 DeprecationWarning, stacklevel=2
             )
-        if owner_id is not None:
+        if owner_id is not None or owner_user_id is not None:
             warnings.warn(
-                "Parameter 'owner_id' is deprecated; use 'owner_user_id' instead.",
+                "Parameters 'owner_id'/'owner_user_id' are deprecated and ignored; "
+                "use 'owner_orcid' instead.",
                 DeprecationWarning, stacklevel=2
             )
-            if owner_user_id is None:
-                owner_user_id = owner_id
 
         sample_info = {
-            "unique_id": unique_id,
             "sample_name": sample_name,
             "owner_orcid": owner_orcid,
-            "owner_user_id": owner_user_id,
             "sample_type": sample_type,
+            "public": public,
             "description": description,
             "project_id": project_id,
             "timestamp": timestamp,
@@ -316,3 +344,18 @@ class SampleOperations(BaseResource):
             Dict: Created link object
         """
         return self._request('post', f"/samples/{parent_id}/children/{child_id}")
+
+    def graph(self, sample_id: str, recursive: bool = False, as_networkx: bool = False):
+        """Return the graph of entities connected to this sample.
+
+        Delegates to client.graphs.get(). See GraphOperations.get() for full docs.
+
+        Args:
+            sample_id (str): Sample unique identifier.
+            recursive (bool): If True, traverse the full connected component.
+            as_networkx (bool): Return a networkx DiGraph if True.
+
+        Returns:
+            dict | networkx.DiGraph: Node-link graph data.
+        """
+        return self._client.graphs.get(sample_id, recursive=recursive, as_networkx=as_networkx)

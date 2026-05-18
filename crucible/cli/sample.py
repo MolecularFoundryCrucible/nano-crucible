@@ -7,6 +7,7 @@ Provides sample-related operations: list, get, create, link, etc.
 """
 
 import sys
+import json
 import logging
 
 logger = logging.getLogger(__name__)
@@ -63,7 +64,7 @@ def _register_list(subparsers):
         'list',
         help='List samples',
         description='List samples, with optional filters',
-        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     crucible sample list -pid my-project
@@ -94,7 +95,7 @@ Examples:
         default=None,
         dest='sample_type',
         metavar='TYPE',
-        help='Filter by sample type (exact match)'
+        help='Filter by sample type (exact match, or use * / ? wildcards)'
     )
 
     parser.add_argument(
@@ -126,6 +127,13 @@ Examples:
         default=_config.default_limit,
         metavar='N',
         help=f'Maximum number of results to return (default: {_config.default_limit})'
+    )
+
+    parser.add_argument(
+        '--include-metadata',
+        action='store_true',
+        dest='include_metadata',
+        help='Include scientific metadata in results'
     )
 
     parser.add_argument(
@@ -161,9 +169,27 @@ def _register_get(subparsers):
     )
 
     parser.add_argument(
-        '--graph',
+        '--no-graph',
+        action='store_false',
+        dest='graph',
+        help='Exclude linked datasets, parents, and children'
+    )
+    parser.set_defaults(graph=True)
+
+    parser.add_argument(
+        '--include-metadata',
         action='store_true',
-        help='Also show linked datasets, parents, and children'
+        dest='include_metadata',
+        help='Include scientific metadata in output'
+    )
+
+    parser.add_argument(
+        '-o', '--output',
+        dest='output',
+        choices=['json'],
+        default=None,
+        metavar='FORMAT',
+        help='Output format: json (always includes scientific metadata)'
     )
 
     parser.set_defaults(func=_execute_get)
@@ -175,7 +201,7 @@ def _register_create(subparsers):
         'create',
         help='Create a new sample',
         description='Create a new sample in Crucible',
-        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     # Interactive mode (prompts for input)
@@ -227,6 +253,20 @@ Examples:
     )
 
     parser.add_argument(
+        '--public',
+        action='store_true',
+        default=False,
+        help='Make sample publicly visible (default: private)'
+    )
+
+    parser.add_argument(
+        '--metadata',
+        dest='metadata',
+        metavar='JSON',
+        help='Scientific metadata as JSON string or path to JSON file'
+    )
+
+    parser.add_argument(
         '-v', '--verbose',
         action='store_true',
         help='Verbose output'
@@ -236,11 +276,9 @@ Examples:
 
 
 def _sample_updatable_fields():
-    """Return sorted list of fields that can be updated on a sample (derived from Sample model)."""
-    from ..models import Sample
-    # Exclude server-managed / identifier fields
-    _readonly = {'unique_id', 'owner_user_id', 'creation_time', 'modification_time'}
-    return sorted(set(Sample.model_fields.keys()) - _readonly)
+    """Return ordered list of fields that can be updated on a sample."""
+    from .schema import SAMPLE_FIELDS, editable_keys
+    return editable_keys(SAMPLE_FIELDS)
 
 
 def _register_update(subparsers):
@@ -248,17 +286,20 @@ def _register_update(subparsers):
     fields = _sample_updatable_fields()
     parser = subparsers.add_parser(
         'update',
-        help='Update sample fields',
-        description='Update fields of an existing sample',
-        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        help='Update sample fields or scientific metadata',
+        description='Update fields or scientific metadata of an existing sample',
+        formatter_class=term.ColorHelpFormatter,
         epilog=f"""
-Updatable fields:
+Updatable fields (use --set):
     {', '.join(fields)}
 
 Examples:
     crucible sample update SAMPLE_ID --set sample_name="Silicon Wafer B"
     crucible sample update SAMPLE_ID --set description="Annealed at 900C"
     crucible sample update SAMPLE_ID --set sample_type=substrate --set project_id=my-project
+    crucible sample update SAMPLE_ID --metadata '{{"thickness_nm": 50, "substrate": "SiO2"}}'
+    crucible sample update SAMPLE_ID --metadata metadata.json
+    crucible sample update SAMPLE_ID --metadata metadata.json --overwrite
 """
     )
 
@@ -275,8 +316,20 @@ Examples:
         action='append',
         dest='set_fields',
         metavar='KEY=VALUE',
-        required=True,
         help='Set a sample field (repeatable). Values are auto-cast to int, float, bool, or string.'
+    )
+
+    parser.add_argument(
+        '--metadata',
+        default=None,
+        metavar='JSON',
+        help='Scientific metadata as JSON string or path to JSON file'
+    )
+
+    parser.add_argument(
+        '--overwrite',
+        action='store_true',
+        help='Replace all existing scientific metadata instead of merging (only with --metadata)'
     )
 
     parser.add_argument(
@@ -291,29 +344,53 @@ Examples:
 def _execute_update(args):
     """Execute the 'sample update' subcommand."""
     from crucible.client import CrucibleClient
-    valid_fields = set(_sample_updatable_fields())
+    from .helpers import cast_value
+
+    has_set = bool(getattr(args, 'set_fields', None))
+    has_metadata = bool(getattr(args, 'metadata', None))
+
+    if not has_set and not has_metadata:
+        logger.error("Error: provide at least one of --set KEY=VALUE or --metadata JSON")
+        sys.exit(1)
+
     updates = {}
-    for field in args.set_fields:
-        if '=' not in field:
-            logger.error(f"Error: --set requires KEY=VALUE format, got: '{field}'")
+    if has_set:
+        valid_fields = set(_sample_updatable_fields())
+        for field in args.set_fields:
+            if '=' not in field:
+                logger.error(f"Error: --set requires KEY=VALUE format, got: '{field}'")
+                sys.exit(1)
+            key, _, value = field.partition('=')
+            key = key.strip()
+            if key not in valid_fields:
+                logger.error(
+                    f"Unknown field '{key}'.\n"
+                    f"Valid fields: {', '.join(sorted(valid_fields))}"
+                )
+                sys.exit(1)
+            updates[key] = cast_value(value)
+
+    metadata_dict = None
+    if has_metadata:
+        from .helpers import load_metadata
+        try:
+            metadata_dict = load_metadata(args.metadata)
+        except ValueError as e:
+            logger.error(f"Error: {e}")
             sys.exit(1)
-        key, _, value = field.partition('=')
-        key = key.strip()
-        if key not in valid_fields:
-            logger.error(
-                f"Unknown field '{key}'.\n"
-                f"Valid fields: {', '.join(sorted(valid_fields))}"
-            )
-            sys.exit(1)
-        updates[key] = value  # samples API expects strings; no cast needed
 
     try:
         client = CrucibleClient()
-        result = client.samples.update(args.sample_id, **updates)
 
-        logger.info(f"✓ Sample {args.sample_id} updated")
-        if getattr(args, "debug", False):
-            logger.debug(f"Updated fields: {list(updates.keys())}")
+        if updates:
+            client.samples.update(args.sample_id, **updates)
+            logger.info(f"✓ Sample {args.sample_id} fields updated")
+
+        if metadata_dict is not None:
+            overwrite = getattr(args, 'overwrite', False)
+            client.samples.update_scientific_metadata(args.sample_id, metadata_dict, overwrite=overwrite)
+            action = "replaced" if overwrite else "updated"
+            logger.info(f"✓ Scientific metadata {action} for sample {args.sample_id}")
 
     except Exception as e:
         logger.error(f"Error updating sample: {e}")
@@ -329,7 +406,7 @@ def _register_edit(subparsers):
         'edit',
         help='Edit sample fields interactively',
         description='Open sample fields in $EDITOR and update on save',
-        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     crucible sample edit SAMPLE_ID
@@ -349,13 +426,18 @@ Examples:
 
 def _edit_sample(sid, client, debug=False):
     """Core edit logic for a sample — shared with the top-level 'crucible edit' command."""
-    sample = client.samples.get(sid)
+    sample = client.samples.get(sid, include_metadata=True)
     if sample is None:
         logger.error(f"Sample not found: {sid}")
         sys.exit(1)
 
+    from .schema import SAMPLE_FIELDS, ordered_dict
     valid_fields = set(_sample_updatable_fields())
-    original = {k: sample.get(k) for k in sorted(valid_fields)}
+    original_fields = ordered_dict(SAMPLE_FIELDS, sample, verbose=True, editable_only=True)
+    original_meta = sample.get('scientific_metadata') or {}
+
+    original = dict(original_fields)
+    original['scientific_metadata'] = original_meta
 
     try:
         edited = term.open_editor_json(original)
@@ -367,16 +449,25 @@ def _edit_sample(sid, client, debug=False):
         logger.info("No changes.")
         return
 
-    changes = {k: v for k, v in edited.items() if k in valid_fields and v != original.get(k)}
+    field_changes = {k: v for k, v in edited.items() if k in valid_fields and v != original_fields.get(k)}
+    edited_meta = edited.get('scientific_metadata')
+    meta_changed = isinstance(edited_meta, dict) and edited_meta != original_meta
 
-    if not changes:
+    if not field_changes and not meta_changed:
         logger.info("No changes.")
         return
 
     try:
-        client.samples.update(sid, **changes)
+        if field_changes:
+            client.samples.update(sid, **field_changes)
+        if meta_changed:
+            client.samples.update_scientific_metadata(sid, edited_meta, overwrite=True)
+
+        diff_updated = dict(field_changes)
+        if meta_changed:
+            diff_updated['scientific_metadata'] = edited_meta
         term.header("Changes")
-        term.diff(original, changes)
+        term.diff(original, diff_updated)
     except Exception as e:
         logger.error(f"Error updating sample: {e}")
         if debug:
@@ -433,7 +524,7 @@ def _register_add_dataset(subparsers):
         'add-dataset',
         help='Link a sample to a dataset',
         description='Associate a dataset with a sample',
-        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     crucible sample add-dataset SAMPLE_ID --dataset DATASET_ID
@@ -451,7 +542,7 @@ def _register_list_parents(subparsers):
         'list-parents',
         help='List parent samples',
         description='List parent samples of a given sample',
-        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     crucible sample list-parents SAMPLE_ID
@@ -470,7 +561,7 @@ def _register_list_children(subparsers):
         'list-children',
         help='List child samples',
         description='List child samples derived from a given sample',
-        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     crucible sample list-children SAMPLE_ID
@@ -489,7 +580,7 @@ def _register_list_datasets(subparsers):
         'list-datasets',
         help='List datasets linked to a sample',
         description='Show all datasets associated with a given sample',
-        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     crucible sample list-datasets SAMPLE_ID
@@ -517,13 +608,23 @@ def _execute_list(args):
     filters = {}
     if args.name:
         filters['sample_name'] = args.name
-    if args.sample_type:
-        filters['sample_type'] = args.sample_type
+    type_pattern = args.sample_type or None
+    if type_pattern and not any(c in type_pattern for c in ('*', '?', '[')):
+        filters['sample_type'] = type_pattern
+        type_pattern = None  # exact match handled by API; no client-side filter needed
 
     try:
         import fnmatch
         client = CrucibleClient()
-        samples = client.samples.list(project_id=project_id, limit=args.limit, **filters)
+        samples = client.samples.list(project_id=project_id, limit=args.limit,
+                                         include_metadata=getattr(args, 'include_metadata', False) or _config.include_metadata,
+                                         **filters)
+
+        # Client-side wildcard filtering on type
+        if type_pattern:
+            samples = [s for s in samples if fnmatch.fnmatch(
+                (s.get('sample_type') or '').lower(), type_pattern.lower()
+            )]
 
         # Client-side glob filtering on name
         if getattr(args, 'include', None):
@@ -561,8 +662,8 @@ def _execute_list(args):
                 url = f"{_base}/{pid}/sample-graph/{uid}" if _base and uid and pid else None
                 return (
                     s.get('sample_name') or '(unnamed)',
-                    term.mfid_link(uid, url) if uid else '—',
-                    s.get('sample_type') or '—',
+                    term.mfid_link(uid, url) if uid else '-',
+                    s.get('sample_type') or '-',
                 )
 
             _by_name = lambda s: (s.get('sample_name') or '').lower()
@@ -590,12 +691,9 @@ def _execute_list(args):
         sys.exit(1)
 
 
-def _show_sample(sample, client, verbose=False, graph=False):
+def _show_sample(sample, client, verbose=False, graph=False, include_metadata=False, links=None):
     """Display sample fields. Extracted for reuse by top-level 'crucible get'."""
-    W = 14
-
-    def _p(label, value):
-        print(f"  {label:<{W}}{value if value not in (None, '') else '—'}")
+    _p = term.field_printer(14)
 
     try:
         from crucible.config import config
@@ -613,9 +711,23 @@ def _show_sample(sample, client, verbose=False, graph=False):
 
     term.header("Sample")
 
+    dr = sample.get('deletion_request')
+    if dr:
+        status = dr.get('status', '')
+        reason = dr.get('reason') or ''
+        rid    = dr.get('id', '')
+        color  = term.yellow if status == 'pending' else term.red
+        msg    = color(f"⚠  Deletion {status}")
+        if reason:
+            msg += f'  "{reason}"'
+        if rid:
+            msg += '  ' + term.dim(f"(request #{rid})")
+        print(f"  {msg}")
+
     _p("Name",        sample.get('sample_name') or '(unnamed)')
     _p("MFID",        _s_link(sample))
     _p("Type",        sample.get('sample_type'))
+    _p("Public",      "yes" if sample.get('public') else "no")
     _p("Project",     sample.get('project_id'))
     _p("Timestamp",   term.fmt_ts(sample.get('timestamp')))
     _p("Description", sample.get('description'))
@@ -623,52 +735,86 @@ def _show_sample(sample, client, verbose=False, graph=False):
     if verbose or graph:
         term.subheader("Ownership")
         _p("Owner ORCID", term.orcid_link(sample.get('owner_orcid')))
-        _p("Owner ID",    sample.get('owner_user_id'))
 
         term.subheader("Timing")
         _p("Created",  term.fmt_ts(sample.get('creation_time')))
         _p("Modified", term.fmt_ts(sample.get('modification_time')))
 
     if graph:
-        sid = sample.get('unique_id')
+        sid  = sample.get('unique_id')
+        proj = sample.get('project_id') or ''
 
-        datasets = client.datasets.list(sample_id=sid)
-        term.subheader(f"Linked Datasets ({len(datasets)})")
-        for ds in datasets:
-            name = ds.get('dataset_name') or '(unnamed)'
-            meas = ds.get('measurement') or ''
-            suffix = f"  {meas}" if meas else ''
-            print(f"  {_ds_link(ds)}  {name}{suffix}")
-        if not datasets:
+        links_list = links if links is not None else sample.get('links')
+        if links_list is None:
+            try:
+                links_list = client.get_links(sid)
+            except Exception:
+                links_list = None
+        if links_list is None:
+            print(f"  {term.dim('⚠  Could not fetch links.')}")
+            return
+
+        linked_datasets = [l for l in links_list if l.get('relationship') == 'associated'
+                           and l.get('resource_type') == 'dataset']
+        parent_samples  = [l for l in links_list if l.get('relationship') == 'parent'
+                           and l.get('resource_type') == 'sample']
+        child_samples   = [l for l in links_list if l.get('relationship') == 'child'
+                           and l.get('resource_type') == 'sample']
+
+        term.subheader(f"Linked Datasets ({len(linked_datasets)})")
+        for ds in linked_datasets:
+            uid = ds['unique_id']
+            url = f"{_base}/{proj}/dataset/{uid}" if _base and proj else None
+            print(f"  {term.mfid_link(uid, url)}  {ds.get('name') or '(unnamed)'}")
+        if not linked_datasets:
             print(f"  {term.dim('(none)')}")
 
-        parents = client.samples.list_parents(sid)
-        term.subheader(f"Parents ({len(parents)})")
-        for p in parents:
-            print(f"  {_s_link(p)}  {p.get('sample_name') or '(unnamed)'}")
-        if not parents:
+        term.subheader(f"Parents ({len(parent_samples)})")
+        for p in parent_samples:
+            uid = p['unique_id']
+            url = f"{_base}/{proj}/sample-graph/{uid}" if _base and proj else None
+            print(f"  {term.mfid_link(uid, url)}  {p.get('name') or '(unnamed)'}")
+        if not parent_samples:
             print(f"  {term.dim('(none)')}")
 
-        children = client.samples.list_children(sid)
-        term.subheader(f"Children ({len(children)})")
-        for c in children:
-            print(f"  {_s_link(c)}  {c.get('sample_name') or '(unnamed)'}")
-        if not children:
+        term.subheader(f"Children ({len(child_samples)})")
+        for c in child_samples:
+            uid = c['unique_id']
+            url = f"{_base}/{proj}/sample-graph/{uid}" if _base and proj else None
+            print(f"  {term.mfid_link(uid, url)}  {c.get('name') or '(unnamed)'}")
+        if not child_samples:
             print(f"  {term.dim('(none)')}")
+
+    if include_metadata:
+        from .helpers import show_scientific_metadata
+        show_scientific_metadata(sample.get('scientific_metadata'))
 
 
 def _execute_get(args):
     """Execute the 'sample get' subcommand."""
+    import json
     from crucible.client import CrucibleClient
+    output = getattr(args, 'output', None)
+    include_metadata = output == 'json' or getattr(args, 'include_metadata', False) or _config.include_metadata
     try:
+        graph  = getattr(args, 'graph', False)
         client = CrucibleClient()
-        sample = client.samples.get(args.sample_id)
+        sample = client.samples.get(args.sample_id, include_links=graph or _config.include_links,
+                                    include_metadata=include_metadata)
         if sample is None:
             logger.error(f"Sample not found: {args.sample_id}")
             sys.exit(1)
-        _show_sample(sample, client,
-                     verbose=getattr(args, 'verbose', False),
-                     graph=getattr(args, 'graph', False))
+        from .helpers import cache_resource
+        cache_resource(getattr(args, '_shell_state', None), client, sample, 'sample',
+                       args.sample_id, verbose=getattr(args, 'verbose', False),
+                       graph=graph, include_metadata=include_metadata)
+        if output == 'json':
+            print(json.dumps(sample, indent=2, default=str))
+        else:
+            _show_sample(sample, client,
+                         verbose=getattr(args, 'verbose', False),
+                         graph=graph,
+                         include_metadata=include_metadata)
     except Exception as e:
         logger.error(f"Error retrieving sample: {e}")
         if getattr(args, "debug", False):
@@ -755,6 +901,15 @@ def _execute_create(args):
                 except ValueError:
                     logger.error(f"Cannot parse date: {val!r}. Try 'today', '2024-01-15', or '2024-01-15 10:30'.")
 
+    metadata_dict = None
+    if getattr(args, 'metadata', None):
+        from .helpers import load_metadata
+        try:
+            metadata_dict = load_metadata(args.metadata)
+        except ValueError as e:
+            logger.error(str(e))
+            sys.exit(1)
+
     try:
         result = client.samples.create(
             sample_name=name,
@@ -762,6 +917,8 @@ def _execute_create(args):
             description=description,
             sample_type=sample_type,
             timestamp=timestamp,
+            public=True if args.public else None,
+            scientific_metadata=metadata_dict,
         )
 
         logger.info("✓ Sample created")
@@ -780,7 +937,7 @@ def _execute_link(args):
     from crucible.client import CrucibleClient
     try:
         client = CrucibleClient()
-        result = client.samples.link(args.parent, args.child)
+        client.samples.link(args.parent, args.child)
 
         logger.info(f"✓ Linked sample {args.child} as child of {args.parent}")
 
@@ -797,13 +954,14 @@ def _execute_list_parents(args):
     from crucible.client import CrucibleClient
     try:
         client = CrucibleClient()
-        parents = client.samples.list_parents(args.sample_id, limit=args.limit)
+        parents = sorted(client.samples.list_parents(args.sample_id, limit=args.limit),
+                         key=lambda s: (s.get('sample_name') or '').lower())
         term.header(f"Parent Samples · {args.sample_id} ({len(parents)})")
         if not parents:
             print(f"  {term.dim('No parent samples found.')}")
             return
-        rows = [(s.get('sample_name') or '(unnamed)', s.get('unique_id') or '—',
-                 s.get('sample_type') or '—') for s in parents]
+        rows = [(s.get('sample_name') or '(unnamed)', s.get('unique_id') or '-',
+                 s.get('sample_type') or '-') for s in parents]
         term.table(rows, ['Name', 'MFID', 'Type'], max_widths=[35, 26, 20])
     except Exception as e:
         logger.error(f"Error listing parent samples: {e}")
@@ -818,13 +976,14 @@ def _execute_list_children(args):
     from crucible.client import CrucibleClient
     try:
         client = CrucibleClient()
-        children = client.samples.list_children(args.sample_id, limit=args.limit)
+        children = sorted(client.samples.list_children(args.sample_id, limit=args.limit),
+                          key=lambda s: (s.get('sample_name') or '').lower())
         term.header(f"Child Samples · {args.sample_id} ({len(children)})")
         if not children:
             print(f"  {term.dim('No child samples found.')}")
             return
-        rows = [(s.get('sample_name') or '(unnamed)', s.get('unique_id') or '—',
-                 s.get('sample_type') or '—') for s in children]
+        rows = [(s.get('sample_name') or '(unnamed)', s.get('unique_id') or '-',
+                 s.get('sample_type') or '-') for s in children]
         term.table(rows, ['Name', 'MFID', 'Type'], max_widths=[35, 26, 20])
     except Exception as e:
         logger.error(f"Error listing child samples: {e}")
@@ -839,13 +998,14 @@ def _execute_list_datasets(args):
     from crucible.client import CrucibleClient
     try:
         client = CrucibleClient()
-        datasets = client.datasets.list(sample_id=args.sample_id, limit=args.limit)
+        datasets = sorted(client.datasets.list(sample_id=args.sample_id, limit=args.limit),
+                          key=lambda ds: (ds.get('dataset_name') or '').lower())
         term.header(f"Datasets · {args.sample_id} ({len(datasets)})")
         if not datasets:
             print(f"  {term.dim('No datasets linked.')}")
             return
-        rows = [(ds.get('dataset_name') or '(unnamed)', ds.get('unique_id') or '—',
-                 ds.get('measurement') or '—') for ds in datasets]
+        rows = [(ds.get('dataset_name') or '(unnamed)', ds.get('unique_id') or '-',
+                 ds.get('measurement') or '-') for ds in datasets]
         term.table(rows, ['Name', 'MFID', 'Measurement'], max_widths=[35, 26, 15])
     except Exception as e:
         logger.error(f"Error listing datasets: {e}")
@@ -861,7 +1021,7 @@ def _execute_link_dataset(args):
     try:
         client = CrucibleClient()
         sample_id = args.sample_id
-        result = client.samples.add_dataset(sample_id, args.dataset)
+        client.samples.add_dataset(sample_id, args.dataset)
 
         logger.info(f"✓ Linked sample {sample_id} to dataset {args.dataset}")
 
@@ -879,7 +1039,7 @@ def _register_remove_child(subparsers):
         'remove-child',
         help='Unlink a child sample from a parent sample',
         description='Remove the parent-child relationship between two samples (requires admin)',
-        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     crucible sample remove-child PARENT_ID --child CHILD_ID
@@ -911,7 +1071,7 @@ def _register_remove_dataset(subparsers):
         'remove-dataset',
         help='Unlink a dataset from a sample',
         description='Remove the association between a sample and a dataset (requires admin)',
-        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     crucible sample remove-dataset SAMPLE_ID --dataset DATASET_ID

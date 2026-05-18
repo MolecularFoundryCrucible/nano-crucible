@@ -11,6 +11,7 @@ Supports unlinking:
 
 import sys
 import logging
+from . import term
 
 logger = logging.getLogger(__name__)
 
@@ -21,36 +22,49 @@ def register_subcommand(subparsers):
         'unlink',
         help='Unlink Crucible resources',
         description='Remove the association between two Crucible resources',
-        formatter_class=lambda prog: __import__('argparse').RawDescriptionHelpFormatter(prog, max_help_position=35),
+        formatter_class=lambda prog: term.ColorHelpFormatter(prog, max_help_position=35),
         epilog="""
 Examples:
-    # Unlink two resources (types auto-detected: dataset-sample, dataset-dataset, sample-sample)
-    crucible unlink -p parent_id -c child_id
+    # Unlink two resources (types auto-detected)
+    crucible unlink MFID1 MFID2
 
-    # Explicit dataset/sample flags
+    # Legacy flag syntax (still supported)
+    crucible unlink -p parent_id -c child_id
     crucible unlink -d dataset_id -s sample_id
 """
     )
 
     parser.add_argument(
+        'id1',
+        nargs='?',
+        metavar='ID1',
+        help='First resource ID'
+    )
+    parser.add_argument(
+        'id2',
+        nargs='?',
+        metavar='ID2',
+        help='Second resource ID'
+    )
+    parser.add_argument(
         '-p', '--parent',
         metavar='ID',
-        help='First resource ID (type auto-detected)'
+        help='First resource ID (legacy)'
     )
     parser.add_argument(
         '-c', '--child',
         metavar='ID',
-        help='Second resource ID (type auto-detected)'
+        help='Second resource ID (legacy)'
     )
     parser.add_argument(
         '-d', '--dataset',
         metavar='ID',
-        help='Dataset ID'
+        help='Dataset ID (legacy)'
     )
     parser.add_argument(
         '-s', '--sample',
         metavar='ID',
-        help='Sample ID'
+        help='Sample ID (legacy)'
     )
 
     parser.set_defaults(func=execute)
@@ -58,12 +72,23 @@ Examples:
 
 def execute(args):
     """Execute the unlink command."""
-    from crucible.config import config
+    from crucible.client import CrucibleClient
 
-    if args.dataset and args.sample:
+    if args.id1 and args.id2:
+        try:
+            CrucibleClient().unlink(args.id1, args.id2)
+            logger.info(f"✓ Unlinked resources successfully")
+        except ValueError as e:
+            logger.error(str(e))
+            sys.exit(1)
+        except Exception as e:
+            logger.error(f"Failed to unlink resources: {e}")
+            sys.exit(1)
+
+    elif args.dataset and args.sample:
         logger.info(f"Unlinking sample '{args.sample}' from dataset '{args.dataset}'...")
         try:
-            result = config.client.datasets.remove_sample(args.dataset, args.sample)
+            CrucibleClient().datasets.remove_sample(args.dataset, args.sample)
             logger.info(f"✓ Unlinked sample {args.sample} from dataset {args.dataset}")
         except Exception as e:
             logger.error(f"Failed to unlink resources: {e}")
@@ -71,7 +96,7 @@ def execute(args):
 
     elif args.parent and args.child:
         try:
-            result = config.client.unlink(args.parent, args.child)
+            CrucibleClient().unlink(args.parent, args.child)
             logger.info(f"✓ Unlinked resources successfully")
         except ValueError as e:
             logger.error(str(e))
@@ -81,7 +106,5 @@ def execute(args):
             sys.exit(1)
 
     else:
-        logger.error("Invalid arguments. Use either:")
-        logger.error("  -p/--parent and -c/--child for auto-detected unlinking")
-        logger.error("  -d/--dataset and -s/--sample for explicit unlinking")
+        logger.error("Usage: crucible unlink ID1 ID2")
         sys.exit(1)

@@ -11,6 +11,7 @@ Supports linking:
 
 import sys
 import logging
+from . import term
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +22,7 @@ def register_subcommand(subparsers):
         'link',
         help='Link Crucible resources (datasets, samples)',
         description='Create parent-child relationships between datasets or samples, or link samples to datasets',
-        formatter_class=lambda prog: __import__('argparse').RawDescriptionHelpFormatter(prog, max_help_position=35),
+        formatter_class=lambda prog: term.ColorHelpFormatter(prog, max_help_position=35),
         epilog="""
 Examples:
     # Link two datasets (resource types auto-detected)
@@ -66,7 +67,7 @@ Examples:
 
 def execute(args):
     """Execute the link command."""
-    from crucible.config import config
+    from crucible.client import CrucibleClient
 
     # Determine parent and child IDs
     if args.dataset and args.sample:
@@ -86,7 +87,7 @@ def execute(args):
 
     # Use the unified link method
     try:
-        result = config.client.link(parent_id, child_id)
+        CrucibleClient().link(parent_id, child_id)
         logger.info("Successfully linked resources")
     except Exception as e:
         logger.error(f"Failed to link resources: {e}")
