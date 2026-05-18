@@ -4,6 +4,7 @@
 [![GitHub stars](https://img.shields.io/github/stars/MolecularFoundryCrucible/nano-crucible?style=social)](https://github.com/MolecularFoundryCrucible/nano-crucible) [![Discord](https://img.shields.io/discord/1476722549424394242?logo=discord&label=Discord&color=5865F2)](https://discord.gg/Wrepphsgbx)
 
 A Python client library and CLI tool for Crucible - the Molecular Foundry's data lakehouse for scientific research. Crucible stores experimental and synthetic data from DOE Nanoscale Science Research Centers (NSRCs), along with comprehensive metadata about samples, projects, instruments, and users.
+-- this branch is compatible with /api/v1 --
 
 ## 🔬 What is Crucible?
 
