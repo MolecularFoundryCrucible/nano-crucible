@@ -7,7 +7,7 @@ Python client library for the Crucible API - the Molecular Foundry data lakehous
 """
 
 __version__ = "2.1.1"
-__author__ = "mkywall"
+__author__ = "mkywall","roncofaber"
 
 import logging
 import sys
