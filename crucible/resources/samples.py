@@ -198,7 +198,7 @@ class SampleOperations(BaseResource):
             self._request('post', f"/samples/{sid}/children/{chd['unique_id']}")
 
         if scientific_metadata:
-            self.add_scientific_metadata(sid, scientific_metadata)
+            self.update_scientific_metadata(sid, scientific_metadata)
 
         return new_samp
 

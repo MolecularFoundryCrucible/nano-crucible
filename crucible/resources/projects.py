@@ -96,7 +96,7 @@ class ProjectOperations(BaseResource):
 
         result = self._request('post', "/projects", json=project_details)
         if scientific_metadata:
-            self.add_scientific_metadata(result['project_id'], scientific_metadata)
+            self.update_scientific_metadata(result['project_id'], scientific_metadata)
         return result
 
     def add_scientific_metadata(self, project_id: str, metadata: Dict) -> Dict:

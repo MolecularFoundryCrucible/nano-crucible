@@ -99,7 +99,7 @@ class InstrumentOperations(BaseResource):
 
         result = self._request('post', '/instruments', json=payload)
         if scientific_metadata:
-            self.add_scientific_metadata(result['unique_id'], scientific_metadata)
+            self.update_scientific_metadata(result['unique_id'], scientific_metadata)
         return result
 
     def update(self, unique_id: str, **kwargs) -> Dict:

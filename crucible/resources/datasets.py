@@ -9,6 +9,8 @@ Provides organized access to dataset-related API endpoints.
 import logging
 from typing import Optional, List, Dict
 
+import mfid
+
 # internal modules
 from .files import FileOperations
 from ..constants import DEFAULT_LIMIT
@@ -130,6 +132,9 @@ class DatasetOperations(FileOperations):
 
         dataset_details = dataset.model_dump()
 
+        if not dataset_details.get('unique_id'):
+            dataset_details['unique_id'] = mfid.mfid()[0]
+
         logger.debug('Creating new dataset record...')
 
         clean_dataset = {k: v for k, v in dataset_details.items() if v is not None}
@@ -140,7 +145,7 @@ class DatasetOperations(FileOperations):
         scimd = None
         if scientific_metadata:
             logger.debug(f'Adding scientific metadata record for {dsid}')
-            scimd = self.add_scientific_metadata(dsid, scientific_metadata)
+            scimd = self.update_scientific_metadata(dsid, scientific_metadata)
 
             
         # add keywords
