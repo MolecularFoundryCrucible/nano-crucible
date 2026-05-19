@@ -87,7 +87,6 @@ class FileOperations(BaseResource):
         """
         import hashlib
         import base64
-        import struct
         import google_crc32c
         _256K      = 256 * 1024
         _MIN_CHUNK = 32 * 1024 * 1024  # 32 MiB floor - overrides server hint for throughput
@@ -98,18 +97,22 @@ class FileOperations(BaseResource):
 
         logger.info(f"Uploading {filename} ({file_size / 1024**2:.1f} MB) to dataset {dsid}")
 
-        # Single pre-pass: SHA256 sent to /initiate for server-side dedup;
-        # reused at /complete - CRC32C per chunk covers transport integrity.
-        h = hashlib.sha256()
+        # SHA256 for server-side dedup; CRC32C for end-to-end integrity vs GCS's
+        # response. Per-chunk x-goog-hash is unusable here — GCS treats it as the
+        # whole-object hash and rejects any multi-chunk upload.
+        sha = hashlib.sha256()
+        crc = google_crc32c.Checksum()
         with open(file_path, 'rb') as f:
             for block in iter(lambda: f.read(_MIN_CHUNK), b''):
-                h.update(block)
-        sha256_hash = h.hexdigest()
-        logger.debug(f"sha256={sha256_hash}")
+                sha.update(block)
+                crc.update(block)
+        sha256_hash = sha.hexdigest()
+        local_crc32c_b64 = base64.b64encode(crc.digest()).decode()
 
         # Initiate resumable upload session; server returns existing_file if hash matches
         init = self._request('post', f'/datasets/{dsid}/upload/initiate',
-                             json={'filename': filename, 'size': file_size, 'sha256_hash': sha256_hash})
+                             json={'filename': filename, 'size': file_size,
+                                   'sha256_hash': sha256_hash})
 
         if init.get('existing_file', None) is not None:
             logger.info(f"File {filename} already exists in dataset {dsid}, skipping upload")
@@ -132,19 +135,27 @@ class FileOperations(BaseResource):
                 chunk_end = offset + len(chunk) - 1
 
                 for attempt in range(_MAX_RETRIES):
-                    crc_b64 = base64.b64encode(struct.pack(">I", google_crc32c.value(chunk))).decode()
                     resp = requests.put(
                         uri,
                         data=chunk,
                         headers={
                             'Content-Range': f'bytes {offset}-{chunk_end}/{file_size}',
                             'Content-Length': str(len(chunk)),
-                            'x-goog-hash': f'crc32c={crc_b64}',
                         },
                         timeout=120,
                     )
                     if resp.status_code in (200, 201):
-                        logger.debug("Chunked upload complete")
+                        # Final chunk: response body is the GCS object resource.
+                        # Verify GCS-computed crc32c matches what we hashed locally.
+                        try:
+                            remote_crc32c = resp.json().get('crc32c')
+                        except ValueError:
+                            remote_crc32c = None
+                        if remote_crc32c and remote_crc32c != local_crc32c_b64:
+                            raise RuntimeError(
+                                f"GCS crc32c mismatch for {filename}: "
+                                f"local={local_crc32c_b64} remote={remote_crc32c}"
+                            )
                         offset = file_size
                         break
                     elif resp.status_code == 308:
@@ -152,8 +163,11 @@ class FileOperations(BaseResource):
                         logger.debug(f"Chunk accepted, offset={offset}/{file_size}")
                         break
                     else:
-                        logger.debug(f"Unexpected GCS status {resp.status_code} "
-                                     f"(attempt {attempt + 1}/{_MAX_RETRIES})")
+                        logger.warning(
+                            f"{filename} GCS chunk rejected offset={offset} "
+                            f"status={resp.status_code} attempt={attempt+1}/{_MAX_RETRIES} "
+                            f"body={resp.text[:300]}"
+                        )
                         if attempt == _MAX_RETRIES - 1:
                             raise RuntimeError(
                                 f"GCS chunk upload failed after {_MAX_RETRIES} attempts "
