@@ -110,7 +110,7 @@ class FileOperations(BaseResource):
         # Initiate resumable upload session; server returns existing_file if hash matches
         init = self._request('post', f'/datasets/{dsid}/upload/initiate',
                              json={'filename': filename, 'size': file_size, 'sha256_hash': sha256_hash})
-        logger.info(f"[{filename}] upload_id={upload_id} uri={uri[-40:]}")
+
         if init.get('existing_file', None) is not None:
             logger.info(f"File {filename} already exists in dataset {dsid}, skipping upload")
             return init['existing_file']
