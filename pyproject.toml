@@ -73,7 +73,8 @@ all = [
 crucible = "crucible.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/MolecularFoundryCrucible/nano-crucible"
+Homepage = "https://molecularfoundrycrucible.github.io/nano-crucible/"
+Documentation = "https://molecularfoundrycrucible.github.io/nano-crucible/"
 Repository = "https://github.com/MolecularFoundryCrucible/nano-crucible"
 "Bug Tracker" = "https://github.com/MolecularFoundryCrucible/nano-crucible/issues"
 

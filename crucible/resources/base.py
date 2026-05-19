@@ -89,17 +89,18 @@ class BaseResource:
         """Get scientific metadata for a resource."""
         return self._request('get', f'/resources/{resource_id}/metadata')
 
-    def add_scientific_metadata(self, resource_id: str, metadata: dict) -> dict:
-        """Create scientific metadata for a resource."""
-        return self._request('post', f'/resources/{resource_id}/metadata', json=metadata)
+    def replace_scientific_metadata(self, resource_id: str, metadata: dict) -> dict:
+        """Create new scientific metadata entry for a resource."""
+        # this is kind of redundant with API but its better here? #TODO
+        return self._request('post', f'/resources/{resource_id}/metadata', json=metadata, params = {'overwrite': True})
 
     def update_scientific_metadata(self, resource_id: str, metadata: dict,
                                    overwrite: bool = False) -> dict:
-        """Update scientific metadata for a resource.
+        """Add or Update scientific metadata for a resource.
 
         Args:
             overwrite: If True, replace all metadata (POST); if False, merge with existing (PATCH)
         """
         if overwrite:
-            return self._request('post', f'/resources/{resource_id}/metadata', json=metadata)
+            return self._request('post', f'/resources/{resource_id}/metadata', json=metadata, params = {'overwrite':overwrite})
         return self._request('patch', f'/resources/{resource_id}/metadata', json=metadata)

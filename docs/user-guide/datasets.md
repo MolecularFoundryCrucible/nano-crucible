@@ -22,7 +22,7 @@
 | Relationship | Key(s) | Description |
 |---|---|---|
 | **Files** | `files_to_upload` in `create()`; `add_file_to_dataset(dsid, file_path)` to add later | Zero or more files can be attached to a dataset. Each file is uploaded to cloud storage and triggers an ingestion process to parse metadata and generate thumbnails. |
-| **Scientific metadata** | `scientific_metadata` in `create()`; `metadata` in `add_scientific_metadata()` / `update_scientific_metadata()` | A free-form JSON object for experiment-specific parameters. Stored separately from structured fields and searchable across datasets. |
+| **Scientific metadata** | `scientific_metadata` in `create()`; `metadata` in `update_scientific_metadata()` / `replace_scientific_metadata()` | A free-form JSON object for experiment-specific parameters. Stored separately from structured fields and searchable across datasets. |
 | **Thumbnails** | `add_thumbnail(dsid, image)` | Small preview images representing the data or results. Generated automatically by ingestors where supported, or uploaded manually. |
 | **Samples** | `sample_id` in `add_sample(dataset_id, sample_id)` | A dataset can be linked to one or more samples, and a sample to one or more datasets — capturing which material was measured. |
 | **Parent/child datasets** | `parent_dataset_id`, `child_dataset_id` in `link_parent_child()` | Datasets can be linked in a directed hierarchy to represent processing pipelines (e.g. raw → calibrated → analyzed). |
@@ -134,8 +134,8 @@ If no ingestion class exists for your data type, reach out on [Discord](https://
 Scientific metadata stores experiment-specific parameters as a free-form JSON object.
 
 ```python
-# Add or replace scientific metadata
-client.datasets.add_scientific_metadata(
+# Merge new keys into existing metadata (PATCH — appends/updates individual keys)
+client.datasets.update_scientific_metadata(
     "ds-abc123",
     metadata={"temperature_K": 300, "pressure_bar": 1.0, "scan_rate_mV_s": 50},
 )
@@ -147,14 +147,11 @@ meta = client.datasets.get_scientific_metadata("ds-abc123")
 results = client.datasets.search_scientific_metadata("temperature", limit=20)
 ```
 
-`add_scientific_metadata()` **replaces** all existing metadata (POST). To update selectively, use `update_scientific_metadata()`:
+`update_scientific_metadata()` merges new keys into the existing metadata (PATCH). To replace all existing metadata entirely, use `replace_scientific_metadata()`:
 
 ```python
-# Merge new keys into existing metadata (PATCH — appends/updates individual keys)
-client.datasets.update_scientific_metadata("ds-abc123", {"new_key": "value"})
-
 # Replace all metadata entirely (POST)
-client.datasets.update_scientific_metadata("ds-abc123", {"new_key": "value"}, overwrite=True)
+client.datasets.replace_scientific_metadata("ds-abc123", {"new_key": "value"})
 ```
 
 ## Keywords

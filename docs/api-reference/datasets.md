@@ -16,8 +16,8 @@ Access via `client.datasets`.
         - add_associated_file
         - get_associated_files
         - get_scientific_metadata
-        - add_scientific_metadata
         - update_scientific_metadata
+        - replace_scientific_metadata
         - search_scientific_metadata
         - add_thumbnail
         - get_thumbnails

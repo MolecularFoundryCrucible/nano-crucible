@@ -19,10 +19,19 @@ result = client.datasets.create(
 )
 ```
 
-Or add/replace it on an existing dataset:
+Or merge new keys into an existing dataset's metadata:
 
 ```python
-client.datasets.add_scientific_metadata(
+client.datasets.update_scientific_metadata(
+    "ds-abc123",
+    metadata={"temperature_K": 300, "pressure_bar": 1.013},
+)
+```
+
+To replace all existing metadata entirely, use `replace_scientific_metadata()`:
+
+```python
+client.datasets.replace_scientific_metadata(
     "ds-abc123",
     metadata={"temperature_K": 300, "pressure_bar": 1.013},
 )
