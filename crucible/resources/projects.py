@@ -177,11 +177,9 @@ class ProjectOperations(BaseResource):
         """
         if not orcid and not email:
             raise ValueError("provide either orcid or email")
-        if not orcid:
-            user = self._client.users.get(email=email)
-            orcid = user.get('orcid') or user.get('unique_id')
-            if not orcid:
-                raise ValueError(f"could not resolve ORCID for email: {email}")
+        if email and not orcid:
+            return self._request('delete', f'/projects/{project_id}/users/me',
+                                 params={'email': email})
         return self._request('delete', f'/projects/{project_id}/users/{orcid}')
 
     def add_user(self, orcid: Optional[str] = None, project_id: str = None,
