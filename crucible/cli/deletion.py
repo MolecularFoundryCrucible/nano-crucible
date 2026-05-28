@@ -34,6 +34,7 @@ def register_subcommand(subparsers):
     _register_get(deletion_subparsers)
     _register_approve(deletion_subparsers)
     _register_reject(deletion_subparsers)
+    _register_delete(deletion_subparsers)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -206,6 +207,26 @@ Examples:
     parser.set_defaults(func=_execute_reject)
 
 
+def _register_delete(subparsers):
+    parser = subparsers.add_parser(
+        'delete',
+        help='Permanently delete a resource (admin)',
+        description='Hard-delete a resource. By default requires an approved deletion request. '
+                    'Use --force to bypass the workflow entirely. Admin only.',
+        formatter_class=term.ColorHelpFormatter,
+        epilog="""
+Examples:
+    crucible deletion delete mf-abc123
+    crucible deletion delete mf-abc123 --force
+""",
+    )
+    parser.add_argument('resource_id', metavar='RESOURCE_ID',
+                        help='MFID of the resource to permanently delete')
+    parser.add_argument('--force', action='store_true',
+                        help='Skip the deletion request workflow and delete immediately')
+    parser.set_defaults(func=_execute_delete)
+
+
 # ── Execute functions ─────────────────────────────────────────────────────────
 
 def _execute_request(args):
@@ -304,6 +325,34 @@ def _execute_approve(args):
             if getattr(args, 'debug', False):
                 import traceback
                 traceback.print_exc()
+
+
+def _execute_delete(args):
+    """Execute the 'deletion delete' subcommand."""
+    import requests as _req
+    from crucible.client import CrucibleClient
+    try:
+        client = CrucibleClient()
+        result = client.deletions.delete(args.resource_id, force=args.force)
+        logger.info(result.get('detail', f"Resource {args.resource_id} permanently deleted"))
+    except _req.exceptions.HTTPError as e:
+        if e.response is not None and e.response.status_code == 409:
+            logger.error(f"No approved deletion request for '{args.resource_id}' - "
+                         f"use --force to bypass, or approve a deletion request first")
+        elif e.response is not None and e.response.status_code == 404:
+            logger.error(f"Resource not found: {args.resource_id}")
+        else:
+            logger.error(f"Error: {e}")
+        if getattr(args, 'debug', False):
+            import traceback
+            traceback.print_exc()
+        sys.exit(1)
+    except Exception as e:
+        logger.error(f"Error: {e}")
+        if getattr(args, 'debug', False):
+            import traceback
+            traceback.print_exc()
+        sys.exit(1)
 
 
 def _execute_reject(args):
