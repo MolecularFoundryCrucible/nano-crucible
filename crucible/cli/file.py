@@ -40,6 +40,7 @@ def register_subcommand(subparsers):
     _register_list(file_subparsers)
     _register_get(file_subparsers)
     _register_download(file_subparsers)
+    _register_ingestion(file_subparsers)
 
 
 def _register_list(subparsers):
@@ -214,6 +215,53 @@ def _execute_download(args):
 
     except SystemExit:
         raise
+    except Exception as e:
+        logger.error(f"Error: {e}")
+        if getattr(args, 'debug', False):
+            import traceback
+            traceback.print_exc()
+        sys.exit(1)
+
+
+def _register_ingestion(subparsers):
+    parser = subparsers.add_parser(
+        'ingestion',
+        help='Show ingestion requests for a file',
+        description='List ingestion requests for a file by its MFID.',
+        formatter_class=term.ColorHelpFormatter,
+        epilog="""
+Examples:
+    crucible file ingestion mf_abc123
+""",
+    )
+    parser.add_argument('file_id', metavar='FILE_ID', help='File MFID')
+    parser.set_defaults(func=_execute_ingestion)
+
+
+def _execute_ingestion(args):
+    """Execute 'crucible file ingestion'."""
+    from crucible.client import CrucibleClient
+    try:
+        client = CrucibleClient()
+        reqs = client.datasets.get_ingestion_requests(file_id=args.file_id)
+
+        term.header(f"Ingestion Requests · {args.file_id} ({len(reqs)})")
+        if not reqs:
+            print(f"  {term.dim('No ingestion requests found.')}")
+            return
+
+        rows = []
+        for r in reqs:
+            status = r.get('status') or '-'
+            color  = term.green if status == 'complete' else (term.red if status == 'failed' else term.yellow)
+            rows.append((
+                str(r.get('id', '-')),
+                color(status),
+                r.get('ingestion_class') or '-',
+                term.fmt_ts(r.get('created_at') or r.get('creation_time')) or '-',
+            ))
+        term.table(rows, ['ID', 'Status', 'Class', 'Created'], max_widths=[8, 12, 25, 20])
+
     except Exception as e:
         logger.error(f"Error: {e}")
         if getattr(args, 'debug', False):

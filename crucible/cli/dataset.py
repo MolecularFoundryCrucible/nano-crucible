@@ -251,6 +251,7 @@ def register_subcommand(subparsers):
     _register_download(dataset_subparsers)
     _register_add_file(dataset_subparsers)
     _register_list_files(dataset_subparsers)
+    _register_ingestion(dataset_subparsers)
     _register_search(dataset_subparsers)
     _register_add_keyword(dataset_subparsers)
     _register_list_keywords(dataset_subparsers)
@@ -1322,6 +1323,55 @@ def _execute_list_files(args):
 
     except Exception as e:
         logger.error(f"Error listing files: {e}")
+        if getattr(args, 'debug', False):
+            import traceback
+            traceback.print_exc()
+        sys.exit(1)
+
+
+def _register_ingestion(subparsers):
+    parser = subparsers.add_parser(
+        'ingestion',
+        help='Show ingestion requests for a dataset',
+        description='List ingestion requests for all files in a dataset.',
+        formatter_class=term.ColorHelpFormatter,
+        epilog="""
+Examples:
+    crucible dataset ingestion DSID
+""",
+    )
+    parser.add_argument('dataset_id', metavar='DATASET_ID', help='Dataset unique ID')
+    parser.set_defaults(func=_execute_ingestion)
+
+
+def _execute_ingestion(args):
+    """Execute 'crucible dataset ingestion'."""
+    from crucible.client import CrucibleClient
+    try:
+        client = CrucibleClient()
+        reqs = client.datasets.get_ingestion_requests(dsid=args.dataset_id)
+
+        term.header(f"Ingestion Requests · {args.dataset_id} ({len(reqs)})")
+        if not reqs:
+            print(f"  {term.dim('No ingestion requests found.')}")
+            return
+
+        rows = []
+        for r in reqs:
+            status = r.get('status') or '-'
+            color  = term.green if status == 'complete' else (term.red if status == 'failed' else term.yellow)
+            rows.append((
+                str(r.get('id', '-')),
+                color(status),
+                r.get('ingestion_class') or '-',
+                r.get('file_id') or '-',
+                term.fmt_ts(r.get('created_at') or r.get('creation_time')) or '-',
+            ))
+        term.table(rows, ['ID', 'Status', 'Class', 'File MFID', 'Created'],
+                   max_widths=[8, 12, 25, 30, 20])
+
+    except Exception as e:
+        logger.error(f"Error: {e}")
         if getattr(args, 'debug', False):
             import traceback
             traceback.print_exc()
