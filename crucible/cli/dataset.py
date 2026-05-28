@@ -62,11 +62,11 @@ def _show_dataset(dataset, client, verbose=False, graph=False, include_metadata=
 
     def _ds_link(r):
         u, p = r.get('unique_id'), r.get('project_id')
-        return term.mfid_link(u, f"{_base}/{p}/dataset/{u}" if _base and u and p else None)
+        return term.mfid_link(u, f"{_base}/{p}/datasets/{u}" if _base and u and p else None)
 
     def _s_link(r):
         u, p = r.get('unique_id'), r.get('project_id')
-        return term.mfid_link(u, f"{_base}/{p}/sample-graph/{u}" if _base and u and p else None)
+        return term.mfid_link(u, f"{_base}/{p}/samples/{u}" if _base and u and p else None)
 
     term.header("Dataset")
 
@@ -173,7 +173,7 @@ def _show_dataset(dataset, client, verbose=False, graph=False, include_metadata=
             term.subheader(f"Linked Samples ({len(linked_samples)})")
             for s in linked_samples:
                 uid = s['unique_id']
-                url = f"{_base}/{proj}/sample-graph/{uid}" if _base and proj else None
+                url = f"{_base}/{proj}/samples/{uid}" if _base and proj else None
                 print(f"  {term.mfid_link(uid, url)}  {s.get('name') or '(unnamed)'}")
             if not linked_samples:
                 print(f"  {term.dim('(none)')}")
@@ -181,7 +181,7 @@ def _show_dataset(dataset, client, verbose=False, graph=False, include_metadata=
             term.subheader(f"Parents ({len(parent_datasets)})")
             for p in parent_datasets:
                 uid = p['unique_id']
-                url = f"{_base}/{proj}/dataset/{uid}" if _base and proj else None
+                url = f"{_base}/{proj}/datasets/{uid}" if _base and proj else None
                 print(f"  {term.mfid_link(uid, url)}  {p.get('name') or '(unnamed)'}")
             if not parent_datasets:
                 print(f"  {term.dim('(none)')}")
@@ -189,7 +189,7 @@ def _show_dataset(dataset, client, verbose=False, graph=False, include_metadata=
             term.subheader(f"Children ({len(child_datasets)})")
             for c in child_datasets:
                 uid = c['unique_id']
-                url = f"{_base}/{proj}/dataset/{uid}" if _base and proj else None
+                url = f"{_base}/{proj}/datasets/{uid}" if _base and proj else None
                 print(f"  {term.mfid_link(uid, url)}  {c.get('name') or '(unnamed)'}")
             if not child_datasets:
                 print(f"  {term.dim('(none)')}")
@@ -1573,7 +1573,7 @@ def _execute_list(args):
             def _make_row(ds):
                 uid = ds.get('unique_id') or ''
                 pid = ds.get('project_id') or project_id
-                url = f"{_base}/{pid}/dataset/{uid}" if _base and uid and pid else None
+                url = f"{_base}/{pid}/datasets/{uid}" if _base and uid and pid else None
                 return (
                     ds.get('dataset_name') or '(unnamed)',
                     term.mfid_link(uid, url) if uid else '-',

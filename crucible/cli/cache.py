@@ -139,7 +139,7 @@ def _execute_show(args):
             try:
                 ds = client.datasets.get(dsid)
                 pid = ds.get('project_id') if ds else None
-                url = f"{_base}/{pid}/dataset/{dsid}" if _base and pid else None
+                url = f"{_base}/{pid}/datasets/{dsid}" if _base and pid else None
             except Exception:
                 url = None
             return dsid, url

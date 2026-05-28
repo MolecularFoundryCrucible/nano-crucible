@@ -659,7 +659,7 @@ def _execute_list(args):
             def _make_row(s):
                 uid = s.get('unique_id') or ''
                 pid = s.get('project_id') or project_id
-                url = f"{_base}/{pid}/sample-graph/{uid}" if _base and uid and pid else None
+                url = f"{_base}/{pid}/samples/{uid}" if _base and uid and pid else None
                 return (
                     s.get('sample_name') or '(unnamed)',
                     term.mfid_link(uid, url) if uid else '-',
@@ -703,11 +703,11 @@ def _show_sample(sample, client, verbose=False, graph=False, include_metadata=Fa
 
     def _ds_link(r):
         u, p = r.get('unique_id'), r.get('project_id')
-        return term.mfid_link(u, f"{_base}/{p}/dataset/{u}" if _base and u and p else None)
+        return term.mfid_link(u, f"{_base}/{p}/datasets/{u}" if _base and u and p else None)
 
     def _s_link(r):
         u, p = r.get('unique_id'), r.get('project_id')
-        return term.mfid_link(u, f"{_base}/{p}/sample-graph/{u}" if _base and u and p else None)
+        return term.mfid_link(u, f"{_base}/{p}/samples/{u}" if _base and u and p else None)
 
     term.header("Sample")
 
@@ -764,7 +764,7 @@ def _show_sample(sample, client, verbose=False, graph=False, include_metadata=Fa
         term.subheader(f"Linked Datasets ({len(linked_datasets)})")
         for ds in linked_datasets:
             uid = ds['unique_id']
-            url = f"{_base}/{proj}/dataset/{uid}" if _base and proj else None
+            url = f"{_base}/{proj}/datasets/{uid}" if _base and proj else None
             print(f"  {term.mfid_link(uid, url)}  {ds.get('name') or '(unnamed)'}")
         if not linked_datasets:
             print(f"  {term.dim('(none)')}")
@@ -772,7 +772,7 @@ def _show_sample(sample, client, verbose=False, graph=False, include_metadata=Fa
         term.subheader(f"Parents ({len(parent_samples)})")
         for p in parent_samples:
             uid = p['unique_id']
-            url = f"{_base}/{proj}/sample-graph/{uid}" if _base and proj else None
+            url = f"{_base}/{proj}/samples/{uid}" if _base and proj else None
             print(f"  {term.mfid_link(uid, url)}  {p.get('name') or '(unnamed)'}")
         if not parent_samples:
             print(f"  {term.dim('(none)')}")
@@ -780,7 +780,7 @@ def _show_sample(sample, client, verbose=False, graph=False, include_metadata=Fa
         term.subheader(f"Children ({len(child_samples)})")
         for c in child_samples:
             uid = c['unique_id']
-            url = f"{_base}/{proj}/sample-graph/{uid}" if _base and proj else None
+            url = f"{_base}/{proj}/samples/{uid}" if _base and proj else None
             print(f"  {term.mfid_link(uid, url)}  {c.get('name') or '(unnamed)'}")
         if not child_samples:
             print(f"  {term.dim('(none)')}")
