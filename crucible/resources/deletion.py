@@ -99,6 +99,26 @@ class DeletionOperations(BaseResource):
         """
         return self._review(request_id, status="rejected", reviewer_notes=reviewer_notes)
 
+    def delete(self, resource_id: str, force: bool = False) -> Dict:
+        """Permanently delete a resource. Admin only.
+
+        By default requires an existing approved deletion request (409 if none).
+        Use force=True to bypass the workflow and hard-delete immediately.
+
+        Args:
+            resource_id: MFID of the dataset or sample to permanently delete.
+            force: If True, skip the deletion request check and delete immediately.
+
+        Returns:
+            Dict: {"detail": "Resource {id} permanently deleted"}
+
+        Raises:
+            HTTPError 409: No approved deletion request exists (only when force=False).
+            HTTPError 404: Resource not found.
+        """
+        params = {'force': True} if force else None
+        return self._request('delete', f'/resources/{resource_id}', params=params)
+
     def _review(self, request_id: int, status: str,
                 reviewer_notes: Optional[str] = None) -> Dict:
         """Internal: send a review decision to the API."""
