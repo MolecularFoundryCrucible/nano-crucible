@@ -71,7 +71,7 @@ def execute(args):
             sys.exit(1)
 
         resource_type = resource.get("resource_type")
-        dtype = "sample-graph" if resource_type == "sample" else "dataset"
+        dtype = "samples" if resource_type == "sample" else "datasets"
         project_id = resource.get("project_id")
         if not project_id:
             logger.error(f"Resource '{mfid}' has no project_id")

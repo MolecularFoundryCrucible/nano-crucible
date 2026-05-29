@@ -76,9 +76,10 @@ Examples:
     )
 
     parser.add_argument(
-        '-v', '--verbose',
+        '--json',
         action='store_true',
-        help='Verbose output'
+        default=False,
+        help='Output as JSON'
     )
 
     parser.set_defaults(func=_execute_get)
@@ -136,12 +137,6 @@ Examples:
         help='Comma-separated list of project IDs to associate with user (optional)'
     )
 
-    parser.add_argument(
-        '-v', '--verbose',
-        action='store_true',
-        help='Verbose output'
-    )
-
     parser.set_defaults(func=_execute_create)
 
 
@@ -167,12 +162,6 @@ Examples:
         help=f'Maximum number of users to return (default: {_config.default_limit})'
     )
 
-    parser.add_argument(
-        '-v', '--verbose',
-        action='store_true',
-        help='Verbose output'
-    )
-
     parser.set_defaults(func=_execute_list)
 
 
@@ -190,7 +179,6 @@ def _show_user(user):
     _p("Email",   user.get('email'))
     if user.get('is_service_account'):
         _p("Type", "service account")
-    _p("ID",      user.get('id'))
 
 
 def _execute_get(args):
@@ -209,7 +197,11 @@ def _execute_get(args):
             logger.error(f"User not found: {identifier}")
             sys.exit(1)
 
-        _show_user(user)
+        if getattr(args, 'json', False):
+            import json
+            print(json.dumps(user, indent=2, default=str))
+        else:
+            _show_user(user)
 
     except Exception as e:
         logger.error(f"Error retrieving user: {e}")
@@ -424,7 +416,6 @@ Examples:
 """
     )
     parser.add_argument('orcid', metavar='ORCID', help='User ORCID identifier')
-    parser.add_argument('-v', '--verbose', action='store_true', help='Verbose output')
     parser.set_defaults(func=_execute_list_datasets)
 
 
@@ -442,7 +433,6 @@ Examples:
     )
     parser.add_argument('orcid', metavar='ORCID', help='User ORCID identifier')
     parser.add_argument('dataset_id', metavar='DATASET_ID', help='Dataset unique ID')
-    parser.add_argument('-v', '--verbose', action='store_true', help='Verbose output')
     parser.set_defaults(func=_execute_check_access)
 
 
@@ -460,7 +450,6 @@ Examples:
 """
     )
     parser.add_argument('orcid', metavar='ORCID', help='User ORCID identifier')
-    parser.add_argument('-v', '--verbose', action='store_true', help='Verbose output')
     parser.set_defaults(func=_execute_list_access_groups)
 
 
@@ -478,7 +467,6 @@ Examples:
 """
     )
     parser.add_argument('orcid', metavar='ORCID', help='User ORCID identifier')
-    parser.add_argument('-v', '--verbose', action='store_true', help='Verbose output')
     parser.set_defaults(func=_execute_list_projects)
 
 

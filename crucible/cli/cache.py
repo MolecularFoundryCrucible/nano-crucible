@@ -126,10 +126,7 @@ def _execute_show(args):
         from crucible.client import CrucibleClient
         from concurrent.futures import ThreadPoolExecutor
 
-        try:
-            _base = config.graph_explorer_url.rstrip('/')
-        except Exception:
-            _base = None
+        from .helpers import explorer_url
 
         top_entries = dataset_entries[:n]
 
@@ -137,9 +134,9 @@ def _execute_show(args):
 
         def _lookup(dsid):
             try:
-                ds = client.datasets.get(dsid)
+                ds  = client.datasets.get(dsid)
                 pid = ds.get('project_id') if ds else None
-                url = f"{_base}/{pid}/datasets/{dsid}" if _base and pid else None
+                url = explorer_url(dsid, pid, 'dataset')
             except Exception:
                 url = None
             return dsid, url

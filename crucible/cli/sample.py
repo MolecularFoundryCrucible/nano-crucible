@@ -137,9 +137,10 @@ Examples:
     )
 
     parser.add_argument(
-        '-v', '--verbose',
+        '--json',
         action='store_true',
-        help='Verbose output'
+        default=False,
+        help='Output as JSON array'
     )
 
     parser.set_defaults(func=_execute_list)
@@ -184,12 +185,11 @@ def _register_get(subparsers):
     )
 
     parser.add_argument(
-        '-o', '--output',
-        dest='output',
-        choices=['json'],
-        default=None,
-        metavar='FORMAT',
-        help='Output format: json (always includes scientific metadata)'
+        '--json',
+        dest='json',
+        action='store_true',
+        default=False,
+        help='Output as JSON (always includes scientific metadata)'
     )
 
     parser.set_defaults(func=_execute_get)
@@ -266,12 +266,6 @@ Examples:
         help='Scientific metadata as JSON string or path to JSON file'
     )
 
-    parser.add_argument(
-        '-v', '--verbose',
-        action='store_true',
-        help='Verbose output'
-    )
-
     parser.set_defaults(func=_execute_create)
 
 
@@ -332,13 +326,22 @@ Examples:
         help='Replace all existing scientific metadata instead of merging (only with --metadata)'
     )
 
-    parser.add_argument(
-        '-v', '--verbose',
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument(
+        '--public',
+        dest='public',
         action='store_true',
-        help='Verbose output'
+        default=None,
+        help='Make sample publicly visible'
+    )
+    group.add_argument(
+        '--no-public',
+        dest='public',
+        action='store_false',
+        help='Make sample private'
     )
 
-    parser.set_defaults(func=_execute_update)
+    parser.set_defaults(func=_execute_update, public=None)
 
 
 def _execute_update(args):
@@ -346,11 +349,12 @@ def _execute_update(args):
     from crucible.client import CrucibleClient
     from .helpers import cast_value
 
-    has_set = bool(getattr(args, 'set_fields', None))
+    has_set      = bool(getattr(args, 'set_fields', None))
     has_metadata = bool(getattr(args, 'metadata', None))
+    has_public   = getattr(args, 'public', None) is not None
 
-    if not has_set and not has_metadata:
-        logger.error("Error: provide at least one of --set KEY=VALUE or --metadata JSON")
+    if not has_set and not has_metadata and not has_public:
+        logger.error("Error: provide at least one of --set KEY=VALUE, --public/--no-public, or --metadata JSON")
         sys.exit(1)
 
     updates = {}
@@ -381,6 +385,9 @@ def _execute_update(args):
 
     try:
         client = CrucibleClient()
+
+        if has_public:
+            updates['public'] = args.public
 
         if updates:
             client.samples.update(args.sample_id, **updates)
@@ -420,7 +427,6 @@ Examples:
     )
     if ARGCOMPLETE_AVAILABLE:
         sample_id_arg.completer = argcomplete.completers.SuppressCompleter()
-    parser.add_argument('-v', '--verbose', action='store_true', help='Verbose output')
     parser.set_defaults(func=_execute_edit)
 
 
@@ -509,12 +515,6 @@ def _register_link(subparsers):
         help='Child sample ID'
     )
 
-    parser.add_argument(
-        '-v', '--verbose',
-        action='store_true',
-        help='Verbose output'
-    )
-
     parser.set_defaults(func=_execute_link)
 
 
@@ -532,7 +532,6 @@ Examples:
     )
     parser.add_argument('sample_id', metavar='SAMPLE_ID', help='Sample unique ID')
     parser.add_argument('-d', '--dataset', required=True, metavar='DATASET_ID', help='Dataset ID')
-    parser.add_argument('-v', '--verbose', action='store_true', help='Verbose output')
     parser.set_defaults(func=_execute_link_dataset)
 
 
@@ -551,7 +550,6 @@ Examples:
     parser.add_argument('sample_id', metavar='SAMPLE_ID', help='Sample unique ID')
     parser.add_argument('--limit', type=int, default=_config.default_limit, metavar='N',
                         help=f'Maximum number of results (default: {_config.default_limit})')
-    parser.add_argument('-v', '--verbose', action='store_true', help='Verbose output')
     parser.set_defaults(func=_execute_list_parents)
 
 
@@ -570,7 +568,6 @@ Examples:
     parser.add_argument('sample_id', metavar='SAMPLE_ID', help='Sample unique ID')
     parser.add_argument('--limit', type=int, default=_config.default_limit, metavar='N',
                         help=f'Maximum number of results (default: {_config.default_limit})')
-    parser.add_argument('-v', '--verbose', action='store_true', help='Verbose output')
     parser.set_defaults(func=_execute_list_children)
 
 
@@ -589,7 +586,6 @@ Examples:
     parser.add_argument('sample_id', metavar='SAMPLE_ID', help='Sample unique ID')
     parser.add_argument('--limit', type=int, default=_config.default_limit, metavar='N',
                         help=f'Maximum number of results (default: {_config.default_limit})')
-    parser.add_argument('-v', '--verbose', action='store_true', help='Verbose output')
     parser.set_defaults(func=_execute_list_datasets)
 
 
@@ -638,6 +634,11 @@ def _execute_list(args):
                 for p in args.exclude
             )]
 
+        if getattr(args, 'json', False):
+            import json
+            print(json.dumps(samples, indent=2, default=str))
+            return
+
         title = f"Samples · {project_id} ({len(samples)})" if project_id else f"Samples ({len(samples)})"
         term.header(title)
         if filters:
@@ -646,11 +647,7 @@ def _execute_list(args):
         if not samples:
             print(f"  {term.dim('No samples found.')}")
         else:
-            try:
-                from crucible.config import config as _cfg
-                _base = _cfg.graph_explorer_url.rstrip('/')
-            except Exception:
-                _base = None
+            from .helpers import explorer_url
 
             _GROUP_FIELD = {'type': 'sample_type', 'project': 'project_id'}
             group_by_key = args.group_by or config.sample_group_by or 'type'
@@ -659,10 +656,9 @@ def _execute_list(args):
             def _make_row(s):
                 uid = s.get('unique_id') or ''
                 pid = s.get('project_id') or project_id
-                url = f"{_base}/{pid}/samples/{uid}" if _base and uid and pid else None
                 return (
                     s.get('sample_name') or '(unnamed)',
-                    term.mfid_link(uid, url) if uid else '-',
+                    term.mfid_link(uid, explorer_url(uid, pid, 'sample')) if uid else '-',
                     s.get('sample_type') or '-',
                 )
 
@@ -695,19 +691,15 @@ def _show_sample(sample, client, verbose=False, graph=False, include_metadata=Fa
     """Display sample fields. Extracted for reuse by top-level 'crucible get'."""
     _p = term.field_printer(14)
 
-    try:
-        from crucible.config import config
-        _base = config.graph_explorer_url.rstrip('/')
-    except Exception:
-        _base = None
+    from .helpers import explorer_url
 
     def _ds_link(r):
         u, p = r.get('unique_id'), r.get('project_id')
-        return term.mfid_link(u, f"{_base}/{p}/datasets/{u}" if _base and u and p else None)
+        return term.mfid_link(u, explorer_url(u, p, 'dataset'))
 
     def _s_link(r):
         u, p = r.get('unique_id'), r.get('project_id')
-        return term.mfid_link(u, f"{_base}/{p}/samples/{u}" if _base and u and p else None)
+        return term.mfid_link(u, explorer_url(u, p, 'sample'))
 
     term.header("Sample")
 
@@ -764,24 +756,21 @@ def _show_sample(sample, client, verbose=False, graph=False, include_metadata=Fa
         term.subheader(f"Linked Datasets ({len(linked_datasets)})")
         for ds in linked_datasets:
             uid = ds['unique_id']
-            url = f"{_base}/{proj}/datasets/{uid}" if _base and proj else None
-            print(f"  {term.mfid_link(uid, url)}  {ds.get('name') or '(unnamed)'}")
+            print(f"  {term.mfid_link(uid, explorer_url(uid, proj, 'dataset'))}  {ds.get('name') or '(unnamed)'}")
         if not linked_datasets:
             print(f"  {term.dim('(none)')}")
 
         term.subheader(f"Parents ({len(parent_samples)})")
         for p in parent_samples:
             uid = p['unique_id']
-            url = f"{_base}/{proj}/samples/{uid}" if _base and proj else None
-            print(f"  {term.mfid_link(uid, url)}  {p.get('name') or '(unnamed)'}")
+            print(f"  {term.mfid_link(uid, explorer_url(uid, proj, 'sample'))}  {p.get('name') or '(unnamed)'}")
         if not parent_samples:
             print(f"  {term.dim('(none)')}")
 
         term.subheader(f"Children ({len(child_samples)})")
         for c in child_samples:
             uid = c['unique_id']
-            url = f"{_base}/{proj}/samples/{uid}" if _base and proj else None
-            print(f"  {term.mfid_link(uid, url)}  {c.get('name') or '(unnamed)'}")
+            print(f"  {term.mfid_link(uid, explorer_url(uid, proj, 'sample'))}  {c.get('name') or '(unnamed)'}")
         if not child_samples:
             print(f"  {term.dim('(none)')}")
 
@@ -794,8 +783,8 @@ def _execute_get(args):
     """Execute the 'sample get' subcommand."""
     import json
     from crucible.client import CrucibleClient
-    output = getattr(args, 'output', None)
-    include_metadata = output == 'json' or getattr(args, 'include_metadata', False) or _config.include_metadata
+    as_json = getattr(args, 'json', False)
+    include_metadata = as_json or getattr(args, 'include_metadata', False) or _config.include_metadata
     try:
         graph  = getattr(args, 'graph', False)
         client = CrucibleClient()
@@ -808,7 +797,7 @@ def _execute_get(args):
         cache_resource(getattr(args, '_shell_state', None), client, sample, 'sample',
                        args.sample_id, verbose=getattr(args, 'verbose', False),
                        graph=graph, include_metadata=include_metadata)
-        if output == 'json':
+        if as_json:
             print(json.dumps(sample, indent=2, default=str))
         else:
             _show_sample(sample, client,

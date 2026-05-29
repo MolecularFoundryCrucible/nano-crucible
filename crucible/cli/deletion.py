@@ -35,6 +35,8 @@ def register_subcommand(subparsers):
     _register_approve(deletion_subparsers)
     _register_reject(deletion_subparsers)
     _register_delete(deletion_subparsers)
+    _register_list_deleted(deletion_subparsers)
+    _register_get_deleted(deletion_subparsers)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -55,14 +57,12 @@ def _status_label(status):
     """Return a styled status string."""
     if not status:
         return '-'
-    if not (hasattr(sys.stdout, 'isatty') and sys.stdout.isatty()):
-        return status
     if status == 'pending':
-        return f"\033[33m{status}\033[0m"    # yellow
+        return term.yellow(status)
     if status == 'approved':
-        return f"\033[32m{status}\033[0m"    # green
+        return term.green(status)
     if status == 'rejected':
-        return f"\033[31m{status}\033[0m"    # red
+        return term.red(status)
     return status
 
 
@@ -75,18 +75,10 @@ def _show_deletion_request(record, client=None):
     rid   = record.get('resource_id') or ''
     rtype = record.get('resource_type')
     url   = None
-    if client and rid:
-        try:
-            from crucible.config import config as _cfg
-            base = (_cfg.graph_explorer_url or '').rstrip('/')
-            if base:
-                resource   = client.get(rid)
-                project_id = resource.get('project_id')
-                if project_id:
-                    dtype = 'sample-graph' if rtype == 'sample' else 'dataset'
-                    url   = f"{base}/{project_id}/{dtype}/{rid}"
-        except Exception:
-            pass
+    project_id = record.get('project_id')
+    if rid and project_id:
+        from .helpers import explorer_url
+        url = explorer_url(rid, project_id, rtype)
     _p("Resource ID",   term.mfid_link(rid, url))
     _p("Resource Type", rtype)
     _p("Name",          record.get('resource_name'))
@@ -227,7 +219,118 @@ Examples:
     parser.set_defaults(func=_execute_delete)
 
 
+def _register_list_deleted(subparsers):
+    parser = subparsers.add_parser(
+        'list-deleted',
+        help='List permanently deleted resources (admin)',
+        description='Show the audit trail of hard-deleted resources. Admin only.',
+        formatter_class=term.ColorHelpFormatter,
+        epilog="""
+Examples:
+    crucible deletion list-deleted
+    crucible deletion list-deleted --resource mf-abc123
+    crucible deletion list-deleted --requester 0000-0002-1825-0097
+""",
+    )
+    parser.add_argument('--resource',  metavar='MFID',  dest='resource_id',  default=None,
+                        help='Filter by resource MFID')
+    parser.add_argument('--requester', metavar='ORCID', dest='requester_id', default=None,
+                        help='Filter by requester ORCID')
+    parser.add_argument('--reviewer',  metavar='ORCID', dest='reviewer_id',  default=None,
+                        help='Filter by reviewer ORCID')
+    parser.add_argument('--limit', type=int, default=50, metavar='N',
+                        help='Maximum number of results (default: 50)')
+    parser.set_defaults(func=_execute_list_deleted)
+
+
+def _register_get_deleted(subparsers):
+    parser = subparsers.add_parser(
+        'get-deleted',
+        help='Get a single deletion audit entry (admin)',
+        description='Fetch a single hard-deletion audit record by ID. Admin only.',
+        formatter_class=term.ColorHelpFormatter,
+        epilog="""
+Examples:
+    crucible deletion get-deleted 42
+""",
+    )
+    parser.add_argument('audit_id', metavar='ID', type=int,
+                        help='Integer ID of the audit log entry')
+    parser.set_defaults(func=_execute_get_deleted)
+
+
 # ── Execute functions ─────────────────────────────────────────────────────────
+
+def _execute_list_deleted(args):
+    """Execute 'crucible deletion list-deleted'."""
+    from crucible.client import CrucibleClient
+    try:
+        client = CrucibleClient()
+        records = client.deletions.list_deleted(
+            resource_id=args.resource_id,
+            requester_id=args.requester_id,
+            reviewer_id=args.reviewer_id,
+            limit=args.limit,
+        )
+
+        term.header(f"Deleted Resources ({len(records)})")
+        if not records:
+            print(f"  {term.dim('No records found.')}")
+            return
+
+        from .helpers import explorer_url
+        rows = [
+            (
+                str(r.get('id', '-')),
+                term.mfid_link(r.get('resource_id') or '',
+                               explorer_url(r.get('resource_id'), r.get('project_id'), r.get('resource_type'))),
+                r.get('resource_type') or '-',
+                r.get('resource_name') or '-',
+                _short_ts(r.get('deleted_at')),
+                r.get('requester_id') or '-',
+            )
+            for r in records
+        ]
+        term.table(rows, ['ID', 'Resource ID', 'Type', 'Name', 'Deleted At', 'Requester'],
+                   max_widths=[6, 26, 10, 20, 12, 22])
+
+    except Exception as e:
+        logger.error(f"Error: {e}")
+        if getattr(args, 'debug', False):
+            import traceback
+            traceback.print_exc()
+        sys.exit(1)
+
+
+def _execute_get_deleted(args):
+    """Execute 'crucible deletion get-deleted'."""
+    from crucible.client import CrucibleClient
+    try:
+        client = CrucibleClient()
+        record = client.deletions.get_deleted(args.audit_id)
+        _p = term.field_printer(16)
+        from .helpers import explorer_url
+        rid  = record.get('resource_id') or ''
+        proj = record.get('project_id')
+        rtype = record.get('resource_type')
+        term.header(f"Deleted Resource · #{record.get('id')}")
+        _p("Resource ID",    term.mfid_link(rid, explorer_url(rid, proj, rtype)))
+        _p("Resource Type",  rtype)
+        _p("Resource Name",  record.get('resource_name'))
+        _p("Project",        proj)
+        _p("Deleted At",     term.fmt_ts(record.get('deleted_at')))
+        _p("Requester",      record.get('requester_id'))
+        _p("Reviewer",       record.get('reviewer_id'))
+        _p("Reason",         record.get('reason'))
+        _p("Reviewer Notes", record.get('reviewer_notes'))
+
+    except Exception as e:
+        logger.error(f"Error: {e}")
+        if getattr(args, 'debug', False):
+            import traceback
+            traceback.print_exc()
+        sys.exit(1)
+
 
 def _execute_request(args):
     """Execute the 'deletion request' subcommand."""
@@ -237,7 +340,7 @@ def _execute_request(args):
         record = client.deletions.request(args.resource_id, reason=args.reason)
         logger.info(f"✓ Deletion request submitted (ID: {record.get('id')})")
         print()
-        _show_deletion_request(record)
+        _show_deletion_request(record, client=client)
     except Exception as e:
         logger.error(f"Error submitting deletion request: {e}")
         if getattr(args, 'debug', False):
@@ -273,20 +376,33 @@ def _execute_list(args):
             print(f"  {term.dim('No deletion requests found.')}")
             return
 
+        from .helpers import explorer_url
+
+        def _resource_link(record):
+            rid   = record.get('resource_id') or ''
+            rtype = record.get('resource_type')
+            proj  = record.get('project_id')
+            return term.mfid_link(rid, explorer_url(rid, proj, rtype)) if rid else '-'
+
+        def _short_reason(r):
+            reason = r.get('reason') or ''
+            return (reason[:28] + '…') if len(reason) > 29 else (reason or '-')
+
         rows = [
             (
                 record.get('id'),
-                term.mfid_link(record.get('resource_id') or '') or '-',
+                _resource_link(record),
                 record.get('resource_type') or '-',
                 record.get('resource_name') or '-',
                 _status_label(record.get('status') or ''),
                 _short_ts(record.get('request_time')),
+                _short_reason(record),
             )
             for record in records
         ]
         term.table(rows,
-                   ['ID', 'Resource ID', 'Type', 'Name', 'Status', 'Requested'],
-                   max_widths=[6, 26, 10, 15, 10, 10])
+                   ['ID', 'Resource ID', 'Type', 'Name', 'Status', 'Requested', 'Reason'],
+                   max_widths=[6, 26, 10, 15, 10, 10, 29])
     except Exception as e:
         logger.error(f"Error listing deletion requests: {e}")
         if getattr(args, 'debug', False):

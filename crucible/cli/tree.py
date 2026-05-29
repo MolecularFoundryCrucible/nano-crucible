@@ -96,7 +96,7 @@ def _find_path(start, target, adj):
 def _explorer_url(base_url, project_id, entity_type, uid):
     if not (base_url and project_id and uid):
         return None
-    dtype = 'sample-graph' if entity_type == 'sample' else 'dataset'
+    dtype = 'samples' if entity_type == 'sample' else 'datasets'
     return f"{base_url.rstrip('/')}/{project_id}/{dtype}/{uid}"
 
 

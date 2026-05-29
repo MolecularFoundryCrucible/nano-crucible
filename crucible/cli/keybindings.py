@@ -127,10 +127,9 @@ def register(kb, shell):
         def _open():
             try:
                 import webbrowser
-                from crucible.config import config as _cfg
-                dtype = 'sample-graph' if last['type'] == 'sample' else 'dataset'
-                pid   = last['data'].get('project_id', '')
-                url   = f"{_cfg.graph_explorer_url.rstrip('/')}/{pid}/{dtype}/{uid}"
+                from .helpers import explorer_url
+                pid = last['data'].get('project_id', '')
+                url = explorer_url(uid, pid, last['type'])
                 webbrowser.open(url)
             except Exception as e:
                 logger.error(f"Could not open resource: {e}")

@@ -74,6 +74,22 @@ def fetch_api_label():
         return 'api: ?'
 
 
+def explorer_url(resource_id: str, project_id: str, resource_type: str) -> str:
+    """Build a graph explorer URL for a dataset or sample.
+
+    Returns None if the graph_explorer_url is not configured or any argument is missing.
+    """
+    try:
+        from crucible.config import config
+        base = (config.graph_explorer_url or '').rstrip('/')
+    except Exception:
+        return None
+    if not base or not resource_id or not project_id:
+        return None
+    dtype = 'samples' if resource_type == 'sample' else 'datasets'
+    return f"{base}/{project_id}/{dtype}/{resource_id}"
+
+
 def cast_value(value: str):
     """Auto-cast a string value to int, float, bool, or string."""
     if value.lower() == 'true':

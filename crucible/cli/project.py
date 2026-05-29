@@ -76,12 +76,6 @@ def _register_list(subparsers):
         help='Include scientific metadata in results'
     )
 
-    parser.add_argument(
-        '-v', '--verbose',
-        action='store_true',
-        help='Verbose output'
-    )
-
     parser.set_defaults(func=_execute_list)
 
 
@@ -110,9 +104,10 @@ def _register_get(subparsers):
     )
 
     parser.add_argument(
-        '-v', '--verbose',
+        '--json',
         action='store_true',
-        help='Verbose output'
+        default=False,
+        help='Output as JSON'
     )
 
     parser.set_defaults(func=_execute_get)
@@ -186,12 +181,6 @@ Examples:
         help='Scientific metadata as JSON string or path to JSON file'
     )
 
-    parser.add_argument(
-        '-v', '--verbose',
-        action='store_true',
-        help='Verbose output'
-    )
-
     parser.set_defaults(func=_execute_create)
 
 
@@ -205,7 +194,6 @@ def _register_list_users(subparsers):
             pid_arg.completer = argcomplete.completers.SuppressCompleter()
         p.add_argument('--limit', type=int, default=_config.default_limit, metavar='N',
                        help=f'Maximum number of results to return (default: {_config.default_limit})')
-        p.add_argument('-v', '--verbose', action='store_true', help='Verbose output')
 
     parser = subparsers.add_parser(
         'list-users',
@@ -254,12 +242,6 @@ Examples:
         '--email',
         metavar='EMAIL',
         help='User email address'
-    )
-
-    parser.add_argument(
-        '-v', '--verbose',
-        action='store_true',
-        help='Verbose output'
     )
 
     parser.set_defaults(func=_execute_add_user)
@@ -392,7 +374,7 @@ def _show_project(project, include_metadata=False):
 def _execute_get(args):
     """Execute the 'project get' subcommand."""
     from crucible.client import CrucibleClient
-    include_metadata = getattr(args, 'include_metadata', False) or _config.include_metadata
+    include_metadata = getattr(args, 'json', False) or getattr(args, 'include_metadata', False) or _config.include_metadata
     try:
         client = CrucibleClient()
         project = client.projects.get(args.project_id,
@@ -402,7 +384,11 @@ def _execute_get(args):
             logger.error(f"Project not found: {args.project_id}")
             sys.exit(1)
 
-        _show_project(project, include_metadata=include_metadata)
+        if getattr(args, 'json', False):
+            import json
+            print(json.dumps(project, indent=2, default=str))
+        else:
+            _show_project(project, include_metadata=include_metadata)
 
     except Exception as e:
         logger.error(f"Error retrieving project: {e}")
@@ -696,7 +682,6 @@ Examples:
     )
     if ARGCOMPLETE_AVAILABLE:
         pid_arg.completer = argcomplete.completers.SuppressCompleter()
-    parser.add_argument('-v', '--verbose', action='store_true', help='Verbose output')
     parser.set_defaults(func=_execute_edit)
 
 

@@ -11,7 +11,7 @@ from typing import Dict, List, Optional
 
 from .base import BaseResource
 from ..constants import DEFAULT_LIMIT
-from ..models import DeletionRequest
+from ..models import DeletionRequest, DeletionAuditLog
 
 
 class DeletionOperations(BaseResource):
@@ -98,6 +98,50 @@ class DeletionOperations(BaseResource):
             Dict: The updated DeletionRequest record.
         """
         return self._review(request_id, status="rejected", reviewer_notes=reviewer_notes)
+
+    def list_deleted(self, resource_id: Optional[str] = None,
+                   requester_id: Optional[str] = None,
+                   reviewer_id: Optional[str] = None,
+                   limit: int = DEFAULT_LIMIT) -> List[Dict]:
+        """List hard-deletion audit log entries. Admin only.
+
+        Returns a permanent record of every resource that was hard-deleted,
+        ordered by deletion time descending. Audit entries survive even after
+        the original DeletionRequest and Resource rows are gone.
+
+        Args:
+            resource_id: Filter by resource MFID.
+            requester_id: Filter by the ORCID of who requested deletion.
+            reviewer_id: Filter by the ORCID of who approved deletion.
+            limit: Maximum number of results.
+
+        Returns:
+            List[Dict]: DeletionAuditLog records.
+        """
+        params = {}
+        if resource_id:
+            params['resource_id'] = resource_id
+        if requester_id:
+            params['requester_id'] = requester_id
+        if reviewer_id:
+            params['reviewer_id'] = reviewer_id
+        raw = self._paginate('/deletion_audit', params, limit=limit)
+        return [DeletionAuditLog(**r).model_dump() for r in raw]
+
+    def get_deleted(self, audit_id: int) -> Dict:
+        """Get a single hard-deletion audit log entry by ID. Admin only.
+
+        Args:
+            audit_id: Integer primary key of the audit log entry.
+
+        Returns:
+            Dict: DeletionAuditLog record.
+
+        Raises:
+            HTTPError 404: Audit entry not found.
+        """
+        raw = self._request('get', f'/deletion_audit/{audit_id}')
+        return DeletionAuditLog(**raw).model_dump()
 
     def delete(self, resource_id: str, force: bool = False) -> Dict:
         """Permanently delete a resource. Admin only.

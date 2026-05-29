@@ -72,12 +72,6 @@ def _register_list(subparsers):
         help='Include scientific metadata in results'
     )
 
-    parser.add_argument(
-        '-v', '--verbose',
-        action='store_true',
-        help='Verbose output'
-    )
-
     parser.set_defaults(func=_execute_list)
 
 
@@ -112,9 +106,10 @@ def _register_get(subparsers):
     )
 
     parser.add_argument(
-        '-v', '--verbose',
+        '--json',
         action='store_true',
-        help='Verbose output'
+        default=False,
+        help='Output as JSON'
     )
 
     parser.set_defaults(func=_execute_get)
@@ -182,12 +177,6 @@ Examples:
         metavar='JSON',
         help='Scientific metadata as JSON string or path to JSON file'
     )
-    parser.add_argument(
-        '-v', '--verbose',
-        action='store_true',
-        help='Verbose output'
-    )
-
     parser.set_defaults(func=_execute_create)
 
 
@@ -354,7 +343,11 @@ def _execute_get(args):
             logger.error(f"Instrument not found: {args.instrument}")
             sys.exit(1)
 
-        _show_instrument(instrument, include_metadata=include_metadata)
+        if getattr(args, 'json', False):
+            import json
+            print(json.dumps(instrument, indent=2, default=str))
+        else:
+            _show_instrument(instrument, include_metadata=include_metadata)
 
     except Exception as e:
         logger.error(f"Error retrieving instrument: {e}")
@@ -476,7 +469,6 @@ Examples:
     )
     if ARGCOMPLETE_AVAILABLE:
         uid_arg.completer = argcomplete.completers.SuppressCompleter()
-    parser.add_argument('-v', '--verbose', action='store_true', help='Verbose output')
     parser.set_defaults(func=_execute_edit)
 
 

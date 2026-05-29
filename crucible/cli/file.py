@@ -46,15 +46,20 @@ def register_subcommand(subparsers):
 def _register_list(subparsers):
     parser = subparsers.add_parser(
         'list',
-        help='List all files across datasets',
-        description='List all files you have access to across all datasets.',
+        help='List files (all or scoped to a dataset)',
+        description='List files across all datasets, or scoped to a specific dataset.',
         formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     crucible file list
+    crucible file list --dataset DSID
     crucible file list --limit 50
     crucible file list --sha256 abc123...
 """,
+    )
+    parser.add_argument(
+        '--dataset', '-d', metavar='DSID', default=None,
+        help='Scope to a specific dataset (faster than global list)',
     )
     parser.add_argument(
         '--limit', type=int, default=100, metavar='N',
@@ -72,9 +77,18 @@ def _execute_list(args):
     from crucible.client import CrucibleClient
     try:
         client = CrucibleClient()
-        files = client.datasets.list_files(limit=args.limit, sha256_hash=args.sha256)
+        dsid = getattr(args, 'dataset', None)
+        if dsid:
+            files = client.datasets.get_associated_files(dsid)
+        else:
+            files = client.datasets.list_files(limit=args.limit, sha256_hash=args.sha256)
 
-        term.header(f"Files ({len(files)})")
+        sha256_filter = getattr(args, 'sha256', None)
+        if sha256_filter and dsid:
+            files = [f for f in files if f.get('sha256_hash', '').startswith(sha256_filter)]
+
+        header = f"Files · {dsid} ({len(files)})" if dsid else f"Files ({len(files)})"
+        term.header(header)
         if not files:
             print(f"  {term.dim('No files found.')}")
             return
