@@ -427,36 +427,54 @@ class DatasetOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMix
     @_deprecated_parameter('parent_dataset_mfid', 'parent_mfid')
     @_deprecated_parameter('child_dataset_id', 'child_mfid')
     @_deprecated_parameter('child_dataset_mfid', 'child_mfid')
-    def link_parent_child(self, parent_mfid: str, child_mfid: str) -> Dict:
+    def link_parent_child(self, parent_mfid: str, child_mfid: str,
+                          relationship_type: Optional[str] = None) -> Dict:
         """Link a derived dataset to a parent dataset.
 
         Args:
             parent_mfid (str): Parent dataset MFID
             child_mfid (str): Derived dataset MFID
+            relationship_type (str, optional): Kind of link, one of
+                crucible.constants.RELATIONSHIP_TYPES. Describes the child
+                relative to the parent, so 'is_part_of' reads "child
+                is_part_of parent". Omit to leave the kind unspecified; on a
+                link that already exists, omitting it preserves the type
+                already stored rather than clearing it.
 
         Returns:
             Dict: Information about the created link
         """
+        # Send the parameter only when the caller set it: the server treats a
+        # supplied relationship_type as an overwrite, so an unconditional
+        # param would clear the stored type on a re-link that just meant
+        # "make sure this link exists".
+        extra = ({'params': {'relationship_type': relationship_type}}
+                 if relationship_type is not None else {})
         new_link = self._request(
-            'post', f"/datasets/{parent_mfid}/children/{child_mfid}")
+            'post', f"/datasets/{parent_mfid}/children/{child_mfid}", **extra)
         return new_link
 
     @_deprecated_parameter('parent_dataset_id', 'parent_mfid')
     @_deprecated_parameter('parent_dataset_mfid', 'parent_mfid')
     def list_children(self, parent_mfid: str, limit: int = DEFAULT_LIMIT,
-                      offset: int = 0, **kwargs) -> List[Dict]:
+                      offset: int = 0, relationship_type: Optional[str] = None,
+                      **kwargs) -> List[Dict]:
         """List the children of a given dataset with optional filtering.
 
         Args:
             parent_mfid (str): Parent dataset MFID
             limit (int): Maximum number of results to return
             offset (int): Starting position in the full result set (default: 0)
+            relationship_type (str, optional): Only return children linked with
+                this kind of link, one of crucible.constants.RELATIONSHIP_TYPES.
             **kwargs (Any): Query parameters for filtering datasets
 
         Returns:
             List[Dict]: Children datasets
         """
         params = {k: v for k, v in kwargs.items() if v is not None}
+        if relationship_type is not None:
+            params['relationship_type'] = relationship_type
         raw = self._paginate(
             f"/datasets/{parent_mfid}/children", params, limit, offset)
         return [self._parse(dataset) for dataset in raw]
@@ -464,19 +482,24 @@ class DatasetOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMix
     @_deprecated_parameter('child_dataset_id', 'child_mfid')
     @_deprecated_parameter('child_dataset_mfid', 'child_mfid')
     def list_parents(self, child_mfid: str, limit: int = DEFAULT_LIMIT,
-                     offset: int = 0, **kwargs) -> List[Dict]:
+                     offset: int = 0, relationship_type: Optional[str] = None,
+                     **kwargs) -> List[Dict]:
         """List the parents of a given dataset with optional filtering.
 
         Args:
             child_mfid (str): Child dataset MFID
             limit (int): Maximum number of results to return
             offset (int): Starting position in the full result set (default: 0)
+            relationship_type (str, optional): Only return parents linked with
+                this kind of link, one of crucible.constants.RELATIONSHIP_TYPES.
             **kwargs (Any): Query parameters for filtering datasets
 
         Returns:
             List[Dict]: Parent datasets
         """
         params = {k: v for k, v in kwargs.items() if v is not None}
+        if relationship_type is not None:
+            params['relationship_type'] = relationship_type
         raw = self._paginate(
             f"/datasets/{child_mfid}/parents", params, limit, offset)
         return [self._parse(dataset) for dataset in raw]

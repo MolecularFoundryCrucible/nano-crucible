@@ -149,37 +149,47 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
     @_deprecated_parameter('sample_id', 'child_mfid')
     @_deprecated_parameter('sample_mfid', 'child_mfid')
     def list_parents(self, child_mfid: str, limit: int = DEFAULT_LIMIT,
-                     offset: int = 0, **kwargs) -> List[Dict]:
+                     offset: int = 0, relationship_type: Optional[str] = None,
+                     **kwargs) -> List[Dict]:
         """List the parents of a given sample with optional filtering.
 
         Args:
             child_mfid (str): Child sample MFID
             limit (int): Maximum number of results to return (default: 100)
             offset (int): Starting position in the full result set (default: 0)
+            relationship_type (str, optional): Only return parents linked with
+                this kind of link, one of crucible.constants.RELATIONSHIP_TYPES.
             **kwargs: Query parameters for filtering samples
 
         Returns:
             List[Dict]: Parent samples
         """
         params = {k: v for k, v in kwargs.items() if v is not None}
+        if relationship_type is not None:
+            params['relationship_type'] = relationship_type
         return self._paginate(f"/samples/{child_mfid}/parents", params, limit, offset)
 
     @_deprecated_parameter('sample_id', 'parent_mfid')
     @_deprecated_parameter('sample_mfid', 'parent_mfid')
     def list_children(self, parent_mfid: str, limit: int = DEFAULT_LIMIT,
-                      offset: int = 0, **kwargs) -> List[Dict]:
+                      offset: int = 0, relationship_type: Optional[str] = None,
+                      **kwargs) -> List[Dict]:
         """List the children of a given sample with optional filtering.
 
         Args:
             parent_mfid (str): Parent sample MFID
             limit (int): Maximum number of results to return (default: 100)
             offset (int): Starting position in the full result set (default: 0)
+            relationship_type (str, optional): Only return children linked with
+                this kind of link, one of crucible.constants.RELATIONSHIP_TYPES.
             **kwargs: Query parameters for filtering samples
 
         Returns:
             List[Dict]: Children samples
         """
         params = {k: v for k, v in kwargs.items() if v is not None}
+        if relationship_type is not None:
+            params['relationship_type'] = relationship_type
         return self._paginate(f"/samples/{parent_mfid}/children", params, limit, offset)
 
     def create(self, sample=None, scientific_metadata: Optional[Dict] = None,
@@ -413,18 +423,31 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
     @_deprecated_parameter('parent_sample_mfid', 'parent_mfid')
     @_deprecated_parameter('child_id', 'child_mfid')
     @_deprecated_parameter('child_sample_mfid', 'child_mfid')
-    def link(self, parent_mfid: str, child_mfid: str) -> Dict:
+    def link(self, parent_mfid: str, child_mfid: str,
+             relationship_type: Optional[str] = None) -> Dict:
         """Link two samples with a parent-child relationship.
 
         Args:
             parent_mfid (str): Parent sample MFID
             child_mfid (str): Child sample MFID
+            relationship_type (str, optional): Kind of link, one of
+                crucible.constants.RELATIONSHIP_TYPES. Describes the child
+                relative to the parent, so 'is_part_of' reads "child
+                is_part_of parent". Omit to leave the kind unspecified; on a
+                link that already exists, omitting it preserves the type
+                already stored rather than clearing it.
 
         Returns:
             Dict: Created link object
         """
+        # Send the parameter only when the caller set it: the server treats a
+        # supplied relationship_type as an overwrite, so an unconditional
+        # param would clear the stored type on a re-link that just meant
+        # "make sure this link exists".
+        extra = ({'params': {'relationship_type': relationship_type}}
+                 if relationship_type is not None else {})
         return self._request(
-            'post', f"/samples/{parent_mfid}/children/{child_mfid}")
+            'post', f"/samples/{parent_mfid}/children/{child_mfid}", **extra)
 
     def search(self, q: str, project_id: Optional[str] = None,
                limit: int = 20) -> List[Dict]:

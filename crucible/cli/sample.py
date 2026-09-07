@@ -590,6 +590,8 @@ def _execute_edit(args):
 
 def _register_link(subparsers):
     """Register the 'sample link' subcommand."""
+    from crucible.constants import RELATIONSHIP_TYPES
+
     parser = subparsers.add_parser(
         'link',
         help='Link parent and child samples',
@@ -608,6 +610,14 @@ def _register_link(subparsers):
         required=True,
         metavar='CHILD_MFID',
         help='Child sample MFID'
+    )
+
+    parser.add_argument(
+        '--relationship-type',
+        choices=RELATIONSHIP_TYPES,
+        metavar='TYPE',
+        help=f"Kind of link, describing the child relative to the parent "
+             f"({', '.join(RELATIONSHIP_TYPES)}). Omit to leave it unspecified."
     )
 
     parser.set_defaults(func=_execute_link)
@@ -784,7 +794,7 @@ def _show_sample(sample, client, verbose=False, graph=False, include_metadata=Fa
     """Display sample fields. Extracted for reuse by top-level 'crucible get'."""
     _p = term.field_printer(14)
 
-    from .helpers import explorer_url, project_reference
+    from .helpers import explorer_url, format_relationship_type, project_reference
 
     def _s_link(r):
         u = r.get('unique_id')
@@ -850,11 +860,13 @@ def _show_sample(sample, client, verbose=False, graph=False, include_metadata=Fa
             show_warning("Could not fetch links.")
             return
 
-        linked_datasets = [l for l in links_list if l.get('relationship') == 'associated'
+        # 'direction' is relative to this sample: links are stored
+        # parent -> child, so a 'source' is one of its parents.
+        linked_datasets = [l for l in links_list if l.get('direction') == 'undirected'
                            and l.get('resource_type') == 'dataset']
-        parent_samples  = [l for l in links_list if l.get('relationship') == 'parent'
+        parent_samples  = [l for l in links_list if l.get('direction') == 'source'
                            and l.get('resource_type') == 'sample']
-        child_samples   = [l for l in links_list if l.get('relationship') == 'child'
+        child_samples   = [l for l in links_list if l.get('direction') == 'target'
                            and l.get('resource_type') == 'sample']
 
         term.subheader(f"Linked Datasets ({len(linked_datasets)})")
@@ -867,14 +879,16 @@ def _show_sample(sample, client, verbose=False, graph=False, include_metadata=Fa
         term.subheader(f"Parents ({len(parent_samples)})")
         for p in parent_samples:
             uid = p['unique_id']
-            print(f"  {term.mfid_link(uid, explorer_url(uid, proj, 'sample'))}  {p.get('name') or '(unnamed)'}")
+            print(f"  {term.mfid_link(uid, explorer_url(uid, proj, 'sample'))}  "
+                  f"{p.get('name') or '(unnamed)'}  {format_relationship_type(p)}")
         if not parent_samples:
             print(f"  {term.dim('(none)')}")
 
         term.subheader(f"Children ({len(child_samples)})")
         for c in child_samples:
             uid = c['unique_id']
-            print(f"  {term.mfid_link(uid, explorer_url(uid, proj, 'sample'))}  {c.get('name') or '(unnamed)'}")
+            print(f"  {term.mfid_link(uid, explorer_url(uid, proj, 'sample'))}  "
+                  f"{c.get('name') or '(unnamed)'}  {format_relationship_type(c)}")
         if not child_samples:
             print(f"  {term.dim('(none)')}")
 
@@ -1028,9 +1042,11 @@ def _execute_link(args):
     from crucible.client import CrucibleClient
     try:
         client = CrucibleClient()
-        client.samples.link(args.parent, args.child)
+        client.samples.link(args.parent, args.child, args.relationship_type)
 
-        term.success(f"Linked sample {args.child} as child of {args.parent}", args)
+        suffix = f" ({args.relationship_type})" if args.relationship_type else ""
+        term.success(
+            f"Linked sample {args.child} as child of {args.parent}{suffix}", args)
 
     except Exception as e:
         from .helpers import fail

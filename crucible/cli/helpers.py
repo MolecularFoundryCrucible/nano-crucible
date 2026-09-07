@@ -146,6 +146,17 @@ def show_warning(message) -> None:
     print(f"{label} {message}", file=sys.stderr)
 
 
+def format_relationship_type(link) -> str:
+    """Render a link's relationship_type as a dim trailing annotation.
+
+    Links created before typing existed carry no type, so show a dim dash
+    rather than dropping the column and making the rows ragged.
+    """
+    from . import term
+
+    return term.dim(link.get('relationship_type') or '—')
+
+
 def _interactive_stdin() -> bool:
     return hasattr(sys.stdin, 'isatty') and sys.stdin.isatty()
 

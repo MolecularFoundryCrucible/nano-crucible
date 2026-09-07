@@ -278,7 +278,15 @@ class CrucibleClient:
 
         Hits GET /resources/{id}/links and returns a flat list of link dicts:
             [{"unique_id": "...", "resource_type": "dataset|sample",
-              "name": "...", "relationship": "parent|child|associated"}, ...]
+              "name": "...", "direction": "source|target|undirected",
+              "relationship_type": "is_derived_from|is_part_of|null"}, ...]
+
+        `direction` says which end of the stored parent -> child edge this
+        resource is, relative to the one you asked about: "source" means it is
+        the parent, "target" the child. Dataset/sample associations have no
+        hierarchy and are always "undirected". `relationship_type` is the kind
+        of link, stored on the link row and oriented child-relative-to-parent;
+        it is null on associations and on links created before typing existed.
 
         Args:
             resource_mfid (str): Dataset or sample MFID
@@ -291,7 +299,8 @@ class CrucibleClient:
 
     @_deprecated_parameter('parent_id', 'parent_mfid')
     @_deprecated_parameter('child_id', 'child_mfid')
-    def link(self, parent_mfid: str, child_mfid: str) -> Dict:
+    def link(self, parent_mfid: str, child_mfid: str,
+             relationship_type: Optional[str] = None) -> Dict:
         """
         Link two resources with automatic type detection.
 
@@ -303,19 +312,25 @@ class CrucibleClient:
         Args:
             parent_mfid (str): Parent resource MFID
             child_mfid (str): Child resource MFID
+            relationship_type (str, optional): Kind of link, one of
+                crucible.constants.RELATIONSHIP_TYPES. Only meaningful for
+                dataset-to-dataset and sample-to-sample links; a dataset/sample
+                association has no hierarchy to describe.
 
         Returns:
             Dict: Information about the created link
 
         Raises:
-            ValueError: If resource types cannot be determined or combination is invalid
+            ValueError: If resource types cannot be determined, the combination
+                is invalid, or relationship_type is given for a dataset/sample
+                association
 
         Example:
             >>> # Link two datasets
             >>> client.link(parent_mfid, child_mfid)
 
-            >>> # Link two samples
-            >>> client.link(parent_mfid, child_mfid)
+            >>> # Link two samples, recording what kind of link it is
+            >>> client.link(parent_mfid, child_mfid, relationship_type='is_part_of')
 
             >>> # Link sample to dataset
             >>> client.link(dataset_mfid, sample_mfid)
@@ -326,14 +341,21 @@ class CrucibleClient:
         # Both are datasets
         if parent_type == "dataset" and child_type == "dataset":
             logger.info(f"Linking datasets: {parent_mfid} (parent) -> {child_mfid} (child)")
-            return self.datasets.link_parent_child(parent_mfid, child_mfid)
+            return self.datasets.link_parent_child(parent_mfid, child_mfid, relationship_type)
 
         # Both are samples
         elif parent_type == "sample" and child_type == "sample":
             logger.info(f"Linking samples: {parent_mfid} (parent) -> {child_mfid} (child)")
-            return self.samples.link(parent_mfid, child_mfid)
+            return self.samples.link(parent_mfid, child_mfid, relationship_type)
 
-        # Mixed: dataset and sample
+        # Mixed: dataset and sample. These associations are undirected, so
+        # there is no parent/child relationship for a type to describe.
+        elif relationship_type is not None:
+            raise ValueError(
+                "relationship_type does not apply to a dataset/sample association; "
+                "it is only meaningful for dataset-to-dataset or sample-to-sample links."
+            )
+
         elif parent_type == "dataset" and child_type == "sample":
             logger.info(f"Linking sample {child_mfid} to dataset {parent_mfid}")
             return self.datasets.add_sample(parent_mfid, child_mfid)

@@ -30,7 +30,7 @@ Running `crucible` without a command starts the interactive shell. See the [CLI 
 | `dataset delete MFID` | Permanently delete a dataset after confirmation |
 | `dataset search QUERY` | Search dataset names |
 | `dataset search-metadata QUERY` | Search scientific metadata; `search-md` is an alias |
-| `dataset link` | Link parent and child datasets |
+| `dataset link` | Link parent and child datasets; `--relationship-type` records the kind of link |
 | `dataset remove-child` | Remove a dataset parent-child link |
 | `dataset list-parents MFID` | List parent datasets |
 | `dataset list-children MFID` | List child datasets |
@@ -74,7 +74,7 @@ Fields normally updated through `dataset update --set` include `dataset_name`, `
 | `sample transfer-ownership MFID USER` | Transfer sample ownership |
 | `sample search QUERY` | Search sample names |
 | `sample search-metadata QUERY` | Search scientific metadata; `search-md` is an alias |
-| `sample link` | Link parent and child samples |
+| `sample link` | Link parent and child samples; `--relationship-type` records the kind of link |
 | `sample remove-child` | Remove a sample parent-child link |
 | `sample list-parents MFID` | List parent samples |
 | `sample list-children MFID` | List child samples |
@@ -278,7 +278,7 @@ Configuration values can come from environment variables, the platform-specific 
 | `get MFID` | Show a dataset, sample, project, or instrument after detecting its resource type |
 | `edit MFID` | Edit a dataset, sample, or instrument after detecting its type |
 | `download MFID` | Save a record and, for datasets, associated files |
-| `link` | Link parent-child resources or associate a dataset and sample |
+| `link` | Link parent-child resources or associate a dataset and sample; `--relationship-type` applies to parent-child links only |
 | `unlink MFID1 MFID2` | Remove a resource relationship |
 | `tree MFID` | Display connected ancestors and descendants |
 | `open [ID]` | Open the Graph Explorer or print its URL |
