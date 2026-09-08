@@ -32,8 +32,8 @@ Running `crucible` without a command starts the interactive shell. See the [CLI 
 | `dataset search-metadata QUERY` | Search scientific metadata; `search-md` is an alias |
 | `dataset link` | Link parent and child datasets; `--relationship-type` records the kind of link |
 | `dataset remove-child` | Remove a dataset parent-child link |
-| `dataset list-parents MFID` | List parent datasets |
-| `dataset list-children MFID` | List child datasets |
+| `dataset list-parents MFID` | List parent datasets; `--relationship-type` filters by kind of link |
+| `dataset list-children MFID` | List child datasets; `--relationship-type` filters by kind of link |
 | `dataset add-sample MFID` | Link a sample to a dataset |
 | `dataset remove-sample MFID` | Unlink a sample from a dataset |
 | `dataset list-samples MFID` | List samples linked to a dataset |
@@ -76,8 +76,8 @@ Fields normally updated through `dataset update --set` include `dataset_name`, `
 | `sample search-metadata QUERY` | Search scientific metadata; `search-md` is an alias |
 | `sample link` | Link parent and child samples; `--relationship-type` records the kind of link |
 | `sample remove-child` | Remove a sample parent-child link |
-| `sample list-parents MFID` | List parent samples |
-| `sample list-children MFID` | List child samples |
+| `sample list-parents MFID` | List parent samples; `--relationship-type` filters by kind of link |
+| `sample list-children MFID` | List child samples; `--relationship-type` filters by kind of link |
 | `sample add-dataset MFID` | Link a dataset to a sample |
 | `sample remove-dataset MFID` | Unlink a dataset from a sample |
 | `sample list-datasets MFID` | List datasets linked to a sample |

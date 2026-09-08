@@ -4,7 +4,7 @@
 
 ### Added
 
-- Dataset-to-dataset and sample-to-sample links can record a `relationship_type` of `is_derived_from` or `is_part_of`, describing the child relative to the parent. It is optional, settable through `link_parent_child()`, `samples.link()`, `client.link()`, and `--relationship-type` on `crucible link`, `dataset link`, and `sample link`, and filterable on `list_parents()` and `list_children()`. Re-linking an existing pair without it preserves the stored type. Dataset-sample associations are undirected and reject it.
+- Dataset-to-dataset and sample-to-sample links can record a `relationship_type` of `is_derived_from` or `is_part_of`, describing the child relative to the parent. It is optional, settable through `link_parent_child()`, `samples.link()`, `client.link()`, and `--relationship-type` on `crucible link`, `dataset link`, and `sample link`, and filterable on `list_parents()` and `list_children()` in Python and via `--relationship-type` on the matching `dataset` and `sample` list commands. Re-linking an existing pair without it preserves the stored type. Dataset-sample associations are undirected and reject it.
 - The interactive shell displays a centered compact pixel-art Crucible banner on a light-blue panel on terminals wide enough to show it.
 - Sample responses expose a typed project reference when supplied by the API, while retaining the flat project ID fallback.
 - Dataset responses expose typed project and instrument references with canonical MFIDs while retaining legacy flat fields.

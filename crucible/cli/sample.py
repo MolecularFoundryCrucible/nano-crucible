@@ -650,11 +650,14 @@ def _register_list_parents(subparsers):
         epilog="""
 Examples:
     crucible sample list-parents SAMPLE_MFID
+    crucible sample list-parents SAMPLE_MFID --relationship-type is_part_of
 """
     )
     parser.add_argument('sample_id', metavar='SAMPLE_MFID', help='Sample MFID')
     parser.add_argument('--limit', type=int, default=_config.default_limit, metavar='N',
                         help=f'Maximum number of results (default: {_config.default_limit})')
+    from .helpers import add_relationship_type_filter
+    add_relationship_type_filter(parser)
     parser.set_defaults(func=_execute_list_parents)
 
 
@@ -668,11 +671,14 @@ def _register_list_children(subparsers):
         epilog="""
 Examples:
     crucible sample list-children SAMPLE_MFID
+    crucible sample list-children SAMPLE_MFID --relationship-type is_derived_from
 """
     )
     parser.add_argument('sample_id', metavar='SAMPLE_MFID', help='Sample MFID')
     parser.add_argument('--limit', type=int, default=_config.default_limit, metavar='N',
                         help=f'Maximum number of results (default: {_config.default_limit})')
+    from .helpers import add_relationship_type_filter
+    add_relationship_type_filter(parser)
     parser.set_defaults(func=_execute_list_children)
 
 
@@ -1058,7 +1064,9 @@ def _execute_list_parents(args):
     from crucible.client import CrucibleClient
     try:
         client = CrucibleClient()
-        parents = sorted(client.samples.list_parents(args.sample_id, limit=args.limit),
+        parents = sorted(client.samples.list_parents(
+            args.sample_id, limit=args.limit,
+            relationship_type=args.relationship_type),
                          key=lambda s: (s.get('sample_name') or '').lower())
         term.header(f"Parent Samples · {args.sample_id} ({len(parents)})")
         if not parents:
@@ -1078,7 +1086,9 @@ def _execute_list_children(args):
     from crucible.client import CrucibleClient
     try:
         client = CrucibleClient()
-        children = sorted(client.samples.list_children(args.sample_id, limit=args.limit),
+        children = sorted(client.samples.list_children(
+            args.sample_id, limit=args.limit,
+            relationship_type=args.relationship_type),
                           key=lambda s: (s.get('sample_name') or '').lower())
         term.header(f"Child Samples · {args.sample_id} ({len(children)})")
         if not children:

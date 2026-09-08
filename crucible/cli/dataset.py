@@ -1134,11 +1134,14 @@ def _register_list_parents(subparsers):
 Examples:
     crucible dataset list-parents DATASET_MFID
     crucible dataset list-parents DATASET_MFID --limit 20
+    crucible dataset list-parents DATASET_MFID --relationship-type is_part_of
 """
     )
     parser.add_argument('dataset_id', metavar='DATASET_MFID', help='Dataset MFID')
     parser.add_argument('--limit', type=int, default=_config.default_limit, metavar='N',
                         help=f'Maximum number of results (default: {_config.default_limit})')
+    from .helpers import add_relationship_type_filter
+    add_relationship_type_filter(parser)
     parser.set_defaults(func=_execute_list_parents)
 
 
@@ -1153,11 +1156,14 @@ def _register_list_children(subparsers):
 Examples:
     crucible dataset list-children DATASET_MFID
     crucible dataset list-children DATASET_MFID --limit 20
+    crucible dataset list-children DATASET_MFID --relationship-type is_derived_from
 """
     )
     parser.add_argument('dataset_id', metavar='DATASET_MFID', help='Dataset MFID')
     parser.add_argument('--limit', type=int, default=_config.default_limit, metavar='N',
                         help=f'Maximum number of results (default: {_config.default_limit})')
+    from .helpers import add_relationship_type_filter
+    add_relationship_type_filter(parser)
     parser.set_defaults(func=_execute_list_children)
 
 
@@ -2157,7 +2163,9 @@ def _execute_list_parents(args):
     from crucible.client import CrucibleClient
     try:
         client = CrucibleClient()
-        parents = sorted(client.datasets.list_parents(args.dataset_id, limit=args.limit),
+        parents = sorted(client.datasets.list_parents(
+            args.dataset_id, limit=args.limit,
+            relationship_type=args.relationship_type),
                          key=lambda ds: (ds.get('dataset_name') or '').lower())
 
         term.header(f"Parent Datasets · {args.dataset_id} ({len(parents)})")
@@ -2179,7 +2187,9 @@ def _execute_list_children(args):
     from crucible.client import CrucibleClient
     try:
         client = CrucibleClient()
-        children = sorted(client.datasets.list_children(args.dataset_id, limit=args.limit),
+        children = sorted(client.datasets.list_children(
+            args.dataset_id, limit=args.limit,
+            relationship_type=args.relationship_type),
                           key=lambda ds: (ds.get('dataset_name') or '').lower())
 
         term.header(f"Child Datasets · {args.dataset_id} ({len(children)})")
