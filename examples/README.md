@@ -7,7 +7,7 @@ This directory contains example notebooks and data files demonstrating how to us
 ### Notebooks
 
 - **`crucible_tutorial.ipynb`** - Comprehensive tutorial covering core dataset and sample operations
-- **`crucible_project_management.ipynb`** - Tutorial for project and user management (requires admin permissions)
+- **`crucible_project_management.ipynb`** - Tutorial for project and user management, including operations that require elevated permissions
 
 ### Data Files (`data/` directory)
 
@@ -24,7 +24,7 @@ The main tutorial demonstrates all core dataset and sample operations:
 
 1. **Setup and Configuration** - Initializing the Crucible client
 2. **Creating Samples** - Creating sample records in Crucible
-3. **Creating Datasets** - Creating metadata-only datasets and uploading files via parsers
+3. **Creating Datasets and Files** - Creating dataset records, recursively discovering files, adding files later, replacing files explicitly, and re-uploading to an existing record
 4. **Listing Datasets** - Retrieving datasets from a project
 5. **Getting Dataset Details** - Retrieving dataset metadata
 6. **Updating Dataset Metadata** - Modifying scientific metadata
@@ -36,9 +36,9 @@ The main tutorial demonstrates all core dataset and sample operations:
 
 ### Project Management Tutorial (`crucible_project_management.ipynb`)
 
-The project management tutorial covers administrative operations (**requires admin API key**):
+The project management tutorial includes administrative operations. Run only the sections allowed by your project or platform role:
 
-1. **Setup and Configuration** - Initializing with admin credentials
+1. **Setup and Configuration** - Initializing with credentials appropriate for the operations being demonstrated
 2. **Creating Projects** - Creating or getting projects
 3. **Getting Project Details** - Retrieving project information
 4. **Listing Projects** - Viewing all accessible projects
@@ -62,15 +62,15 @@ The project management tutorial covers administrative operations (**requires adm
    ```
 
    You'll need:
-   - **For main tutorial**: Regular API key from https://crucible.lbl.gov/api/v2/user_apikey
-   - **For project management tutorial**: Admin API key
+   - **For main tutorial**: A Crucible API key with access to the selected project
+   - **For project management tutorial**: A Crucible API key with the permissions needed for the operations you run
    - Access to project `crucible-demo` (or update the PROJECT_ID variable)
 
    **Alternative (without terminal access)**: If you don't have terminal access, you can initialize the client directly in your notebook:
    ```python
    from crucible import CrucibleClient
    client = CrucibleClient(
-       api_url="https://crucible.lbl.gov/api/v2",
+       api_url="https://crucible.lbl.gov/api/v3",
        api_key="your-api-key-here"
    )
    ```
@@ -89,7 +89,7 @@ cd /path/to/nano-crucible/examples
 jupyter notebook crucible_tutorial.ipynb
 ```
 
-For project and user management (requires admin key):
+For project and user management:
 
 ```bash
 cd /path/to/nano-crucible/examples
@@ -106,11 +106,11 @@ jupyter lab
 ## Notes
 
 - Both tutorials use project ID `crucible-demo` by default - make sure you have access to this project or update the `PROJECT_ID` variable
-- The **project management tutorial requires admin permissions** for most operations
+- Project creation is available to authenticated human users. Some membership and user-management operations require elevated project or platform permissions.
 - All example data files are located in the `data/` subdirectory
 - The notebooks create new resources (samples, datasets, projects, users) in Crucible when executed
 - Resource IDs are displayed for reference - you can use `crucible open <ID>` to view them in your browser
-- File uploads use parsers (`BaseParser` by default) — swap in a domain-specific parser (e.g. `LAMMPSParser`) for automatic metadata extraction
+- Dataset files are added through `client.datasets.add_file()`. Domain-specific parsers remain available when local metadata extraction is needed.
 - If running in VSCode Flatpak, you may need to set the API key as an environment variable (see notebook for details)
 
 ## Example Data Details

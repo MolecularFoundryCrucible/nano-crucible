@@ -11,10 +11,10 @@ Access via `client.samples`.
         - search
         - create
         - update
-        - add_dataset
-        - remove_dataset
+        - link_dataset
+        - unlink_dataset
         - link
-        - remove_child
+        - unlink
         - list_parents
         - list_children
         - get_scientific_metadata

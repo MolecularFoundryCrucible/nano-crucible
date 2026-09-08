@@ -12,13 +12,13 @@ Crucible supports links between datasets and between datasets and samples. Links
 
 ```python
 # Link a dataset to a sample
-client.samples.add_dataset(sample_mfid=sample_mfid, dataset_mfid=dataset_mfid)
+client.samples.link_dataset(sample_mfid=sample_mfid, dataset_mfid=dataset_mfid)
 
 # Or equivalently from the dataset side
-client.datasets.add_sample(dataset_mfid=dataset_mfid, sample_mfid=sample_mfid)
+client.datasets.link_sample(dataset_mfid=dataset_mfid, sample_mfid=sample_mfid)
 
 # Remove a link
-client.samples.remove_dataset(sample_mfid=sample_mfid, dataset_mfid=dataset_mfid)
+client.samples.unlink_dataset(sample_mfid=sample_mfid, dataset_mfid=dataset_mfid)
 ```
 
 List the readable resources on either side of the relationship through the canonical collection filters:
@@ -38,14 +38,14 @@ Use parent-child links to represent processing pipelines:
 
 ```python
 # Establish raw → processed relationship
-client.datasets.link_parent_child(
+client.datasets.link(
     parent_mfid=raw_dataset_mfid,
     child_mfid=processed_dataset_mfid,
     relationship_type='is_derived_from',   # optional
 )
 
 # Remove it
-client.datasets.remove_child(
+client.datasets.unlink(
     parent_mfid=raw_dataset_mfid,
     child_mfid=processed_dataset_mfid,
 )
@@ -91,7 +91,7 @@ client.samples.link(
 )
 
 # Remove it
-client.samples.remove_child(
+client.samples.unlink(
     parent_mfid=boule_sample_mfid,
     child_mfid=wafer_sample_mfid,
 )

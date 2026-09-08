@@ -11,7 +11,7 @@ from typing import Optional, List, Dict, Sequence, Union
 from .base import BaseResource
 from .capabilities import AccessControlMixin, OwnershipMixin, ProjectAssignmentMixin
 from ..constants import DEFAULT_LIMIT, API_PAGE_MAX
-from ..utils.deprecation import _deprecated_parameter
+from ..utils.deprecation import _deprecated, _deprecated_parameter
 from ..utils.identifiers import is_mfid, require_canonical_identifier
 
 logger = logging.getLogger(__name__)
@@ -88,6 +88,9 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
              offset: int = 0,
              accessible_to_user: Optional[Union[str, Sequence[str]]] = None,
              accessible_to_project: Optional[Union[str, Sequence[str]]] = None,
+             project_id: Optional[str] = None,
+             project_mfid: Optional[str] = None,
+             project_scope: Optional[str] = None,
              **kwargs) -> List[Dict]:
         """List samples with optional filtering and automatic pagination.
 
@@ -107,6 +110,10 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
                                 must include every result
             accessible_to_project: Project reference or references whose direct access
                                    must include every result
+            project_id: Project slug used to scope results by project relationship
+            project_mfid: Canonical project MFID used to scope results by project relationship
+            project_scope: Project relationship to include: assigned, shared, or all.
+                           Requires project_id or project_mfid and defaults to assigned.
             **kwargs: Query parameters for filtering samples
 
         Returns:
@@ -117,7 +124,12 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
             accessible_to_user, accessible_to_project)
         if parent_mfid and selectors:
             raise ValueError("Access selectors are supported only by the top-level sample list")
+        project_params = self._project_scope_params(
+            project_id, project_mfid, project_scope)
+        if parent_mfid and dataset_mfid is None and project_params:
+            raise ValueError("Project scope is supported only by the top-level sample list")
         params.update(selectors)
+        params.update(project_params)
         if dataset_mfid is not None:
             params['dataset_mfid'] = dataset_mfid
         if include_metadata:
@@ -140,9 +152,13 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
         raw = self._paginate(endpoint, params, limit, offset)
         return [self._parse(s) for s in raw]
 
-    def count(self, **kwargs) -> int:
+    def count(self, project_id: Optional[str] = None,
+              project_mfid: Optional[str] = None,
+              project_scope: Optional[str] = None, **kwargs) -> int:
         """Return the total number of samples matching the given filters without fetching items."""
         params = {k: v for k, v in kwargs.items() if v is not None}
+        params.update(self._project_scope_params(
+            project_id, project_mfid, project_scope))
         result = self._request('get', '/samples', params={**params, 'limit': 1})
         return result['total']
 
@@ -201,7 +217,9 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
             sample (Sample): Sample model instance with the desired fields. Use
                 `owner` with an ORCID, MFID, username, or email to
                 create for a specific owner. `owner_orcid` is deprecated for
-                creation. Providing both fields is invalid.
+                creation. Providing both owner fields is invalid. `project_id`
+                accepts the human-readable ID and `project_mfid` accepts the canonical
+                MFID. Matching selectors may be supplied together.
             scientific_metadata (dict, optional): Scientific metadata to attach after creation.
             parents (list, optional): Parent samples to link ({unique_id: ...}).
             children (list, optional): Child samples to link ({unique_id: ...}).
@@ -352,12 +370,10 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
 
         return upd_samp
 
-    @_deprecated_parameter('sample_id', 'sample_mfid')
-    @_deprecated_parameter('dataset_id', 'dataset_mfid')
-    def add_dataset(self, sample_mfid: str, dataset_mfid: str) -> Dict:
+    def link_dataset(self, sample_mfid: str, dataset_mfid: str) -> Dict:
         """Link a dataset to this sample.
 
-        Delegates to DatasetOperations.add_sample — single implementation.
+        Delegates to DatasetOperations.link_sample.
 
         Args:
             sample_mfid (str): Sample MFID
@@ -366,11 +382,9 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
         Returns:
             Dict: Information about the created link
         """
-        return self._client.datasets.add_sample(dataset_mfid, sample_mfid)
+        return self._client.datasets.link_sample(dataset_mfid, sample_mfid)
 
-    @_deprecated_parameter('sample_id', 'sample_mfid')
-    @_deprecated_parameter('dataset_id', 'dataset_mfid')
-    def remove_dataset(self, sample_mfid: str, dataset_mfid: str) -> Dict:
+    def unlink_dataset(self, sample_mfid: str, dataset_mfid: str) -> Dict:
         """Remove the link between a sample and a dataset.
 
         **Requires admin permissions.**
@@ -382,42 +396,40 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
         Returns:
             Dict: Deletion confirmation
         """
-        return self._client.datasets.remove_sample(dataset_mfid, sample_mfid)
+        return self._client.datasets.unlink_sample(dataset_mfid, sample_mfid)
 
+    @_deprecated("client.samples.link_dataset()")
+    @_deprecated_parameter('sample_id', 'sample_mfid')
+    @_deprecated_parameter('dataset_id', 'dataset_mfid')
+    def add_dataset(self, sample_mfid: str, dataset_mfid: str) -> Dict:
+        """Deprecated: use link_dataset(sample_mfid, dataset_mfid) instead."""
+        return self.link_dataset(sample_mfid, dataset_mfid)
+
+    @_deprecated("client.samples.unlink_dataset()")
+    @_deprecated_parameter('sample_id', 'sample_mfid')
+    @_deprecated_parameter('dataset_id', 'dataset_mfid')
+    def remove_dataset(self, sample_mfid: str, dataset_mfid: str) -> Dict:
+        """Deprecated: use unlink_dataset(sample_mfid, dataset_mfid) instead."""
+        return self.unlink_dataset(sample_mfid, dataset_mfid)
+
+    @_deprecated("client.samples.link_dataset()")
     def add_to_dataset(self, dataset_id: str, sample_id: str) -> Dict:
-        """Deprecated: use add_dataset(sample_mfid, dataset_mfid) instead."""
-        import warnings
-        warnings.warn(
-            "add_to_dataset() is deprecated; use add_dataset(sample_mfid, dataset_mfid) instead.",
-            DeprecationWarning, stacklevel=2,
-        )
-        return self.add_dataset(sample_id, dataset_id)
+        """Deprecated: use link_dataset(sample_mfid, dataset_mfid) instead."""
+        return self.link_dataset(sample_id, dataset_id)
 
+    @_deprecated("client.samples.unlink_dataset()")
     def remove_from_dataset(self, dataset_id: str, sample_id: str) -> Dict:
-        """Deprecated: use remove_dataset(sample_mfid, dataset_mfid) instead."""
-        import warnings
-        warnings.warn(
-            "remove_from_dataset() is deprecated; use remove_dataset(sample_mfid, dataset_mfid) instead.",
-            DeprecationWarning, stacklevel=2,
-        )
-        return self.remove_dataset(sample_id, dataset_id)
+        """Deprecated: use unlink_dataset(sample_mfid, dataset_mfid) instead."""
+        return self.unlink_dataset(sample_id, dataset_id)
 
+    @_deprecated("client.samples.unlink()")
     @_deprecated_parameter('parent_id', 'parent_mfid')
     @_deprecated_parameter('parent_sample_mfid', 'parent_mfid')
     @_deprecated_parameter('child_id', 'child_mfid')
     @_deprecated_parameter('child_sample_mfid', 'child_mfid')
     def remove_child(self, parent_mfid: str, child_mfid: str) -> Dict:
-        """Remove the parent-child link between two samples.
-
-        Args:
-            parent_mfid (str): Parent sample MFID
-            child_mfid (str): Child sample MFID
-
-        Returns:
-            Dict: Deletion confirmation
-        """
-        return self._request(
-            'delete', f"/samples/{parent_mfid}/children/{child_mfid}")
+        """Deprecated: use unlink(parent_mfid, child_mfid) instead."""
+        return self.unlink(parent_mfid, child_mfid)
 
     @_deprecated_parameter('parent_id', 'parent_mfid')
     @_deprecated_parameter('parent_sample_mfid', 'parent_mfid')
@@ -448,6 +460,19 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
                  if relationship_type is not None else {})
         return self._request(
             'post', f"/samples/{parent_mfid}/children/{child_mfid}", **extra)
+
+    def unlink(self, parent_mfid: str, child_mfid: str) -> Dict:
+        """Remove the parent-child link between two samples.
+
+        Args:
+            parent_mfid (str): Parent sample MFID
+            child_mfid (str): Child sample MFID
+
+        Returns:
+            Dict: Deletion confirmation
+        """
+        return self._request(
+            'delete', f"/samples/{parent_mfid}/children/{child_mfid}")
 
     def search(self, q: str, project_id: Optional[str] = None,
                limit: int = 20) -> List[Dict]:

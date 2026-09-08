@@ -341,7 +341,7 @@ class CrucibleClient:
         # Both are datasets
         if parent_type == "dataset" and child_type == "dataset":
             logger.info(f"Linking datasets: {parent_mfid} (parent) -> {child_mfid} (child)")
-            return self.datasets.link_parent_child(parent_mfid, child_mfid, relationship_type)
+            return self.datasets.link(parent_mfid, child_mfid)
 
         # Both are samples
         elif parent_type == "sample" and child_type == "sample":
@@ -358,11 +358,11 @@ class CrucibleClient:
 
         elif parent_type == "dataset" and child_type == "sample":
             logger.info(f"Linking sample {child_mfid} to dataset {parent_mfid}")
-            return self.datasets.add_sample(parent_mfid, child_mfid)
+            return self.datasets.link_sample(parent_mfid, child_mfid)
 
         elif parent_type == "sample" and child_type == "dataset":
             logger.info(f"Linking sample {parent_mfid} to dataset {child_mfid}")
-            return self.datasets.add_sample(child_mfid, parent_mfid)
+            return self.datasets.link_sample(child_mfid, parent_mfid)
 
         else:
             raise ValueError(
@@ -395,21 +395,21 @@ class CrucibleClient:
 
         if type_a == "dataset" and type_b == "sample":
             logger.info(f"Unlinking sample {resource_mfid_b} from dataset {resource_mfid_a}")
-            return self.datasets.remove_sample(resource_mfid_a, resource_mfid_b)
+            return self.datasets.unlink_sample(resource_mfid_a, resource_mfid_b)
 
         elif type_a == "sample" and type_b == "dataset":
             logger.info(f"Unlinking sample {resource_mfid_a} from dataset {resource_mfid_b}")
-            return self.datasets.remove_sample(resource_mfid_b, resource_mfid_a)
+            return self.datasets.unlink_sample(resource_mfid_b, resource_mfid_a)
 
         elif type_a == "dataset" and type_b == "dataset":
             logger.info(
                 f"Unlinking child dataset {resource_mfid_b} from parent dataset {resource_mfid_a}")
-            return self.datasets.remove_child(resource_mfid_a, resource_mfid_b)
+            return self.datasets.unlink(resource_mfid_a, resource_mfid_b)
 
         elif type_a == "sample" and type_b == "sample":
             logger.info(
                 f"Unlinking child sample {resource_mfid_b} from parent sample {resource_mfid_a}")
-            return self.samples.remove_child(resource_mfid_a, resource_mfid_b)
+            return self.samples.unlink(resource_mfid_a, resource_mfid_b)
 
         else:
             raise ValueError(

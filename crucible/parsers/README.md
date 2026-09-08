@@ -157,12 +157,15 @@ Inside your `parse()` method, you have access to all instance variables:
 
 **Dataset Properties:**
 - `self.project_id` - Crucible project ID
+- `self.project_mfid` - Canonical Crucible project MFID
 - `self.mfid` - Unique dataset identifier
 - `self.measurement` - Measurement type (defaults to `_measurement`)
 - `self.dataset_name` - Human-readable dataset name
 - `self.session_name` - Session name for grouping
 - `self.public` - Whether dataset is public (bool)
 - `self.instrument_name` - Instrument name
+- `self.instrument_id` - Registered instrument ID
+- `self.instrument_mfid` - Canonical registered instrument MFID
 - `self.data_format` - Data format type
 - `self.source_folder` - Directory where parser was called
 

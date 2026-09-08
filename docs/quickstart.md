@@ -85,7 +85,7 @@ print(sample["unique_id"])  # system-assigned sample MFID
 ## Link a dataset to a sample
 
 ```python
-client.samples.add_dataset(sample["unique_id"], dataset_mfid)
+client.samples.link_dataset(sample["unique_id"], dataset_mfid)
 ```
 
 See [linking resources](user-guide/linking.md) for dataset processing chains and sample hierarchies.

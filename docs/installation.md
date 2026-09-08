@@ -2,7 +2,7 @@
 
 ## Requirements
 
-- Python 3.8 or later
+- Python 3.9 or later
 - A Crucible account and API key ([crucible.lbl.gov](https://crucible.lbl.gov))
 
 ## Install from PyPI

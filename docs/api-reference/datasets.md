@@ -24,13 +24,14 @@ File operations are also available via `client.files` (by MFID) and ingestion vi
         - search_metadata
         - add_thumbnail
         - get_thumbnails
+        - update_thumbnail
         - delete_thumbnail
         - add_keyword
         - get_keywords
-        - add_sample
-        - remove_sample
-        - link_parent_child
-        - remove_child
+        - link_sample
+        - unlink_sample
+        - link
+        - unlink
         - list_parents
         - list_children
         - get_access_groups

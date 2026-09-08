@@ -88,7 +88,7 @@ def execute(args):
     elif args.dataset and args.sample:
         logger.info(f"Unlinking sample '{args.sample}' from dataset '{args.dataset}'...")
         try:
-            CrucibleClient().datasets.remove_sample(args.dataset, args.sample)
+            CrucibleClient().datasets.unlink_sample(args.dataset, args.sample)
             term.success(f"Unlinked sample {args.sample} from dataset {args.dataset}", args)
         except Exception as e:
             logger.error(f"Failed to unlink resources: {e}")

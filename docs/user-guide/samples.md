@@ -5,6 +5,7 @@
 | `sample_name` | Human-readable name for the sample | create, update |
 | `sample_type` | Category or type of sample (used for filtering) | create, update |
 | `project_id` | Project this sample belongs to | create; later changes use `reassign_project()` |
+| `project_mfid` | Canonical project selector for creation | create |
 | `project` | Current project title, ID, and canonical identity when the relationship resolves | server-assigned |
 | `description` | Free-text description of the sample | create, update |
 | `timestamp` | Date associated with the sample (ISO 8601 format) | create, update |
@@ -21,7 +22,7 @@
 | Relationship | Key(s) | Description |
 |---|---|---|
 | **Scientific metadata** | `scientific_metadata` in `create()`; `metadata` in `update_scientific_metadata()` / `replace_scientific_metadata()` | A free-form JSON object for sample-specific properties (e.g. solubility, physical location). |
-| **Datasets** | `dataset_mfid` in `add_dataset(sample_mfid, dataset_mfid)` | A sample can be linked to one or more datasets, and a dataset to one or more samples, capturing which material was measured. |
+| **Datasets** | `dataset_mfid` in `link_dataset(sample_mfid, dataset_mfid)` | A sample can be linked to one or more datasets, and a dataset to one or more samples, capturing which material was measured. |
 | **Parent/child samples** | `parent_mfid`, `child_mfid` in `link()`; parent and child records are also accepted in `create()` | Samples form hierarchies to represent provenance, such as boule to wafer to thin film. |
 
 # Working with Samples
@@ -42,6 +43,8 @@ sample = client.samples.create(
 
 sample_mfid = sample["unique_id"]
 ```
+
+Applications may provide `project_mfid` instead of `project_id`, or provide both when they identify the same project. Conflicting selectors produce an API validation error. The CLI keeps `--project-id` as its normal interactive input and exposes `--project-mfid` for integrations and automation.
 
 ## Retrieving a sample
 
@@ -70,6 +73,15 @@ Sample responses include a lightweight `project` reference when the canonical re
 # All samples in a project
 samples = client.samples.list(project_id="my-project", limit=50)
 
+# Samples shared with a project but assigned elsewhere or unassigned
+shared = client.samples.list(project_id="my-project", project_scope="shared")
+
+# Assigned and shared samples using the project's canonical MFID
+visible = client.samples.list(
+    project_mfid="0tkn2knjast3h0008nyq9zps2c",
+    project_scope="all",
+)
+
 # Samples linked to a specific dataset
 samples = client.samples.list(dataset_mfid="0tkn2knjast3h0008nyq9zps2c")
 
@@ -79,6 +91,8 @@ samples = client.samples.list(
     accessible_to_project="my-project",
 )
 ```
+
+Pass the project slug as `project_id` or the canonical project MFID as `project_mfid`. Both may be supplied when they identify the same project; conflicting identifiers produce an API validation error. `project_scope` accepts `assigned`, `shared`, or `all` and defaults to `assigned`. Scoped collection results expose `project_relation` as `assigned` or `shared`; `project` may be `None` when a shared resource has no primary project.
 
 The `dataset_mfid` relationship filter uses the normal paginated sample collection and can be combined with compatible sample and access filters. Results follow cursor pagination and include only samples the caller may read.
 
@@ -149,10 +163,10 @@ children = client.samples.list_children(sample_mfid)
 
 ```python
 # Link a dataset to a sample
-client.samples.add_dataset(sample_mfid=sample_mfid, dataset_mfid=dataset_mfid)
+client.samples.link_dataset(sample_mfid=sample_mfid, dataset_mfid=dataset_mfid)
 
 # Remove the link
-client.samples.remove_dataset(sample_mfid=sample_mfid, dataset_mfid=dataset_mfid)
+client.samples.unlink_dataset(sample_mfid=sample_mfid, dataset_mfid=dataset_mfid)
 ```
 
 ## Viewing the sample graph

@@ -31,15 +31,12 @@ _BRAND_DARK_BLUE = '#031e2d'
 _BRAND_LIGHT_BLUE = '#a8c4cd'
 _BRAND_ORANGE = '#ff6600'
 _BRAND_OFF_WHITE = '#eeeeee'
-_BANNER_MIN_WIDTH = 36
-_BANNER_VERTICAL_PADDING = 1
-_BANNER_PIXEL_WIDTH = 2
+_BANNER_MIN_WIDTH = 16
 _BANNER_PIXEL_COLORS = {
     '_': _BRAND_LIGHT_BLUE,
     '%': _BRAND_DARK_BLUE,
     '=': _BRAND_ORANGE,
     '.': _BRAND_OFF_WHITE,
-    ':': _BRAND_OFF_WHITE,
 }
 
 
@@ -123,19 +120,25 @@ try:
     def _shell_banner_rows(banner):
         lines = banner.splitlines()
         width = max(map(len, lines), default=0)
-        content = [f'_{line.ljust(width, "_")}_' for line in lines]
-        blank = '_' * (width + 2)
-        padding = [blank] * _BANNER_VERTICAL_PADDING
-        return padding + content + padding
+        return [line.ljust(width, '_') for line in lines]
+
+    def _shell_banner_row_pairs(banner):
+        rows = _shell_banner_rows(banner)
+        if len(rows) % 2:
+            rows.append('_' * len(rows[0]))
+        return zip(rows[::2], rows[1::2])
 
     def _shell_banner_panel(banner):
         visible_pixels = frozenset('%=')
         return '\n'.join(
             ''.join(
-                ('██' if pixel in visible_pixels else ' ' * _BANNER_PIXEL_WIDTH)
-                for pixel in row
+                '█' if upper in visible_pixels and lower in visible_pixels
+                else '▀' if upper in visible_pixels
+                else '▄' if lower in visible_pixels
+                else ' '
+                for upper, lower in zip(upper_row, lower_row)
             )
-            for row in _shell_banner_rows(banner)
+            for upper_row, lower_row in _shell_banner_row_pairs(banner)
         )
 
     def _shell_banner_left_margin(panel, columns):
@@ -146,20 +149,25 @@ try:
         from prompt_toolkit.formatted_text import FormattedText
 
         fragments = []
-        rows = _shell_banner_rows(banner)
-        for row_index, row in enumerate(rows):
+        pairs = list(_shell_banner_row_pairs(banner))
+        for row_index, (upper_row, lower_row) in enumerate(pairs):
             if left_margin:
                 fragments.append(('', ' ' * left_margin))
-            for pixel in row:
-                color = _BANNER_PIXEL_COLORS.get(pixel)
-                style = f'bg:{color}' if color else ''
-                text = ' ' * _BANNER_PIXEL_WIDTH if color else pixel * _BANNER_PIXEL_WIDTH
+            for upper, lower in zip(upper_row, lower_row):
+                upper_color = _BANNER_PIXEL_COLORS[upper]
+                lower_color = _BANNER_PIXEL_COLORS[lower]
+                if upper_color == lower_color:
+                    style = f'bg:{lower_color}'
+                    text = ' '
+                else:
+                    style = f'fg:{upper_color} bg:{lower_color}'
+                    text = '▀'
                 if fragments and fragments[-1][0] == style:
                     previous_style, previous_text = fragments[-1]
                     fragments[-1] = (previous_style, previous_text + text)
                 else:
                     fragments.append((style, text))
-            if row_index < len(rows) - 1:
+            if row_index < len(pairs) - 1:
                 fragments.append(('', '\n'))
         return FormattedText(fragments)
 
@@ -275,8 +283,10 @@ try:
             self._project_search_cache[query] = results
             return results
 
-        def _yield_project_completions(self, prefix, use_search=True):
-            if use_search and len(prefix) >= 3:
+        def _yield_project_completions(self, prefix, use_search=True, use_mfid=False):
+            if use_mfid and len(prefix) < 3:
+                return
+            if (use_search or use_mfid) and len(prefix) >= 3:
                 candidates = self._search_projects(prefix)
             else:
                 prefix_lower = prefix.lower()
@@ -286,13 +296,15 @@ try:
                     if project_id.lower().startswith(prefix_lower)
                 ]
             for project_id, title, unique_id in candidates:
-                metadata = title
-                if unique_id:
-                    metadata = f'{metadata}  {unique_id}'
+                value = unique_id if use_mfid else project_id
+                if not value:
+                    continue
+                metadata_id = project_id if use_mfid else unique_id
+                metadata = f'{title}  {metadata_id}' if metadata_id else title
                 yield Completion(
-                    project_id + ' ',
+                    value + ' ',
                     start_position=-len(prefix),
-                    display=_shell_html(f'<b>{_html.escape(project_id)}</b>'),
+                    display=_shell_html(f'<b>{_html.escape(value)}</b>'),
                     display_meta=_shell_html(
                         f'<ansibrightblack>{_html.escape(metadata)}</ansibrightblack>'
                     ),
@@ -907,9 +919,11 @@ try:
             prev = (words[-1] if trailing_space else words[-2]) if len(words) >= 2 else ''
 
             _PROJECT_FLAGS = ('--project-id', '--project', '-pid')
+            _PROJECT_MFID_FLAGS = ('--project-mfid',)
             if subcommand in {'list', 'create', 'search'}:
                 _PROJECT_FLAGS += ('-p',)
             _USER_FLAGS = ('--user', '-u', '--owner', '--lead', '-e', '--orcid')
+            _INSTRUMENT_FLAGS = ('--instrument-id',)
             _INSTRUMENT_MFID_FLAGS = ('--instrument-mfid',)
             # Flags whose value is a dataset or sample MFID, by resource context.
             # Values here can't contain unquoted spaces (argparse flag values are
@@ -950,6 +964,10 @@ try:
                     yield from self._yield_user_completions(current_word)
                 elif prev in _PROJECT_FLAGS:
                     yield from self._yield_project_completions(current_word)
+                elif prev in _PROJECT_MFID_FLAGS:
+                    yield from self._yield_project_completions(current_word, use_mfid=True)
+                elif prev in _INSTRUMENT_FLAGS:
+                    yield from self._yield_instrument_completions(current_word)
                 elif prev in _INSTRUMENT_MFID_FLAGS:
                     yield from self._yield_instrument_completions(current_word, use_mfid=True)
                 elif prev in _ENTITY_FLAGS:
@@ -972,6 +990,14 @@ try:
 
             if not current_word and prev in _PROJECT_FLAGS:
                 yield from self._yield_project_completions('')
+                return
+
+            if not current_word and prev in _PROJECT_MFID_FLAGS:
+                yield from self._yield_project_completions('', use_mfid=True)
+                return
+
+            if not current_word and prev in _INSTRUMENT_FLAGS:
+                yield from self._yield_instrument_completions('')
                 return
 
             if not current_word and prev in _INSTRUMENT_MFID_FLAGS:

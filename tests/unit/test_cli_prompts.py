@@ -9,6 +9,7 @@ from crucible.cli import helpers
 from crucible.cli import cache as cache_cli
 from crucible.cli import config as config_cli
 from crucible.cli import dataset as dataset_cli
+from crucible.cli import file as file_cli
 from crucible.cli import instrument as instrument_cli
 from crucible.cli import project as project_cli
 from crucible.cli import sample as sample_cli
@@ -189,6 +190,43 @@ def test_dataset_delete_yes_bypasses_prompt(monkeypatch):
     client.datasets.delete.assert_called_once_with('0td7evvtg5wb90005k1j97ak94')
 
 
+def test_file_delete_yes_bypasses_prompt(monkeypatch):
+    client = SimpleNamespace(files=SimpleNamespace(delete=MagicMock()))
+    monkeypatch.setattr('crucible.client.CrucibleClient', lambda: client)
+    monkeypatch.setattr(
+        helpers,
+        'prompt_confirm',
+        lambda *args, **kwargs: pytest.fail('confirmation should be bypassed'),
+    )
+
+    file_cli._execute_delete(SimpleNamespace(
+        file_id='0tf7evvtg5wb90005k1j97ak94',
+        yes=True,
+    ))
+
+    client.files.delete.assert_called_once_with('0tf7evvtg5wb90005k1j97ak94')
+
+
+def test_file_delete_cancellation_skips_client(monkeypatch, capsys):
+    confirm = MagicMock(return_value=False)
+    monkeypatch.setattr(helpers, 'prompt_confirm', confirm)
+    monkeypatch.setattr(
+        'crucible.client.CrucibleClient',
+        lambda: pytest.fail('client should not be created'),
+    )
+
+    file_cli._execute_delete(SimpleNamespace(
+        file_id='0tf7evvtg5wb90005k1j97ak94',
+        yes=False,
+    ))
+
+    assert capsys.readouterr().out == 'Aborted.\n'
+    confirm.assert_called_once_with(
+        'Delete file 0tf7evvtg5wb90005k1j97ak94? This cannot be undone.',
+        option='--yes',
+    )
+
+
 def test_config_init_cancellation_stops_before_secret_prompt(monkeypatch, tmp_path):
     config_file = tmp_path / 'config.ini'
     config_file.touch()
@@ -288,6 +326,7 @@ def test_sample_create_reprompts_when_project_is_not_found(monkeypatch):
     sample_cli._execute_create(SimpleNamespace(
         name='Sample',
         project_id=None,
+        project_mfid=None,
         description=None,
         sample_type=None,
         timestamp=None,
@@ -322,6 +361,7 @@ def test_sample_create_uses_active_shell_project_without_prompt(monkeypatch):
     sample_cli._execute_create(SimpleNamespace(
         name='Sample',
         project_id=None,
+        project_mfid=None,
         description=None,
         sample_type=None,
         timestamp=None,

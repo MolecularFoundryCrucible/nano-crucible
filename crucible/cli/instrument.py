@@ -826,13 +826,14 @@ def _execute_search(args):
             url = instrument_explorer_url(uid)
             return (
                 term.navigation_link(name, url) if name else '-',
+                instrument.get('instrument_id') or '-',
                 instrument.get('instrument_type') or '-',
-                instrument.get('manufacturer') or '-',
                 term.mfid_link(uid, url if not name else None) or '-',
             )
         rows = [_instrument_row(instrument) for instrument in results]
-        term.table(rows, ['Name', 'Type', 'Manufacturer', 'MFID'],
-                   max_widths=[25, 20, 20, 26])
+        term.table(rows, ['Name', 'Instrument ID', 'Type', 'MFID'],
+                   max_widths=[25, 25, 20, 26],
+                   min_widths=[4, 25, 4, 26])
     except Exception as e:
         from .helpers import fail
         fail("", e, args)

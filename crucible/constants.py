@@ -8,6 +8,7 @@ DEFAULT_LIMIT = 100   # default page size for list requests
 API_PAGE_MAX  = 1000  # server hard cap per request
 
 PROJECT_MEMBER_ROLES = ('viewer', 'contributor', 'editor', 'admin')
+PROJECT_SCOPES = ('assigned', 'shared', 'all')
 
 # Kinds of parent/child link between two datasets, or between two samples.
 # Oriented child-relative-to-parent: 'is_part_of' reads "child is_part_of

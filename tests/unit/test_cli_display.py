@@ -294,24 +294,38 @@ def test_shell_leaves_color_depth_automatic_without_true_color(monkeypatch):
 
 def test_shell_banner_is_packaged_and_uses_requested_colors():
     banner = shell_cli._load_shell_banner()
-    fragments = shell_cli._shell_banner_fragments('_%=.:')
+    fragments = shell_cli._shell_banner_fragments('_%=.\n.=_%')
     styles = {style for style, _text in fragments}
 
-    assert len(banner.splitlines()) == 15
-    assert {len(line) for line in banner.splitlines()} == {15}
-    assert 'bg:#a8c4cd' in styles
-    assert 'bg:#031e2d' in styles
-    assert 'bg:#ff6600' in styles
-    assert 'bg:#eeeeee' in styles
-    assert 'bg:#ffffff' not in styles
+    assert len(banner.splitlines()) == 16
+    assert {len(line) for line in banner.splitlines()} == {16}
+    assert any('#a8c4cd' in style for style in styles)
+    assert any('#031e2d' in style for style in styles)
+    assert any('#ff6600' in style for style in styles)
+    assert any('#eeeeee' in style for style in styles)
+    assert all('#ffffff' not in style for style in styles)
+    assert any(text == '▀' for _style, text in fragments)
+
+
+def test_shell_banner_contains_its_own_boundary():
+    banner = shell_cli._load_shell_banner()
+    rows = shell_cli._shell_banner_rows(banner)
+    panel = shell_cli._shell_banner_panel(banner)
+
+    assert len(rows) == 16
+    assert {len(row) for row in rows} == {16}
+    assert len(panel.splitlines()) == 8
+    assert {shell_cli._vlen(line) for line in panel.splitlines()} == {16}
+    assert set(rows[0]) == {'_'}
+    assert set(rows[-1]) == {'_'}
 
 
 def test_shell_banner_panel_has_consistent_width():
     panel = shell_cli._shell_banner_panel('%%\n%')
 
     lines = panel.splitlines()
-    assert lines == ['        ', '  ████  ', '  ██    ', '        ']
-    assert {shell_cli._vlen(line) for line in lines} == {8}
+    assert lines == ['█▀']
+    assert {shell_cli._vlen(line) for line in lines} == {2}
 
 
 def test_shell_banner_panel_has_requested_edge_padding():
@@ -326,24 +340,24 @@ def test_shell_banner_panel_has_requested_edge_padding():
 def test_shell_banner_is_centered_by_display_width():
     panel = shell_cli._shell_banner_panel('%%')
 
-    assert shell_cli._shell_banner_left_margin(panel, 14) == 3
-    assert shell_cli._shell_banner_left_margin(panel, 7) == 0
+    assert shell_cli._shell_banner_left_margin(panel, 14) == 6
+    assert shell_cli._shell_banner_left_margin(panel, 7) == 2
 
 
 def test_shell_banner_centering_keeps_outer_margin_uncolored():
     fragments = list(shell_cli._shell_banner_fragments('%%', left_margin=3))
 
     assert fragments[0] == ('', '   ')
-    assert fragments[1][0] == 'bg:#a8c4cd'
+    assert '#a8c4cd' in fragments[1][0]
 
 
 def test_shell_banner_pixel_material_counts_match_source_pattern():
     banner = shell_cli._load_shell_banner()
 
-    assert banner.count('%') == 126
-    assert banner.count('=') == 19
-    assert banner.count('.') == 7
-    assert banner.count(':') == 2
+    assert banner.count('%') == 127
+    assert banner.count('=') == 18
+    assert banner.count('.') == 9
+    assert banner.count('_') == 102
 
 
 def test_shell_banner_is_skipped_on_narrow_terminals(monkeypatch):
@@ -353,7 +367,7 @@ def test_shell_banner_is_skipped_on_narrow_terminals(monkeypatch):
         lambda: pytest.fail('Narrow terminals should not load the banner.'),
     )
 
-    assert shell_cli._print_shell_banner(35) is False
+    assert shell_cli._print_shell_banner(15) is False
 
 
 def test_shell_toolbar_marks_custom_api_and_debug(monkeypatch):
@@ -626,6 +640,84 @@ def test_missing_public_value_is_not_rendered_as_false(show, record, capsys):
     assert public_line.rstrip().endswith('-')
 
 
+@pytest.mark.parametrize(
+    ('module', 'namespace', 'resource_attr', 'record', 'type_label'),
+    [
+        (
+            dataset_cli,
+            {
+                'measurement': None,
+                'keyword': None,
+                'session': None,
+                'data_format': None,
+                'data_type': None,
+                'instrument_name': None,
+                'instrument_mfid': None,
+                'include': None,
+                'exclude': None,
+            },
+            'datasets',
+            {
+                'unique_id': MFID,
+                'dataset_name': 'Shared Dataset',
+                'measurement': 'XRD',
+                'project': None,
+                'project_relation': 'shared',
+            },
+            'Measurement',
+        ),
+        (
+            sample_cli,
+            {
+                'name': None,
+                'sample_type': None,
+                'include_metadata': False,
+                'include': None,
+                'exclude': None,
+            },
+            'samples',
+            {
+                'unique_id': MFID,
+                'sample_name': 'Shared Sample',
+                'sample_type': 'wafer',
+                'project': None,
+                'project_relation': 'shared',
+            },
+            'Type',
+        ),
+    ],
+)
+def test_scoped_resource_lists_show_relation_and_unassigned_project(
+        module, namespace, resource_attr, record, type_label, monkeypatch, capsys):
+    operation = SimpleNamespace(list=MagicMock(return_value=[record]))
+    client = SimpleNamespace(**{resource_attr: operation})
+    monkeypatch.setattr('crucible.client.CrucibleClient', lambda: client)
+    args = SimpleNamespace(
+        project_id=None,
+        project_mfid=MFID,
+        project_scope='all',
+        limit=10,
+        json=False,
+        group_by='none',
+        debug=False,
+        **namespace,
+    )
+
+    module._execute_list(args)
+
+    operation.list.assert_called_once_with(
+        limit=10,
+        project_mfid=MFID,
+        project_scope='all',
+        **({'include_metadata': False} if resource_attr == 'samples' else {}),
+    )
+    output = capsys.readouterr().out
+    assert 'PROJECT' in output
+    assert 'RELATION' in output
+    assert 'shared' in output
+    assert type_label.upper() in output
+
+
 def test_dataset_detail_prefers_embedded_reference_labels(capsys):
     dataset_cli._show_dataset(
         {
@@ -809,6 +901,34 @@ def test_table_fits_terminal_and_preserves_protected_identifiers(monkeypatch, ca
     assert all(term._dlen(line) <= 80 for line in lines)
     assert slug in lines[1]
     assert MFID in lines[1]
+
+
+def test_instrument_search_displays_slug_instead_of_manufacturer(monkeypatch, capsys):
+    results = [{
+        'unique_id': MFID,
+        'instrument_id': 'xrd-beamline',
+        'instrument_name': 'XRD Instrument',
+        'instrument_type': 'diffractometer',
+        'manufacturer': 'Manufacturer omitted from search',
+    }]
+    operations = SimpleNamespace(search=MagicMock(return_value=results))
+    monkeypatch.setattr(
+        'crucible.client.CrucibleClient',
+        lambda: SimpleNamespace(instruments=operations),
+    )
+
+    instrument_cli._execute_search(SimpleNamespace(
+        query='xrd',
+        limit=20,
+        status=None,
+        json=False,
+        debug=False,
+    ))
+
+    output = capsys.readouterr().out
+    assert 'INSTRUMENT ID' in output
+    assert 'xrd-beamline' in output
+    assert 'Manufacturer omitted from search' not in output
 
 
 def test_table_preserves_full_username_when_space_permits(monkeypatch, capsys):

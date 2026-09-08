@@ -6,6 +6,11 @@
 
 - Dataset-to-dataset and sample-to-sample links can record a `relationship_type` of `is_derived_from` or `is_part_of`, describing the child relative to the parent. It is optional, settable through `link_parent_child()`, `samples.link()`, `client.link()`, and `--relationship-type` on `crucible link`, `dataset link`, and `sample link`, and filterable on `list_parents()` and `list_children()` in Python and via `--relationship-type` on the matching `dataset` and `sample` list commands. Re-linking an existing pair without it preserves the stored type. Dataset-sample associations are undirected and reject it.
 - The interactive shell displays a centered compact pixel-art Crucible banner on a light-blue panel on terminals wide enough to show it.
+- Dataset and sample creation accept canonical project MFIDs alongside matching project IDs, and dataset creation accepts canonical instrument MFIDs alongside matching instrument IDs.
+- Dataset and sample lists accept a project ID or canonical project MFID with assigned, shared, or combined project scope in the Python client and CLI.
+- `client.datasets.update_thumbnail()` renames or replaces an existing dataset thumbnail.
+- `crucible dataset add-thumbnail` adds a local image as a thumbnail for an existing dataset.
+- The interactive shell displays a centered 16×16 Crucible mark with square-proportioned half-block pixels.
 - Sample responses expose a typed project reference when supplied by the API, while retaining the flat project ID fallback.
 - Dataset responses expose typed project and instrument references with canonical MFIDs while retaining legacy flat fields.
 - The CLI supports `--no-color` and the standard `NO_COLOR` environment variable.
@@ -16,6 +21,11 @@
 ### Changed
 
 - **Breaking:** entries returned by `client.get_links()` renamed `relationship` to `direction` and changed its values from `parent`/`child`/`associated` to `source`/`target`/`undirected`. The meaning is unchanged — links are stored parent to child, so `source` is a parent of the resource you asked about and `target` is a child — but the new name no longer collides with `relationship_type`, which is a different thing: `direction` is computed per query and flips depending on which end you read from, while `relationship_type` is stored on the link and always reads child-relative-to-parent. There is no compatibility alias; code reading `link['relationship']` must be updated.
+- The minimum supported Python version is now 3.9.
+- Dataset thumbnail create, list, and update responses expose the API-provided authoritative MIME type.
+- Instrument search results now show the user-facing instrument ID instead of manufacturer metadata.
+- `crucible dataset create` can create a dataset record without `--input`; file-dependent options still require at least one input file.
+- Dataset and sample relationship methods now consistently use `link`, `unlink`, `link_sample`, `unlink_sample`, `link_dataset`, and `unlink_dataset`; previous method names remain as deprecated wrappers.
 - Python resource namespaces now use `publish()` and `unpublish()` for public access; `set_public()` and `unset_public()` remain as deprecated compatibility aliases.
 - The interactive shell now remembers the project selected by `use PROJECT_ID`, `unuse` clears it, and project context sources are visible; `CRUCIBLE_CURRENT_PROJECT` is deprecated because it can silently redirect operations.
 - The interactive shell status bar now renders the Crucible dark blue, light blue, and orange brand palette in true color on capable terminals while keeping autocomplete menus visually plain.
@@ -43,6 +53,9 @@
 
 ### Fixed
 
+- `crucible file delete` now requires interactive confirmation or an explicit `--yes` before permanently deleting a file.
+- Dataset file tutorials now use the API v3 record-first workflow and document recursive uploads, additions, explicit replacement, and re-uploading without recreating the dataset.
+- Documentation navigation tabs now remain visible while scrolling using MkDocs Material's native sticky-tabs behavior.
 - Instrument creation no longer sends inherited response-only fields rejected by API v3.
 
 ## 3.2.0

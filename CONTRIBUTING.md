@@ -12,7 +12,7 @@ cd nano-crucible
 python -m pip install -e ".[dev,docs]"
 ```
 
-The package supports Python 3.8 and newer. Avoid syntax that requires a newer version unless the supported-version policy changes in the same contribution.
+The package supports Python 3.9 and newer. Avoid syntax that requires a newer version unless the supported-version policy changes in the same contribution.
 
 ## Make and verify a change
 

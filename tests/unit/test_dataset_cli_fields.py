@@ -60,7 +60,6 @@ def test_dataset_list_instrument_filter_ignores_configured_project(monkeypatch, 
     dataset_cli._execute_list(args)
 
     datasets.list.assert_called_once_with(
-        project_id=None,
         limit=10,
         instrument_mfid='0tkn2knjast3h0008nyq9zps2c',
     )

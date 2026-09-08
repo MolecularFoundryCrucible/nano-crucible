@@ -85,6 +85,18 @@ def test_project_flag_values_use_project_search():
     client.projects.search.assert_called_once_with('pro', limit=20)
 
 
+def test_project_mfid_flag_values_use_project_search():
+    client = make_client()
+
+    completions = complete(
+        make_completer(client),
+        'sample list --project-mfid pro',
+    )
+
+    assert MFID in completions
+    client.projects.search.assert_called_once_with('pro', limit=20)
+
+
 def test_project_positionals_use_project_search():
     client = make_client()
 
@@ -112,6 +124,18 @@ def test_instrument_mfid_flags_use_instrument_search():
     )
 
     assert MFID in completions
+    client.instruments.search.assert_called_once_with('xrd', limit=20)
+
+
+def test_dataset_create_instrument_id_uses_instrument_search():
+    client = make_client()
+
+    completions = complete(
+        make_completer(client),
+        'dataset create --instrument-id xrd',
+    )
+
+    assert 'xrd-one' in completions
     client.instruments.search.assert_called_once_with('xrd', limit=20)
 
 
@@ -173,3 +197,12 @@ def test_fixed_flag_choices_are_completed():
     )
 
     assert completions == ['maintenance']
+
+
+def test_project_scope_choices_are_completed():
+    completions = complete(
+        make_completer(),
+        'dataset list --project-scope s',
+    )
+
+    assert completions == ['shared']

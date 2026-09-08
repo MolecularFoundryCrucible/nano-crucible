@@ -133,6 +133,24 @@ def test_sample_response_uses_typed_project_reference():
     assert resource.project.project_id == 'project-one'
 
 
+@pytest.mark.parametrize('model', [Dataset, Sample])
+def test_scoped_collection_project_relation_is_typed(model):
+    resource = model.model_validate({
+        'unique_id': MFID,
+        'project': None,
+        'project_relation': 'shared',
+    })
+
+    assert resource.project is None
+    assert resource.project_relation == 'shared'
+
+    with pytest.raises(ValueError):
+        model.model_validate({
+            'unique_id': MFID,
+            'project_relation': 'unrelated',
+        })
+
+
 @pytest.mark.parametrize(
     'operations_class',
     [DatasetOperations, SampleOperations],

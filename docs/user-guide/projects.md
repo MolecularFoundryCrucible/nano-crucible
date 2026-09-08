@@ -41,6 +41,8 @@ Use `include_members=True` to request the member list. Members and administrator
 
 Exact MFID and slug lookups include caller-specific `capabilities` when the server has calculated them. General lists and searches normally return `capabilities=None`, which means the guidance was not calculated rather than that every action is denied. The API remains authoritative for each mutation.
 
+Dataset and sample collections can use either `project_id` or `project_mfid` with `project_scope="assigned"`, `"shared"`, or `"all"`. The default `assigned` scope preserves the traditional project listing. The `shared` scope finds resources accessible through the project but assigned elsewhere or unassigned, while `all` combines both relationships. Singleton resource retrieval remains MFID-based and does not require project context.
+
 Project capabilities expose the strict membership hierarchy through `max_grant_role`: editors receive `contributor`, admins receive `editor`, and owners receive `admin`. The value is guidance for the highest role the caller may grant, while the API still validates the target member and current project state.
 
 ```python

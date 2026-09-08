@@ -230,27 +230,43 @@ def _register_delete(subparsers):
     parser = subparsers.add_parser(
         'delete',
         help='Delete a file by MFID',
-        description='Permanently delete a file record and its stored data.',
+        description=(
+            'Permanently delete a file record and its stored data. '
+            'Prompts for confirmation unless -y is given.'
+        ),
         formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     crucible file delete mf_abc123
+    crucible file delete mf_abc123 --yes
 """,
     )
-    parser.add_argument('file_id', metavar='FILE_ID', help='File MFID')
+    parser.add_argument('file_id', metavar='FILE_MFID', help='File MFID')
+    parser.add_argument(
+        '-y', '--yes', action='store_true',
+        help='Confirm deletion without prompting',
+    )
     parser.set_defaults(func=_execute_delete)
 
 
 def _execute_delete(args):
     """Execute 'crucible file delete'."""
     from crucible.client import CrucibleClient
+    from .helpers import prompt_confirm
+    confirmed = args.yes or prompt_confirm(
+        f"Delete file {args.file_id}? This cannot be undone.",
+        option='--yes',
+    )
+    if not confirmed:
+        print("Aborted.")
+        return
     try:
         client = CrucibleClient()
         client.files.delete(args.file_id)
         term.success(f"Deleted {args.file_id}", args)
     except Exception as e:
         from .helpers import fail
-        fail("", e, args)
+        fail("deleting file", e, args)
 
 
 def _register_ingestion(subparsers):

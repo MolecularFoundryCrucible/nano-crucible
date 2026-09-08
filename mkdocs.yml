@@ -22,6 +22,7 @@ theme:
         name: Switch to light mode
   features:
     - navigation.tabs
+    - navigation.tabs.sticky
     - navigation.sections
     - navigation.top
     - search.suggest
@@ -92,4 +93,6 @@ nav:
     - Models: api-reference/models.md
   - Development:
     - Permission Alignment: development/permission-alignment.md
+    - MFID UUIDv7 Compatibility: development/mfid-uuidv7-compatibility.md
+    - Dataset Sidecar and Cast Convergence: development/dataset-sidecar-cast-convergence.md
   - Changelog: changelog.md
