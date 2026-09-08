@@ -471,26 +471,33 @@ class DatasetOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMix
     @_deprecated_parameter('parent_dataset_mfid', 'parent_mfid')
     @_deprecated_parameter('child_dataset_id', 'child_mfid')
     @_deprecated_parameter('child_dataset_mfid', 'child_mfid')
-    def link_parent_child(self, parent_mfid: str, child_mfid: str) -> Dict:
+    def link_parent_child(self, parent_mfid: str, child_mfid: str,
+                          relationship_type: Optional[str] = None) -> Dict:
         """Deprecated: use link(parent_mfid, child_mfid) instead."""
-        return self.link(parent_mfid, child_mfid)
+        return self.link(parent_mfid, child_mfid, relationship_type)
+
 
     @_deprecated_parameter('parent_dataset_id', 'parent_mfid')
     @_deprecated_parameter('parent_dataset_mfid', 'parent_mfid')
     def list_children(self, parent_mfid: str, limit: int = DEFAULT_LIMIT,
-                      offset: int = 0, **kwargs) -> List[Dict]:
+                      offset: int = 0, relationship_type: Optional[str] = None,
+                      **kwargs) -> List[Dict]:
         """List the children of a given dataset with optional filtering.
 
         Args:
             parent_mfid (str): Parent dataset MFID
             limit (int): Maximum number of results to return
             offset (int): Starting position in the full result set (default: 0)
+            relationship_type (str, optional): Only return children linked with
+                this kind of link, one of crucible.constants.RELATIONSHIP_TYPES.
             **kwargs (Any): Query parameters for filtering datasets
 
         Returns:
             List[Dict]: Children datasets
         """
         params = {k: v for k, v in kwargs.items() if v is not None}
+        if relationship_type is not None:
+            params['relationship_type'] = relationship_type
         raw = self._paginate(
             f"/datasets/{parent_mfid}/children", params, limit, offset)
         return [self._parse(dataset) for dataset in raw]
@@ -498,19 +505,24 @@ class DatasetOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMix
     @_deprecated_parameter('child_dataset_id', 'child_mfid')
     @_deprecated_parameter('child_dataset_mfid', 'child_mfid')
     def list_parents(self, child_mfid: str, limit: int = DEFAULT_LIMIT,
-                     offset: int = 0, **kwargs) -> List[Dict]:
+                     offset: int = 0, relationship_type: Optional[str] = None,
+                     **kwargs) -> List[Dict]:
         """List the parents of a given dataset with optional filtering.
 
         Args:
             child_mfid (str): Child dataset MFID
             limit (int): Maximum number of results to return
             offset (int): Starting position in the full result set (default: 0)
+            relationship_type (str, optional): Only return parents linked with
+                this kind of link, one of crucible.constants.RELATIONSHIP_TYPES.
             **kwargs (Any): Query parameters for filtering datasets
 
         Returns:
             List[Dict]: Parent datasets
         """
         params = {k: v for k, v in kwargs.items() if v is not None}
+        if relationship_type is not None:
+            params['relationship_type'] = relationship_type
         raw = self._paginate(
             f"/datasets/{child_mfid}/parents", params, limit, offset)
         return [self._parse(dataset) for dataset in raw]

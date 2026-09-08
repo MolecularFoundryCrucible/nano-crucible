@@ -4,6 +4,8 @@
 
 ### Added
 
+- Dataset-to-dataset and sample-to-sample links can record a `relationship_type` of `is_derived_from` or `is_part_of`, describing the child relative to the parent. It is optional, settable through `link_parent_child()`, `samples.link()`, `client.link()`, and `--relationship-type` on `crucible link`, `dataset link`, and `sample link`, and filterable on `list_parents()` and `list_children()` in Python and via `--relationship-type` on the matching `dataset` and `sample` list commands. Re-linking an existing pair without it preserves the stored type. Dataset-sample associations are undirected and reject it.
+- The interactive shell displays a centered compact pixel-art Crucible banner on a light-blue panel on terminals wide enough to show it.
 - Dataset and sample creation accept canonical project MFIDs alongside matching project IDs, and dataset creation accepts canonical instrument MFIDs alongside matching instrument IDs.
 - Dataset and sample lists accept a project ID or canonical project MFID with assigned, shared, or combined project scope in the Python client and CLI.
 - `client.datasets.update_thumbnail()` renames or replaces an existing dataset thumbnail.
@@ -18,6 +20,7 @@
 
 ### Changed
 
+- **Breaking:** entries returned by `client.get_links()` renamed `relationship` to `direction` and changed its values from `parent`/`child`/`associated` to `source`/`target`/`undirected`. The meaning is unchanged — links are stored parent to child, so `source` is a parent of the resource you asked about and `target` is a child — but the new name no longer collides with `relationship_type`, which is a different thing: `direction` is computed per query and flips depending on which end you read from, while `relationship_type` is stored on the link and always reads child-relative-to-parent. There is no compatibility alias; code reading `link['relationship']` must be updated.
 - The minimum supported Python version is now 3.9.
 - Dataset thumbnail create, list, and update responses expose the API-provided authoritative MIME type.
 - Instrument search results now show the user-facing instrument ID instead of manufacturer metadata.

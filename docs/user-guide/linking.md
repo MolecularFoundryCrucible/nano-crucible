@@ -41,6 +41,7 @@ Use parent-child links to represent processing pipelines:
 client.datasets.link(
     parent_mfid=raw_dataset_mfid,
     child_mfid=processed_dataset_mfid,
+    relationship_type='is_derived_from',   # optional
 )
 
 # Remove it
@@ -49,10 +50,33 @@ client.datasets.unlink(
     child_mfid=processed_dataset_mfid,
 )
 
-# Navigate
+# Navigate, optionally filtering by the kind of link
 parents = client.datasets.list_parents(processed_dataset_mfid)
-children = client.datasets.list_children(raw_dataset_mfid)
+children = client.datasets.list_children(
+    raw_dataset_mfid, relationship_type='is_derived_from')
 ```
+
+---
+
+## Relationship types
+
+Parent-child links — dataset → dataset and sample → sample — can record what
+kind of link they are. The value describes the **child relative to the
+parent**, so a link `(parent=A, child=B, 'is_part_of')` reads "B is_part_of A".
+
+| Value | Meaning |
+| --- | --- |
+| `is_derived_from` | The child was produced from the parent (processing, measurement, synthesis) |
+| `is_part_of` | The child is a component or subset of the parent |
+
+The type is optional. Omitting it leaves the link untyped, which is also how
+every link created before relationship types existed reads. Because the server
+treats a supplied type as an overwrite, re-linking an existing pair **without**
+`relationship_type` preserves whatever type is already stored rather than
+clearing it — pass the new value explicitly to change it.
+
+Dataset ↔ sample associations have no parent-child direction, so they carry no
+relationship type. Passing one raises `ValueError`.
 
 ---
 
@@ -63,6 +87,7 @@ children = client.datasets.list_children(raw_dataset_mfid)
 client.samples.link(
     parent_mfid=boule_sample_mfid,
     child_mfid=wafer_sample_mfid,
+    relationship_type='is_part_of',   # optional
 )
 
 # Remove it
@@ -86,6 +111,9 @@ If you have two IDs and don't want to look up their types first:
 # Works for dataset-sample, dataset-dataset, or sample-sample pairs
 client.link(dataset_mfid, sample_mfid)
 client.unlink(dataset_mfid, sample_mfid)
+
+# A relationship type may be given for parent-child pairs only
+client.link(parent_mfid, child_mfid, relationship_type='is_derived_from')
 ```
 
 ---

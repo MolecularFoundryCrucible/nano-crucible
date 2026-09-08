@@ -146,6 +146,30 @@ def show_warning(message) -> None:
     print(f"{label} {message}", file=sys.stderr)
 
 
+def add_relationship_type_filter(parser) -> None:
+    """Add the --relationship-type filter to a parent/child listing command."""
+    from ..constants import RELATIONSHIP_TYPES
+
+    parser.add_argument(
+        '--relationship-type',
+        choices=RELATIONSHIP_TYPES,
+        metavar='TYPE',
+        help=f"Only show links of this kind ({', '.join(RELATIONSHIP_TYPES)}). "
+             f"Untyped links are excluded when this is set."
+    )
+
+
+def format_relationship_type(link) -> str:
+    """Render a link's relationship_type as a dim trailing annotation.
+
+    Links created before typing existed carry no type, so show a dim dash
+    rather than dropping the column and making the rows ragged.
+    """
+    from . import term
+
+    return term.dim(link.get('relationship_type') or '—')
+
+
 def _interactive_stdin() -> bool:
     return hasattr(sys.stdin, 'isatty') and sys.stdin.isatty()
 
