@@ -2327,7 +2327,7 @@ def _execute_link(args):
     from crucible.client import CrucibleClient
     try:
         client = CrucibleClient()
-        client.datasets.link_parent_child(
+        client.datasets.link(
             args.parent, args.child, args.relationship_type)
 
 

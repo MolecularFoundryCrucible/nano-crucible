@@ -417,18 +417,24 @@ class DatasetOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMix
         """
         return self._request('delete', f"/datasets/{dataset_mfid}/samples/{sample_mfid}")
 
-    def link(self, parent_mfid: str, child_mfid: str) -> Dict:
+    def link(self, parent_mfid: str, child_mfid: str,
+             relationship_type: Optional[str] = None) -> Dict:
         """Link two datasets with a parent-child relationship.
 
         Args:
             parent_mfid (str): Parent dataset MFID
             child_mfid (str): Child dataset MFID
+            relationship_type (str, optional): Kind of link, one of
+                crucible.constants.RELATIONSHIP_TYPES. Describes the child
+                relative to the parent.
 
         Returns:
             Dict: Information about the created link
         """
+        options = ({'params': {'relationship_type': relationship_type}}
+                   if relationship_type is not None else {})
         return self._request(
-            'post', f"/datasets/{parent_mfid}/children/{child_mfid}")
+            'post', f"/datasets/{parent_mfid}/children/{child_mfid}", **options)
 
     def unlink(self, parent_mfid: str, child_mfid: str) -> Dict:
         """Remove the parent-child link between two datasets.
@@ -474,6 +480,8 @@ class DatasetOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMix
     def link_parent_child(self, parent_mfid: str, child_mfid: str,
                           relationship_type: Optional[str] = None) -> Dict:
         """Deprecated: use link(parent_mfid, child_mfid) instead."""
+        if relationship_type is None:
+            return self.link(parent_mfid, child_mfid)
         return self.link(parent_mfid, child_mfid, relationship_type)
 
 

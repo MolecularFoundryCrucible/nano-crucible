@@ -125,6 +125,8 @@ client.link(parent_mfid, child_mfid, relationship_type='is_derived_from')
 links = client.get_links(dataset_mfid)
 ```
 
+Each link exposes `direction` as `source`, `target`, or `undirected`. Nano also retains the legacy `relationship` alias with the corresponding `parent`, `child`, or `associated` value for compatibility with existing applications.
+
 ---
 
 ## Graph traversal

@@ -279,6 +279,7 @@ class CrucibleClient:
         Hits GET /resources/{id}/links and returns a flat list of link dicts:
             [{"unique_id": "...", "resource_type": "dataset|sample",
               "name": "...", "direction": "source|target|undirected",
+              "relationship": "parent|child|associated",
               "relationship_type": "is_derived_from|is_part_of|null"}, ...]
 
         `direction` says which end of the stored parent -> child edge this
@@ -287,6 +288,7 @@ class CrucibleClient:
         hierarchy and are always "undirected". `relationship_type` is the kind
         of link, stored on the link row and oriented child-relative-to-parent;
         it is null on associations and on links created before typing existed.
+        `relationship` remains as a compatibility alias for `direction`.
 
         Args:
             resource_mfid (str): Dataset or sample MFID
@@ -294,8 +296,27 @@ class CrucibleClient:
         Returns:
             list: Link objects, or empty list if none
         """
-        result = self._request('get', f"/resources/{resource_mfid}/links")
-        return result or []
+        result = self._request('get', f"/resources/{resource_mfid}/links") or []
+        direction_to_relationship = {
+            'source': 'parent',
+            'target': 'child',
+            'undirected': 'associated',
+        }
+        relationship_to_direction = {
+            value: key for key, value in direction_to_relationship.items()
+        }
+        links = []
+        for raw_link in result:
+            link = dict(raw_link)
+            if link.get('direction') in direction_to_relationship:
+                link.setdefault(
+                    'relationship',
+                    direction_to_relationship[link['direction']],
+                )
+            elif link.get('relationship') in relationship_to_direction:
+                link['direction'] = relationship_to_direction[link['relationship']]
+            links.append(link)
+        return links
 
     @_deprecated_parameter('parent_id', 'parent_mfid')
     @_deprecated_parameter('child_id', 'child_mfid')
@@ -341,7 +362,7 @@ class CrucibleClient:
         # Both are datasets
         if parent_type == "dataset" and child_type == "dataset":
             logger.info(f"Linking datasets: {parent_mfid} (parent) -> {child_mfid} (child)")
-            return self.datasets.link(parent_mfid, child_mfid)
+            return self.datasets.link(parent_mfid, child_mfid, relationship_type)
 
         # Both are samples
         elif parent_type == "sample" and child_type == "sample":

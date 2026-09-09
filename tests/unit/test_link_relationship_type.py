@@ -42,7 +42,7 @@ def _sample_ops():
 @pytest.mark.parametrize('relationship_type', RELATIONSHIP_TYPES)
 def test_dataset_link_sends_relationship_type(relationship_type):
     ops = _dataset_ops()
-    ops.link_parent_child(PARENT, CHILD, relationship_type)
+    ops.link(PARENT, CHILD, relationship_type)
     ops._request.assert_called_once_with(
         'post', f'/datasets/{PARENT}/children/{CHILD}',
         params={'relationship_type': relationship_type})
@@ -70,7 +70,7 @@ def test_link_without_type_sends_no_params(call):
     """
     ops = call()
     if isinstance(ops, DatasetOperations):
-        ops.link_parent_child(PARENT, CHILD)
+        ops.link(PARENT, CHILD)
     else:
         ops.link(PARENT, CHILD)
     _, kwargs = ops._request.call_args
@@ -111,7 +111,7 @@ def _client_with_types(parent_type, child_type):
 def test_client_link_forwards_type_to_datasets():
     client = _client_with_types('dataset', 'dataset')
     client.link(PARENT, CHILD, 'is_derived_from')
-    client.datasets.link_parent_child.assert_called_once_with(
+    client.datasets.link.assert_called_once_with(
         PARENT, CHILD, 'is_derived_from')
 
 
@@ -132,7 +132,30 @@ def test_client_link_rejects_type_on_dataset_sample_pair():
 def test_client_link_allows_dataset_sample_pair_without_type():
     client = _client_with_types('dataset', 'sample')
     client.link(PARENT, CHILD)
-    client.datasets.add_sample.assert_called_once_with(PARENT, CHILD)
+    client.datasets.link_sample.assert_called_once_with(PARENT, CHILD)
+
+
+def test_get_links_adds_legacy_relationship_alias():
+    client = _client_with_types('dataset', 'dataset')
+    client._request = MagicMock(return_value=[
+        {'unique_id': CHILD, 'direction': 'target'},
+        {'unique_id': PARENT, 'direction': 'source'},
+    ])
+
+    links = client.get_links(PARENT)
+
+    assert [link['relationship'] for link in links] == ['child', 'parent']
+
+
+def test_get_links_normalizes_legacy_relationship_response():
+    client = _client_with_types('dataset', 'sample')
+    client._request = MagicMock(return_value=[
+        {'unique_id': CHILD, 'relationship': 'associated'},
+    ])
+
+    links = client.get_links(PARENT)
+
+    assert links[0]['direction'] == 'undirected'
 
 
 # ── CLI ───────────────────────────────────────────────────────────────────────
@@ -156,7 +179,7 @@ def test_cli_link_passes_type_through(module, resource, monkeypatch):
     args = SimpleNamespace(parent=PARENT, child=CHILD,
                            relationship_type='is_derived_from', json=False)
     module._execute_link(args)
-    method = (client.datasets.link_parent_child if resource == 'datasets'
+    method = (client.datasets.link if resource == 'datasets'
               else client.samples.link)
     method.assert_called_once_with(PARENT, CHILD, 'is_derived_from')
 
