@@ -24,8 +24,8 @@ Access via `client.samples`.
         - list_access
         - set_access
         - revoke_access
-        - publish
-        - unpublish
+        - set_public
+        - set_private
         - transfer_ownership
         - reassign_project
         - graph

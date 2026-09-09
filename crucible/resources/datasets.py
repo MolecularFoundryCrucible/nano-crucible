@@ -303,26 +303,48 @@ class DatasetOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMix
 
         'owner_orcid' and 'project_id' are no longer accepted here (422) -
         use transfer_ownership() / reassign_project() instead.
+        The deprecated 'public' field delegates to set_public() or set_private().
         Instrument reassignment is not available through generic PATCH. Omit
         'instrument_id' and 'instrument_name' unless resubmitting their current
         values for compatibility.
 
         Args:
             dataset_mfid (str): Dataset MFID
-            **updates (Any): Fields to update (e.g., dataset_name="New Name", public=True)
+            **updates (Any): Fields to update (e.g., dataset_name="New Name")
 
         Returns:
             Dict: Updated dataset object
 
         Example:
-            >>> client.datasets.update("my-dataset-id", dataset_name="Updated Name", public=True)
+            >>> client.datasets.update("my-dataset-id", dataset_name="Updated Name")
         """
+        public_provided = 'public' in updates
+        public = updates.pop('public', None)
+        if public_provided:
+            warnings.warn(
+                "The 'public' update field is deprecated; use set_public() or "
+                "set_private() instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            if public is not None and not isinstance(public, bool):
+                raise ValueError("public must be true, false, or None.")
         response_only = {'capabilities', 'instrument', 'project'} & updates.keys()
         if response_only:
             fields = ', '.join(sorted(response_only))
             raise ValueError(f"Dataset fields are response-only: {fields}.")
-        return self._parse(
-            self._request('patch', f'/datasets/{dataset_mfid}', json=updates))
+        updated = None
+        if updates:
+            updated = self._parse(
+                self._request('patch', f'/datasets/{dataset_mfid}', json=updates))
+        if public is not None:
+            operation = self.set_public if public else self.set_private
+            operation(dataset_mfid)
+        if updated is None:
+            updated = self.get(dataset_mfid)
+        if public is not None:
+            updated['public'] = public
+        return updated
 
     @_deprecated_parameter('dsid', 'dataset_mfid')
     def list_files(self, dataset_mfid: str) -> List[Dict]:

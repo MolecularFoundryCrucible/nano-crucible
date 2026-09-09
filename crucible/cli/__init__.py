@@ -24,6 +24,14 @@ _DEPRECATED_SUBCOMMANDS = {
     ('user',    'get-access-groups'): 'list-access-groups',
     ('user',    'get-projects'):    'list-projects',
     ('project', 'get-users'):       'list-users',
+    ('dataset', 'publish'):         'set-public',
+    ('dataset', 'unpublish'):       'set-private',
+    ('sample', 'publish'):          'set-public',
+    ('sample', 'unpublish'):        'set-private',
+    ('project', 'publish'):         'set-public',
+    ('project', 'unpublish'):       'set-private',
+    ('instrument', 'publish'):      'set-public',
+    ('instrument', 'unpublish'):    'set-private',
 }
 
 

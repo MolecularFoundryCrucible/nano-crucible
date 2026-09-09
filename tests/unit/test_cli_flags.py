@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from crucible.cli import dataset, file as file_cli, project, sample, upload
+from crucible.cli import _remap_deprecated, dataset, file as file_cli, instrument, project, sample, upload
 from crucible.parsers import BaseParser
 
 
@@ -122,6 +122,59 @@ def test_sample_create_accepts_matching_project_selectors():
 
     assert args.project_id == 'project-one'
     assert args.project_mfid == '0tkn2knjast3h0008nyq9zps2c'
+
+
+@pytest.mark.parametrize('module', [dataset, sample, project, instrument])
+@pytest.mark.parametrize('command', ['set-public', 'set-private'])
+def test_resources_accept_canonical_visibility_commands(module, command):
+    resource = module.__name__.rsplit('.', 1)[-1]
+    args = make_parser(module).parse_args([resource, command, 'resource-id'])
+
+    assert args.resource_id == 'resource-id'
+
+
+@pytest.mark.parametrize(
+    ('old_command', 'new_command'),
+    [('publish', 'set-public'), ('unpublish', 'set-private')],
+)
+def test_visibility_commands_remap_deprecated_names(old_command, new_command, capsys):
+    remapped = _remap_deprecated(['dataset', old_command, 'resource-id'])
+
+    assert remapped == ['dataset', new_command, 'resource-id']
+    assert f"'dataset {old_command}' is deprecated" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    ('command', 'method_name'),
+    [('set-public', 'set_public'), ('set-private', 'set_private')],
+)
+def test_visibility_commands_dispatch_to_canonical_methods(
+        command, method_name, monkeypatch, capsys):
+    client = MagicMock()
+    monkeypatch.setattr('crucible.client.CrucibleClient', lambda: client)
+    args = make_parser(dataset).parse_args(['dataset', command, 'resource-id'])
+
+    args.func(args)
+
+    getattr(client.datasets, method_name).assert_called_once_with('resource-id')
+    assert 'resource-id' in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    ('option', 'method_name'),
+    [('--public', 'set_public'), ('--no-public', 'set_private')],
+)
+def test_sample_update_visibility_options_delegate_with_warning(
+        option, method_name, monkeypatch, capsys):
+    client = MagicMock()
+    monkeypatch.setattr('crucible.client.CrucibleClient', lambda: client)
+    args = make_parser(sample).parse_args(['sample', 'update', 'sample-id', option])
+
+    args.func(args)
+
+    getattr(client.samples, method_name).assert_called_once_with('sample-id')
+    client.samples.update.assert_not_called()
+    assert f'{option} is deprecated' in capsys.readouterr().err
 
 
 @pytest.mark.parametrize('module', [dataset, sample])

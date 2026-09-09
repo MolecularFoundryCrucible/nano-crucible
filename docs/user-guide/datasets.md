@@ -189,8 +189,8 @@ client.datasets.transfer_ownership(dataset_mfid, "new-owner@example.org", confir
 grants = client.datasets.list_access(dataset_mfid)
 client.datasets.set_access(dataset_mfid, "users", "0000-0002-1825-0097", "editor")
 client.datasets.revoke_access(dataset_mfid, "users", "0000-0002-1825-0097")
-client.datasets.publish(dataset_mfid)
-client.datasets.unpublish(dataset_mfid)
+client.datasets.set_public(dataset_mfid)
+client.datasets.set_private(dataset_mfid)
 ```
 
 Normal access grants accept `viewer`, `contributor`, `editor`, or `admin`. Use `transfer_ownership()` for ownership.

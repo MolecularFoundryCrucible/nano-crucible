@@ -121,8 +121,8 @@ client.samples.transfer_ownership(sample_mfid, "new-owner@example.org", confirm=
 ```python
 grants = client.samples.list_access(sample_mfid)
 client.samples.set_access(sample_mfid, "users", "0000-0002-1825-0097", "viewer")
-client.samples.publish(sample_mfid)
-client.samples.unpublish(sample_mfid)
+client.samples.set_public(sample_mfid)
+client.samples.set_private(sample_mfid)
 ```
 
 Normal access grants accept `viewer`, `contributor`, `editor`, or `admin`. Use `transfer_ownership()` for ownership.

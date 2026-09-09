@@ -778,11 +778,12 @@ Updatable fields (use --set):
 
 Examples:
     crucible dataset update DATASET_MFID --set dataset_name="My Dataset"
-    crucible dataset update DATASET_MFID --set public=true
     crucible dataset update DATASET_MFID --set measurement=XRD --set session_name=run-01
     crucible dataset update DATASET_MFID --metadata '{{"temperature": 300, "pressure": 1.0}}'
     crucible dataset update DATASET_MFID --metadata metadata.json
     crucible dataset update DATASET_MFID --set measurement=XRD --metadata '{{"temperature": 300}}'
+
+Use `dataset set-public` or `dataset set-private` to change public visibility.
 """
     )
     _add_args(parser)
@@ -803,6 +804,7 @@ def _execute_update(args):
 
     # Parse --set for model field updates
     updates = {}
+    public = None
     if has_set:
         valid_fields = set(_dataset_updatable_fields())
         for field in args.set_fields:
@@ -811,6 +813,18 @@ def _execute_update(args):
                 sys.exit(1)
             key, _, value = field.partition('=')
             key = key.strip()
+            if key == 'public':
+                public = cast_value(value)
+                if not isinstance(public, bool):
+                    logger.error("Error: public must be true or false")
+                    sys.exit(1)
+                warning = term.yellow('Warning:', stream=sys.stderr)
+                replacement = 'set-public' if public else 'set-private'
+                print(
+                    f"{warning} --set public=... is deprecated; use dataset {replacement} instead.",
+                    file=sys.stderr,
+                )
+                continue
             if key not in valid_fields:
                 logger.error(
                     f"Unknown field '{key}'.\n"
@@ -836,6 +850,12 @@ def _execute_update(args):
             term.success(f"Dataset {args.dataset_id} fields updated", args)
             if getattr(args, "debug", False):
                 logger.debug(f"Updated fields: {list(updates.keys())}")
+
+        if public is not None:
+            operation = client.datasets.set_public if public else client.datasets.set_private
+            operation(args.dataset_id)
+            visibility = 'publicly viewable' if public else 'private'
+            term.success(f"Dataset {args.dataset_id} is now {visibility}", args)
 
         if metadata_dict is not None:
             overwrite = getattr(args, 'overwrite', False)
