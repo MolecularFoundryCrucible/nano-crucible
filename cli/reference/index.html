@@ -1,0 +1,2963 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Python client library and CLI for Crucible, the Molecular Foundry's scientific data management platform">
+      
+      
+      
+        <link rel="canonical" href="https://MolecularFoundryCrucible.github.io/nano-crucible/cli/reference/">
+      
+      
+        <link rel="prev" href="../">
+      
+      
+        <link rel="next" href="../../api-reference/client/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>Command Reference - nano-crucible</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
+    
+      <link rel="stylesheet" href="../../stylesheets/extra.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="custom">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#cli-command-reference" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow md-header--lifted" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="nano-crucible" class="md-header__button md-logo" aria-label="nano-crucible" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            nano-crucible
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Command Reference
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="custom"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="custom" data-md-color-accent="custom"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/MolecularFoundryCrucible/nano-crucible" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    MolecularFoundryCrucible/nano-crucible
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+    
+      
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../installation/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Installation
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../quickstart/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Quick Start
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../concepts/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Core Concepts
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../automation/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Automation & Agents
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../integrations/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Integrations
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../user-guide/datasets/" class="md-tabs__link">
+          
+  
+  
+  User Guide
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../" class="md-tabs__link">
+          
+  
+  
+  CLI Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../api-reference/client/" class="md-tabs__link">
+          
+  
+  
+  API Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../development/permission-alignment/" class="md-tabs__link">
+          
+  
+  
+  Development
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../changelog/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Changelog
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+    
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="nano-crucible" class="md-nav__button md-logo" aria-label="nano-crucible" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    nano-crucible
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/MolecularFoundryCrucible/nano-crucible" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    MolecularFoundryCrucible/nano-crucible
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../quickstart/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Quick Start
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Core Concepts
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../automation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Automation & Agents
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../integrations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Integrations
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    User Guide
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    User Guide
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../user-guide/datasets/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Working with Datasets
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../user-guide/samples/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Working with Samples
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../user-guide/projects/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Project Management
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../user-guide/instruments/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Working with Instruments
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../user-guide/linking/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Linking Resources
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../user-guide/downloading/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Downloading Data
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../user-guide/scientific-metadata/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scientific Metadata
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_8" id="__nav_8_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_8">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    CLI Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Command Reference
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Command Reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#global-options" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Global options
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dataset-commands" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Dataset commands
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#sample-commands" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sample commands
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#project-commands" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Project commands
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#instrument-commands" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Instrument commands
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#user-commands" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        User commands
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#file-commands" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        File commands
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#ingestion-commands" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Ingestion commands
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#service-account-commands" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Service-account commands
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#access-group-commands" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Access-group commands
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#account-commands" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Account commands
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#deletion-commands" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Deletion commands
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cast-command" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cast command
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#configuration-and-cache" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Configuration and cache
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#general-utility-commands" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        General utility commands
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#deprecated-aliases" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Deprecated aliases
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_9" >
+        
+          
+          <label class="md-nav__link" for="__nav_9" id="__nav_9_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_9_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_9">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    API Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api-reference/client/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CrucibleClient
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api-reference/datasets/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Datasets
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api-reference/samples/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Samples
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api-reference/projects/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Projects
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api-reference/instruments/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Instruments
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api-reference/users/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Users
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api-reference/files/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Files
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api-reference/account/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Account
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api-reference/ingestion/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Ingestion
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api-reference/graphs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Graphs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api-reference/models/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Models
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_10" >
+        
+          
+          <label class="md-nav__link" for="__nav_10" id="__nav_10_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Development
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_10_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_10">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Development
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../development/permission-alignment/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Permission Alignment
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../development/mfid-uuidv7-compatibility/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    MFID UUIDv7 Compatibility
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../development/dataset-sidecar-cast-convergence/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dataset Sidecar and Cast Convergence
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../changelog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Changelog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#global-options" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Global options
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dataset-commands" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Dataset commands
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#sample-commands" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sample commands
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#project-commands" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Project commands
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#instrument-commands" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Instrument commands
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#user-commands" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        User commands
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#file-commands" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        File commands
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#ingestion-commands" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Ingestion commands
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#service-account-commands" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Service-account commands
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#access-group-commands" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Access-group commands
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#account-commands" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Account commands
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#deletion-commands" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Deletion commands
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cast-command" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cast command
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#configuration-and-cache" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Configuration and cache
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#general-utility-commands" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        General utility commands
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#deprecated-aliases" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Deprecated aliases
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="cli-command-reference">CLI command reference<a class="headerlink" href="#cli-command-reference" title="Permanent link">&para;</a></h1>
+<p>This page is the canonical command inventory for the Crucible CLI. Use <code>crucible &lt;command&gt; --help</code> or <code>crucible &lt;resource&gt; &lt;action&gt; --help</code> for the exact arguments, aliases, defaults, and examples supported by the installed version.</p>
+<p>Project options use <code>--project-id</code> with the conventional <code>-p</code> short alias. Sample type options use <code>--type</code> with <code>-t</code>. Older spellings remain temporarily accepted with a deprecation warning but are omitted from current examples.</p>
+<h2 id="global-options">Global options<a class="headerlink" href="#global-options" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--version</code></td>
+<td>Print the installed client version and exit</td>
+</tr>
+<tr>
+<td><code>--debug</code></td>
+<td>Enable Crucible debug logging; place it before the command</td>
+</tr>
+<tr>
+<td><code>--no-color</code></td>
+<td>Disable ANSI colors while retaining interactive terminal hyperlinks; place it before the command</td>
+</tr>
+</tbody>
+</table>
+<p>Running <code>crucible</code> without a command starts the interactive shell. See the <a href="../">CLI overview</a> for setup, shell completion, and interactive usage.</p>
+<p><code>--json</code> is available for dataset, sample, and instrument <code>list</code> and <code>get</code>; project <code>list</code> and <code>get</code>; generic <code>get</code>; user <code>get</code>, <code>list</code>, and <code>search</code>; service-account <code>get</code> and <code>list</code>; account <code>show</code>; and dataset, sample, project, and instrument name or metadata searches. Collection and search commands return arrays, while singleton commands return objects.</p>
+<h2 id="dataset-commands">Dataset commands<a class="headerlink" href="#dataset-commands" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>dataset list</code></td>
+<td>List assigned or shared datasets by project ID or canonical project MFID, with instrument, metadata, and name-pattern filters</td>
+</tr>
+<tr>
+<td><code>dataset get MFID</code></td>
+<td>Show a dataset, its files, and linked resources</td>
+</tr>
+<tr>
+<td><code>dataset create [--input FILE ...]</code></td>
+<td>Create a dataset, optionally uploading or cataloging files</td>
+</tr>
+<tr>
+<td><code>dataset update MFID</code></td>
+<td>Update model fields or scientific metadata</td>
+</tr>
+<tr>
+<td><code>dataset edit MFID</code></td>
+<td>Edit dataset fields interactively</td>
+</tr>
+<tr>
+<td><code>dataset reassign-project MFID PROJECT</code></td>
+<td>Move a dataset to another project</td>
+</tr>
+<tr>
+<td><code>dataset transfer-ownership MFID USER</code></td>
+<td>Transfer dataset ownership</td>
+</tr>
+<tr>
+<td><code>dataset delete MFID</code></td>
+<td>Permanently delete a dataset after confirmation</td>
+</tr>
+<tr>
+<td><code>dataset search QUERY</code></td>
+<td>Search dataset names</td>
+</tr>
+<tr>
+<td><code>dataset search-metadata QUERY</code></td>
+<td>Search scientific metadata; <code>search-md</code> is an alias</td>
+</tr>
+<tr>
+<td><code>dataset link</code></td>
+<td>Link parent and child datasets; <code>--relationship-type</code> records the kind of link</td>
+</tr>
+<tr>
+<td><code>dataset remove-child</code></td>
+<td>Remove a dataset parent-child link</td>
+</tr>
+<tr>
+<td><code>dataset list-parents MFID</code></td>
+<td>List parent datasets; <code>--relationship-type</code> filters by kind of link</td>
+</tr>
+<tr>
+<td><code>dataset list-children MFID</code></td>
+<td>List child datasets; <code>--relationship-type</code> filters by kind of link</td>
+</tr>
+<tr>
+<td><code>dataset add-sample MFID</code></td>
+<td>Link a sample to a dataset</td>
+</tr>
+<tr>
+<td><code>dataset remove-sample MFID</code></td>
+<td>Unlink a sample from a dataset</td>
+</tr>
+<tr>
+<td><code>dataset list-samples MFID</code></td>
+<td>List samples linked to a dataset</td>
+</tr>
+<tr>
+<td><code>dataset add-file MFID FILE</code></td>
+<td>Upload files to an existing dataset</td>
+</tr>
+<tr>
+<td><code>dataset add-thumbnail MFID IMAGE</code></td>
+<td>Encode and add a local image as a dataset thumbnail</td>
+</tr>
+<tr>
+<td><code>dataset list-files MFID</code></td>
+<td>List associated files and available download links</td>
+</tr>
+<tr>
+<td><code>dataset download MFID</code></td>
+<td>Download dataset files with optional include and exclude patterns</td>
+</tr>
+<tr>
+<td><code>dataset ingestion MFID</code></td>
+<td>Show ingestion requests for a dataset</td>
+</tr>
+<tr>
+<td><code>dataset add-keyword MFID WORD</code></td>
+<td>Add a keyword</td>
+</tr>
+<tr>
+<td><code>dataset list-keywords MFID</code></td>
+<td>List a dataset's keywords and usage counts</td>
+</tr>
+<tr>
+<td><code>dataset list-access-groups MFID</code></td>
+<td>Deprecated compatibility command; use <code>dataset access list</code></td>
+</tr>
+<tr>
+<td><code>dataset add-access-group MFID GROUP</code></td>
+<td>Deprecated compatibility command; use <code>dataset access grant</code></td>
+</tr>
+<tr>
+<td><code>dataset access ...</code></td>
+<td>List, grant, or revoke direct access entries</td>
+</tr>
+<tr>
+<td><code>dataset set-public MFID</code></td>
+<td>Make a dataset publicly viewable</td>
+</tr>
+<tr>
+<td><code>dataset set-private MFID</code></td>
+<td>Remove public access from a dataset</td>
+</tr>
+<tr>
+<td><code>dataset parsers</code></td>
+<td>List installed client-side parsers</td>
+</tr>
+<tr>
+<td><code>dataset ingestors</code></td>
+<td>List server-advertised ingestion classes</td>
+</tr>
+</tbody>
+</table>
+<p>Common creation example:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>crucible<span class="w"> </span>dataset<span class="w"> </span>create<span class="w"> </span>-i<span class="w"> </span>data.csv<span class="w"> </span>--project-id<span class="w"> </span>my-project<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w">    </span>-n<span class="w"> </span><span class="s2">"XRD measurement"</span><span class="w"> </span>-m<span class="w"> </span><span class="s2">"X-ray diffraction"</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="w">    </span>--metadata<span class="w"> </span><span class="s1">'{"temperature_K": 300}'</span><span class="w"> </span>--keywords<span class="w"> </span><span class="s2">"XRD,powder"</span>
+</code></pre></div>
+<p>Create a dataset record without attaching files:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>crucible<span class="w"> </span>dataset<span class="w"> </span>create<span class="w"> </span>--project-id<span class="w"> </span>my-project<span class="w"> </span>--name<span class="w"> </span><span class="s2">"Planned experiment"</span>
+</code></pre></div>
+<p>Dataset creation accepts <code>--project-id</code> or <code>--project-mfid</code> and <code>--instrument-id</code> or <code>--instrument-mfid</code>. Matching ID and MFID forms may be supplied together. Interactive use remains ID-oriented, while MFID flags support integrations and automation.</p>
+<p>The <code>--type</code>, <code>--ingestor</code>, <code>--no-upload</code>, <code>--backend</code>, and <code>--access-note</code> options require at least one <code>--input</code> file.</p>
+<p>Use <code>dataset list --project-id PROJECT --project-scope shared</code> to show resources shared with a project but assigned elsewhere or unassigned. Use <code>--project-scope all</code> to combine assigned and shared resources. <code>--project-mfid</code> accepts the canonical project MFID instead of a project ID. The interactive shell completes both identifiers through project search. Human-readable scoped results include the resource's actual project and its <code>assigned</code> or <code>shared</code> relation.</p>
+<p>Fields normally updated through <code>dataset update --set</code> include <code>dataset_name</code>, <code>measurement</code>, <code>data_type</code>, <code>session_name</code>, <code>data_format</code>, and <code>timestamp</code>. Use <code>set-public</code> or <code>set-private</code> for public visibility, <code>reassign-project</code> for project changes, and <code>transfer-ownership</code> for owner changes. Instrument reassignment remains unavailable and is not exposed as ordinary metadata editing.</p>
+<h2 id="sample-commands">Sample commands<a class="headerlink" href="#sample-commands" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>sample list</code></td>
+<td>List assigned or shared samples by project ID or canonical project MFID, with name, type, and name-pattern filters</td>
+</tr>
+<tr>
+<td><code>sample get MFID</code></td>
+<td>Show a sample and its linked resources</td>
+</tr>
+<tr>
+<td><code>sample create</code></td>
+<td>Create a sample</td>
+</tr>
+<tr>
+<td><code>sample update MFID</code></td>
+<td>Update sample fields or scientific metadata</td>
+</tr>
+<tr>
+<td><code>sample edit MFID</code></td>
+<td>Edit sample fields interactively</td>
+</tr>
+<tr>
+<td><code>sample reassign-project MFID PROJECT</code></td>
+<td>Move a sample to another project</td>
+</tr>
+<tr>
+<td><code>sample transfer-ownership MFID USER</code></td>
+<td>Transfer sample ownership</td>
+</tr>
+<tr>
+<td><code>sample search QUERY</code></td>
+<td>Search sample names</td>
+</tr>
+<tr>
+<td><code>sample search-metadata QUERY</code></td>
+<td>Search scientific metadata; <code>search-md</code> is an alias</td>
+</tr>
+<tr>
+<td><code>sample link</code></td>
+<td>Link parent and child samples; <code>--relationship-type</code> records the kind of link</td>
+</tr>
+<tr>
+<td><code>sample remove-child</code></td>
+<td>Remove a sample parent-child link</td>
+</tr>
+<tr>
+<td><code>sample list-parents MFID</code></td>
+<td>List parent samples; <code>--relationship-type</code> filters by kind of link</td>
+</tr>
+<tr>
+<td><code>sample list-children MFID</code></td>
+<td>List child samples; <code>--relationship-type</code> filters by kind of link</td>
+</tr>
+<tr>
+<td><code>sample add-dataset MFID</code></td>
+<td>Link a dataset to a sample</td>
+</tr>
+<tr>
+<td><code>sample remove-dataset MFID</code></td>
+<td>Unlink a dataset from a sample</td>
+</tr>
+<tr>
+<td><code>sample list-datasets MFID</code></td>
+<td>List datasets linked to a sample</td>
+</tr>
+<tr>
+<td><code>sample access ...</code></td>
+<td>List, grant, or revoke direct access entries</td>
+</tr>
+<tr>
+<td><code>sample set-public MFID</code></td>
+<td>Make a sample publicly viewable</td>
+</tr>
+<tr>
+<td><code>sample set-private MFID</code></td>
+<td>Remove public access from a sample</td>
+</tr>
+</tbody>
+</table>
+<p>Fields normally updated through <code>sample update</code> include <code>sample_name</code>, <code>sample_type</code>, <code>description</code>, and <code>timestamp</code>. Use <code>set-public</code> or <code>set-private</code> for public visibility, <code>reassign-project</code> for project changes, and <code>transfer-ownership</code> for owner changes.</p>
+<p>Sample creation accepts <code>--project-id</code> or <code>--project-mfid</code>, including both when they resolve to the same project. Interactive creation continues to prompt for the human-readable project ID.</p>
+<p><code>sample list</code> uses the same <code>--project-id</code> or <code>--project-mfid</code> selectors and <code>--project-scope assigned|shared|all</code> behavior as dataset listing. Human-readable shared and combined results include the actual project and project relation.</p>
+<h2 id="project-commands">Project commands<a class="headerlink" href="#project-commands" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>project list</code></td>
+<td>List accessible projects</td>
+</tr>
+<tr>
+<td><code>project get PROJECT [--include-members]</code></td>
+<td>Show a project by MFID or project slug, optionally with its members</td>
+</tr>
+<tr>
+<td><code>project create</code></td>
+<td>Create a project</td>
+</tr>
+<tr>
+<td><code>project update ID</code></td>
+<td>Update a project record or scientific metadata</td>
+</tr>
+<tr>
+<td><code>project edit ID</code></td>
+<td>Edit project fields interactively</td>
+</tr>
+<tr>
+<td><code>project search QUERY</code></td>
+<td>Search project names and IDs</td>
+</tr>
+<tr>
+<td><code>project search-metadata QUERY</code></td>
+<td>Search scientific metadata; <code>search-md</code> is an alias</td>
+</tr>
+<tr>
+<td><code>project list-users ID</code></td>
+<td>List project members and roles</td>
+</tr>
+<tr>
+<td><code>project add-user ID</code></td>
+<td>Add a user to a project</td>
+</tr>
+<tr>
+<td><code>project remove-user ID</code></td>
+<td>Remove a user from a project</td>
+</tr>
+<tr>
+<td><code>project update-user-role ID USER_ID ROLE</code></td>
+<td>Change a project member's role</td>
+</tr>
+<tr>
+<td><code>project transfer-ownership ID USER</code></td>
+<td>Transfer project ownership</td>
+</tr>
+<tr>
+<td><code>project request-join ID</code></td>
+<td>Request membership in a project</td>
+</tr>
+<tr>
+<td><code>project list-join-requests ID</code></td>
+<td>List project join requests</td>
+</tr>
+<tr>
+<td><code>project access ...</code></td>
+<td>List, grant, or revoke direct access entries</td>
+</tr>
+<tr>
+<td><code>project set-public ID</code></td>
+<td>Make a project publicly viewable</td>
+</tr>
+<tr>
+<td><code>project set-private ID</code></td>
+<td>Remove public access from a project</td>
+</tr>
+</tbody>
+</table>
+<p><code>project add-user</code> and <code>project update-user-role</code> require editor or above and accept <code>viewer</code>, <code>contributor</code>, <code>editor</code>, or <code>admin</code>. The target member's current role and requested role must both be below the caller's role. Editors can manage viewers and contributors, admins can also manage editors, and owners can also manage admins. Platform administrators retain their bypass. Use <code>project transfer-ownership</code> to change ownership.</p>
+<p><code>project remove-user</code> permits project owners and platform administrators to remove members, while any member may remove themselves.</p>
+<p>Project member tables sort by standing from lead through viewer, display the API <code>owner</code> role as <code>lead</code>, and use semantic role colors when terminal color is enabled: gold for lead, magenta for admin, blue for editor, the default foreground for contributor, and gray for viewer.</p>
+<p>The <code>access grant</code> commands accept <code>viewer</code>, <code>contributor</code>, <code>editor</code>, or <code>admin</code>. Use the resource's <code>transfer-ownership</code> command to change ownership.</p>
+<h2 id="instrument-commands">Instrument commands<a class="headerlink" href="#instrument-commands" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>instrument list</code></td>
+<td>List instruments</td>
+</tr>
+<tr>
+<td><code>instrument get INSTRUMENT</code></td>
+<td>Show an instrument by MFID or instrument slug</td>
+</tr>
+<tr>
+<td><code>instrument create</code></td>
+<td>Register an instrument</td>
+</tr>
+<tr>
+<td><code>instrument update MFID</code></td>
+<td>Update an instrument record or scientific metadata</td>
+</tr>
+<tr>
+<td><code>instrument set-status MFID STATUS</code></td>
+<td>Change an instrument lifecycle status</td>
+</tr>
+<tr>
+<td><code>instrument transfer-ownership MFID USER</code></td>
+<td>Transfer instrument ownership</td>
+</tr>
+<tr>
+<td><code>instrument list-service-accounts MFID</code></td>
+<td>List service accounts bound as instrument operators</td>
+</tr>
+<tr>
+<td><code>instrument bind-sa MFID SA_MFID</code></td>
+<td>Bind a service account as an instrument operator</td>
+</tr>
+<tr>
+<td><code>instrument unbind-sa MFID SA_MFID</code></td>
+<td>Remove an instrument operator binding</td>
+</tr>
+<tr>
+<td><code>instrument edit MFID</code></td>
+<td>Edit instrument fields interactively</td>
+</tr>
+<tr>
+<td><code>instrument search QUERY [--status STATUS]</code></td>
+<td>Search names, types, and manufacturers with optional lifecycle filtering</td>
+</tr>
+<tr>
+<td><code>instrument search-metadata QUERY</code></td>
+<td>Search scientific metadata; <code>search-md</code> is an alias</td>
+</tr>
+<tr>
+<td><code>instrument access ...</code></td>
+<td>List, grant, or revoke direct access entries</td>
+</tr>
+<tr>
+<td><code>instrument set-public MFID</code></td>
+<td>Make an instrument publicly viewable</td>
+</tr>
+<tr>
+<td><code>instrument set-private MFID</code></td>
+<td>Remove public access from an instrument</td>
+</tr>
+</tbody>
+</table>
+<p>The deprecated <code>publish</code> and <code>unpublish</code> command names remain temporarily available as aliases for <code>set-public</code> and <code>set-private</code>.</p>
+<h2 id="user-commands">User commands<a class="headerlink" href="#user-commands" title="Permanent link">&para;</a></h2>
+<p>Most user-management commands require administrator permissions.</p>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>user get USER</code></td>
+<td>Show a user by ORCID, MFID, username, or email</td>
+</tr>
+<tr>
+<td><code>user search QUERY</code></td>
+<td>Search names and usernames</td>
+</tr>
+<tr>
+<td><code>user list</code></td>
+<td>List users</td>
+</tr>
+<tr>
+<td><code>user create</code></td>
+<td>Create a user</td>
+</tr>
+<tr>
+<td><code>user update USER</code></td>
+<td>Update a user record</td>
+</tr>
+<tr>
+<td><code>user edit USER</code></td>
+<td>Edit a user record interactively</td>
+</tr>
+<tr>
+<td><code>user list-datasets USER [--limit N]</code></td>
+<td>List datasets accessible to a user</td>
+</tr>
+<tr>
+<td><code>user check-access USER DATASET_MFID</code></td>
+<td>Show a user's effective dataset access role</td>
+</tr>
+<tr>
+<td><code>user list-access-groups USER</code></td>
+<td>List a user's access groups</td>
+</tr>
+<tr>
+<td><code>user add-access-group USER GROUP</code></td>
+<td>Deprecated; use the typed project or instrument membership command</td>
+</tr>
+<tr>
+<td><code>user remove-access-group USER GROUP</code></td>
+<td>Deprecated; use the typed project or instrument membership command</td>
+</tr>
+<tr>
+<td><code>user list-projects USER</code></td>
+<td>List a user's projects</td>
+</tr>
+</tbody>
+</table>
+<p>Human users require a username and may optionally supply an ORCID during creation.
+When the ORCID is omitted, the API assigns a canonical MFID.
+Usernames are normalized to lowercase and must be 3 to 24 characters, start with a letter, contain only letters, digits, underscores, or hyphens, and contain no leading, trailing, or consecutive separators. Interactive creation validates each entry and prompts again when it is invalid.</p>
+<h2 id="file-commands">File commands<a class="headerlink" href="#file-commands" title="Permanent link">&para;</a></h2>
+<p>File commands operate on individual file MFIDs. Dataset-scoped file operations remain available under <code>dataset</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>file list</code></td>
+<td>List files globally or within a dataset</td>
+</tr>
+<tr>
+<td><code>file get ID</code></td>
+<td>Show file metadata and a download link when available</td>
+</tr>
+<tr>
+<td><code>file download ID</code></td>
+<td>Download one file</td>
+</tr>
+<tr>
+<td><code>file ingestion ID</code></td>
+<td>Show ingestion requests for a file</td>
+</tr>
+<tr>
+<td><code>file request-ingestion ID</code></td>
+<td>Request or repeat ingestion for a cataloged file</td>
+</tr>
+<tr>
+<td><code>file delete ID [--yes]</code></td>
+<td>Permanently delete a file after confirmation</td>
+</tr>
+</tbody>
+</table>
+<h2 id="ingestion-commands">Ingestion commands<a class="headerlink" href="#ingestion-commands" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ingestion list</code></td>
+<td>List ingestion requests</td>
+</tr>
+<tr>
+<td><code>ingestion get ID</code></td>
+<td>Show an ingestion request</td>
+</tr>
+<tr>
+<td><code>ingestion wait ID</code></td>
+<td>Wait for an ingestion request to finish</td>
+</tr>
+<tr>
+<td><code>ingestion list-ingestors</code></td>
+<td>List available ingestion classes</td>
+</tr>
+</tbody>
+</table>
+<h2 id="service-account-commands">Service-account commands<a class="headerlink" href="#service-account-commands" title="Permanent link">&para;</a></h2>
+<p><code>sa</code> is an alias for <code>service-account</code>. These commands require administrator permissions.
+Service-account creation uses the same username rules and interactive validation as human-user creation.</p>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>sa create</code></td>
+<td>Create a service account</td>
+</tr>
+<tr>
+<td><code>sa rotate-key USER</code></td>
+<td>Generate a new key and invalidate the previous key</td>
+</tr>
+<tr>
+<td><code>sa get USER</code></td>
+<td>Show a service account</td>
+</tr>
+<tr>
+<td><code>sa list</code></td>
+<td>List service accounts</td>
+</tr>
+<tr>
+<td><code>sa update USER</code></td>
+<td>Update a service account</td>
+</tr>
+<tr>
+<td><code>sa edit USER</code></td>
+<td>Edit a service account interactively</td>
+</tr>
+<tr>
+<td><code>sa list-access-groups USER</code></td>
+<td>List access groups for a service account</td>
+</tr>
+<tr>
+<td><code>sa add-access-group USER GROUP</code></td>
+<td>Deprecated; use <code>project add-user</code> or <code>instrument bind-sa</code></td>
+</tr>
+<tr>
+<td><code>sa remove-access-group USER GROUP</code></td>
+<td>Deprecated; use <code>project remove-user</code> or <code>instrument unbind-sa</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="access-group-commands">Access-group commands<a class="headerlink" href="#access-group-commands" title="Permanent link">&para;</a></h2>
+<p><code>ag</code> is an alias for <code>access-group</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ag request GROUP</code></td>
+<td>Request to join an access group or project</td>
+</tr>
+<tr>
+<td><code>ag mine</code></td>
+<td>List the current user's join requests</td>
+</tr>
+<tr>
+<td><code>ag list</code></td>
+<td>List join requests for review</td>
+</tr>
+<tr>
+<td><code>ag get ID</code></td>
+<td>Show a join request</td>
+</tr>
+<tr>
+<td><code>ag approve ID...</code></td>
+<td>Approve pending join requests</td>
+</tr>
+<tr>
+<td><code>ag reject ID...</code></td>
+<td>Reject pending join requests</td>
+</tr>
+</tbody>
+</table>
+<h2 id="account-commands">Account commands<a class="headerlink" href="#account-commands" title="Permanent link">&para;</a></h2>
+<p>These commands operate on the currently authenticated account and do not require administrator permissions.</p>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>account show</code></td>
+<td>Show the current profile</td>
+</tr>
+<tr>
+<td><code>account update</code></td>
+<td>Update profile fields</td>
+</tr>
+<tr>
+<td><code>account edit</code></td>
+<td>Edit the current profile interactively</td>
+</tr>
+<tr>
+<td><code>account api-key</code></td>
+<td>Show the current API key</td>
+</tr>
+<tr>
+<td><code>account verify</code></td>
+<td>Check API-key validity and expiry</td>
+</tr>
+</tbody>
+</table>
+<p>Treat output from <code>account api-key</code> as a secret. Do not include it in logs, issue reports, or agent prompts.</p>
+<h2 id="deletion-commands">Deletion commands<a class="headerlink" href="#deletion-commands" title="Permanent link">&para;</a></h2>
+<p>The deletion-request workflow is separate from direct permanent deletion. Review and audit commands require administrator permissions.</p>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>deletion request RESOURCE</code></td>
+<td>Request deletion of a dataset or sample</td>
+</tr>
+<tr>
+<td><code>deletion list</code></td>
+<td>List deletion requests</td>
+</tr>
+<tr>
+<td><code>deletion get ID</code></td>
+<td>Show a deletion request</td>
+</tr>
+<tr>
+<td><code>deletion approve ID...</code></td>
+<td>Approve pending requests</td>
+</tr>
+<tr>
+<td><code>deletion reject ID...</code></td>
+<td>Reject pending requests</td>
+</tr>
+<tr>
+<td><code>deletion delete RESOURCE</code></td>
+<td>Permanently delete a resource</td>
+</tr>
+<tr>
+<td><code>deletion list-deleted</code></td>
+<td>List permanent-deletion audit records</td>
+</tr>
+<tr>
+<td><code>deletion get-deleted ID</code></td>
+<td>Show a permanent-deletion audit record</td>
+</tr>
+</tbody>
+</table>
+<h2 id="cast-command">Cast command<a class="headerlink" href="#cast-command" title="Permanent link">&para;</a></h2>
+<p><code>cast</code> loads a declarative <code>.crux</code> recipe containing datasets, samples, files, and links.</p>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>cast FILE</code></td>
+<td>Execute a recipe</td>
+</tr>
+<tr>
+<td><code>cast FILE --validate</code></td>
+<td>Validate references and cycles without executing</td>
+</tr>
+<tr>
+<td><code>cast FILE --dry-run</code></td>
+<td>Preview execution without API mutations</td>
+</tr>
+<tr>
+<td><code>cast FILE --show</code></td>
+<td>Show the plan and lock status</td>
+</tr>
+<tr>
+<td><code>cast FILE --force</code></td>
+<td>Clear the lock and recreate entities</td>
+</tr>
+<tr>
+<td><code>cast FILE --reupload</code></td>
+<td>Re-upload files without recreating records</td>
+</tr>
+</tbody>
+</table>
+<h2 id="configuration-and-cache">Configuration and cache<a class="headerlink" href="#configuration-and-cache" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>config init</code></td>
+<td>Run interactive configuration setup</td>
+</tr>
+<tr>
+<td><code>config show</code></td>
+<td>Show the current configuration</td>
+</tr>
+<tr>
+<td><code>config get KEY</code></td>
+<td>Print one configuration value</td>
+</tr>
+<tr>
+<td><code>config set KEY VALUE</code></td>
+<td>Set one configuration value</td>
+</tr>
+<tr>
+<td><code>config unset KEY</code></td>
+<td>Remove a config-file override and return to the environment or package default</td>
+</tr>
+<tr>
+<td><code>config path</code></td>
+<td>Show the configuration-file path</td>
+</tr>
+<tr>
+<td><code>config edit</code></td>
+<td>Edit the configuration file</td>
+</tr>
+<tr>
+<td><code>cache show</code></td>
+<td>Show cache location and disk usage</td>
+</tr>
+<tr>
+<td><code>cache clear</code></td>
+<td>Remove cached files by dataset, age, or all entries</td>
+</tr>
+</tbody>
+</table>
+<p>Configuration values can come from environment variables, the platform-specific config file, or defaults. Avoid displaying <code>api_key</code> in shared terminals or logs.</p>
+<p><code>dataset delete</code>, <code>file delete</code>, and <code>cache clear</code> prompt before removing data. Use <code>--yes</code> only when the operation has already been explicitly approved, such as in a controlled noninteractive workflow.</p>
+<h2 id="general-utility-commands">General utility commands<a class="headerlink" href="#general-utility-commands" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>status</code></td>
+<td>Show endpoint reachability, deployment provenance, database readiness, and authentication identity</td>
+</tr>
+<tr>
+<td><code>whoami</code></td>
+<td>Show the identity associated with the configured key</td>
+</tr>
+<tr>
+<td><code>get MFID</code></td>
+<td>Show a dataset, sample, project, or instrument after detecting its resource type</td>
+</tr>
+<tr>
+<td><code>edit MFID</code></td>
+<td>Edit a dataset, sample, or instrument after detecting its type</td>
+</tr>
+<tr>
+<td><code>download MFID</code></td>
+<td>Save a record and, for datasets, associated files</td>
+</tr>
+<tr>
+<td><code>link</code></td>
+<td>Link parent-child resources or associate a dataset and sample; <code>--relationship-type</code> applies to parent-child links only</td>
+</tr>
+<tr>
+<td><code>unlink MFID1 MFID2</code></td>
+<td>Remove a resource relationship</td>
+</tr>
+<tr>
+<td><code>tree MFID</code></td>
+<td>Display connected ancestors and descendants</td>
+</tr>
+<tr>
+<td><code>open [ID]</code></td>
+<td>Open the Graph Explorer or print its URL</td>
+</tr>
+<tr>
+<td><code>qr ID</code></td>
+<td>Print a terminal QR code for an MFID</td>
+</tr>
+<tr>
+<td><code>completion [SHELL]</code></td>
+<td>Generate and install completion for bash, zsh, fish, or tcsh</td>
+</tr>
+<tr>
+<td><code>upload ...</code></td>
+<td>Deprecated upload command; use <code>dataset create</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="deprecated-aliases">Deprecated aliases<a class="headerlink" href="#deprecated-aliases" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Old form</th>
+<th>Current form</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>dataset update-metadata</code></td>
+<td><code>dataset update --metadata</code></td>
+</tr>
+<tr>
+<td><code>dataset get-keywords</code></td>
+<td><code>dataset list-keywords</code></td>
+</tr>
+<tr>
+<td><code>sample link-dataset</code></td>
+<td><code>sample add-dataset</code></td>
+</tr>
+<tr>
+<td><code>user get-access-groups</code></td>
+<td><code>user list-access-groups</code></td>
+</tr>
+<tr>
+<td><code>user get-projects</code></td>
+<td><code>user list-projects</code></td>
+</tr>
+<tr>
+<td><code>project get-users</code></td>
+<td><code>project list-users</code></td>
+</tr>
+<tr>
+<td><code>project get PROJECT --members</code></td>
+<td><code>project get PROJECT --include-members</code></td>
+</tr>
+</tbody>
+</table>
+<p>Deprecated forms remain available for compatibility but emit a warning. New documentation and scripts should use the current forms.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.tabs.sticky", "navigation.sections", "navigation.top", "search.suggest", "search.highlight", "content.code.copy", "content.tabs.link"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  </body>
+</html>

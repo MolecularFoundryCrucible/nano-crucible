@@ -1,0 +1,3054 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Python client library and CLI for Crucible, the Molecular Foundry's scientific data management platform">
+      
+      
+      
+        <link rel="canonical" href="https://MolecularFoundryCrucible.github.io/nano-crucible/development/permission-alignment/">
+      
+      
+        <link rel="prev" href="../../api-reference/models/">
+      
+      
+        <link rel="next" href="../mfid-uuidv7-compatibility/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>Permission Alignment - nano-crucible</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
+    
+      <link rel="stylesheet" href="../../stylesheets/extra.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="custom">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#permission-control-alignment-decisions" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow md-header--lifted" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="nano-crucible" class="md-header__button md-logo" aria-label="nano-crucible" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            nano-crucible
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Permission Alignment
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="custom"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="custom" data-md-color-accent="custom"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/MolecularFoundryCrucible/nano-crucible" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    MolecularFoundryCrucible/nano-crucible
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+    
+      
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../installation/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Installation
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../quickstart/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Quick Start
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../concepts/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Core Concepts
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../automation/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Automation & Agents
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../integrations/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Integrations
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../user-guide/datasets/" class="md-tabs__link">
+          
+  
+  
+  User Guide
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../cli/" class="md-tabs__link">
+          
+  
+  
+  CLI Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../api-reference/client/" class="md-tabs__link">
+          
+  
+  
+  API Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="./" class="md-tabs__link">
+          
+  
+  
+  Development
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../changelog/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Changelog
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+    
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="nano-crucible" class="md-nav__button md-logo" aria-label="nano-crucible" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    nano-crucible
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/MolecularFoundryCrucible/nano-crucible" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    MolecularFoundryCrucible/nano-crucible
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../quickstart/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Quick Start
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Core Concepts
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../automation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Automation & Agents
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../integrations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Integrations
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    User Guide
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    User Guide
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../user-guide/datasets/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Working with Datasets
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../user-guide/samples/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Working with Samples
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../user-guide/projects/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Project Management
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../user-guide/instruments/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Working with Instruments
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../user-guide/linking/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Linking Resources
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../user-guide/downloading/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Downloading Data
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../user-guide/scientific-metadata/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scientific Metadata
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8" >
+        
+          
+          <label class="md-nav__link" for="__nav_8" id="__nav_8_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    CLI Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/reference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Command Reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_9" >
+        
+          
+          <label class="md-nav__link" for="__nav_9" id="__nav_9_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_9_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_9">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    API Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api-reference/client/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CrucibleClient
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api-reference/datasets/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Datasets
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api-reference/samples/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Samples
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api-reference/projects/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Projects
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api-reference/instruments/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Instruments
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api-reference/users/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Users
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api-reference/files/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Files
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api-reference/account/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Account
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api-reference/ingestion/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Ingestion
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api-reference/graphs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Graphs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api-reference/models/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Models
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_10" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_10" id="__nav_10_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Development
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_10_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_10">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Development
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Permission Alignment
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Permission Alignment
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#repository-ownership" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Repository ownership
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#status-key" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Status key
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#recommended-discussion-order" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Recommended discussion order
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#1-define-whether-owner-is-exclusive" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Define whether owner is exclusive
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="1. Define whether owner is exclusive">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#issue" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Issue
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#best-solution" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Best solution
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#alternative" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Alternative
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#decision" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Decision
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-align-dataset-cli-update-fields" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Align dataset CLI update fields
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2. Align dataset CLI update fields">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#issue_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Issue
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#best-solution_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Best solution
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#decision_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Decision
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-normalize-project-member-mutation-responses" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Normalize project member mutation responses
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="3. Normalize project member mutation responses">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#issue_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Issue
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#best-solution_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Best solution
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#decision_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Decision
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-make-flexible-identifiers-explicit" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Make flexible identifiers explicit
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="4. Make flexible identifiers explicit">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#issue_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Issue
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#best-solution_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Best solution
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#compatibility-decision" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Compatibility decision
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#decision_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Decision
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-add-instrument-ownership-transfer-to-the-cli" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Add instrument ownership transfer to the CLI
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="5. Add instrument ownership transfer to the CLI">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#issue_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Issue
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#best-solution_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Best solution
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#decision_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Decision
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-scope-resource-operations-to-valid-namespaces" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. Scope resource operations to valid namespaces
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="6. Scope resource operations to valid namespaces">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#issue_5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Issue
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#best-solution_5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Best solution
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#alternative_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Alternative
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#decision_5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Decision
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#7-correct-the-api-contract-document" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7. Correct the API contract document
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="7. Correct the API contract document">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#issue_6" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Issue
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#best-solution_6" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Best solution
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#decision_6" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Decision
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#8-align-client-api-and-user-documentation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8. Align client API and user documentation
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="8. Align client API and user documentation">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#issue_7" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Issue
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#best-solution_7" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Best solution
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#decision_7" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Decision
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#9-close-focused-verification-gaps" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        9. Close focused verification gaps
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="9. Close focused verification gaps">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#issue_8" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Issue
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#best-solution_8" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Best solution
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#decision_8" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Decision
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#10-complete-the-staged-client-rollout" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        10. Complete the staged client rollout
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="10. Complete the staged client rollout">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#issue_9" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Issue
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#decision_9" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Decision
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../mfid-uuidv7-compatibility/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    MFID UUIDv7 Compatibility
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../dataset-sidecar-cast-convergence/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dataset Sidecar and Cast Convergence
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../changelog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Changelog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#repository-ownership" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Repository ownership
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#status-key" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Status key
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#recommended-discussion-order" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Recommended discussion order
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#1-define-whether-owner-is-exclusive" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Define whether owner is exclusive
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="1. Define whether owner is exclusive">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#issue" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Issue
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#best-solution" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Best solution
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#alternative" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Alternative
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#decision" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Decision
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-align-dataset-cli-update-fields" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Align dataset CLI update fields
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2. Align dataset CLI update fields">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#issue_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Issue
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#best-solution_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Best solution
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#decision_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Decision
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-normalize-project-member-mutation-responses" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Normalize project member mutation responses
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="3. Normalize project member mutation responses">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#issue_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Issue
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#best-solution_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Best solution
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#decision_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Decision
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-make-flexible-identifiers-explicit" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Make flexible identifiers explicit
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="4. Make flexible identifiers explicit">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#issue_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Issue
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#best-solution_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Best solution
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#compatibility-decision" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Compatibility decision
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#decision_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Decision
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-add-instrument-ownership-transfer-to-the-cli" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Add instrument ownership transfer to the CLI
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="5. Add instrument ownership transfer to the CLI">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#issue_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Issue
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#best-solution_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Best solution
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#decision_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Decision
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-scope-resource-operations-to-valid-namespaces" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. Scope resource operations to valid namespaces
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="6. Scope resource operations to valid namespaces">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#issue_5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Issue
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#best-solution_5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Best solution
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#alternative_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Alternative
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#decision_5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Decision
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#7-correct-the-api-contract-document" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7. Correct the API contract document
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="7. Correct the API contract document">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#issue_6" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Issue
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#best-solution_6" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Best solution
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#decision_6" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Decision
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#8-align-client-api-and-user-documentation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8. Align client API and user documentation
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="8. Align client API and user documentation">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#issue_7" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Issue
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#best-solution_7" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Best solution
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#decision_7" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Decision
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#9-close-focused-verification-gaps" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        9. Close focused verification gaps
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="9. Close focused verification gaps">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#issue_8" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Issue
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#best-solution_8" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Best solution
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#decision_8" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Decision
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#10-complete-the-staged-client-rollout" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        10. Complete the staged client rollout
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="10. Complete the staged client rollout">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#issue_9" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Issue
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#decision_9" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Decision
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="permission-control-alignment-decisions">Permission-control alignment decisions<a class="headerlink" href="#permission-control-alignment-decisions" title="Permanent link">&para;</a></h1>
+<p>This document records the decisions and implementation work used to align <code>nano-crucible</code> with the permission-control changes on the <code>crucible-api</code> <code>feat/permission-roles</code> branch. It is a development record rather than user documentation.</p>
+<p>Implementation follows the repository ownership boundaries and decisions recorded below.</p>
+<h2 id="repository-ownership">Repository ownership<a class="headerlink" href="#repository-ownership" title="Permanent link">&para;</a></h2>
+<ul>
+<li>The nano-crucible agent owns changes in this client repository.</li>
+<li>The API agent owns changes in the <code>crucible-api</code> repository.</li>
+<li>The nano-crucible agent may inspect API source, schemas, tests, and documentation as read-only contract evidence, but must not modify the API repository.</li>
+<li>Decisions in this document form the shared coordination contract. Each agent should report completed commits and any discovered contract conflict before the other side relies on the change.</li>
+</ul>
+<h2 id="status-key">Status key<a class="headerlink" href="#status-key" title="Permanent link">&para;</a></h2>
+<ul>
+<li><code>Open</code>: observed and ready for discussion</li>
+<li><code>Decided</code>: approach agreed, implementation not started</li>
+<li><code>Deferred</code>: intentionally postponed pending another design or dependency</li>
+<li><code>Partial</code>: implemented for the current contract with explicitly retained follow-up work</li>
+<li><code>Implemented</code>: code and documentation updated</li>
+<li><code>Verified</code>: relevant local checks passed</li>
+</ul>
+<h2 id="recommended-discussion-order">Recommended discussion order<a class="headerlink" href="#recommended-discussion-order" title="Permanent link">&para;</a></h2>
+<ol>
+<li>Define whether <code>owner</code> is exclusive.</li>
+<li>Align dataset CLI update fields.</li>
+<li>Normalize project member mutation responses.</li>
+<li>Make flexible identifiers explicit.</li>
+<li>Add instrument ownership transfer to the CLI.</li>
+<li>Scope resource operations to valid namespaces.</li>
+<li>Correct the API contract document.</li>
+<li>Align client API and user documentation.</li>
+<li>Close focused verification gaps.</li>
+</ol>
+<h2 id="1-define-whether-owner-is-exclusive">1. Define whether <code>owner</code> is exclusive<a class="headerlink" href="#1-define-whether-owner-is-exclusive" title="Permanent link">&para;</a></h2>
+<p>Status: <code>Implemented</code></p>
+<h3 id="issue">Issue<a class="headerlink" href="#issue" title="Permanent link">&para;</a></h3>
+<p>The permission design says that a project has exactly one owner and that ownership changes go through <code>POST /resources/{mfid}/transfer_ownership</code>. However, <code>PUT /resources/{mfid}/access/{kind}/{principal}</code> currently accepts <code>effective_permission="owner"</code>. An existing owner or platform administrator can therefore create another owner-level ACL entry without using the ownership-transfer workflow.</p>
+<p>For projects, this can create an owner-level ACL outside the project membership record that stores the canonical project lead. A later transfer updates the project-group owner but does not necessarily remove the additional direct owner grant. The CLI also advertises <code>owner</code> as a normal permission for <code>access grant</code>.</p>
+<h3 id="best-solution">Best solution<a class="headerlink" href="#best-solution" title="Permanent link">&para;</a></h3>
+<p>Treat <code>owner</code> as an exclusive ownership state, not a generally grantable permission:</p>
+<ul>
+<li>Reject <code>effective_permission="owner"</code> in the generic access-grant route with a conflict response that directs callers to <code>transfer_ownership</code>.</li>
+<li>Keep internal creation and migration code responsible for establishing the initial owner.</li>
+<li>Remove <code>owner</code> from the CLI's advertised <code>access grant</code> values.</li>
+<li>Add server coverage proving that generic ACL writes cannot create or replace an owner and that ownership transfer remains the only public ownership mutation.</li>
+</ul>
+<h3 id="alternative">Alternative<a class="headerlink" href="#alternative" title="Permanent link">&para;</a></h3>
+<p>If multiple owner-level principals are intentional, revise the ownership model and documentation to distinguish the canonical owner from principals with owner-equivalent permission. The transfer code must then define whether those additional grants survive a transfer. This is more complex and weakens the current single-owner invariant.</p>
+<h3 id="decision">Decision<a class="headerlink" href="#decision" title="Permanent link">&para;</a></h3>
+<p><code>owner</code> is exclusive and may be assigned only through the ownership-transfer workflow. Generic access grants will allow permissions up to <code>admin</code>, reject <code>owner</code>, and direct callers to <code>transfer_ownership</code>. The CLI will follow the same rule. Internal creation and migration code may establish the initial owner.</p>
+<h2 id="2-align-dataset-cli-update-fields">2. Align dataset CLI update fields<a class="headerlink" href="#2-align-dataset-cli-update-fields" title="Permanent link">&para;</a></h2>
+<p>Status: <code>Implemented</code></p>
+<h3 id="issue_1">Issue<a class="headerlink" href="#issue_1" title="Permanent link">&para;</a></h3>
+<p>The client CLI field registry did not match the server's supported dataset mutation contract:</p>
+<ul>
+<li><code>description</code> is exposed as editable but is rejected by the server.</li>
+<li><code>data_format</code> is accepted by the server but marked non-editable by the client.</li>
+<li><code>instrument_id</code> and <code>instrument_name</code> remain accepted only so older clients may resubmit their current values. Changing or clearing either field returns HTTP 409 while dedicated instrument reassignment is deferred.</li>
+</ul>
+<p>This can make a documented or interactive client operation fail with 422 while hiding valid update fields.</p>
+<p>The API schema comparison also confirms that <code>description</code> is absent from <code>DatasetCreate</code>, <code>DatasetUpdate</code>, <code>DatasetRead</code>, and <code>DatasetResponse</code>. It is therefore an orphaned client CLI field rather than a missing response declaration.</p>
+<p>The client <code>Dataset</code> model also relies on permissive extra-field handling for declared API fields:</p>
+<ul>
+<li><code>instrument_id</code>, present in create and read schemas and retained in the update schema only for compatibility validation.</li>
+<li><code>owner</code>, used as a flexible creation identifier and as the resolved owner object in <code>DatasetResponse</code>.</li>
+</ul>
+<p>The dual-purpose <code>owner</code> field is tracked under issue 4 because its request and response types require a broader model decision.</p>
+<p>At review time, <code>source_folder</code> remained in the API's dataset create and read schemas, core database model, and revision-record serialization, but it was deprecated as a dataset field. The API implementation removed it from create and read schemas and stopped serializing it in new revision records. File location belongs to associated-file records. A parser may retain a local working-directory variable for file discovery without sending it as dataset metadata.</p>
+<h3 id="best-solution_1">Best solution<a class="headerlink" href="#best-solution_1" title="Permanent link">&para;</a></h3>
+<p>Make the client registry match the deployed update contract exactly:</p>
+<ul>
+<li>Remove <code>description</code> from editable dataset fields unless the API deliberately adds it.</li>
+<li>Mark <code>data_format</code> as editable.</li>
+<li>Keep <code>instrument_id</code> and <code>instrument_name</code> visible in dataset output but exclude both from ordinary CLI update and edit surfaces.</li>
+<li>Declare <code>instrument_id</code> on the client <code>Dataset</code> model so the supported field does not depend on extra-field handling.</li>
+<li>Remove deprecated <code>source_folder</code> from the API dataset create and read schemas and from dataset revision-record serialization. Treat removal of the underlying database column as separate migration work.</li>
+<li>Use one explicit client-side update-field definition for CLI validation, edit prompts, help text, and documentation.</li>
+</ul>
+<p>Runtime OpenAPI discovery is not recommended because CLI behavior should remain predictable offline and across server versions.</p>
+<h3 id="decision_1">Decision<a class="headerlink" href="#decision_1" title="Permanent link">&para;</a></h3>
+<p>Remove dataset <code>description</code> from the CLI, make <code>data_format</code> editable, and explicitly model <code>instrument_id</code> for creation and reads. Keep <code>instrument_id</code> and <code>instrument_name</code> out of ordinary CLI update and edit surfaces because changing or clearing instrument assignment returns HTTP 409. Preserve Python-level compatibility for callers that resubmit the current instrument values. Do not add <code>source_folder</code> to the client model. Remove it from the API dataset create and read contract because file locations now belong to associated-file records. Address strict extra-field handling under issue 4.</p>
+<h2 id="3-normalize-project-member-mutation-responses">3. Normalize project member mutation responses<a class="headerlink" href="#3-normalize-project-member-mutation-responses" title="Permanent link">&para;</a></h2>
+<p>Status: <code>Implemented</code></p>
+<h3 id="issue_2">Issue<a class="headerlink" href="#issue_2" title="Permanent link">&para;</a></h3>
+<p>The server now returns the complete <code>AccessGroupMemberRead</code> list from project member POST, PATCH, and DELETE operations. The client parses POST and PATCH results into <code>ProjectMember</code> models, but <code>projects.remove_user()</code> still declares a dictionary return value, describes a response message, and returns raw response data.</p>
+<p>The email and username identification path also returns raw data rather than the same model list as the ORCID path.</p>
+<h3 id="best-solution_2">Best solution<a class="headerlink" href="#best-solution_2" title="Permanent link">&para;</a></h3>
+<p>Make every project member mutation return <code>List[ProjectMember]</code>:</p>
+<ul>
+<li>Parse add, update-role, and remove responses through one private member-list parser.</li>
+<li>Apply the same behavior to ORCID, username, and email identification paths.</li>
+<li>Update docstrings, CLI callers, API reference, and compatibility notes together.</li>
+</ul>
+<h3 id="decision_2">Decision<a class="headerlink" href="#decision_2" title="Permanent link">&para;</a></h3>
+<p>Parse every project member mutation response through one shared member-list parser and return <code>List[ProjectMember]</code> consistently from add, role-update, and removal operations for ORCID, username, and email identification paths. Correct the annotations and docstrings without changing CLI presentation unless a caller needs the returned list.</p>
+<h2 id="4-make-flexible-identifiers-explicit">4. Make flexible identifiers explicit<a class="headerlink" href="#4-make-flexible-identifiers-explicit" title="Permanent link">&para;</a></h2>
+<p>Status: <code>Implemented</code></p>
+<h3 id="issue_3">Issue<a class="headerlink" href="#issue_3" title="Permanent link">&para;</a></h3>
+<p>The server accepts flexible <code>owner</code> fields for dataset and sample creation and a flexible <code>project_lead</code> field for project creation. The current Pydantic models accept these values only because extra fields are allowed. Consequently, IDE completion, type checking, generated schemas, and the model reference do not expose them.</p>
+<p>The broader read-model comparison found additional declarations that are preserved only as extra fields or raw dictionaries:</p>
+<ul>
+<li><code>Dataset</code> does not declare <code>instrument_id</code>.</li>
+<li><code>Sample</code> does not declare the resolved <code>owner</code> response.</li>
+<li><code>Project</code> does not declare its response <code>unique_id</code> or its create-time <code>project_lead</code> field.</li>
+<li><code>Instrument</code> does not declare the response <code>status</code> field.</li>
+<li>The API has a distinct <code>ProjectMinimalRead</code> response for instrument-associated callers, while the client represents both full and minimal project responses as raw dictionaries.</li>
+</ul>
+<p>CLI support is incomplete:</p>
+<ul>
+<li>Dataset and sample creation have no option for creating on behalf of a flexible owner.</li>
+<li><code>project create --lead</code> accepts email or ORCID in its help and routes any non-ORCID value through the legacy email field, so a username does not use the flexible server-side resolver.</li>
+</ul>
+<h3 id="best-solution_3">Best solution<a class="headerlink" href="#best-solution_3" title="Permanent link">&para;</a></h3>
+<p>First make the existing public models explicit without breaking current callers:</p>
+<ul>
+<li>Add a declared <code>owner</code> field to <code>Dataset</code> and <code>Sample</code> that can represent a creation identifier or a resolved owner response.</li>
+<li>Add a declared <code>instrument_id</code> field to <code>Dataset</code>.</li>
+<li>Add a declared <code>project_lead: Optional[str]</code> field to <code>Project</code>.</li>
+<li>Add the API response <code>unique_id</code> to <code>Project</code> and <code>status</code> to <code>Instrument</code>.</li>
+<li>Validate that callers do not provide both flexible and legacy identifier fields before sending the request, producing a clear local error.</li>
+<li>Keep flexible dataset and sample owners in the Python API only for now, without adding parser or CLI plumbing.</li>
+<li>Make <code>project create --lead</code> send <code>project_lead</code> directly and describe it as accepting ORCID, MFID, username, or email.</li>
+</ul>
+<p>Retain <code>extra="allow"</code> for the current combined models to preserve forward compatibility and avoid expanding this permission work into a request/response model redesign. Separating strict request models from forward-compatible response models remains a possible later improvement.</p>
+<h3 id="compatibility-decision">Compatibility decision<a class="headerlink" href="#compatibility-decision" title="Permanent link">&para;</a></h3>
+<p>Keep permissive extra-field handling for the time being. Declare fields that are part of the known public contract, but do not make strict request/response model separation a prerequisite for this work.</p>
+<h3 id="decision_3">Decision<a class="headerlink" href="#decision_3" title="Permanent link">&para;</a></h3>
+<p>Keep <code>extra="allow"</code> while explicitly declaring the known public fields. Add flexible or resolved <code>owner</code> fields to <code>Dataset</code> and <code>Sample</code>, add <code>project_lead</code> and response <code>unique_id</code> to <code>Project</code>, add response <code>status</code> to <code>Instrument</code>, and validate conflicting flexible and legacy identifiers locally. Keep flexible dataset and sample owner selection in the Python API only, with no new CLI option or parser changes. Make <code>project create --lead</code> send <code>project_lead</code> directly. Continue representing <code>ProjectMinimalRead</code> responses as raw dictionaries for now.</p>
+<h2 id="5-add-instrument-ownership-transfer-to-the-cli">5. Add instrument ownership transfer to the CLI<a class="headerlink" href="#5-add-instrument-ownership-transfer-to-the-cli" title="Permanent link">&para;</a></h2>
+<p>Status: <code>Implemented</code></p>
+<h3 id="issue_4">Issue<a class="headerlink" href="#issue_4" title="Permanent link">&para;</a></h3>
+<p>The ownership-transfer endpoint supports instruments, but the client did not expose instrument ownership transfer while the API contract was unsettled.
+Dataset, sample, and project commands already exposed the workflow.</p>
+<p>The API now defines the instrument <code>owner_orcid</code> field as the canonical owner identity and the optional expanded <code>owner</code> field as its public-safe user record.
+Ordinary instrument PATCH requests do not accept either ownership field.</p>
+<h3 id="best-solution_4">Best solution<a class="headerlink" href="#best-solution_4" title="Permanent link">&para;</a></h3>
+<p>Add <code>instrument transfer-ownership INSTRUMENT_MFID NEW_OWNER [--confirm]</code> with the same preview-first behavior and output as the other resources.</p>
+<p>Use the existing command pattern for the initial implementation. A shared ownership-command registrar can be considered later, but is not required for this permission alignment.</p>
+<h3 id="decision_4">Decision<a class="headerlink" href="#decision_4" title="Permanent link">&para;</a></h3>
+<p>Expose <code>OwnershipMixin</code> on <code>InstrumentOperations</code>, add the preview-first CLI command, and remove owner from ordinary update and edit fields.</p>
+<h2 id="6-scope-resource-operations-to-valid-namespaces">6. Scope resource operations to valid namespaces<a class="headerlink" href="#6-scope-resource-operations-to-valid-namespaces" title="Permanent link">&para;</a></h2>
+<p>Status: <code>Implemented</code></p>
+<h3 id="issue_5">Issue<a class="headerlink" href="#issue_5" title="Permanent link">&para;</a></h3>
+<p>ACL, ownership-transfer, and project-reassignment methods currently live on <code>BaseResource</code>. Every resource namespace therefore exposes them, including account, users, files, ingestion, deletion, graphs, access groups, and service accounts. Many of those combinations are invalid or misleading. Project reassignment is specifically valid only for datasets and samples.</p>
+<h3 id="best-solution_5">Best solution<a class="headerlink" href="#best-solution_5" title="Permanent link">&para;</a></h3>
+<p>Split cross-resource behavior into capability mixins:</p>
+<ul>
+<li><code>AccessControlMixin</code> for resource types supporting ACL and public access.</li>
+<li><code>OwnershipMixin</code> for datasets, samples, projects, and instruments.</li>
+<li><code>ProjectAssignmentMixin</code> for datasets and samples only.</li>
+</ul>
+<p>Compose only the appropriate mixins into each operations class. Keep pagination, transport delegation, and scientific metadata behavior in the base class where they are genuinely shared.</p>
+<h3 id="alternative_1">Alternative<a class="headerlink" href="#alternative_1" title="Permanent link">&para;</a></h3>
+<p>Define thin forwarding methods directly on each supported resource class. This is more repetitive but simpler than mixins. Leaving the methods on every namespace is not recommended because it makes invalid operations appear supported.</p>
+<h3 id="decision_5">Decision<a class="headerlink" href="#decision_5" title="Permanent link">&para;</a></h3>
+<p>Introduce small, stateless capability mixins for access control, ownership transfer, and project assignment. Compose access control and ownership into datasets, samples, projects, and instruments; compose project assignment only into datasets and samples. Preserve existing valid method locations and remove accidental methods from unsupported namespaces.</p>
+<h2 id="7-correct-the-api-contract-document">7. Correct the API contract document<a class="headerlink" href="#7-correct-the-api-contract-document" title="Permanent link">&para;</a></h2>
+<p>Status: <code>Implemented</code></p>
+<h3 id="issue_6">Issue<a class="headerlink" href="#issue_6" title="Permanent link">&para;</a></h3>
+<p><code>crucible-api/docs/permission_system_api_changes.md</code> does not exactly match the current server implementation:</p>
+<ul>
+<li>It lists a singular <code>GET /resources/{mfid}/access/{kind}/{principal}</code>, but the GET operation is the collection route <code>GET /resources/{mfid}/access</code>.</li>
+<li>It says DELETE access and public-access responses contain <code>effective_permission</code>, but the implementations return detail messages.</li>
+<li>Its dataset update field list omits the accepted <code>instrument_id</code> field.</li>
+<li>It describes dataset and sample create request schemas as unchanged after adding the flexible <code>owner</code> field.</li>
+<li>The transfer route's source docstring still says dataset and sample PATCH rejection is not yet implemented.</li>
+</ul>
+<h3 id="best-solution_6">Best solution<a class="headerlink" href="#best-solution_6" title="Permanent link">&para;</a></h3>
+<p>Update the API contract document from the current route decorators and Pydantic schemas, then regenerate or inspect local OpenAPI as a consistency check. Describe response shapes per HTTP method instead of grouping routes with different responses into one sentence.</p>
+<p>The server source docstring should be corrected in the same API-repository change.</p>
+<h3 id="decision_6">Decision<a class="headerlink" href="#decision_6" title="Permanent link">&para;</a></h3>
+<p>Correct the API contract and source docstring as part of the API agent's server-side implementation. The API agent will cross-check route declarations, schemas, OpenAPI, and server tests. The nano-crucible agent will not edit the API repository and will use the corrected contract and reported API commit as the basis for client implementation and documentation.</p>
+<h2 id="8-align-client-api-and-user-documentation">8. Align client API and user documentation<a class="headerlink" href="#8-align-client-api-and-user-documentation" title="Permanent link">&para;</a></h2>
+<p>Status: <code>Implemented</code></p>
+<h3 id="issue_7">Issue<a class="headerlink" href="#issue_7" title="Permanent link">&para;</a></h3>
+<p>The client API reference omits most new permission methods, and several user guides describe pre-change behavior:</p>
+<ul>
+<li>Dataset and sample guides say project and owner fields can be changed through ordinary update calls.</li>
+<li>The project guide says <code>project_id</code> is creation-only and does not cover ownership transfer, member roles, or member visibility.</li>
+<li>Sample creation examples use the removed keyword-based calling convention and an incorrect response identifier.</li>
+<li>Project member examples treat <code>ProjectMember</code> models as dictionaries.</li>
+<li>Instrument permission and ownership behavior must be documented only after its API, Python, and CLI contracts are implemented together.</li>
+</ul>
+<h3 id="best-solution_7">Best solution<a class="headerlink" href="#best-solution_7" title="Permanent link">&para;</a></h3>
+<p>After the preceding behavior decisions are implemented, update documentation from the resulting public contract:</p>
+<ul>
+<li>Add completed access, publication, ownership, reassignment, and membership-role methods to the API reference.</li>
+<li>Correct model field tables and creation/update examples.</li>
+<li>Explain preview and confirmation semantics for ownership transfer and project reassignment.</li>
+<li>Keep CLI command inventory in <code>docs/cli/reference.md</code> and link to it rather than duplicating command tables.</li>
+<li>Document instrument owner expansion, default ownership, service-account operators, and preview-first ownership transfer now that they are implemented end to end.</li>
+</ul>
+<p>Documentation should follow implementation decisions so it does not need repeated rewrites while the contract remains unsettled.</p>
+<h3 id="decision_7">Decision<a class="headerlink" href="#decision_7" title="Permanent link">&para;</a></h3>
+<p>Update client documentation after the corresponding implemented behavior is stable. Cover completed dataset, sample, project, and instrument permission workflows, correct stale model tables and examples, and keep the canonical CLI inventory in <code>docs/cli/reference.md</code>.</p>
+<h2 id="9-close-focused-verification-gaps">9. Close focused verification gaps<a class="headerlink" href="#9-close-focused-verification-gaps" title="Permanent link">&para;</a></h2>
+<p>Status: <code>Verified</code></p>
+<h3 id="issue_8">Issue<a class="headerlink" href="#issue_8" title="Permanent link">&para;</a></h3>
+<p>The original focused mocked permission tests left several identified boundaries unverified:</p>
+<ul>
+<li>Generic ACL handling of <code>owner</code>.</li>
+<li>Dataset CLI update-field parity, including frozen instrument assignment.</li>
+<li>Parsed project removal responses across all identifier forms.</li>
+<li>Flexible owner and project-lead payloads and mutual exclusion.</li>
+<li>Instrument owner expansion and ownership-transfer CLI wiring.</li>
+<li>Absence of invalid methods from unsupported resource namespaces.</li>
+</ul>
+<h3 id="best-solution_8">Best solution<a class="headerlink" href="#best-solution_8" title="Permanent link">&para;</a></h3>
+<p>Add or update focused mocked tests as each approved behavior is implemented. Keep live integration tests out of the routine workflow because these operations mutate persistent authorization and ownership state. Use server route tests for authorization invariants and client unit tests for payload, parsing, and CLI wiring.</p>
+<h3 id="decision_8">Decision<a class="headerlink" href="#decision_8" title="Permanent link">&para;</a></h3>
+<p>Focused mocked coverage now exercises canonical ACL fields and payloads, effective dataset access, identifier dispatch, typed access selectors, project member parsing, canonical membership targets, owner expansion, and instrument ownership CLI wiring. The separately authorized staging harness completed 32 baseline checks and 35 multi-identity permission checks against API commit <code>af4a24b946e401c919a8766b88bb19180983e14d</code> and schema revision <code>a9f3c2e7b614</code>. The follow-up verified ACL roles through admin, owner-grant rejection, ownership transfer and restoration, authorization-filtered graphs, service-account access, deletion thresholds and duplicate rejection, and frozen instrument reassignment. Broader test expansion remains optional rather than a release gate. Do not run live integration tests without explicit authorization.</p>
+<h2 id="10-complete-the-staged-client-rollout">10. Complete the staged client rollout<a class="headerlink" href="#10-complete-the-staged-client-rollout" title="Permanent link">&para;</a></h2>
+<p>Status: <code>Verified</code> on staging; production release gated on the API rollout</p>
+<h3 id="issue_9">Issue<a class="headerlink" href="#issue_9" title="Permanent link">&para;</a></h3>
+<p>The staging API now exposes canonical ACL fields, effective-access responses, repeated typed access selectors, exact project member expansion, public-safe email redaction, owner expansion, and deployment provenance. Older API versions silently ignore unknown collection query parameters, so a client cannot safely detect unsupported typed selectors from a successful response.</p>
+<h3 id="decision_9">Decision<a class="headerlink" href="#decision_9" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Use <code>principal_id</code>, <code>principal_type</code>, and <code>permission</code> for ACL responses and send <code>permission</code> in grant bodies.</li>
+<li>Report <code>effective_access</code> directly rather than reconstructing legacy read and write Booleans.</li>
+<li>Accept repeated <code>accessible_to_user</code> and <code>accessible_to_project</code> selectors on top-level dataset, sample, and project collections, with at most ten selectors and intersection semantics.</li>
+<li>Keep legacy resource and generic membership helpers as deprecated compatibility surfaces while directing new work to canonical ACL, project membership, and instrument service-account operations.</li>
+<li>Resolve project membership usernames and emails through exact user collection lookups, then send the returned canonical user identifier to the membership route.</li>
+<li>Return the caller-authorized user representation from exact collection lookups: self and platform administrators may receive email, while broad directory, project lead, project member, instrument operator, access-group member, and unauthorized exact lookup records remain public-safe.</li>
+<li>Apply current slug validation only to create and rename operations so existing out-of-range project and instrument slugs remain readable.</li>
+<li>Treat graph and relationship results as permission-filtered authorized views.</li>
+</ul>
+<p>Staging verification is complete against the API commit and schema revision recorded under issue 9. Deploy the corresponding API contract to production before publishing Nano 3.2.0, which sends typed selectors. This ordering prevents older servers from silently ignoring selector parameters and returning the wrong authorized collection.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.tabs.sticky", "navigation.sections", "navigation.top", "search.suggest", "search.highlight", "content.code.copy", "content.tabs.link"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  </body>
+</html>
