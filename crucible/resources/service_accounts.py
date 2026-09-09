@@ -12,6 +12,7 @@ from typing import Dict, List, Optional
 
 from .base import BaseResource
 from ..constants import DEFAULT_LIMIT
+from ..utils.identifiers import validate_mfid, validate_username
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +29,7 @@ class ServiceAccountOperations(BaseResource):
         The API key is returned once only — store it immediately.
 
         Args:
-            username: Unique username (lowercase letters, digits, hyphens, underscores).
+            username: Unique 3-to-24-character username.
             unique_id: Optional MFID. Server generates one if omitted.
 
         Returns:
@@ -37,9 +38,9 @@ class ServiceAccountOperations(BaseResource):
         Raises:
             HTTPError 409: username or unique_id already exists.
         """
-        body = {'username': username}
+        body = {'username': validate_username(username)}
         if unique_id:
-            body['unique_id'] = unique_id
+            body['unique_id'] = validate_mfid(unique_id)
         return self._request('post', '/service_accounts', json=body)
 
     def rotate_key(self, unique_id: str) -> Dict:

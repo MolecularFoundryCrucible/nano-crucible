@@ -9,7 +9,6 @@ Provides user-related operations: get, create.
 import sys
 import logging
 import json
-import re
 
 logger = logging.getLogger(__name__)
 
@@ -98,17 +97,23 @@ Examples:
 """,
     )
     parser.add_argument('query', metavar='TERM', help='Search term')
+    parser.add_argument('--json', action='store_true', default=False,
+                        help='Output as JSON array')
     parser.set_defaults(func=_execute_search)
 
 
 def _execute_search(args):
     """Execute 'user search'."""
     if len(args.query) < 3:
-        logger.error("Search term must be at least 3 characters")
-        sys.exit(1)
+        from .helpers import fail
+        fail("searching users", ValueError("Search term must be at least 3 characters."), args)
     from crucible.client import CrucibleClient
     try:
         users = CrucibleClient().users.search(args.query)
+
+        if getattr(args, 'json', False):
+            print(json.dumps(users, indent=2, default=str))
+            return
 
         term.header(f"Users matching '{args.query}' ({len(users)})")
         if not users:
@@ -118,10 +123,18 @@ def _execute_search(args):
         rows = []
         for u in users:
             username = u.get('username') or '-'
-            name  = term.fmt_name(u, default='-', fallback_username=False)
-            user_id = term.user_id_link(u.get('unique_id')) or '-'
+            name = term.user_link(
+                term.fmt_name(u, default='-', fallback_username=False),
+                u.get('unique_id'),
+            )
+            user_id = term.cyan(u.get('unique_id')) if u.get('unique_id') else '-'
             rows.append((username, name, user_id))
-        term.table(rows, ['Username', 'Name', 'ID'], max_widths=[25, 25, 26])
+        term.table(
+            rows,
+            ['Username', 'Name', 'ID'],
+            max_widths=[24, 25, 26],
+            min_widths=[24, 4, 26],
+        )
 
     except Exception as e:
         from .helpers import fail
@@ -156,7 +169,7 @@ Examples:
     parser.add_argument('-f', '--first-name',  dest='first_name', metavar='NAME',     help='First name. If not provided, will prompt interactively.')
     parser.add_argument('-l', '--last-name',   dest='last_name',  metavar='NAME',     help='Last name. If not provided, will prompt interactively.')
     parser.add_argument('--email',                 metavar='EMAIL',    help='Email address (optional)')
-    parser.add_argument('-u', '--username',         metavar='USERNAME', help='Username (required, 3-24 chars: lowercase letters/digits/hyphens/underscores)')
+    parser.add_argument('-u', '--username', metavar='USERNAME', help='Username (required, 3-24 chars, starts with a letter; lowercase letters, digits, hyphens, and underscores)')
     parser.add_argument('-p', '--projects',         metavar='IDS',      help='Comma-separated project IDs (optional)')
 
     parser.set_defaults(func=_execute_create)
@@ -186,6 +199,9 @@ Examples:
 
     parser.add_argument('-u', '--username', metavar='USERNAME', default=None,
                         help='Filter by exact username')
+
+    parser.add_argument('--json', action='store_true', default=False,
+                        help='Output as JSON array')
 
     parser.set_defaults(func=_execute_list)
 
@@ -256,6 +272,14 @@ def _execute_get(args):
 def _execute_create(args):
     """Execute the 'user create' subcommand."""
     from crucible.client import CrucibleClient
+    from .helpers import (
+        prompt_optional,
+        prompt_required,
+        prompt_username,
+        validate_email,
+        validate_orcid,
+        validate_project_ids,
+    )
     # Interactive mode if required arguments are missing
     orcid = args.orcid
     first_name = args.first_name
@@ -269,56 +293,42 @@ def _execute_create(args):
         term.header("Create User")
         print("")
 
-    # Prompt for first name
     if first_name is None:
-        while True:
-            first_name = input("First name: ").strip()
-            if first_name:
-                break
-            else:
-                logger.error("First name is required.")
+        first_name = prompt_required("First name", option='--first-name')
 
-    # Prompt for last name
     if last_name is None:
-        while True:
-            last_name = input("Last name: ").strip()
-            if last_name:
-                break
-            else:
-                logger.error("Last name is required.")
+        last_name = prompt_required("Last name", option='--last-name')
 
     if username is None:
-        while True:
-            username = input("Username: ").strip()
-            if username:
-                break
-            logger.error("Username is required.")
+        username = prompt_username()
 
-    # Optional fields — only prompt in interactive mode
     if interactive:
         if orcid is None:
-            orcid_input = input("ORCID (optional, press Enter to generate an MFID): ").strip()
-            if orcid_input:
-                if re.match(r'^\d{4}-\d{4}-\d{4}-\d{3}[0-9X]$', orcid_input):
-                    orcid = orcid_input
-                else:
-                    logger.warning("Invalid ORCID format. The API will assign an MFID.")
+            orcid = prompt_optional(
+                "ORCID",
+                validator=validate_orcid,
+                hint="Enter to generate an MFID",
+            )
 
         if email is None:
-            email_input = input("Email (optional, press Enter to skip): ").strip()
-            if email_input:
-                if re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', email_input):
-                    email = email_input
-                else:
-                    logger.warning("Invalid email format. Skipping.")
+            email = prompt_optional("Email", validator=validate_email)
 
         if projects is None:
-            projects_input = input("Project IDs (comma-separated, optional, press Enter to skip): ").strip()
-            if projects_input:
-                projects = projects_input
+            projects = prompt_optional(
+                "Project IDs",
+                validator=validate_project_ids,
+                hint="comma-separated",
+            )
 
     try:
         from crucible.models import User
+        from ..utils.identifiers import validate_username
+
+        username = validate_username(username)
+        if email is not None:
+            email = validate_email(email)
+        if projects is not None:
+            projects = validate_project_ids(projects)
         client = CrucibleClient()
 
         user = User(
@@ -331,7 +341,7 @@ def _execute_create(args):
         project_ids = [p.strip() for p in projects.split(',')] if projects else []
         result = client.users.create(user, project_ids=project_ids)
 
-        logger.info("✓ User created")
+        term.success("User created", args)
         _show_user(result)
 
     except Exception as e:
@@ -385,7 +395,7 @@ def _execute_update(args):
         client = CrucibleClient()
         user_id = resolve_user_id(client, args.user)
         result = client.users.update(user_id, **fields)
-        logger.info("User updated")
+        term.success("User updated", args)
         _show_user(result)
     except ValueError as e:
         logger.error(str(e))
@@ -512,7 +522,7 @@ def _execute_add_access_group(args):
         client = CrucibleClient()
         user_id = resolve_user_id(client, args.user)
         client.users.add_to_access_group(user_id, args.group_name)
-        logger.info(f"Added {args.user} to access group '{args.group_name}'")
+        term.success(f"Added {args.user} to access group '{args.group_name}'", args)
     except ValueError as e:
         logger.error(str(e))
         sys.exit(1)
@@ -550,7 +560,7 @@ def _execute_remove_access_group(args):
         client = CrucibleClient()
         user_id = resolve_user_id(client, args.user)
         client.users.remove_from_access_group(user_id, args.group_name)
-        logger.info(f"Removed {args.user} from access group '{args.group_name}'")
+        term.success(f"Removed {args.user} from access group '{args.group_name}'", args)
     except ValueError as e:
         logger.error(str(e))
         sys.exit(1)
@@ -568,6 +578,10 @@ def _execute_list(args):
         kwargs = {'username': username_filter} if username_filter else {}
         users = client.users.list(limit=args.limit, **kwargs)
 
+        if getattr(args, 'json', False):
+            print(json.dumps(users, indent=2, default=str))
+            return
+
         term.header(f"Users ({len(users)})")
 
         if not users:
@@ -576,11 +590,19 @@ def _execute_list(args):
 
         rows = []
         for user in users:
-            name     = term.fmt_name(user, default='-', fallback_username=False)
-            user_id  = term.user_id_link(user.get('unique_id')) or '-'
+            name = term.user_link(
+                term.fmt_name(user, default='-', fallback_username=False),
+                user.get('unique_id'),
+            )
+            user_id  = term.cyan(user.get('unique_id')) if user.get('unique_id') else '-'
             username = user.get('username') or '-'
             rows.append((username, name, user_id))
-        term.table(rows, ['Username', 'Name', 'ID'], max_widths=[25, 25, 26])
+        term.table(
+            rows,
+            ['Username', 'Name', 'ID'],
+            max_widths=[24, 25, 26],
+            min_widths=[24, 4, 26],
+        )
 
     except Exception as e:
         from .helpers import fail
@@ -750,15 +772,23 @@ def _execute_list_projects(args):
             print(f"  {term.dim('No projects found.')}")
             return
 
-        rows = [
-            (
-                p.get('project_id') or '-',
-                p.get('title') or '-',
-                p.get('organization') or '-',
+        from .helpers import project_explorer_url
+        def _project_row(project):
+            project_id = project.get('project_id')
+            title = project.get('title')
+            url = project_explorer_url(project_id)
+            return (
+                project_id if title else term.project_link(project_id, url),
+                term.navigation_link(title, url) if title else '-',
+                project.get('organization') or '-',
             )
-            for p in projects
-        ]
-        term.table(rows, ['ID', 'Title', 'Organization'], max_widths=[25, 30, 20])
+        rows = [_project_row(project) for project in projects]
+        term.table(
+            rows,
+            ['Project ID', 'Title', 'Organization'],
+            max_widths=[25, 30, 20],
+            min_widths=[25, 5, 12],
+        )
 
     except ValueError as e:
         logger.error(str(e))

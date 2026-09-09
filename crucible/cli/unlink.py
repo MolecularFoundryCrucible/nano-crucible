@@ -77,7 +77,7 @@ def execute(args):
     if args.id1 and args.id2:
         try:
             CrucibleClient().unlink(args.id1, args.id2)
-            logger.info(f"✓ Unlinked resources successfully")
+            term.success("Unlinked resources", args)
         except ValueError as e:
             logger.error(str(e))
             sys.exit(1)
@@ -88,8 +88,8 @@ def execute(args):
     elif args.dataset and args.sample:
         logger.info(f"Unlinking sample '{args.sample}' from dataset '{args.dataset}'...")
         try:
-            CrucibleClient().datasets.remove_sample(args.dataset, args.sample)
-            logger.info(f"✓ Unlinked sample {args.sample} from dataset {args.dataset}")
+            CrucibleClient().datasets.unlink_sample(args.dataset, args.sample)
+            term.success(f"Unlinked sample {args.sample} from dataset {args.dataset}", args)
         except Exception as e:
             logger.error(f"Failed to unlink resources: {e}")
             sys.exit(1)
@@ -97,7 +97,7 @@ def execute(args):
     elif args.parent and args.child:
         try:
             CrucibleClient().unlink(args.parent, args.child)
-            logger.info(f"✓ Unlinked resources successfully")
+            term.success("Unlinked resources", args)
         except ValueError as e:
             logger.error(str(e))
             sys.exit(1)

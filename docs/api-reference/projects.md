@@ -20,5 +20,5 @@ Access via `client.projects`.
         - set_access
         - revoke_access
         - set_public
-        - unset_public
+        - set_private
         - transfer_ownership

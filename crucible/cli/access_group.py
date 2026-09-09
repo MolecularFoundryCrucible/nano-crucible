@@ -44,10 +44,12 @@ def _show_join_request(record, client=None):
     _p("Status",     term.status_label(record.get('status')))
     _p("Reason",     record.get('reason'))
     _p("Requested",  term.fmt_ts(record.get('request_time')))
-    _p("Requester",  names.get(record.get('requester_id'), record.get('requester_id')))
+    requester_id = record.get('requester_id')
+    _p("Requester",  term.user_link(names.get(requester_id, requester_id), requester_id))
     if record.get('reviewer_notes') or record.get('review_time'):
         _p("Review Time",  term.fmt_ts(record.get('review_time')))
-        _p("Reviewer",     names.get(record.get('reviewer_id'), record.get('reviewer_id')))
+        reviewer_id = record.get('reviewer_id')
+        _p("Reviewer",     term.user_link(names.get(reviewer_id, reviewer_id), reviewer_id))
         _p("Review Notes", record.get('reviewer_notes'))
 
 
@@ -60,7 +62,10 @@ def _table_rows(records, client=None):
             str(r.get('id', '-')),
             r.get('group_name') or '-',
             term.status_label(r.get('status') or '-'),
-            names.get(r.get('requester_id'), r.get('requester_id')) or '-',
+            term.user_link(
+                names.get(r.get('requester_id'), r.get('requester_id')),
+                r.get('requester_id'),
+            ) or '-',
             term.fmt_date(r.get('request_time')),
         ))
     return rows
@@ -90,7 +95,7 @@ def _execute_request(args):
     try:
         client = CrucibleClient()
         record = client.access_groups.request_join(args.group_name, reason=args.reason)
-        logger.info("✓ Join request submitted")
+        term.success("Join request submitted", args)
         print()
         _show_join_request(record, client=client)
     except Exception as e:
@@ -134,7 +139,7 @@ def _execute_list(args):
         )
         term.header(f"Join Requests — {args.status} ({len(records)})")
         if not records:
-            print(f"  {term.dim('None found.')}")
+            print(f"  {term.dim('No join requests found.')}")
             return
         term.table(_table_rows(records, client=client),
                   ['ID', 'Group', 'Status', 'Requester', 'Requested'],
@@ -172,7 +177,7 @@ def _execute_mine(args):
         records = client.account.join_requests(status=status, limit=args.limit)
         term.header(f"My Join Requests — {args.status} ({len(records)})")
         if not records:
-            print(f"  {term.dim('None found.')}")
+            print(f"  {term.dim('No join requests found.')}")
             return
         term.table(_table_rows(records, client=client),
                   ['ID', 'Group', 'Status', 'Requester', 'Requested'],
@@ -244,7 +249,7 @@ def _execute_approve(args):
     for rid in args.request_id:
         try:
             record = client.access_groups.approve_join_request(rid, reviewer_notes=args.reviewer_notes)
-            logger.info(f"✓ Join request {rid} approved")
+            term.success(f"Join request {rid} approved", args)
             print()
             _show_join_request(record, client=client)
         except Exception as e:
@@ -288,7 +293,7 @@ def _execute_reject(args):
     for rid in args.request_id:
         try:
             record = client.access_groups.reject_join_request(rid, reviewer_notes=args.reviewer_notes)
-            logger.info(f"✓ Join request {rid} rejected")
+            term.success(f"Join request {rid} rejected", args)
             print()
             _show_join_request(record, client=client)
         except Exception as e:

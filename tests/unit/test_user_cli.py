@@ -7,7 +7,8 @@ from unittest.mock import MagicMock
 import pytest
 
 from crucible.cli import term
-from crucible.cli.user import _execute_edit, _register_create, _register_update, _show_user
+from crucible.cli.helpers import prompt_username
+from crucible.cli.user import _execute_create, _execute_edit, _register_create, _register_update, _show_user
 
 
 BASE_USER = {
@@ -68,6 +69,43 @@ def test_create_accepts_username_without_orcid():
 
     assert args.username == 'test-user-one'
     assert args.orcid is None
+
+
+def test_interactive_username_prompt_retries_and_normalizes(monkeypatch, capsys):
+    answers = iter(['1invalid', 'Alice_User'])
+    monkeypatch.setattr('crucible.cli.helpers._interactive_stdin', lambda: True)
+    monkeypatch.setattr('builtins.input', lambda prompt: next(answers))
+
+    assert prompt_username() == 'alice_user'
+    assert 'Invalid value' in capsys.readouterr().err
+
+
+def test_interactive_create_uses_validated_username(monkeypatch):
+    client = SimpleNamespace(users=SimpleNamespace())
+    client.users.create = MagicMock(return_value={
+        'unique_id': '0tkvpezyz1zzf00076nahf85j4',
+        'username': 'alice_user',
+        'first_name': 'Alice',
+        'last_name': 'User',
+    })
+    monkeypatch.setattr('crucible.client.CrucibleClient', lambda: client)
+    monkeypatch.setattr('crucible.cli.helpers.prompt_username', lambda prompt='Username: ': 'alice_user')
+    monkeypatch.setattr('crucible.cli.helpers._interactive_stdin', lambda: True)
+    monkeypatch.setattr('builtins.input', lambda prompt: '')
+
+    _execute_create(SimpleNamespace(
+        orcid=None,
+        first_name='Alice',
+        last_name='User',
+        username=None,
+        email=None,
+        projects=None,
+        debug=False,
+        json=False,
+    ))
+
+    created_user = client.users.create.call_args.args[0]
+    assert created_user.username == 'alice_user'
 
 
 def test_update_no_longer_accepts_service_account_conversion():

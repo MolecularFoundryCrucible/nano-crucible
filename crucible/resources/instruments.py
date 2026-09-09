@@ -172,7 +172,10 @@ class InstrumentOperations(OwnershipMixin, AccessControlMixin, BaseResource):
         return self._parse(collapse_exact_lookup(raw, 'instrument', instrument_name))
 
     def create(self, instrument, scientific_metadata: Optional[Dict] = None) -> Dict:
-        """Create a new instrument, returning the existing one if it already exists.
+        """Create a new instrument as an authenticated human caller.
+
+        Service accounts cannot create instruments. If the instrument already
+        exists, this method returns the existing record.
 
         Args:
             instrument: Instrument model or dict with instrument details.
@@ -189,9 +192,25 @@ class InstrumentOperations(OwnershipMixin, AccessControlMixin, BaseResource):
         import warnings
         from ..models import Instrument
         if isinstance(instrument, Instrument):
-            payload = instrument.model_dump(exclude_none=True, exclude={'id', 'unique_id'})
+            payload = instrument.model_dump(
+                include={
+                    'instrument_id',
+                    'instrument_name',
+                    'manufacturer',
+                    'model',
+                    'owner_orcid',
+                    'owner',
+                    'location',
+                    'description',
+                    'instrument_type',
+                    'other_id',
+                    'other_id_source',
+                },
+                exclude_none=True,
+            )
         else:
             payload = dict(instrument)
+            payload.pop('capabilities', None)
 
         if not payload.get('instrument_id'):
             raise ValueError(
@@ -246,6 +265,8 @@ class InstrumentOperations(OwnershipMixin, AccessControlMixin, BaseResource):
                 "Instrument ownership cannot be changed with update(); "
                 "use transfer_ownership() instead."
             )
+        if 'capabilities' in kwargs:
+            raise ValueError("Instrument capabilities are response-only.")
         if kwargs.get('instrument_id') is not None:
             validate_slug(kwargs['instrument_id'], 'instrument')
         return self._parse(self._request('patch', f'/instruments/{unique_id}', json=kwargs))
@@ -282,8 +303,39 @@ class InstrumentOperations(OwnershipMixin, AccessControlMixin, BaseResource):
         raw = self._request('delete', f'/instruments/{instrument_mfid}/service_accounts/{sa_unique_id}')
         return [ProjectMember.model_validate(m) for m in raw]
 
+    def list_service_accounts(self, instrument_mfid: str) -> List['ProjectMember']:
+        """List service accounts bound to an instrument.
+
+        Args:
+            instrument_mfid (str): Instrument unique identifier (MFID)
+
+        Returns:
+            List[ProjectMember]: Bound service accounts and their operator roles
+        """
+        from ..models import ProjectMember
+        raw = self._request('get', f'/instruments/{instrument_mfid}/service_accounts')
+        return [ProjectMember.model_validate(member) for member in raw]
+
+    def set_status(self, instrument_mfid: str, status: str) -> Dict:
+        """Change an instrument lifecycle status.
+
+        Args:
+            instrument_mfid (str): Instrument unique identifier (MFID)
+            status (str): One of active, maintenance, or decommissioned
+
+        Returns:
+            Dict: Updated instrument response
+        """
+        allowed = {'active', 'maintenance', 'decommissioned'}
+        if status not in allowed:
+            raise ValueError(f"status must be one of: {', '.join(sorted(allowed))}")
+        raw = self._request(
+            'post', f'/instruments/{instrument_mfid}/status', params={'status': status})
+        return self._parse(raw)
+
     def search(self, q: str, limit: int = 20,
-               include_owner: bool = False) -> List[Dict]:
+               include_owner: bool = False,
+               status: Optional[str] = None) -> List[Dict]:
         """Fuzzy search across instruments. Available to all authenticated users.
 
         Matches against instrument_name, instrument_type, and manufacturer
@@ -293,6 +345,7 @@ class InstrumentOperations(OwnershipMixin, AccessControlMixin, BaseResource):
             q: Search term (min 3 chars). Typo-tolerant.
             limit: Max results (default 20, max 50).
             include_owner: Resolve owner_orcid into a public-safe user object.
+            status: Restrict results to active, maintenance, or decommissioned.
 
         Returns:
             List[Dict]: Matching instrument records, ranked by relevance.
@@ -300,6 +353,11 @@ class InstrumentOperations(OwnershipMixin, AccessControlMixin, BaseResource):
         params = {'q': q, 'limit': limit}
         if include_owner:
             params['include_owner'] = True
+        if status is not None:
+            allowed = {'active', 'maintenance', 'decommissioned'}
+            if status not in allowed:
+                raise ValueError(f"status must be one of: {', '.join(sorted(allowed))}")
+            params['status'] = status
         result = self._request('get', '/instruments/search', params=params)
         items = result.get('items', result) if isinstance(result, dict) else result
         return [self._parse(item) for item in items]

@@ -85,7 +85,7 @@ print(sample["unique_id"])  # system-assigned sample MFID
 ## Link a dataset to a sample
 
 ```python
-client.samples.add_dataset(sample["unique_id"], dataset_mfid)
+client.samples.link_dataset(sample["unique_id"], dataset_mfid)
 ```
 
 See [linking resources](user-guide/linking.md) for dataset processing chains and sample hierarchies.
@@ -116,16 +116,16 @@ The same operations are available from the terminal:
 
 ```bash
 # Create a dataset with a file
-crucible dataset create -i xrd_data.xy -n "XRD measurement" -m "X-ray diffraction" -pid my-project
+crucible dataset create -i xrd_data.xy -n "XRD measurement" -m "X-ray diffraction" --project-id my-project
 
 # Create a sample
-crucible sample create -n "Silicon wafer A" --type substrate -pid my-project
+crucible sample create -n "Silicon wafer A" --type substrate --project-id my-project
 
 # Link them
 crucible sample add-dataset SAMPLE_ID -d DATASET_ID
 
 # List datasets
-crucible dataset list -pid my-project
+crucible dataset list --project-id my-project
 
 # Download
 crucible download DATASET_ID

@@ -88,7 +88,7 @@ def test_dataset_link_parent_child(client, project_id, test_tag):
     parent = client.datasets.create(Dataset(dataset_name=f'{test_tag}-parent', project_id=project_id)).get('dsid')
     child  = client.datasets.create(Dataset(dataset_name=f'{test_tag}-child',  project_id=project_id)).get('dsid')
 
-    client.datasets.link_parent_child(parent, child)
+    client.datasets.link(parent, child)
     children = client.datasets.list_children(parent)
     assert any(d.get('unique_id') == child for d in children)
 

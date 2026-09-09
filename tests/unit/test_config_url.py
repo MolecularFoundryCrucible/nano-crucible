@@ -77,6 +77,7 @@ def test_unset_api_url_restores_package_default(monkeypatch, tmp_path):
         "api_url = https://crucible.lbl.gov/api/v2\n"
     )
     original_data = global_config._data.copy()
+    original_sources = global_config._sources.copy()
 
     monkeypatch.delenv("CRUCIBLE_API_URL", raising=False)
     monkeypatch.setattr(
@@ -95,3 +96,37 @@ def test_unset_api_url_restores_package_default(monkeypatch, tmp_path):
         assert global_config.api_url == Config.DEFAULT_API_URL
     finally:
         global_config._data = original_data
+        global_config._sources = original_sources
+
+
+def test_current_session_is_retained_with_deprecation_warning(monkeypatch):
+    monkeypatch.setattr(global_config, '_data', {'current_session': 'legacy-session'})
+
+    with pytest.warns(DeprecationWarning, match='current_session'):
+        assert global_config.current_session == 'legacy-session'
+
+
+def test_config_tracks_environment_and_file_sources(monkeypatch, tmp_path):
+    config_file = tmp_path / "config.ini"
+    config_file.write_text(
+        "[crucible]\n"
+        "api_key = test\n"
+        "current_project = saved-project\n"
+    )
+    monkeypatch.setattr(
+        Config,
+        "config_file_path",
+        property(lambda self: config_file),
+    )
+    monkeypatch.delenv("CRUCIBLE_CURRENT_PROJECT", raising=False)
+
+    config = Config()
+
+    assert config.current_project == "saved-project"
+    assert config.source("current_project") == "config file"
+
+    monkeypatch.setenv("CRUCIBLE_CURRENT_PROJECT", "environment-project")
+    config.reload()
+
+    assert config.current_project == "environment-project"
+    assert config.source("current_project") == "environment"

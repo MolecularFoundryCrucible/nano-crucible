@@ -6,6 +6,7 @@ Dataset subcommand for Crucible CLI.
 Provides dataset-related operations: list, get, create, update-metadata, link, etc.
 """
 
+import argparse
 import sys
 import json
 from pathlib import Path
@@ -48,6 +49,16 @@ def _build_file_display(af_list, link_map, dsid):
     return result
 
 
+def _format_file_label(item):
+    name = item['name']
+    backend = item['backend']
+    if backend != 'gcs':
+        return f"{name} {term.dim(f'({backend})')}"
+    if item['ingested']:
+        return term.navigation_link(name, item['url']) if item['url'] else name
+    return f"{name} {term.yellow('(pending ingestion)')}"
+
+
 def _show_scientific_metadata(sci_md):
     """Display scientific metadata. Delegates to helpers.show_scientific_metadata."""
     from .helpers import show_scientific_metadata
@@ -58,10 +69,12 @@ def _show_dataset(dataset, client, verbose=False, graph=False, include_metadata=
     """Display dataset fields. Extracted for reuse by top-level 'crucible get'."""
     _p = term.field_printer(14)
 
-    from .helpers import explorer_url
+    from .helpers import (explorer_url, format_relationship_type,
+                          instrument_reference, project_reference)
 
     def _ds_link(r):
-        u, p = r.get('unique_id'), r.get('project_id')
+        u = r.get('unique_id')
+        _, p, _ = project_reference(r)
         return term.mfid_link(u, explorer_url(u, p, 'dataset'))
 
     term.header("Dataset")
@@ -72,36 +85,56 @@ def _show_dataset(dataset, client, verbose=False, graph=False, include_metadata=
         reason = dr.get('reason') or ''
         rid    = dr.get('id', '')
         color  = term.yellow if status == 'pending' else term.red
-        msg    = color(f"⚠  Deletion {status}")
+        msg    = color(f"Deletion {status}")
         if reason:
             msg += f'  "{reason}"'
         if rid:
             msg += '  ' + term.dim(f"(request #{rid})")
         print(f"  {msg}")
 
-    pub = dataset.get('public')
-    _p("Name",        dataset.get('dataset_name') or '(unnamed)')
+    project_title, project_id, project_url = project_reference(dataset)
+    _p("Name",        term.bold(dataset.get('dataset_name') or '(unnamed)'))
     _p("MFID",        _ds_link(dataset))
     _p("Measurement", dataset.get('measurement'))
     _p("Data Type",   dataset.get('data_type'))
     _p("Session",     dataset.get('session_name'))
-    _p("Instrument",  dataset.get('instrument_name'))
-    _p("Public",      "yes" if pub else ("no" if pub is not None else None))
-    _p("Project",     dataset.get('project_id'))
-    _p("Timestamp",   term.fmt_ts(dataset.get('timestamp')))
-    _p("Owner",       term.fmt_owner(dataset))
     _p("Description", dataset.get('description'))
 
     dsid = dataset.get('unique_id')
 
     if verbose:
-        term.subheader("File")
         _p("Data Format", dataset.get('data_format'))
         _p("Size",        term.fmt_size(dataset.get('size')))
 
+    if project_title or project_id:
+        term.subheader("Project")
+        if project_title:
+            _p("Title", term.navigation_link(project_title, project_url))
+        if project_id:
+            _p("Project ID", project_id)
+
+    instrument_name, instrument_id, instrument_url = instrument_reference(dataset)
+    if instrument_name or instrument_id:
+        term.subheader("Instrument")
+        if instrument_name:
+            _p("Name", term.navigation_link(instrument_name, instrument_url))
+        if instrument_id:
+            _p("Instrument ID", instrument_id)
+
+    term.subheader("Access")
+    _p("Owner",  term.fmt_owner(dataset))
+    _p("Public", term.fmt_bool(dataset.get('public')))
+
+    timing = (
+        ("Timestamp", dataset.get('timestamp')),
+        ("Created", dataset.get('creation_time')),
+        ("Modified", dataset.get('modification_time')),
+    )
+    if any(value for _, value in timing):
         term.subheader("Timing")
-        _p("Created",  term.fmt_ts(dataset.get('creation_time')))
-        _p("Modified", term.fmt_ts(dataset.get('modification_time')))
+        for label, value in timing:
+            if value:
+                _p(label, term.fmt_ts(value))
 
     if prefetched is not None:
         keywords = prefetched.get('keywords', [])
@@ -140,16 +173,8 @@ def _show_dataset(dataset, client, verbose=False, graph=False, include_metadata=
         term.subheader(f"Files ({len(file_display)})")
         rows = []
         for item in sorted(file_display, key=lambda x: x['name']):
-            name    = item['name']
-            backend = item['backend']
             size    = term.fmt_size(item['size']) if item['size'] is not None else '-'
-            if backend != 'gcs':
-                label = f"{term.dim(name)} {term.cyan(f'({backend})')}"
-            elif item['ingested']:
-                label = term.hyperlink(term.cyan(name), item['url']) if item['url'] else term.cyan(name)
-            else:
-                label = f"{term.dim(name)} {term.yellow('(pending ingestion)')}"
-            rows.append((item['mfid'], label, size))
+            rows.append((term.cyan(item['mfid']), _format_file_label(item), size))
         term.table(rows, ['MFID', 'File', 'Size'], max_widths=[26, 60, 10])
 
     if graph:
@@ -160,14 +185,18 @@ def _show_dataset(dataset, client, verbose=False, graph=False, include_metadata=
             except Exception:
                 links_list = None
         if links_list is None:
-            print(f"  {term.dim('⚠  Could not fetch links.')}")
+            from .helpers import show_warning
+            show_warning("Could not fetch links.")
         else:
-            proj            = dataset.get('project_id') or ''
-            linked_samples  = [l for l in links_list if l.get('relationship') == 'associated'
+            _, proj, _ = project_reference(dataset)
+            proj = proj or ''
+            # 'direction' is relative to this dataset: links are stored
+            # parent -> child, so a 'source' is one of its parents.
+            linked_samples  = [l for l in links_list if l.get('direction') == 'undirected'
                                and l.get('resource_type') == 'sample']
-            parent_datasets = [l for l in links_list if l.get('relationship') == 'parent'
+            parent_datasets = [l for l in links_list if l.get('direction') == 'source'
                                and l.get('resource_type') == 'dataset']
-            child_datasets  = [l for l in links_list if l.get('relationship') == 'child'
+            child_datasets  = [l for l in links_list if l.get('direction') == 'target'
                                and l.get('resource_type') == 'dataset']
 
             term.subheader(f"Linked Samples ({len(linked_samples)})")
@@ -180,14 +209,16 @@ def _show_dataset(dataset, client, verbose=False, graph=False, include_metadata=
             term.subheader(f"Parents ({len(parent_datasets)})")
             for p in parent_datasets:
                 uid = p['unique_id']
-                print(f"  {term.mfid_link(uid, explorer_url(uid, proj, 'dataset'))}  {p.get('name') or '(unnamed)'}")
+                print(f"  {term.mfid_link(uid, explorer_url(uid, proj, 'dataset'))}  "
+                      f"{p.get('name') or '(unnamed)'}  {format_relationship_type(p)}")
             if not parent_datasets:
                 print(f"  {term.dim('(none)')}")
 
             term.subheader(f"Children ({len(child_datasets)})")
             for c in child_datasets:
                 uid = c['unique_id']
-                print(f"  {term.mfid_link(uid, explorer_url(uid, proj, 'dataset'))}  {c.get('name') or '(unnamed)'}")
+                print(f"  {term.mfid_link(uid, explorer_url(uid, proj, 'dataset'))}  "
+                      f"{c.get('name') or '(unnamed)'}  {format_relationship_type(c)}")
             if not child_datasets:
                 print(f"  {term.dim('(none)')}")
 
@@ -208,6 +239,7 @@ except ImportError:
 
 #internal modules
 from ..config import config as _config
+from ..constants import PROJECT_SCOPES
 
 #%%
 
@@ -249,6 +281,7 @@ def register_subcommand(subparsers):
     _register_list_samples(dataset_subparsers)
     _register_download(dataset_subparsers)
     _register_add_file(dataset_subparsers)
+    _register_add_thumbnail(dataset_subparsers)
     _register_list_files(dataset_subparsers)
     _register_ingestion(dataset_subparsers)
     _register_search(dataset_subparsers)
@@ -272,22 +305,50 @@ def _register_list(subparsers):
         formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
-    crucible dataset list -pid my-project
-    crucible dataset list -pid my-project -m XRD
-    crucible dataset list -pid my-project -k silicon --limit 20
+    crucible dataset list --project-id my-project
+    crucible dataset list --project-id my-project --project-scope shared
+    crucible dataset list --project-mfid 0tkn2knjast3h0008nyq9zps2c --project-scope all
+    crucible dataset list --project-id my-project -m XRD
+    crucible dataset list --project-id my-project -k silicon --limit 20
+    crucible dataset list --instrument-mfid 0tkn2knjast3h0008nyq9zps2c
     crucible dataset list --session 2024-01-15-run
-    crucible dataset list -pid my-project --group-by measurement
-    crucible dataset list -pid my-project --include "run-*" "*XRD*"
-    crucible dataset list -pid my-project --exclude "*test*"
+    crucible dataset list --project-id my-project --group-by measurement
+    crucible dataset list --project-id my-project --include "run-*" "*XRD*"
+    crucible dataset list --project-id my-project --exclude "*test*"
 """
     )
 
-    parser.add_argument(
-        '-pid', '--project-id',
+    from .helpers import DeprecatedAliasAction
+    project_group = parser.add_mutually_exclusive_group()
+    project_group.add_argument(
+        '--project-id', '-p',
         required=False,
         default=None,
         metavar='ID',
-        help='Crucible project ID (uses config current_project if not specified)'
+        help='Crucible project ID (uses the saved current project if omitted)'
+    )
+    project_group.add_argument(
+        '--project-mfid',
+        default=None,
+        metavar='MFID',
+        help='Canonical project MFID'
+    )
+    parser.add_argument(
+        '-pid',
+        action=DeprecatedAliasAction,
+        deprecated_options={'-pid'},
+        replacement='--project-id',
+        dest='project_id',
+        default=argparse.SUPPRESS,
+        metavar='ID',
+        help=argparse.SUPPRESS,
+    )
+    parser.add_argument(
+        '--project-scope',
+        choices=PROJECT_SCOPES,
+        default=None,
+        metavar='SCOPE',
+        help='Project relationship to include: assigned, shared, or all (default: assigned)'
     )
 
     parser.add_argument(
@@ -333,6 +394,13 @@ Examples:
         dest='instrument_name',
         metavar='NAME',
         help='Filter by instrument name (exact match)'
+    )
+
+    parser.add_argument(
+        '--instrument-mfid',
+        default=None,
+        metavar='MFID',
+        help='Filter by canonical instrument MFID across accessible projects'
     )
 
     parser.add_argument(
@@ -430,33 +498,36 @@ def _register_create(subparsers):
 
     parser = subparsers.add_parser(
         'create',
-        help='Create and upload a new dataset',
-        description='Parse and upload dataset files to Crucible',
+        help='Create a dataset, optionally attaching files',
+        description='Create a dataset record and optionally parse, upload, or catalog files',
         formatter_class=lambda prog: term.ColorHelpFormatter(prog, max_help_position=35),
         epilog="""
 Examples:
+    # Create a dataset record without files
+    crucible dataset create --project-id my-project --name "Planned experiment"
+
     # Preview what would be uploaded (dry run)
-    crucible dataset create -i file1.dat -pid my-project --dry-run
+    crucible dataset create -i file1.dat --project-id my-project --dry-run
 
     # Generic upload (server assigns mfid)
-    crucible dataset create -i file1.dat file2.csv -pid my-project
+    crucible dataset create -i file1.dat file2.csv --project-id my-project
 
     # Upload with locally generated mfid
-    crucible dataset create -i data.csv -pid my-project --mfid
+    crucible dataset create -i data.csv --project-id my-project --mfid
 
     # Upload with explicit mfid (e.g., re-uploading same dataset)
-    crucible dataset create -i data.csv -pid my-project --mfid 0tcxz5xs5xr6q0002vmzmp3beg
+    crucible dataset create -i data.csv --project-id my-project --mfid 0tcxz5xs5xr6q0002vmzmp3beg
 
     # Generic upload with metadata and keywords
-    crucible dataset create -i data.csv -pid my-project \\
+    crucible dataset create -i data.csv --project-id my-project \\
         --metadata '{"temperature": 300, "pressure": 1.0}' \\
         --keywords "experiment,thermal" -m "thermal_analysis"
 
     # Upload multiple files using wildcards
-    crucible dataset create -i *.dat -pid my-project -m "raw_data"
+    crucible dataset create -i *.dat --project-id my-project -m "raw_data"
 
     # Parse and upload LAMMPS simulation
-    crucible dataset create -i input.lmp -t lammps -pid my-project
+    crucible dataset create -i input.lmp -t lammps --project-id my-project
 """
     )
 
@@ -464,9 +535,9 @@ Examples:
     input_arg = parser.add_argument(
         '-i', '--input',
         nargs='+',
-        required=True,
+        default=None,
         metavar='FILE',
-        help='Input file(s) to upload (supports wildcards like *.dat)'
+        help='Optional input file(s) to upload or catalog (supports wildcards like *.dat)'
     )
     if ARGCOMPLETE_AVAILABLE:
         input_arg.completer = FilesCompleter()
@@ -485,12 +556,30 @@ Examples:
         type_arg.completer = lambda **kwargs: sorted(PARSER_REGISTRY.keys())
 
     # Project ID
+    from .helpers import DeprecatedAliasAction
     parser.add_argument(
-        '-pid', '--project-id',
+        '--project-id', '-p',
         required=False,
         default=None,
         metavar='ID',
-        help='Crucible project ID (uses config current_project if not specified)'
+        help='Crucible project ID (uses the saved current project if omitted)'
+    )
+    parser.add_argument(
+        '--project-mfid',
+        required=False,
+        default=None,
+        metavar='MFID',
+        help='Canonical project MFID (advanced; may accompany a matching --project-id)'
+    )
+    parser.add_argument(
+        '-pid',
+        action=DeprecatedAliasAction,
+        deprecated_options={'-pid'},
+        replacement='--project-id',
+        dest='project_id',
+        default=argparse.SUPPRESS,
+        metavar='ID',
+        help=argparse.SUPPRESS,
     )
 
     # Unique ID / mfid
@@ -567,6 +656,18 @@ Examples:
         metavar='NAME',
         help='Instrument name (optional)'
     )
+    parser.add_argument(
+        '--instrument-id',
+        default=None,
+        metavar='ID',
+        help='Registered instrument ID (optional)'
+    )
+    parser.add_argument(
+        '--instrument-mfid',
+        default=None,
+        metavar='MFID',
+        help='Canonical registered instrument MFID (advanced; may accompany a matching --instrument-id)'
+    )
 
     # Data format
     parser.add_argument(
@@ -613,7 +714,7 @@ Examples:
         '--dry-run',
         action='store_true',
         dest='dry_run',
-        help='Show what would be uploaded without actually uploading'
+        help='Show what would be created without making API changes'
     )
 
     # Catalog-only (non-GCS) files
@@ -677,11 +778,12 @@ Updatable fields (use --set):
 
 Examples:
     crucible dataset update DATASET_MFID --set dataset_name="My Dataset"
-    crucible dataset update DATASET_MFID --set public=true
     crucible dataset update DATASET_MFID --set measurement=XRD --set session_name=run-01
     crucible dataset update DATASET_MFID --metadata '{{"temperature": 300, "pressure": 1.0}}'
     crucible dataset update DATASET_MFID --metadata metadata.json
     crucible dataset update DATASET_MFID --set measurement=XRD --metadata '{{"temperature": 300}}'
+
+Use `dataset set-public` or `dataset set-private` to change public visibility.
 """
     )
     _add_args(parser)
@@ -702,6 +804,7 @@ def _execute_update(args):
 
     # Parse --set for model field updates
     updates = {}
+    public = None
     if has_set:
         valid_fields = set(_dataset_updatable_fields())
         for field in args.set_fields:
@@ -710,6 +813,18 @@ def _execute_update(args):
                 sys.exit(1)
             key, _, value = field.partition('=')
             key = key.strip()
+            if key == 'public':
+                public = cast_value(value)
+                if not isinstance(public, bool):
+                    logger.error("Error: public must be true or false")
+                    sys.exit(1)
+                warning = term.yellow('Warning:', stream=sys.stderr)
+                replacement = 'set-public' if public else 'set-private'
+                print(
+                    f"{warning} --set public=... is deprecated; use dataset {replacement} instead.",
+                    file=sys.stderr,
+                )
+                continue
             if key not in valid_fields:
                 logger.error(
                     f"Unknown field '{key}'.\n"
@@ -732,9 +847,15 @@ def _execute_update(args):
 
         if updates:
             client.datasets.update(args.dataset_id, **updates)
-            logger.info(f"✓ Dataset {args.dataset_id} fields updated")
+            term.success(f"Dataset {args.dataset_id} fields updated", args)
             if getattr(args, "debug", False):
                 logger.debug(f"Updated fields: {list(updates.keys())}")
+
+        if public is not None:
+            operation = client.datasets.set_public if public else client.datasets.set_private
+            operation(args.dataset_id)
+            visibility = 'publicly viewable' if public else 'private'
+            term.success(f"Dataset {args.dataset_id} is now {visibility}", args)
 
         if metadata_dict is not None:
             overwrite = getattr(args, 'overwrite', False)
@@ -742,7 +863,7 @@ def _execute_update(args):
                 args.dataset_id, metadata_dict, overwrite=overwrite
             )
             action = "replaced" if overwrite else "updated"
-            logger.info(f"✓ Scientific metadata {action} for dataset {args.dataset_id}")
+            term.success(f"Scientific metadata {action} for dataset {args.dataset_id}", args)
 
     except Exception as e:
         from .helpers import fail
@@ -827,22 +948,25 @@ Examples:
 """
     )
     parser.add_argument('dataset_id', metavar='DATASET_MFID', help='Dataset MFID to delete')
-    parser.add_argument('-y', '--yes', action='store_true', help='Skip confirmation prompt')
+    parser.add_argument('-y', '--yes', action='store_true', help='Confirm deletion without prompting')
     parser.set_defaults(func=_execute_delete)
 
 
 def _execute_delete(args):
     """Execute the 'dataset delete' subcommand."""
     from crucible.client import CrucibleClient
-    if not args.yes:
-        confirm = input(f"Delete dataset {args.dataset_id}? This cannot be undone. [y/N] ").strip().lower()
-        if confirm != 'y':
-            print("Aborted.")
-            return
+    from .helpers import prompt_confirm
+    confirmed = args.yes or prompt_confirm(
+        f"Delete dataset {args.dataset_id}? This cannot be undone.",
+        option='--yes',
+    )
+    if not confirmed:
+        print("Aborted.")
+        return
     try:
         client = CrucibleClient()
         client.datasets.delete(args.dataset_id)
-        logger.info(f"✓ Deleted dataset {args.dataset_id}")
+        term.success(f"Deleted dataset {args.dataset_id}", args)
     except Exception as e:
         from .helpers import fail
         fail("deleting dataset", e, args)
@@ -937,6 +1061,8 @@ def _execute_edit(args):
 
 def _register_link(subparsers):
     """Register the 'dataset link' subcommand."""
+    from crucible.constants import RELATIONSHIP_TYPES
+
     parser = subparsers.add_parser(
         'link',
         help='Link parent and child datasets',
@@ -955,6 +1081,14 @@ def _register_link(subparsers):
         required=True,
         metavar='CHILD_MFID',
         help='Child dataset MFID'
+    )
+
+    parser.add_argument(
+        '--relationship-type',
+        choices=RELATIONSHIP_TYPES,
+        metavar='TYPE',
+        help=f"Kind of link, describing the child relative to the parent "
+             f"({', '.join(RELATIONSHIP_TYPES)}). Omit to leave it unspecified."
     )
 
     parser.set_defaults(func=_execute_link)
@@ -982,9 +1116,9 @@ def _execute_add_sample(args):
     from crucible.client import CrucibleClient
     try:
         client = CrucibleClient()
-        client.datasets.add_sample(args.dataset_id, args.sample)
+        client.datasets.link_sample(args.dataset_id, args.sample)
 
-        logger.info(f"✓ Linked sample {args.sample} to dataset {args.dataset_id}")
+        term.success(f"Linked sample {args.sample} to dataset {args.dataset_id}", args)
 
     except Exception as e:
         from .helpers import fail
@@ -1013,8 +1147,8 @@ def _execute_remove_sample(args):
     from crucible.client import CrucibleClient
     try:
         client = CrucibleClient()
-        client.datasets.remove_sample(args.dataset_id, args.sample)
-        logger.info(f"✓ Unlinked sample {args.sample} from dataset {args.dataset_id}")
+        client.datasets.unlink_sample(args.dataset_id, args.sample)
+        term.success(f"Unlinked sample {args.sample} from dataset {args.dataset_id}", args)
     except Exception as e:
         from .helpers import fail
         fail("unlinking sample from dataset", e, args)
@@ -1042,8 +1176,8 @@ def _execute_remove_child(args):
     from crucible.client import CrucibleClient
     try:
         client = CrucibleClient()
-        client.datasets.remove_child(args.parent_id, args.child)
-        logger.info(f"✓ Unlinked child dataset {args.child} from parent dataset {args.parent_id}")
+        client.datasets.unlink(args.parent_id, args.child)
+        term.success(f"Unlinked child dataset {args.child} from parent dataset {args.parent_id}", args)
     except Exception as e:
         from .helpers import fail
         fail("unlinking child dataset", e, args)
@@ -1060,11 +1194,14 @@ def _register_list_parents(subparsers):
 Examples:
     crucible dataset list-parents DATASET_MFID
     crucible dataset list-parents DATASET_MFID --limit 20
+    crucible dataset list-parents DATASET_MFID --relationship-type is_part_of
 """
     )
     parser.add_argument('dataset_id', metavar='DATASET_MFID', help='Dataset MFID')
     parser.add_argument('--limit', type=int, default=_config.default_limit, metavar='N',
                         help=f'Maximum number of results (default: {_config.default_limit})')
+    from .helpers import add_relationship_type_filter
+    add_relationship_type_filter(parser)
     parser.set_defaults(func=_execute_list_parents)
 
 
@@ -1079,11 +1216,14 @@ def _register_list_children(subparsers):
 Examples:
     crucible dataset list-children DATASET_MFID
     crucible dataset list-children DATASET_MFID --limit 20
+    crucible dataset list-children DATASET_MFID --relationship-type is_derived_from
 """
     )
     parser.add_argument('dataset_id', metavar='DATASET_MFID', help='Dataset MFID')
     parser.add_argument('--limit', type=int, default=_config.default_limit, metavar='N',
                         help=f'Maximum number of results (default: {_config.default_limit})')
+    from .helpers import add_relationship_type_filter
+    add_relationship_type_filter(parser)
     parser.set_defaults(func=_execute_list_children)
 
 
@@ -1212,7 +1352,7 @@ def _execute_download(args):
             else:
                 logger.info("No files to download (all already exist or dataset is empty)")
         else:
-            logger.info(f"✓ Downloaded {len(downloaded)} file(s):")
+            term.success(f"Downloaded {len(downloaded)} file(s)", args)
             for path in downloaded:
                 logger.info(f"  {path}")
 
@@ -1308,7 +1448,8 @@ def _execute_add_file(args):
             client.datasets.add_file(dsid, str(fpath),
                                                 ingestion_class=ingestor,
                                                 wait_for_ingestion_response=wait)
-            rows.append((fpath.name, term.fmt_size(fpath.stat().st_size), '✓'))
+            rows.append((fpath.name, term.fmt_size(fpath.stat().st_size),
+                         term.status_marker('success')))
 
         print()
         term.table(rows, ['File', 'Size', ''], max_widths=[60, 10, 4])
@@ -1316,6 +1457,66 @@ def _execute_add_file(args):
     except Exception as e:
         from .helpers import fail
         fail("uploading file(s)", e, args)
+
+
+def _register_add_thumbnail(subparsers):
+    """Register the 'dataset add-thumbnail' subcommand."""
+    parser = subparsers.add_parser(
+        'add-thumbnail',
+        help='Add a thumbnail to an existing dataset',
+        description='Encode a local image and add it as a dataset thumbnail',
+        formatter_class=term.ColorHelpFormatter,
+        epilog="""
+Examples:
+    crucible dataset add-thumbnail DATASET_MFID preview.png
+    crucible dataset add-thumbnail DATASET_MFID preview.png --name overview.png
+""",
+    )
+    dataset_mfid_arg = parser.add_argument(
+        'dataset_mfid',
+        metavar='DATASET_MFID',
+        help='Dataset MFID',
+    )
+    if ARGCOMPLETE_AVAILABLE:
+        dataset_mfid_arg.completer = argcomplete.completers.SuppressCompleter()
+    image_arg = parser.add_argument(
+        'image',
+        metavar='IMAGE',
+        help='Path to the local thumbnail image',
+    )
+    if ARGCOMPLETE_AVAILABLE:
+        image_arg.completer = FilesCompleter()
+    parser.add_argument(
+        '--name',
+        metavar='NAME',
+        help='Thumbnail name stored by the API (default: local filename)',
+    )
+    parser.set_defaults(func=_execute_add_thumbnail)
+
+
+def _execute_add_thumbnail(args):
+    """Execute the 'dataset add-thumbnail' subcommand."""
+    from crucible.client import CrucibleClient
+
+    try:
+        image_path = Path(args.image).expanduser()
+        if not image_path.is_file():
+            raise FileNotFoundError(f"Thumbnail image not found: {image_path}")
+
+        client = CrucibleClient()
+        client.datasets.add_thumbnail(
+            args.dataset_mfid,
+            str(image_path),
+            thumbnail_name=args.name,
+        )
+        thumbnail_name = args.name or image_path.name
+        term.success(
+            f"Added thumbnail {thumbnail_name} to dataset {args.dataset_mfid}",
+            args,
+        )
+    except Exception as e:
+        from .helpers import fail
+        fail("adding dataset thumbnail", e, args)
 
 
 def _register_list_files(subparsers):
@@ -1354,16 +1555,8 @@ def _execute_list_files(args):
 
         rows = []
         for item in sorted(file_display, key=lambda x: x['name']):
-            name    = item['name']
-            backend = item['backend']
             size    = term.fmt_size(item['size']) if item['size'] is not None else '-'
-            if backend != 'gcs':
-                label = f"{term.dim(name)} {term.cyan(f'({backend})')}"
-            elif item['ingested']:
-                label = term.hyperlink(term.cyan(name), item['url']) if item['url'] else term.cyan(name)
-            else:
-                label = f"{term.dim(name)} {term.yellow('(pending)')}"
-            rows.append((item['mfid'], label, size))
+            rows.append((term.cyan(item['mfid']), _format_file_label(item), size))
 
         term.table(rows, ['MFID', 'File', 'Size'], max_widths=[26, 60, 10])
 
@@ -1408,7 +1601,7 @@ def _execute_ingestion(args):
                 str(r.get('id', '-')),
                 term.status_label(r.get('status')),
                 r.get('ingestion_class') or '-',
-                r.get('file_id') or '-',
+                term.cyan(r.get('file_id')) if r.get('file_id') else '-',
                 term.fmt_ts(r.get('created_at') or r.get('creation_time')) or '-',
             ))
         term.table(rows, ['ID', 'Status', 'Class', 'File MFID', 'Created'],
@@ -1429,37 +1622,60 @@ def _register_search(subparsers):
         epilog="""
 Examples:
     crucible dataset search perovskite
-    crucible dataset search "silicon wafer" --project my-project
+    crucible dataset search "silicon wafer" --project-id my-project
     crucible dataset search XRD --limit 10
 """,
     )
     parser.add_argument('query', metavar='QUERY', help='Search term (min 3 chars)')
-    parser.add_argument('--project', '-pid', dest='project_id', default=None, metavar='ID',
-                        help='Scope to a specific project')
+    from .helpers import DeprecatedAliasAction
+    parser.add_argument(
+        '--project-id', '-p',
+        dest='project_id',
+        default=None,
+        metavar='ID',
+        help='Scope to a project (uses the saved current project if omitted)',
+    )
+    parser.add_argument(
+        '--project', '-pid',
+        action=DeprecatedAliasAction,
+        deprecated_options={'--project', '-pid'},
+        replacement='--project-id',
+        dest='project_id',
+        default=argparse.SUPPRESS,
+        metavar='ID',
+        help=argparse.SUPPRESS,
+    )
     parser.add_argument('--limit', '-l', type=int, default=20, metavar='N',
                         help='Maximum results (default: 20, max: 50)')
+    parser.add_argument('--json', action='store_true', default=False,
+                        help='Output as JSON array')
     parser.set_defaults(func=_execute_search)
 
 
 def _execute_search(args):
     if len(args.query) < 3:
-        logger.error("Search term must be at least 3 characters")
-        sys.exit(1)
+        from .helpers import fail
+        fail("searching datasets", ValueError("Search term must be at least 3 characters."), args)
     from crucible.client import CrucibleClient
     try:
+        from .helpers import resolve_project_context
         client     = CrucibleClient()
-        project_id = args.project_id or _config.current_project or None
+        project_id, _ = resolve_project_context(args, args.project_id)
         results    = client.datasets.search(args.query, project_id=project_id,
                                             limit=args.limit)
+        if getattr(args, 'json', False):
+            print(json.dumps(results, indent=2, default=str))
+            return
         term.header(f"Datasets matching '{args.query}' ({len(results)})")
         if not results:
             print(f"  {term.dim('No results found.')}")
             return
-        from .helpers import explorer_url
+        from .helpers import explorer_url, project_reference
         rows = []
         for r in results:
             uid  = r.get('unique_id') or ''
-            pid  = r.get('project_id') or project_id or ''
+            _, referenced_project_id, _ = project_reference(r)
+            pid = referenced_project_id or project_id or ''
             rows.append((
                 r.get('dataset_name') or '(unnamed)',
                 term.mfid_link(uid, explorer_url(uid, pid, 'dataset')),
@@ -1487,6 +1703,8 @@ Examples:
         parser.add_argument('query', metavar='QUERY', help='Search query string')
         parser.add_argument('--limit', '-l', type=int, default=50, metavar='N',
                             help='Maximum results (default: 50)')
+        parser.add_argument('--json', action='store_true', default=False,
+                            help='Output as JSON array')
         parser.set_defaults(func=_execute_search_metadata)
 
 
@@ -1495,6 +1713,9 @@ def _execute_search_metadata(args):
     try:
         client  = CrucibleClient()
         results = client.datasets.search_metadata(args.query, limit=args.limit)
+        if getattr(args, 'json', False):
+            print(json.dumps(results, indent=2, default=str))
+            return
         term.header(f"Metadata search: {args.query} ({len(results)})")
         if not results:
             print(f"  {term.dim('No results found.')}")
@@ -1541,7 +1762,7 @@ def _execute_add_keyword(args):
         client = CrucibleClient()
         client.datasets.add_keyword(args.dataset_id, args.keyword)
 
-        logger.info(f"✓ Keyword '{args.keyword}' added to {args.dataset_id}")
+        term.success(f"Keyword '{args.keyword}' added to {args.dataset_id}", args)
 
     except Exception as e:
         from .helpers import fail
@@ -1645,7 +1866,7 @@ def _execute_add_access_group(args):
         client.datasets.add_access_group(args.dataset_id, args.group_name,
                                          read=True, write=args.write)
         perms = 'read+write' if args.write else 'read'
-        logger.info(f"✓ Access group '{args.group_name}' added to {args.dataset_id} ({perms})")
+        term.success(f"Access group '{args.group_name}' added to {args.dataset_id} ({perms})", args)
     except Exception as e:
         from .helpers import fail
         fail("", e, args)
@@ -1672,13 +1893,25 @@ def _execute_list(args):
     """Execute the 'dataset list' subcommand."""
     from crucible.config import config
     from crucible.client import CrucibleClient
-    # Get project_id
+    from .helpers import resolve_project_context
     project_id = args.project_id
-    if project_id is None:
-        project_id = config.current_project
-        if project_id is None:
-            logger.error("Error: Project ID required. Specify with -pid or set current_project in config.")
-            sys.exit(1)
+    project_mfid = getattr(args, 'project_mfid', None)
+    project_scope = getattr(args, 'project_scope', None)
+    instrument_mfid = getattr(args, 'instrument_mfid', None)
+    if project_id is not None and project_mfid is not None:
+        logger.error("Error: Specify either --project-id or --project-mfid, not both.")
+        sys.exit(1)
+    if (project_id is None and project_mfid is None and
+            (instrument_mfid is None or project_scope is not None)):
+        project_id, _ = resolve_project_context(args)
+    if project_scope is not None and project_id is None and project_mfid is None:
+        logger.error("Error: --project-scope requires --project-id, --project-mfid, or a saved current project.")
+        sys.exit(1)
+    if project_id is None and project_mfid is None and instrument_mfid is None:
+        logger.error(
+            "Error: Project ID, project MFID, or instrument MFID required. Specify "
+            "--project-id, --project-mfid, --instrument-mfid, or set current_project in config.")
+        sys.exit(1)
 
     # Build optional filters
     filters = {}
@@ -1694,11 +1927,20 @@ def _execute_list(args):
         filters['data_type'] = args.data_type
     if args.instrument_name:
         filters['instrument_name'] = args.instrument_name
+    if instrument_mfid:
+        filters['instrument_mfid'] = instrument_mfid
+    project_filters = {}
+    if project_id is not None:
+        project_filters['project_id'] = project_id
+    if project_mfid is not None:
+        project_filters['project_mfid'] = project_mfid
+    if project_scope is not None:
+        project_filters['project_scope'] = project_scope
 
     try:
         import fnmatch
         client = CrucibleClient()
-        datasets = client.datasets.list(project_id=project_id, limit=args.limit, **filters)
+        datasets = client.datasets.list(limit=args.limit, **project_filters, **filters)
 
         # Client-side glob filtering on name
         if getattr(args, 'include', None):
@@ -1716,7 +1958,14 @@ def _execute_list(args):
             print(json.dumps(datasets, indent=2, default=str))
             return
 
-        title = f"Datasets · {project_id} ({len(datasets)})" if project_id else f"Datasets ({len(datasets)})"
+        project_label = project_id or project_mfid
+        if project_label:
+            scope_label = f" · {project_scope}" if project_scope else ''
+            title = f"Datasets · {project_label}{scope_label} ({len(datasets)})"
+        elif instrument_mfid:
+            title = f"Datasets · instrument {instrument_mfid} ({len(datasets)})"
+        else:
+            title = f"Datasets ({len(datasets)})"
         term.header(title)
         if filters:
             logger.info(f"Filters: {', '.join(f'{k}={v}' for k, v in filters.items())}")
@@ -1724,7 +1973,7 @@ def _execute_list(args):
         if not datasets:
             print(f"  {term.dim('No datasets found.')}")
         else:
-            from .helpers import explorer_url
+            from .helpers import explorer_url, project_reference
 
             _GROUP_FIELD = {
                 'measurement': 'measurement',
@@ -1737,20 +1986,38 @@ def _execute_list(args):
 
             def _make_row(ds):
                 uid = ds.get('unique_id') or ''
-                pid = ds.get('project_id') or project_id
-                return (
+                _, referenced_project_id, _ = project_reference(ds)
+                pid = referenced_project_id or project_id
+                row = (
                     ds.get('dataset_name') or '(unnamed)',
                     term.mfid_link(uid, explorer_url(uid, pid, 'dataset')) if uid else '-',
+                )
+                if project_scope in ('shared', 'all'):
+                    row += (
+                        referenced_project_id or '-',
+                        ds.get('project_relation') or '-',
+                    )
+                return row + (
                     ds.get('measurement') or '-',
                     ds.get('session_name') or '-',
                 )
+
+            contextual_headers = ['Name', 'MFID', 'Project', 'Relation', 'Measurement', 'Session']
+            standard_headers = ['Name', 'MFID', 'Measurement', 'Session']
+            headers = contextual_headers if project_scope in ('shared', 'all') else standard_headers
+            contextual_max = [25, 26, 25, 8, 15, 18]
+            standard_max = [35, 26, 15, 20]
+            max_widths = contextual_max if project_scope in ('shared', 'all') else standard_max
+            contextual_min = [4, 26, 7, 8, 11, 7]
+            standard_min = [4, 26, 11, 7]
+            min_widths = contextual_min if project_scope in ('shared', 'all') else standard_min
 
             _by_name = lambda ds: (ds.get('dataset_name') or '').lower()
 
             if not group_by:
                 term.table([_make_row(ds) for ds in sorted(datasets, key=_by_name)],
-                           ['Name', 'MFID', 'Measurement', 'Session'],
-                           max_widths=[35, 26, 15, 20])
+                           headers, max_widths=max_widths,
+                           min_widths=min_widths)
             else:
                 from collections import defaultdict
                 groups = defaultdict(list)
@@ -1761,8 +2028,8 @@ def _execute_list(args):
                     label = key or '(none)'
                     term.subheader(f"{label} ({len(groups[key])})")
                     term.table([_make_row(ds) for ds in sorted(groups[key], key=_by_name)],
-                               ['Name', 'MFID', 'Measurement', 'Session'],
-                               max_widths=[35, 26, 15, 20])
+                               headers, max_widths=max_widths,
+                               min_widths=min_widths)
 
     except Exception as e:
         from .helpers import fail
@@ -1802,31 +2069,39 @@ def _execute_get(args):
 def _execute_create(args):
     """Execute the 'dataset create' subcommand."""
     from crucible.parsers import get_parser, BaseParser
-    from crucible.config import config
-    # Get project_id
-    project_id = args.project_id
-    project_from_config = False
-    if project_id is None:
-        project_id = config.current_project
-        project_from_config = True
-        if project_id is None:
-            logger.error("Project ID required. Specify with -pid or set current_project in config.")
+    from .helpers import resolve_project_context
+
+    if not args.input:
+        file_options = [
+            option for option, enabled in (
+                ('--type', args.dataset_type is not None),
+                ('--ingestor', args.ingestor is not None),
+                ('--no-upload', args.no_upload),
+                ('--backend', args.backend is not None),
+                ('--access-note', args.access_note is not None),
+            )
+            if enabled
+        ]
+        if file_options:
+            logger.error(f"{', '.join(file_options)} require --input FILE.")
             sys.exit(1)
 
-    # Validate the project exists before doing any expensive work
-    from crucible.client import CrucibleClient as _CC
-    try:
-        if _CC().projects.get(project_id) is None:
-            logger.error(f"Project '{project_id}' not found.")
-            sys.exit(1)
-    except Exception as e:
-        logger.error(f"Error validating project: {e}")
+    project_id = args.project_id
+    project_mfid = getattr(args, 'project_mfid', None)
+    instrument_id = getattr(args, 'instrument_id', None)
+    instrument_mfid = getattr(args, 'instrument_mfid', None)
+    if project_id is None and project_mfid is None:
+        project_id, project_source = resolve_project_context(args)
+    else:
+        project_source = 'argument'
+    if project_id is None and project_mfid is None:
+        logger.error("Project required. Specify --project-id or --project-mfid, or set the current project.")
         sys.exit(1)
 
     # Expand wildcards in input files
     import glob
     expanded_files = []
-    for pattern in args.input:
+    for pattern in args.input or []:
         matches = glob.glob(pattern)
         if matches:
             expanded_files.extend(matches)
@@ -1894,85 +2169,115 @@ def _execute_create(args):
         logger.error("--no-upload is only supported for generic uploads (omit -t/--type).")
         sys.exit(1)
 
-    # Determine parser class
-    if args.dataset_type is None:
-        from crucible.parsers import get_all_parsers
-        all_parsers = get_all_parsers()
-        non_base = sorted(k for k in all_parsers if k != 'base')
-        if non_base:
-            logger.info(f"Tip: No parser type specified (-t). Using generic upload (BaseParser).")
-            logger.info(f"     Available parsers: {', '.join(non_base)}")
-            logger.info(f"     Run 'crucible dataset parsers' to see all options.\n")
-        ParserClass = BaseParser
-    else:
-        try:
-            ParserClass = get_parser(args.dataset_type)
-        except ValueError as e:
-            logger.error(f"Error: {e}")
-            sys.exit(1)
+    parser = None
+    if input_files:
+        if args.dataset_type is None:
+            from crucible.parsers import get_all_parsers
+            all_parsers = get_all_parsers()
+            non_base = sorted(k for k in all_parsers if k != 'base')
+            if non_base:
+                logger.info("Tip: No parser type specified (-t). Using generic upload (BaseParser).")
+                logger.info(f"     Available parsers: {', '.join(non_base)}")
+                logger.info("     Run 'crucible dataset parsers' to see all options.\n")
+            ParserClass = BaseParser
+        else:
+            try:
+                ParserClass = get_parser(args.dataset_type)
+            except ValueError as e:
+                logger.error(f"Error: {e}")
+                sys.exit(1)
 
-    # Initialize parser
-    try:
-        parser = ParserClass(
-            files_to_upload=[str(f) for f in input_files],
-            project_id=project_id,
-            metadata=metadata_dict,
-            keywords=keywords_list,
-            mfid=dataset_mfid,
+        try:
+            parser = ParserClass(
+                files_to_upload=[str(f) for f in input_files],
+                project_id=project_id,
+                project_mfid=project_mfid,
+                metadata=metadata_dict,
+                keywords=keywords_list,
+                mfid=dataset_mfid,
+                measurement=args.measurement,
+                dataset_name=args.dataset_name,
+                session_name=args.session_name,
+                public=args.public,
+                instrument_name=args.instrument_name,
+                instrument_id=instrument_id,
+                instrument_mfid=instrument_mfid,
+                data_format=args.data_format,
+                data_type=args.data_type,
+                timestamp=timestamp,
+            )
+        except Exception as e:
+            from .helpers import fail
+            fail("parsing file", e, args)
+
+        if args.ingestor is not None and args.measurement is None:
+            parser.measurement = None
+
+        dataset_record = parser.to_dataset()
+        record_metadata = parser.scientific_metadata
+        record_keywords = parser.keywords
+    else:
+        from crucible.models import Dataset
+        dataset_record = Dataset(
+            unique_id=dataset_mfid,
             measurement=args.measurement,
+            project_id=project_id,
+            project_mfid=project_mfid,
             dataset_name=args.dataset_name,
             session_name=args.session_name,
+            timestamp=timestamp,
             public=args.public,
             instrument_name=args.instrument_name,
+            instrument_id=instrument_id,
+            instrument_mfid=instrument_mfid,
             data_format=args.data_format,
             data_type=args.data_type,
-            timestamp=timestamp,
         )
-    except Exception as e:
-        from .helpers import fail
-        fail("parsing file", e, args)
-
-    # If a custom ingestor is used and the user didn't explicitly set -m,
-    # clear the parser's default measurement so the server assigns it
-    if args.ingestor is not None and args.measurement is None:
-        parser.measurement = None
+        record_metadata = metadata_dict or {}
+        record_keywords = keywords_list or []
 
     # Display dataset information
     _p = term.field_printer(14)
 
     term.header("Dataset")
-    proj_label = f"{project_id} {term.dim('(from config)')}" if project_from_config else project_id
+    project_context = {
+        'environment': 'from environment',
+        'config file': 'current project',
+    }.get(project_source)
+    project_selector = project_id or project_mfid
+    proj_label = f"{project_selector} {term.dim(f'({project_context})')}" if project_context else project_selector
     _p("Project",     proj_label)
-    _p("Parser",      ParserClass.__name__)
-    _p("Name",        parser.dataset_name)
-    _p("Measurement", parser.measurement or term.dim("(server assigns)"))
-    _p("Data format", parser.data_format)
-    _p("Data type",   parser.data_type)
-    _p("Session",     parser.session_name)
-    _p("Timestamp",   parser.timestamp)
-    _p("Public",      "yes" if parser.public else "no")
-    _p("Instrument",  parser.instrument_name)
+    if parser is not None:
+        _p("Parser", ParserClass.__name__)
+    _p("Name",        dataset_record.dataset_name)
+    _p("Measurement", dataset_record.measurement or term.dim("(server assigns)"))
+    _p("Data format", dataset_record.data_format)
+    _p("Data type",   dataset_record.data_type)
+    _p("Session",     dataset_record.session_name)
+    _p("Timestamp",   dataset_record.timestamp)
+    _p("Public",      term.fmt_bool(dataset_record.public))
+    _p("Instrument",  dataset_record.instrument_id or dataset_record.instrument_mfid or dataset_record.instrument_name)
     _p("MFID",        dataset_mfid or term.dim("(server assigns)"))
-    if args.no_upload:
+    if input_files and args.no_upload:
         _p("Backend", args.backend or 'local')
         if args.access_note:
             _p("Access note", args.access_note)
-    else:
+    elif input_files:
         _p("Ingestor", args.ingestor or term.dim("(server detects)"))
 
-    if parser.files_to_upload:
+    if parser is not None and parser.files_to_upload:
         label = 'Files (cataloged, not uploaded)' if args.no_upload else 'Files'
         print(f"\n  {term.dim(f'{label} ({len(parser.files_to_upload)})')}")
         for f in parser.files_to_upload:
             print(f"    {Path(f).name}")
 
-    if parser.keywords:
-        print(f"\n  {term.dim(f'Keywords ({len(parser.keywords)})')}")
-        print(f"    {', '.join(parser.keywords)}")
+    if record_keywords:
+        print(f"\n  {term.dim(f'Keywords ({len(record_keywords)})')}")
+        print(f"    {', '.join(record_keywords)}")
 
-    if parser.scientific_metadata:
-        print(f"\n  {term.dim(f'Scientific Metadata ({len(parser.scientific_metadata)} fields)')}")
-        for key, value in parser.scientific_metadata.items():
+    if record_metadata:
+        print(f"\n  {term.dim(f'Scientific Metadata ({len(record_metadata)} fields)')}")
+        for key, value in record_metadata.items():
             if key == 'dump_files':
                 print(f"    {key}: {len(value)} files")
             elif isinstance(value, (list, dict)) and len(str(value)) > 80:
@@ -1983,7 +2288,7 @@ def _execute_create(args):
     # Upload or dry run
     if args.dry_run:
         print("")
-        logger.info("Dry run - not uploading. Remove --dry-run to upload.")
+        logger.info("Dry run - dataset not created. Remove --dry-run to create it.")
     else:
         print("")
         try:
@@ -2006,13 +2311,22 @@ def _execute_create(args):
                     files=remote_files,
                 )
             else:
-                result = parser.upload_dataset(
-                    ingestor=args.ingestor,
-                    verbose=getattr(args, 'debug', False),
-                    wait_for_ingestion_response=True
-                )
+                if parser is None:
+                    from crucible.client import CrucibleClient
+                    result = CrucibleClient().datasets.create(
+                        dataset_record,
+                        scientific_metadata=record_metadata,
+                        keywords=record_keywords,
+                        files=[],
+                    )
+                else:
+                    result = parser.upload_dataset(
+                        ingestor=args.ingestor,
+                        verbose=getattr(args, 'debug', False),
+                        wait_for_ingestion_response=True
+                    )
 
-            logger.info("✓ Upload successful")
+            term.success("Dataset created" if parser is None else "Upload completed", args)
             created = result.get('created_record', {}) if result else {}
             if created:
                 from crucible.client import CrucibleClient
@@ -2024,11 +2338,8 @@ def _execute_create(args):
                     logger.debug(f"  {key}: {value}")
 
         except Exception as e:
-            logger.error(f"✗ Upload failed: {e}")
-            if getattr(args, "debug", False):
-                import traceback
-                traceback.print_exc()
-            sys.exit(1)
+            from .helpers import fail
+            fail("uploading dataset", e, args)
 
 
 def _execute_link(args):
@@ -2036,9 +2347,13 @@ def _execute_link(args):
     from crucible.client import CrucibleClient
     try:
         client = CrucibleClient()
-        client.datasets.link_parent_child(args.parent, args.child)
+        client.datasets.link(
+            args.parent, args.child, args.relationship_type)
 
-        logger.info(f"✓ Linked dataset {args.child} as child of {args.parent}")
+
+        suffix = f" ({args.relationship_type})" if args.relationship_type else ""
+        term.success(
+            f"Linked dataset {args.child} as child of {args.parent}{suffix}", args)
 
     except Exception as e:
         from .helpers import fail
@@ -2050,14 +2365,17 @@ def _execute_list_parents(args):
     from crucible.client import CrucibleClient
     try:
         client = CrucibleClient()
-        parents = sorted(client.datasets.list_parents(args.dataset_id, limit=args.limit),
+        parents = sorted(client.datasets.list_parents(
+            args.dataset_id, limit=args.limit,
+            relationship_type=args.relationship_type),
                          key=lambda ds: (ds.get('dataset_name') or '').lower())
 
         term.header(f"Parent Datasets · {args.dataset_id} ({len(parents)})")
         if not parents:
             print(f"  {term.dim('No parent datasets found.')}")
             return
-        rows = [(ds.get('dataset_name') or '(unnamed)', ds.get('unique_id') or '-',
+        rows = [(ds.get('dataset_name') or '(unnamed)',
+                 term.cyan(ds.get('unique_id')) if ds.get('unique_id') else '-',
                  ds.get('measurement') or '-') for ds in parents]
         term.table(rows, ['Name', 'MFID', 'Measurement'], max_widths=[35, 26, 15])
 
@@ -2071,14 +2389,17 @@ def _execute_list_children(args):
     from crucible.client import CrucibleClient
     try:
         client = CrucibleClient()
-        children = sorted(client.datasets.list_children(args.dataset_id, limit=args.limit),
+        children = sorted(client.datasets.list_children(
+            args.dataset_id, limit=args.limit,
+            relationship_type=args.relationship_type),
                           key=lambda ds: (ds.get('dataset_name') or '').lower())
 
         term.header(f"Child Datasets · {args.dataset_id} ({len(children)})")
         if not children:
             print(f"  {term.dim('No child datasets found.')}")
             return
-        rows = [(ds.get('dataset_name') or '(unnamed)', ds.get('unique_id') or '-',
+        rows = [(ds.get('dataset_name') or '(unnamed)',
+                 term.cyan(ds.get('unique_id')) if ds.get('unique_id') else '-',
                  ds.get('measurement') or '-') for ds in children]
         term.table(rows, ['Name', 'MFID', 'Measurement'], max_widths=[35, 26, 15])
 
@@ -2099,7 +2420,8 @@ def _execute_list_samples(args):
         if not samples:
             print(f"  {term.dim('No samples linked.')}")
             return
-        rows = [(s.get('sample_name') or '(unnamed)', s.get('unique_id') or '-',
+        rows = [(s.get('sample_name') or '(unnamed)',
+                 term.cyan(s.get('unique_id')) if s.get('unique_id') else '-',
                  s.get('sample_type') or '-') for s in samples]
         term.table(rows, ['Name', 'MFID', 'Type'], max_widths=[35, 26, 20])
 

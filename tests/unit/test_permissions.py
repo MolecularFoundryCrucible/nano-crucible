@@ -5,16 +5,20 @@ crucible-api/docs/permission_system_api_changes.md), not yet universally
 deployed - see tests/unit/ vs tests/integration/ split in CLAUDE.md.
 """
 
-import pytest
 from unittest.mock import MagicMock
+
+import pytest
+import requests
 
 from crucible.models import (
     AccessGrant,
     EffectiveResourceAccess,
     Instrument,
     OwnershipTransfer,
+    Project,
     ProjectMember,
     ProjectReassignment,
+    ResourceCapabilities,
 )
 from crucible.resources.datasets import DatasetOperations
 from crucible.resources.instruments import InstrumentOperations
@@ -52,6 +56,69 @@ def user_ops():
     ops = UserOperations(client)
     ops._client = client
     return ops
+
+
+class TestResourceCapabilities:
+    def test_optional_capabilities_accept_absent_and_null(self):
+        assert Instrument().capabilities is None
+        assert Project(
+            project_id='example',
+            organization='LBNL',
+            capabilities=None,
+        ).capabilities is None
+
+    def test_capabilities_parse_named_maximum_grant_role(self):
+        capabilities = ResourceCapabilities(
+            can_edit=True,
+            can_manage_access=True,
+            can_change_status=False,
+            can_transfer=False,
+            max_grant_role='editor',
+        )
+
+        instrument = Instrument(capabilities=capabilities)
+
+        assert instrument.capabilities.max_grant_role == 'editor'
+
+    def test_capabilities_reject_owner_as_normal_grant_role(self):
+        with pytest.raises(ValueError):
+            ResourceCapabilities(
+                can_edit=True,
+                can_manage_access=True,
+                can_change_status=True,
+                can_transfer=True,
+                max_grant_role='owner',
+            )
+
+    def test_project_create_omits_response_capabilities(self, project_ops):
+        project_ops._request = MagicMock(return_value={
+            'unique_id': '0tkn2knjast3h0008nyq9zps2c',
+            'project_id': 'example',
+        })
+        project = Project(
+            project_id='example',
+            organization='LBNL',
+            project_lead='alice',
+            capabilities=ResourceCapabilities(
+                can_edit=True,
+                can_manage_access=True,
+                can_change_status=True,
+                can_transfer=True,
+                max_grant_role='admin',
+            ),
+        )
+
+        project_ops.create(project)
+
+        assert 'capabilities' not in project_ops._request.call_args.kwargs['json']
+
+    def test_project_update_rejects_response_capabilities(self, project_ops):
+        project_ops._request = MagicMock()
+
+        with pytest.raises(ValueError, match='response-only'):
+            project_ops.update('example', capabilities={})
+
+        project_ops._request.assert_not_called()
 
 
 class TestListAccess:
@@ -106,16 +173,77 @@ class TestPublicAccess:
             'permission': 'viewer',
         })
 
-        dataset_ops.set_public('ds-1')
+        result = dataset_ops.set_public('ds-1')
 
         dataset_ops._request.assert_called_once_with('put', '/resources/ds-1/access/public')
+        assert isinstance(result, AccessGrant)
 
-    def test_unset_public(self, dataset_ops):
+    def test_set_private(self, dataset_ops):
         dataset_ops._request = MagicMock(return_value=None)
 
-        dataset_ops.unset_public('ds-1')
+        dataset_ops.set_private('ds-1')
 
         dataset_ops._request.assert_called_once_with('delete', '/resources/ds-1/access/public')
+
+    def test_publish_warns_and_sets_public(self, dataset_ops):
+        dataset_ops.set_public = MagicMock(return_value='grant')
+
+        with pytest.warns(DeprecationWarning, match=r'publish\(\) is deprecated'):
+            result = dataset_ops.publish('ds-1')
+
+        dataset_ops.set_public.assert_called_once_with('ds-1')
+        assert result == 'grant'
+
+    @pytest.mark.parametrize('method_name', ['unpublish', 'unset_public'])
+    def test_private_aliases_warn_and_set_private(self, dataset_ops, method_name):
+        dataset_ops.set_private = MagicMock(return_value={'detail': 'removed'})
+
+        with pytest.warns(DeprecationWarning, match=rf'{method_name}\(\) is deprecated'):
+            result = getattr(dataset_ops, method_name)('ds-1')
+
+        dataset_ops.set_private.assert_called_once_with('ds-1')
+        assert result == {'detail': 'removed'}
+
+    def test_dataset_update_public_delegates_to_access_route(self, dataset_ops):
+        dataset_ops._request = MagicMock(side_effect=[
+            {'unique_id': 'ds-1', 'dataset_name': 'Updated'},
+            {
+                'principal_id': 'public',
+                'principal_type': 'public',
+                'permission': 'viewer',
+            },
+        ])
+
+        with pytest.warns(DeprecationWarning, match="'public' update field"):
+            result = dataset_ops.update('ds-1', dataset_name='Updated', public=True)
+
+        assert dataset_ops._request.call_args_list == [
+            (("patch", "/datasets/ds-1"), {'json': {'dataset_name': 'Updated'}}),
+            (("put", "/resources/ds-1/access/public"),),
+        ]
+        assert result['public'] is True
+
+    def test_sample_update_public_delegates_to_access_route(self):
+        client = MagicMock()
+        from crucible.resources.samples import SampleOperations
+        sample_ops = SampleOperations(client)
+        sample_ops._request = MagicMock(side_effect=[
+            {'unique_id': 'sample-1', 'sample_name': 'Updated'},
+            {
+                'principal_id': 'public',
+                'principal_type': 'public',
+                'permission': 'viewer',
+            },
+        ])
+
+        with pytest.warns(DeprecationWarning, match="Parameter 'public'"):
+            result = sample_ops.update('sample-1', sample_name='Updated', public=True)
+
+        assert sample_ops._request.call_args_list == [
+            (("patch", "/samples/sample-1"), {'json': {'sample_name': 'Updated'}}),
+            (("put", "/resources/sample-1/access/public"),),
+        ]
+        assert result['public'] is True
 
 
 class TestEffectiveDatasetAccess:
@@ -256,6 +384,61 @@ class TestProjectAddUserRole:
         project_ops._request.assert_called_once_with(
             'post', '/projects/proj-1/users/0000-0001', params={})
 
+    def test_email_resolves_before_canonical_membership_request(self, project_ops):
+        project_ops._client.users.get.return_value = {
+            'unique_id': '0000-0001',
+            'username': 'alice',
+        }
+        project_ops._request = MagicMock(return_value=[])
+
+        project_ops.add_user(email='alice@example.org', project_id='proj-1')
+
+        project_ops._client.users.get.assert_called_once_with(email='alice@example.org')
+        project_ops._request.assert_called_once_with(
+            'post', '/projects/proj-1/users/0000-0001', params={})
+
+    def test_service_account_mfid_uses_canonical_membership_request(self, project_ops):
+        service_account_mfid = '0tkvpezyz1zzf00076nahf85j4'
+        project_ops._request = MagicMock(return_value=[])
+
+        project_ops.add_user(user_unique_id=service_account_mfid, project_id='proj-1')
+
+        project_ops._client.users.get.assert_not_called()
+        project_ops._request.assert_called_once_with(
+            'post', f'/projects/proj-1/users/{service_account_mfid}', params={})
+
+    def test_conflicting_identifiers_are_rejected(self, project_ops):
+        project_ops._request = MagicMock()
+
+        with pytest.raises(ValueError, match='exactly one user identifier'):
+            project_ops.add_user(
+                user_unique_id='0000-0001', username='alice', project_id='proj-1')
+
+        project_ops._request.assert_not_called()
+
+    @pytest.mark.parametrize('role', ['owner', 'invalid', 'EDITOR', 3])
+    def test_invalid_role_is_rejected(self, project_ops, role):
+        project_ops._request = MagicMock()
+
+        with pytest.raises(ValueError, match='Project member role must be one of'):
+            project_ops.add_user(
+                user_unique_id='0000-0001', project_id='proj-1', role=role)
+
+        project_ops._request.assert_not_called()
+
+    def test_duplicate_member_conflict_is_preserved(self, project_ops):
+        response = requests.Response()
+        response.status_code = 409
+        response.reason = 'Conflict'
+        response._content = b'{"detail":"User is already a project member"}'
+        project_ops._request = MagicMock(side_effect=requests.HTTPError(
+            '409 Conflict', response=response))
+
+        with pytest.raises(requests.HTTPError) as raised:
+            project_ops.add_user(user_unique_id='0000-0001', project_id='proj-1')
+
+        assert raised.value.response.status_code == 409
+
 
 class TestProjectUpdateUserRole:
     def test_sends_correct_route_and_param(self, project_ops):
@@ -268,6 +451,15 @@ class TestProjectUpdateUserRole:
         project_ops._request.assert_called_once_with(
             'patch', '/projects/proj-1/users/0000-0001', params={'role': 'admin'})
         assert result[0].role == 'admin'
+
+    @pytest.mark.parametrize('role', ['owner', 'invalid', 'ADMIN', 4])
+    def test_invalid_role_is_rejected(self, project_ops, role):
+        project_ops._request = MagicMock()
+
+        with pytest.raises(ValueError, match='Project member role must be one of'):
+            project_ops.update_user_role('proj-1', '0000-0001', role)
+
+        project_ops._request.assert_not_called()
 
 
 class TestProjectGetIncludeMembers:

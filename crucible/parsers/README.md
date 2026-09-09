@@ -157,12 +157,15 @@ Inside your `parse()` method, you have access to all instance variables:
 
 **Dataset Properties:**
 - `self.project_id` - Crucible project ID
+- `self.project_mfid` - Canonical Crucible project MFID
 - `self.mfid` - Unique dataset identifier
 - `self.measurement` - Measurement type (defaults to `_measurement`)
 - `self.dataset_name` - Human-readable dataset name
 - `self.session_name` - Session name for grouping
 - `self.public` - Whether dataset is public (bool)
 - `self.instrument_name` - Instrument name
+- `self.instrument_id` - Registered instrument ID
+- `self.instrument_mfid` - Canonical registered instrument MFID
 - `self.data_format` - Data format type
 - `self.source_folder` - Directory where parser was called
 
@@ -323,15 +326,15 @@ Once registered, your parser is automatically available in the CLI:
 
 ```bash
 # Upload XRD data
-crucible dataset create -i sample.xrd -t xrd -pid my-project
+crucible dataset create -i sample.xrd -t xrd --project-id my-project
 
 # Add user metadata/keywords
-crucible dataset create -i sample.xrd -t xrd -pid my-project \
+crucible dataset create -i sample.xrd -t xrd --project-id my-project \
     --metadata '{"sample_id": "XRD-001"}' \
     --keywords "validated,published"
 
 # Make it public
-crucible dataset create -i sample.xrd -t xrd -pid my-project --public
+crucible dataset create -i sample.xrd -t xrd --project-id my-project --public
 ```
 
 ## Available Parsers

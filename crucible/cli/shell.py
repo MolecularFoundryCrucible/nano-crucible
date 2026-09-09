@@ -7,6 +7,7 @@ Starts when `crucible` is invoked with no arguments.
 Uses prompt_toolkit if available, falls back to readline + input().
 """
 
+import argparse
 import os
 import sys
 import re as _re
@@ -26,6 +27,17 @@ from . import term
 logger = logging.getLogger(__name__)
 
 _PROMPT = "crucible> "
+_BRAND_DARK_BLUE = '#031e2d'
+_BRAND_LIGHT_BLUE = '#a8c4cd'
+_BRAND_ORANGE = '#ff6600'
+_BRAND_OFF_WHITE = '#eeeeee'
+_BANNER_MIN_WIDTH = 16
+_BANNER_PIXEL_COLORS = {
+    '_': _BRAND_LIGHT_BLUE,
+    '%': _BRAND_DARK_BLUE,
+    '=': _BRAND_ORANGE,
+    '.': _BRAND_OFF_WHITE,
+}
 
 
 def _get_subparser_map(parser):
@@ -47,9 +59,9 @@ def _vlen(s):
 
 
 _ENTITY_ICONS = {
-    'dataset':    '<ansired><b>[ds]</b></ansired>',
-    'sample':     '<ansimagenta><b>[s]</b></ansimagenta>',
-    'instrument': '<ansicyan><b>[i]</b></ansicyan>',
+    'dataset':    '<ansibrightblack><b>[ds]</b></ansibrightblack>',
+    'sample':     '<ansibrightblack><b>[s]</b></ansibrightblack>',
+    'instrument': '<ansibrightblack><b>[i]</b></ansibrightblack>',
 }
 
 
@@ -57,21 +69,141 @@ try:
     from prompt_toolkit.completion     import Completer, Completion
     from prompt_toolkit.formatted_text import HTML as _HTML
 
+    def _shell_html(markup):
+        if not term.color_enabled():
+            markup = _re.sub(r'</?[^>]+>', '', markup)
+        return _HTML(markup)
+
+    def _shell_style_rules():
+        if not term.color_enabled():
+            return {
+                'bottom-toolbar':      'noinherit',
+                'bottom-toolbar.text': 'noinherit',
+                'tb-project':          'noinherit',
+                'tb-separator':        'noinherit',
+                'tb-api':              'noinherit',
+                'tb-api-attention':    'noinherit',
+                'tb-clock':            'noinherit',
+                'tb-debug':            'noinherit',
+            }
+        return {
+            'bottom-toolbar':      f'noinherit bg:{_BRAND_DARK_BLUE} fg:{_BRAND_LIGHT_BLUE}',
+            'bottom-toolbar.text': f'noinherit bg:{_BRAND_DARK_BLUE} fg:{_BRAND_LIGHT_BLUE}',
+            'tb-project':          f'noinherit bg:{_BRAND_LIGHT_BLUE} fg:{_BRAND_DARK_BLUE}',
+            'tb-separator':        f'noinherit bg:{_BRAND_DARK_BLUE} fg:{_BRAND_ORANGE}',
+            'tb-api':              f'noinherit bg:{_BRAND_DARK_BLUE} fg:{_BRAND_LIGHT_BLUE}',
+            'tb-api-attention':    f'noinherit bg:{_BRAND_DARK_BLUE} fg:{_BRAND_ORANGE} bold',
+            'tb-clock':            f'noinherit bg:{_BRAND_DARK_BLUE} fg:{_BRAND_LIGHT_BLUE}',
+            'tb-debug':            f'noinherit bg:{_BRAND_ORANGE} fg:{_BRAND_DARK_BLUE} bold',
+        }
+
+    def _shell_color_depth():
+        from prompt_toolkit.output import ColorDepth
+
+        if not term.color_enabled():
+            return ColorDepth.DEPTH_1_BIT
+        configured = ColorDepth.from_env()
+        if configured is not None:
+            return configured
+        if os.environ.get('COLORTERM', '').lower() in ('truecolor', '24bit'):
+            return ColorDepth.DEPTH_24_BIT
+        return None
+
+    def _load_shell_banner():
+        try:
+            from importlib.resources import files
+        except ImportError:
+            from importlib.resources import read_text
+            return read_text('crucible.cli', 'crucible_ascii.txt').rstrip('\n')
+        return files('crucible.cli').joinpath('crucible_ascii.txt').read_text().rstrip('\n')
+
+    def _shell_banner_rows(banner):
+        lines = banner.splitlines()
+        width = max(map(len, lines), default=0)
+        return [line.ljust(width, '_') for line in lines]
+
+    def _shell_banner_row_pairs(banner):
+        rows = _shell_banner_rows(banner)
+        if len(rows) % 2:
+            rows.append('_' * len(rows[0]))
+        return zip(rows[::2], rows[1::2])
+
+    def _shell_banner_panel(banner):
+        visible_pixels = frozenset('%=')
+        return '\n'.join(
+            ''.join(
+                '█' if upper in visible_pixels and lower in visible_pixels
+                else '▀' if upper in visible_pixels
+                else '▄' if lower in visible_pixels
+                else ' '
+                for upper, lower in zip(upper_row, lower_row)
+            )
+            for upper_row, lower_row in _shell_banner_row_pairs(banner)
+        )
+
+    def _shell_banner_left_margin(panel, columns):
+        width = max((_vlen(line) for line in panel.splitlines()), default=0)
+        return max((columns - width) // 2, 0)
+
+    def _shell_banner_fragments(banner, left_margin=0):
+        from prompt_toolkit.formatted_text import FormattedText
+
+        fragments = []
+        pairs = list(_shell_banner_row_pairs(banner))
+        for row_index, (upper_row, lower_row) in enumerate(pairs):
+            if left_margin:
+                fragments.append(('', ' ' * left_margin))
+            for upper, lower in zip(upper_row, lower_row):
+                upper_color = _BANNER_PIXEL_COLORS[upper]
+                lower_color = _BANNER_PIXEL_COLORS[lower]
+                if upper_color == lower_color:
+                    style = f'bg:{lower_color}'
+                    text = ' '
+                else:
+                    style = f'fg:{upper_color} bg:{lower_color}'
+                    text = '▀'
+                if fragments and fragments[-1][0] == style:
+                    previous_style, previous_text = fragments[-1]
+                    fragments[-1] = (previous_style, previous_text + text)
+                else:
+                    fragments.append((style, text))
+            if row_index < len(pairs) - 1:
+                fragments.append(('', '\n'))
+        return FormattedText(fragments)
+
+    def _print_shell_banner(columns):
+        if columns < _BANNER_MIN_WIDTH:
+            return False
+        banner = _load_shell_banner()
+        panel = _shell_banner_panel(banner)
+        left_margin = _shell_banner_left_margin(panel, columns)
+        if not term.color_enabled():
+            prefix = ' ' * left_margin
+            print('\n'.join(f'{prefix}{line}' for line in panel.splitlines()))
+            return True
+        from prompt_toolkit import print_formatted_text
+        print_formatted_text(
+            _shell_banner_fragments(banner, left_margin=left_margin),
+            color_depth=_shell_color_depth(),
+        )
+        return True
+
     class _CrucibleCompleter(Completer):
         """Three-level argparse completer: resource -> subcommand -> flags."""
 
         def __init__(self, parser, client=None, projects=None, deletions=None,
-                     join_requests=None, service_accounts=None, instruments=None, state=None):
+                     join_requests=None, service_accounts=None, state=None):
             self._top               = _get_subparser_map(parser)
             self._client            = client
             self._projects          = projects  or []
             self._deletions         = deletions or []
             self._join_requests     = join_requests or []
             self._service_accounts  = service_accounts or []
-            self._instruments       = instruments or []
             self._unlink_cache      = {}  # mfid -> [(uid, name, entity_type), ...]
             self._user_search_cache = {}  # query -> [(username, name, orcid), ...]
             self._entity_search_cache = {}  # (entity_type, project_id, query) -> [(uid, name), ...]
+            self._project_search_cache = {}
+            self._instrument_search_cache = {}
             self._state             = state or {}
 
         def _lazy_projects(self):
@@ -79,12 +211,6 @@ try:
                 from .helpers import fetch_projects
                 self._projects = fetch_projects(self._client)
             return self._projects
-
-        def _lazy_instruments(self):
-            if not self._instruments and self._client is not None:
-                from .helpers import fetch_instruments
-                self._instruments = fetch_instruments(self._client)
-            return self._instruments
 
         def _search_users(self, query):
             """Search users by name/username via the public search endpoint (no admin required).
@@ -134,8 +260,89 @@ try:
                 yield Completion(
                     identifier + ' ',
                     start_position=-len(prefix),
-                    display=_HTML(f'<b>{_html.escape(identifier)}</b>'),
-                    display_meta=_HTML(f'<ansibrightblack>{_html.escape(meta)}{_html.escape(meta_orcid)}</ansibrightblack>'),
+                    display=_shell_html(f'<b>{_html.escape(identifier)}</b>'),
+                    display_meta=_shell_html(f'<ansibrightblack>{_html.escape(meta)}{_html.escape(meta_orcid)}</ansibrightblack>'),
+                )
+
+        def _search_projects(self, query):
+            if query in self._project_search_cache:
+                return self._project_search_cache[query]
+            results = []
+            if self._client is not None:
+                try:
+                    for project in self._client.projects.search(query, limit=20):
+                        project_id = project.get('project_id') or ''
+                        if project_id:
+                            results.append((
+                                project_id,
+                                project.get('title') or '-',
+                                project.get('unique_id') or '',
+                            ))
+                except Exception:
+                    pass
+            self._project_search_cache[query] = results
+            return results
+
+        def _yield_project_completions(self, prefix, use_search=True, use_mfid=False):
+            if use_mfid and len(prefix) < 3:
+                return
+            if (use_search or use_mfid) and len(prefix) >= 3:
+                candidates = self._search_projects(prefix)
+            else:
+                prefix_lower = prefix.lower()
+                candidates = [
+                    (project_id, title, '')
+                    for project_id, title in self._lazy_projects()
+                    if project_id.lower().startswith(prefix_lower)
+                ]
+            for project_id, title, unique_id in candidates:
+                value = unique_id if use_mfid else project_id
+                if not value:
+                    continue
+                metadata_id = project_id if use_mfid else unique_id
+                metadata = f'{title}  {metadata_id}' if metadata_id else title
+                yield Completion(
+                    value + ' ',
+                    start_position=-len(prefix),
+                    display=_shell_html(f'<b>{_html.escape(value)}</b>'),
+                    display_meta=_shell_html(
+                        f'<ansibrightblack>{_html.escape(metadata)}</ansibrightblack>'
+                    ),
+                )
+
+        def _search_instruments(self, query):
+            if query in self._instrument_search_cache:
+                return self._instrument_search_cache[query]
+            results = []
+            if self._client is not None:
+                try:
+                    for instrument in self._client.instruments.search(query, limit=20):
+                        unique_id = instrument.get('unique_id') or ''
+                        instrument_id = instrument.get('instrument_id') or ''
+                        if unique_id and instrument_id:
+                            results.append((
+                                instrument_id,
+                                instrument.get('instrument_name') or '-',
+                                unique_id,
+                            ))
+                except Exception:
+                    pass
+            self._instrument_search_cache[query] = results
+            return results
+
+        def _yield_instrument_completions(self, prefix, use_mfid=False):
+            if len(prefix) < 3:
+                return
+            for instrument_id, name, unique_id in self._search_instruments(prefix):
+                value = unique_id if use_mfid else instrument_id
+                metadata = f'{name}  {instrument_id if use_mfid else unique_id}'
+                yield Completion(
+                    value + ' ',
+                    start_position=-len(prefix),
+                    display=_shell_html(f'<b>{_html.escape(value)}</b>'),
+                    display_meta=_shell_html(
+                        f'<ansibrightblack>{_html.escape(metadata)}</ansibrightblack>'
+                    ),
                 )
 
         def _search_entities(self, entity_type, query, project_id=None):
@@ -173,8 +380,8 @@ try:
                         yield Completion(
                             uid + ' ',
                             start_position=-len(arg_text),
-                            display=_HTML(f'<b>{_html.escape(uid)}</b>'),
-                            display_meta=_HTML(f'{icon} <ansibrightblack>{_html.escape(name)}</ansibrightblack>'),
+                            display=_shell_html(f'<b>{_html.escape(uid)}</b>'),
+                            display_meta=_shell_html(f'{icon} <ansibrightblack>{_html.escape(name)}</ansibrightblack>'),
                         )
                 return
             project_id = self._state.get('project')
@@ -182,8 +389,8 @@ try:
                 yield Completion(
                     uid + ' ',
                     start_position=-len(arg_text),
-                    display=_HTML(f'<b>{_html.escape(uid)}</b>'),
-                    display_meta=_HTML(f'{icon} <ansibrightblack>{_html.escape(name)}</ansibrightblack>'),
+                    display=_shell_html(f'<b>{_html.escape(uid)}</b>'),
+                    display_meta=_shell_html(f'{icon} <ansibrightblack>{_html.escape(name)}</ansibrightblack>'),
                 )
 
         @staticmethod
@@ -291,11 +498,7 @@ try:
             if len(words) > 2 or (trailing_space and len(words) == 2):
                 return True
             prefix = words[1] if len(words) == 2 else ''
-            for pid, title in self._lazy_projects():
-                if pid.startswith(prefix):
-                    yield Completion(pid + ' ', start_position=-len(prefix),
-                                     display=_HTML(f'<b>{pid}</b>'),
-                                     display_meta=_HTML(f'<ansibrightblack>{_html.escape(title)}</ansibrightblack>'))
+            yield from self._yield_project_completions(prefix, use_search=False)
             return True
 
         def _complete_deletion(self, ctx):
@@ -321,8 +524,8 @@ try:
                 yield Completion(
                     did + ' ',
                     start_position=-len(prefix),
-                    display=_HTML(f'<b>{did}</b>'),
-                    display_meta=_HTML(' | '.join(parts)),
+                    display=_shell_html(f'<b>{did}</b>'),
+                    display_meta=_shell_html(' | '.join(parts)),
                 )
             return True
 
@@ -345,8 +548,8 @@ try:
                     yield Completion(
                         jid + ' ',
                         start_position=-len(prefix),
-                        display=_HTML(f'<b>{jid}</b>'),
-                        display_meta=_HTML(' | '.join(parts)),
+                        display=_shell_html(f'<b>{jid}</b>'),
+                        display_meta=_shell_html(' | '.join(parts)),
                     )
                 return True
 
@@ -358,14 +561,7 @@ try:
                     prefix = words[2]
                 else:
                     return True  # GROUP already filled
-                for pid, title in self._lazy_projects():
-                    if pid.startswith(prefix):
-                        yield Completion(
-                            pid + ' ',
-                            start_position=-len(prefix),
-                            display=_HTML(f'<b>{pid}</b>'),
-                            display_meta=_HTML(f'<ansibrightblack>{_html.escape(title)}</ansibrightblack>'),
-                        )
+                yield from self._yield_project_completions(prefix)
                 return True
 
             return False
@@ -384,7 +580,11 @@ try:
             elif not trailing_space and len(words) == 3 and not words[2].startswith('-'):
                 prefix = words[2]
             else:
-                return True  # SA already filled
+                return False
+            yield from self._yield_service_account_completions(prefix)
+            return True
+
+        def _yield_service_account_completions(self, prefix):
             prefix_lower = prefix.lower()
             for sa in self._service_accounts:
                 username = sa.get('username') or ''
@@ -394,10 +594,9 @@ try:
                 yield Completion(
                     username + ' ',
                     start_position=-len(prefix),
-                    display=_HTML(f'<b>{_html.escape(username)}</b>'),
-                    display_meta=_HTML(f'<ansibrightblack>{_html.escape(name)}</ansibrightblack>'),
+                    display=_shell_html(f'<b>{_html.escape(username)}</b>'),
+                    display_meta=_shell_html(f'<ansibrightblack>{_html.escape(name)}</ansibrightblack>'),
                 )
-            return True
 
         def _complete_unlink(self, ctx):
             text, words, trailing_space, resource = ctx
@@ -421,8 +620,8 @@ try:
                     yield Completion(
                         uid + ' ',
                         start_position=-len(prefix),
-                        display=_HTML(f'<b>{_html.escape(uid)}</b>'),
-                        display_meta=_HTML(meta),
+                        display=_shell_html(f'<b>{_html.escape(uid)}</b>'),
+                        display_meta=_shell_html(meta),
                     )
             return True
 
@@ -437,8 +636,8 @@ try:
                         yield Completion(
                             uid + ' ',
                             start_position=-len(prefix),
-                            display=_HTML(f'<b>{_html.escape(uid)}</b>'),
-                            display_meta=_HTML(f'{icon} <ansibrightblack>{_html.escape(name)}</ansibrightblack>'),
+                            display=_shell_html(f'<b>{_html.escape(uid)}</b>'),
+                            display_meta=_shell_html(f'{icon} <ansibrightblack>{_html.escape(name)}</ansibrightblack>'),
                         )
                 return True
             elif not trailing_space and len(words) == 2 and not words[1].startswith('-'):
@@ -449,8 +648,8 @@ try:
                         yield Completion(
                             uid + ' ',
                             start_position=-len(prefix),
-                            display=_HTML(f'<b>{_html.escape(uid)}</b>'),
-                            display_meta=_HTML(f'{icon} <ansibrightblack>{_html.escape(name)}</ansibrightblack>'),
+                            display=_shell_html(f'<b>{_html.escape(uid)}</b>'),
+                            display_meta=_shell_html(f'{icon} <ansibrightblack>{_html.escape(name)}</ansibrightblack>'),
                         )
                 return True
             # ID already filled — complete flags from the top-level parser
@@ -479,7 +678,7 @@ try:
             elif not trailing_space and len(words) == 3 and not words[2].startswith('-'):
                 prefix = words[2]
             else:
-                return True  # USER already filled
+                return False
             yield from self._yield_user_completions(prefix)
             return True
 
@@ -488,48 +687,86 @@ try:
             if len(words) < 2:
                 return False
             # Complete the PROJECT_ID positional for subcommands that take one.
-            _PID_SUBS = {'get', 'update', 'list-users', 'add-user', 'remove-user',
-                         'request-join', 'list-join-requests'}
+            _PID_SUBS = {
+                'get', 'update', 'list-users', 'add-user', 'remove-user',
+                'update-user-role', 'transfer-ownership', 'request-join',
+                'list-join-requests',
+            }
             if words[1] not in _PID_SUBS:
                 return False
+            subcommand = words[1]
             if trailing_space and len(words) == 2:
                 prefix = ''
             elif not trailing_space and len(words) == 3 and not words[2].startswith('-'):
                 prefix = words[2]
             else:
-                return True  # project ID already filled
-            for pid, title in self._lazy_projects():
-                if pid.startswith(prefix):
-                    yield Completion(
-                        pid + ' ',
-                        start_position=-len(prefix),
-                        display=_HTML(f'<b>{pid}</b>'),
-                        display_meta=_HTML(f'<ansibrightblack>{_html.escape(title)}</ansibrightblack>'),
-                    )
+                if subcommand in {'transfer-ownership', 'update-user-role'}:
+                    if not trailing_space and len(words) == 4:
+                        yield from self._yield_user_completions(words[3])
+                        return True
+                    if subcommand == 'update-user-role':
+                        roles = ('viewer', 'contributor', 'editor', 'admin')
+                        if trailing_space and len(words) == 4:
+                            for role in roles:
+                                yield Completion(role + ' ', start_position=0)
+                            return True
+                        if not trailing_space and len(words) == 5:
+                            for role in roles:
+                                if role.startswith(words[4]):
+                                    yield Completion(
+                                        role + ' ', start_position=-len(words[4]))
+                            return True
+                return False
+            yield from self._yield_project_completions(prefix)
             return True
 
         def _complete_instrument(self, ctx):
             text, words, trailing_space, resource = ctx
-            if not (len(words) >= 2 and words[1] == 'get'):
+            if len(words) < 2:
                 return False
-            # Complete the canonical instrument slug used by identifier dispatch.
-            span = self._multiword_arg(text, 2)
-            if span is None:
-                return True  # already past the positional (a flag was typed)
-            arg_text, query = span
-            query_lower = query.lower()
-            for slug, name, uid in self._lazy_instruments():
-                if query_lower not in slug.lower() and query_lower not in name.lower():
-                    continue
-                yield Completion(
-                    slug + ' ',
-                    start_position=-len(arg_text),
-                    display=_HTML(f'<b>{_html.escape(slug)}</b>'),
-                    display_meta=_HTML(
-                        f'<ansibrightblack>{_html.escape(name)}  {_html.escape(uid)}</ansibrightblack>'
-                    ),
-                )
-            return True
+            subcommand = words[1]
+            mfid_subcommands = {
+                'update', 'edit', 'transfer-ownership', 'set-status',
+                'list-service-accounts', 'bind-sa', 'unbind-sa',
+            }
+            if subcommand == 'get':
+                span = self._multiword_arg(text, 2)
+                if span is None:
+                    return False
+                _, query = span
+                yield from self._yield_instrument_completions(query)
+                return True
+            if subcommand not in mfid_subcommands:
+                return False
+            if trailing_space and len(words) == 2:
+                yield from self._yield_instrument_completions('', use_mfid=True)
+                return True
+            if not trailing_space and len(words) == 3 and not words[2].startswith('-'):
+                yield from self._yield_instrument_completions(words[2], use_mfid=True)
+                return True
+            if subcommand == 'transfer-ownership' and not trailing_space and len(words) == 4:
+                yield from self._yield_user_completions(words[3])
+                return True
+            if subcommand in {'bind-sa', 'unbind-sa'}:
+                if trailing_space and len(words) == 3:
+                    yield from self._yield_service_account_completions('')
+                    return True
+                if not trailing_space and len(words) == 4:
+                    yield from self._yield_service_account_completions(words[3])
+                    return True
+            if subcommand == 'set-status':
+                statuses = ('active', 'maintenance', 'decommissioned')
+                if trailing_space and len(words) == 3:
+                    for status in statuses:
+                        yield Completion(status + ' ', start_position=0)
+                    return True
+                if not trailing_space and len(words) == 4:
+                    for status in statuses:
+                        if status.startswith(words[3]):
+                            yield Completion(
+                                status + ' ', start_position=-len(words[3]))
+                    return True
+            return False
 
         def _complete_dataset_or_sample(self, ctx):
             text, words, trailing_space, resource = ctx
@@ -537,9 +774,26 @@ try:
                 return False
             # Complete the ID positional (by name, resolving to MFID) for
             # every subcommand except the handful that don't take one.
-            _NO_ID_SUBS = {'list', 'create', 'search', 'search-metadata', 'search-md',
-                           'parsers', 'ingestors'}
+            _NO_ID_SUBS = {
+                'list', 'create', 'search', 'search-metadata', 'search-md',
+                'link', 'parsers', 'ingestors',
+            }
             if words[1] in _NO_ID_SUBS:
+                return False
+            from ..utils.identifiers import is_mfid
+            subcommand = words[1]
+            if len(words) >= 3 and is_mfid(words[2]):
+                if subcommand == 'reassign-project':
+                    if trailing_space and len(words) == 3:
+                        yield from self._yield_project_completions('')
+                        return True
+                    if not trailing_space and len(words) == 4:
+                        yield from self._yield_project_completions(words[3])
+                        return True
+                if subcommand == 'transfer-ownership':
+                    if not trailing_space and len(words) == 4:
+                        yield from self._yield_user_completions(words[3])
+                        return True
                 return False
             span = self._multiword_arg(text, 2)
             if span is None:
@@ -569,7 +823,7 @@ try:
                     results.append((False, '', Completion(
                         remaining + '/',
                         start_position=0,
-                        display=_HTML('<ansiblue><b>../</b></ansiblue>'),
+                        display=_shell_html('<ansicyan><b>../</b></ansicyan>'),
                     )))
 
                 try:
@@ -593,9 +847,9 @@ try:
                         esc = _html.escape(display_name)
 
                         if is_dir:
-                            disp = f'<ansiblue><b>{esc}</b></ansiblue>'
+                            disp = f'<ansicyan><b>{esc}</b></ansicyan>'
                         elif is_crux:
-                            disp = f'<ansiyellow><b>{esc}</b></ansiyellow>'
+                            disp = f'<b>{esc}</b>'
                         elif is_hidden:
                             disp = f'<ansibrightblack>{esc}</ansibrightblack>'
                         else:
@@ -604,7 +858,7 @@ try:
                         results.append((is_hidden, display_name.lower(), Completion(
                             completion_text,
                             start_position=0,
-                            display=_HTML(disp),
+                            display=_shell_html(disp),
                         )))
 
                 results.sort(key=lambda x: (x[0], x[1]))
@@ -654,11 +908,7 @@ try:
                             yield Completion(key + ' ', start_position=-len(prefix))
                 elif len(words) >= 3 and words[2] == 'current_project':
                     prefix = words[3] if len(words) == 4 and not trailing_space else ''
-                    for pid, title in self._lazy_projects():
-                        if pid.startswith(prefix):
-                            yield Completion(pid + ' ', start_position=-len(prefix),
-                                             display=_HTML(f'<b>{pid}</b>'),
-                                             display_meta=_HTML(f'<ansibrightblack>{_html.escape(title)}</ansibrightblack>'))
+                    yield from self._yield_project_completions(prefix, use_search=False)
                 return
 
             sub_parser  = sub_map.get(subcommand)
@@ -668,45 +918,90 @@ try:
             current_word = '' if trailing_space else words[-1]
             prev = (words[-1] if trailing_space else words[-2]) if len(words) >= 2 else ''
 
-            _PROJECT_FLAGS = ('--project', '-pid', '--project-id')
+            _PROJECT_FLAGS = ('--project-id', '--project', '-pid')
+            _PROJECT_MFID_FLAGS = ('--project-mfid',)
+            if subcommand in {'list', 'create', 'search'}:
+                _PROJECT_FLAGS += ('-p',)
+            _USER_FLAGS = ('--user', '-u', '--owner', '--lead', '-e', '--orcid')
+            _INSTRUMENT_FLAGS = ('--instrument-id',)
+            _INSTRUMENT_MFID_FLAGS = ('--instrument-mfid',)
             # Flags whose value is a dataset or sample MFID, by resource context.
             # Values here can't contain unquoted spaces (argparse flag values are
             # single tokens), so completion is a plain prefix/substring search
             # rather than the multi-word span logic used for positionals.
             _ENTITY_FLAGS = {
-                'dataset': {'-s': 'samples', '--sample': 'samples', '-c': 'datasets', '--child': 'datasets'},
-                'sample':  {'-d': 'datasets', '--dataset': 'datasets', '-c': 'samples', '--child': 'samples'},
-            }.get(resource, {})
+                ('dataset', 'link'): {
+                    '-p': 'datasets', '--parent': 'datasets',
+                    '-c': 'datasets', '--child': 'datasets',
+                },
+                ('dataset', 'add-sample'): {
+                    '-s': 'samples', '--sample': 'samples',
+                },
+                ('dataset', 'remove-sample'): {
+                    '-s': 'samples', '--sample': 'samples',
+                },
+                ('dataset', 'remove-child'): {
+                    '-c': 'datasets', '--child': 'datasets',
+                },
+                ('sample', 'link'): {
+                    '-p': 'samples', '--parent': 'samples',
+                    '-c': 'samples', '--child': 'samples',
+                },
+                ('sample', 'add-dataset'): {
+                    '-d': 'datasets', '--dataset': 'datasets',
+                },
+                ('sample', 'remove-dataset'): {
+                    '-d': 'datasets', '--dataset': 'datasets',
+                },
+                ('sample', 'remove-child'): {
+                    '-c': 'samples', '--child': 'samples',
+                },
+            }.get((resource, subcommand), {})
 
             if current_word and not current_word.startswith('-'):
                 # Mid-typing a flag value.
-                if prev == '--orcid':
+                if prev in _USER_FLAGS:
                     yield from self._yield_user_completions(current_word)
                 elif prev in _PROJECT_FLAGS:
-                    for pid, title in self._lazy_projects():
-                        if pid.startswith(current_word):
-                            yield Completion(
-                                pid + ' ', start_position=-len(current_word),
-                                display=_HTML(f'<b>{pid}</b>'),
-                                display_meta=_HTML(f'<ansibrightblack>{_html.escape(title)}</ansibrightblack>'),
-                            )
+                    yield from self._yield_project_completions(current_word)
+                elif prev in _PROJECT_MFID_FLAGS:
+                    yield from self._yield_project_completions(current_word, use_mfid=True)
+                elif prev in _INSTRUMENT_FLAGS:
+                    yield from self._yield_instrument_completions(current_word)
+                elif prev in _INSTRUMENT_MFID_FLAGS:
+                    yield from self._yield_instrument_completions(current_word, use_mfid=True)
                 elif prev in _ENTITY_FLAGS:
                     entity_type = _ENTITY_FLAGS[prev]
                     icon = _ENTITY_ICONS.get(entity_type.rstrip('s'), '')
                     yield from self._yield_entity_completions(entity_type, current_word, current_word, icon)
+                else:
+                    action = sub_parser._option_string_actions.get(prev)
+                    if action is not None and action.choices:
+                        for choice in action.choices:
+                            choice = str(choice)
+                            if choice.startswith(current_word):
+                                yield Completion(
+                                    choice + ' ', start_position=-len(current_word))
                 return
 
-            if not current_word and prev == '--orcid':
+            if not current_word and prev in _USER_FLAGS:
                 yield from self._yield_user_completions('')
                 return
 
             if not current_word and prev in _PROJECT_FLAGS:
-                for pid, title in self._lazy_projects():
-                    yield Completion(
-                        pid + ' ', start_position=0,
-                        display=_HTML(f'<b>{pid}</b>'),
-                        display_meta=_HTML(f'<ansibrightblack>{_html.escape(title)}</ansibrightblack>'),
-                    )
+                yield from self._yield_project_completions('')
+                return
+
+            if not current_word and prev in _PROJECT_MFID_FLAGS:
+                yield from self._yield_project_completions('', use_mfid=True)
+                return
+
+            if not current_word and prev in _INSTRUMENT_FLAGS:
+                yield from self._yield_instrument_completions('')
+                return
+
+            if not current_word and prev in _INSTRUMENT_MFID_FLAGS:
+                yield from self._yield_instrument_completions('', use_mfid=True)
                 return
 
             if not current_word and prev in _ENTITY_FLAGS:
@@ -715,7 +1010,16 @@ try:
                 yield from self._yield_entity_completions(entity_type, '', '', icon)
                 return
 
-            for flag in sub_parser._option_string_actions:
+            if not current_word:
+                action = sub_parser._option_string_actions.get(prev)
+                if action is not None and action.choices:
+                    for choice in action.choices:
+                        yield Completion(str(choice) + ' ', start_position=0)
+                    return
+
+            for flag, action in sub_parser._option_string_actions.items():
+                if action.help == argparse.SUPPRESS:
+                    continue
                 if flag.startswith(current_word):
                     yield Completion(flag + ' ', start_position=-len(current_word))
 
@@ -811,19 +1115,21 @@ class CrucibleShell:
         """Populate self.state from startup data."""
         from .helpers import (
             fetch_projects, fetch_deletions, fetch_join_requests, fetch_service_accounts,
-            fetch_user_label, fetch_current_project, fetch_current_session, fetch_api_label,
+            fetch_user_label, fetch_project_context, fetch_api_label, fetch_api_attention,
         )
         deletions     = fetch_deletions(self.client)
         join_requests = fetch_join_requests(self.client)
         self.is_admin = deletions is not None
         service_accounts = fetch_service_accounts(self.client) if self.is_admin else None
 
+        project_id, project_source = fetch_project_context()
         self.state = {
             'user_label':        fetch_user_label(self.client, whoami_info),
             'projects':          fetch_projects(self.client),
-            'project':           fetch_current_project(),
-            'session':           fetch_current_session(),
+            'project':           project_id,
+            'project_source':    project_source,
             'api_label':         fetch_api_label(),
+            'api_attention':     fetch_api_attention(),
             'debug':             False,
             'deletions':         deletions or [],
             'join_requests':     join_requests or [],
@@ -835,7 +1141,7 @@ class CrucibleShell:
         """Re-fetch projects, user info, deletions, join requests, and service accounts. Updates state + completer."""
         from .helpers import (
             fetch_projects, fetch_deletions, fetch_join_requests, fetch_service_accounts,
-            fetch_user_label, fetch_current_project, fetch_current_session, fetch_api_label,
+            fetch_user_label, fetch_project_context, fetch_api_label, fetch_api_attention,
         )
         with ThreadPoolExecutor(max_workers=4) as pool:
             proj_f = pool.submit(fetch_projects,      self.client)
@@ -849,9 +1155,11 @@ class CrucibleShell:
         self.is_admin = new_deletions is not None
         self.state['projects']         = new_projects
         self.state['user_label']       = fetch_user_label(self.client)
-        self.state['project']          = fetch_current_project()
-        self.state['session']          = fetch_current_session()
+        project_id, project_source = fetch_project_context()
+        self.state['project']          = project_id
+        self.state['project_source']   = project_source
         self.state['api_label']        = fetch_api_label()
+        self.state['api_attention']    = fetch_api_attention()
         self.state['deletions']        = new_deletions or []
         self.state['join_requests']    = new_join_requests or []
         self.state['service_accounts'] = new_service_accounts or []
@@ -860,21 +1168,28 @@ class CrucibleShell:
             self.completer._deletions        = new_deletions
             self.completer._join_requests    = new_join_requests
             self.completer._service_accounts = new_service_accounts
+            self.completer._user_search_cache.clear()
+            self.completer._entity_search_cache.clear()
+            self.completer._project_search_cache.clear()
+            self.completer._instrument_search_cache.clear()
         print(f"Refreshed: {len(new_projects)} projects, user info reloaded.")
 
     def _toolbar(self):
         from prompt_toolkit.application import get_app
-        proj  = self.state.get('project', '')
-        sess  = self.state.get('session', '')
-        label = f'{proj} / {sess}' if sess else proj
+        label = self.state.get('project') or '(no project set)'
         if len(label) > 22:
             label = label[:21] + '…'
-        proj_content = f'🔬 {label}'.ljust(25)
+        source = self.state.get('project_source')
+        source_label = ' [env]' if source == 'environment' else ''
+        project_label = f'🔬 {label}{source_label}'
+        proj_content = project_label + ' ' * max(0, 25 - _vlen(project_label))
         clock        = datetime.now().strftime('%H:%M')
 
         left_str  = f' {proj_content} '
         mid_str   = f' 🧸 {self.state.get("user_label", "?")} '
-        right_str = f' 🔗 {self.state.get("api_label", "?")}  │  {clock} '
+        api_str   = f' 🔗 {self.state.get("api_label", "?")} '
+        clock_str = f' {clock} '
+        separator = ' │ '
         debug_str = ' DEBUG ' if self.state.get('debug') else ''
 
         try:
@@ -882,14 +1197,24 @@ class CrucibleShell:
         except Exception:
             term_width = 80
 
-        from prompt_toolkit.formatted_text import HTML
-        pad = ' ' * max(0, term_width - _vlen(left_str) - _vlen(mid_str)
-                        - len(debug_str) - _vlen(right_str))
-        return HTML(
+        fixed_width = (
+            _vlen(left_str) + _vlen(mid_str) + _vlen(api_str)
+            + _vlen(clock_str) + 3 * _vlen(separator) + len(debug_str)
+        )
+        if debug_str:
+            fixed_width += _vlen(separator)
+        pad = ' ' * max(0, term_width - fixed_width)
+        api_tag = 'tb-api-attention' if self.state.get('api_attention') else 'tb-api'
+        debug_segment = (
+            f'<tb-separator>{separator}</tb-separator><tb-debug>{debug_str}</tb-debug>'
+            if debug_str else ''
+        )
+        return _shell_html(
             f'<tb-project>{left_str}</tb-project>'
-            f'{mid_str}{pad}'
-            f'<tb-debug>{debug_str}</tb-debug>'
-            f'<tb-clock>{right_str}</tb-clock>'
+            f'<tb-separator>{separator}</tb-separator>{mid_str}'
+            f'<tb-separator>{separator}</tb-separator><{api_tag}>{api_str}</{api_tag}>'
+            f'{pad}{debug_segment}'
+            f'<tb-separator>{separator}</tb-separator><tb-clock>{clock_str}</tb-clock>'
         )
 
     def _clock_tick(self):
@@ -945,6 +1270,23 @@ class CrucibleShell:
         except Exception as e:
             logger.error(f"Error rendering resource: {e}")
 
+    def _activate_project(self, project_id, title=None):
+        """Persist a project selection and apply it to the running shell."""
+        if os.environ.get('CRUCIBLE_CURRENT_PROJECT') is not None:
+            from .helpers import show_warning
+            show_warning(
+                "CRUCIBLE_CURRENT_PROJECT controls the current project. "
+                "Unset it before using the shell project selector."
+            )
+            return False
+        from .config import set_config_value
+        set_config_value('current_project', project_id)
+        self.state['project'] = project_id
+        self.state['project_source'] = 'config file'
+        label = f"{project_id} - {title}" if title else project_id
+        print(f"Using project: {label} (remembered)")
+        return True
+
     def _dispatch(self, line):
         """Parse and execute one command line. Returns False to signal exit."""
         from . import _remap_deprecated, setup_logging
@@ -960,8 +1302,8 @@ class CrucibleShell:
             print()
             term.header("Shell commands")
             for _cmd, _desc in [
-                ('use PROJECT',   'switch active project'),
-                ('unuse',         'clear active project'),
+                ('use PROJECT',   'select and remember current project'),
+                ('unuse',         'clear the current project'),
                 ('refresh',       're-fetch projects, user info, deletions'),
                 ('reload',        'restart the shell process'),
                 ('debug on|off',  'toggle debug logging'),
@@ -994,10 +1336,16 @@ class CrucibleShell:
                 print("Usage: use <project_id>")
                 return True
             project_id = parts[1].strip()
+            if os.environ.get('CRUCIBLE_CURRENT_PROJECT') is not None:
+                from .helpers import show_warning
+                show_warning(
+                    "CRUCIBLE_CURRENT_PROJECT controls the current project. "
+                    "Unset it before using the shell project selector."
+                )
+                return True
             try:
                 import requests as _req
-                from crucible.client import CrucibleClient
-                project = CrucibleClient().projects.get(project_id)
+                project = self.client.projects.get(project_id)
                 if project is None:
                     logger.error(f"Project not found: {project_id}")
                     return True
@@ -1011,28 +1359,25 @@ class CrucibleShell:
                 logger.error(f"Cannot access project '{project_id}': {e}")
                 return True
             try:
-                from crucible.cli.config import set_config_value
-                set_config_value('current_project', project_id)
-                set_config_value('current_session', '')
                 title = project.get('title') or ''
-                label = f"{project_id} - {title}" if title else project_id
-                print(f"Switched to project: {label}")
-                self.state['project'] = project_id
-                self.state['session'] = ''
+                self._activate_project(project_id, title)
             except Exception as e:
                 logger.error(f"Error switching project: {e}")
             return True
 
         if line == 'unuse':
-            try:
-                from crucible.cli.config import set_config_value
-                set_config_value('current_project', '')
-                set_config_value('current_session', '')
-                print("Cleared current project and session.")
-                self.state['project'] = '(no project set)'
-                self.state['session'] = ''
-            except Exception as e:
-                logger.error(f"Error clearing project: {e}")
+            if os.environ.get('CRUCIBLE_CURRENT_PROJECT') is not None:
+                from .helpers import show_warning
+                show_warning(
+                    "CRUCIBLE_CURRENT_PROJECT controls the current project. "
+                    "Unset it before clearing the shell project selection."
+                )
+                return True
+            from .config import unset_config_value
+            unset_config_value('current_project')
+            self.state['project'] = None
+            self.state['project_source'] = None
+            print("Cleared current project.")
             return True
 
         if line == 'refresh':
@@ -1141,6 +1486,10 @@ class CrucibleShell:
             if hasattr(args, 'func'):
                 args._shell_state = self.state
                 args.func(args)
+                from .helpers import fetch_project_context
+                project_id, project_source = fetch_project_context()
+                self.state['project'] = project_id
+                self.state['project_source'] = project_source
             else:
                 self.parser.print_help()
         except SystemExit:
@@ -1186,7 +1535,10 @@ class CrucibleShell:
                 if self.completer is not None:
                     self.completer._client       = self.client
                     self.completer._unlink_cache = {}
-                    self.completer._users        = []
+                    self.completer._user_search_cache.clear()
+                    self.completer._entity_search_cache.clear()
+                    self.completer._project_search_cache.clear()
+                    self.completer._instrument_search_cache.clear()
             except Exception:
                 pass
             self.refresh()
@@ -1210,12 +1562,20 @@ class CrucibleShell:
         info = self._verify_connection()
         self._init_state(info)
 
+        _print_shell_banner(shutil.get_terminal_size((80, 24)).columns)
+
         _u     = info.get('user_info', {})
         _first = _u.get('first_name', '').strip() or \
                  _u.get('last_name', '').strip() or \
                  info.get('access_group_name') or 'there'
         print(f"\nWelcome to the Crucible interactive shell, {_first}.\n"
               "(type 'help' for commands, 'exit' to quit)")
+        if self.state.get('project_source') == 'environment':
+            from .helpers import show_warning
+            show_warning(
+                "CRUCIBLE_CURRENT_PROJECT is controlling the current project and is deprecated. "
+                "Use 'use PROJECT_ID' to save a selection after unsetting the environment variable."
+            )
 
         self.completer = _CrucibleCompleter(
             self.parser,
@@ -1238,13 +1598,8 @@ class CrucibleShell:
             complete_while_typing=True,
             key_bindings=kb,
             bottom_toolbar=self._toolbar,
-            style=Style.from_dict({
-                'bottom-toolbar':      'noinherit bg:#1c9aad fg:#E8F4F7',
-                'bottom-toolbar.text': 'noinherit bg:#1c9aad fg:#E8F4F7',
-                'tb-project':          'noinherit bg:#A8C4CD fg:#0D2B35',
-                'tb-clock':            'noinherit bg:#A8C4CD fg:#0D2B35',
-                'tb-debug':            'noinherit bg:#E8820A fg:#1C1C1C bold',
-            }),
+            style=Style.from_dict(_shell_style_rules()),
+            color_depth=_shell_color_depth(),
         )
 
         threading.Thread(target=self._clock_tick, daemon=True).start()

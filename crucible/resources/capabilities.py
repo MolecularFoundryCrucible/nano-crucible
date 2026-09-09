@@ -56,9 +56,24 @@ class AccessControlMixin:
         raw = self._request('put', f'/resources/{mfid}/access/public')
         return AccessGrant.model_validate(raw)
 
-    def unset_public(self, mfid: str) -> Dict:
+    def set_private(self, mfid: str) -> Dict:
         """Revoke public access to a resource."""
         return self._request('delete', f'/resources/{mfid}/access/public')
+
+    @_deprecated("set_public()")
+    def publish(self, mfid: str) -> 'AccessGrant':
+        """Grant public viewer access to a resource."""
+        return self.set_public(mfid)
+
+    @_deprecated("set_private()")
+    def unpublish(self, mfid: str) -> Dict:
+        """Revoke public access to a resource."""
+        return self.set_private(mfid)
+
+    @_deprecated("set_private()")
+    def unset_public(self, mfid: str) -> Dict:
+        """Revoke public access to a resource."""
+        return self.set_private(mfid)
 
 
 class OwnershipMixin:

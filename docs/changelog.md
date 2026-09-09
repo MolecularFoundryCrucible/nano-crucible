@@ -2,10 +2,59 @@
 
 ## Unreleased
 
-## 3.2.0
+## 3.2.1
 
 ### Added
 
+- Dataset and sample parent-child links support optional `is_derived_from` and `is_part_of` relationship types in Python and the CLI, including relationship-type filtering.
+- The interactive shell displays a centered 16x16 Crucible mark with square-proportioned half-block pixels on supported terminals.
+- Dataset and sample creation accept canonical project MFIDs alongside matching project IDs, and dataset creation accepts canonical instrument MFIDs alongside matching instrument IDs.
+- Dataset and sample lists accept a project ID or canonical project MFID with assigned, shared, or combined project scope in the Python client and CLI.
+- Dataset thumbnails can be added from the CLI and renamed or replaced with `client.datasets.update_thumbnail()`.
+- Dataset and sample responses expose typed project references with canonical MFIDs, and dataset responses also expose typed instrument references, while retaining legacy flat fields.
+- The CLI supports `--no-color` and the standard `NO_COLOR` environment variable.
+- Instrument workflows support lifecycle status changes, bound service-account listing, and dataset filtering by canonical instrument MFID.
+- Exact dataset, sample, project, and instrument responses expose typed caller-specific resource capabilities when supplied by the API.
+
+### Changed
+
+- Entries returned by `client.get_links()` expose the API's `direction` field with `source`, `target`, or `undirected` values. The legacy `relationship` field remains as a compatibility alias with its previous `parent`, `child`, or `associated` value.
+- The minimum supported Python version is now 3.9.
+- Dataset thumbnail create, list, and update responses expose the API-provided authoritative MIME type.
+- Instrument search results now show the user-facing instrument ID instead of manufacturer metadata.
+- `crucible dataset create` can create a dataset record without `--input`; file-dependent options still require at least one input file.
+- Dataset and sample relationship methods now consistently use `link`, `unlink`, `link_sample`, `unlink_sample`, `link_dataset`, and `unlink_dataset`; previous method names remain as deprecated wrappers.
+- Public visibility now uses `set_public()` and `set_private()` in Python and `set-public` and `set-private` in the CLI; previous method names, command names, and update visibility options remain deprecated compatibility aliases that delegate to the dedicated access routes.
+- The interactive shell now remembers the project selected by `use PROJECT_ID`, `unuse` clears it, and project context sources are visible; `CRUCIBLE_CURRENT_PROJECT` is deprecated because it can silently redirect operations.
+- The interactive shell status bar now renders the Crucible dark blue, light blue, and orange brand palette in true color on capable terminals while keeping autocomplete menus visually plain.
+- Sample detail methods can suppress the deprecated embedded dataset expansion; existing Python and JSON behavior remains compatible, while human CLI workflows avoid loading it.
+- CLI detail views group related fields, use consistent semantic colors, link resources and users to Crucible Explorer, distinguish slugs from MFIDs, and abbreviate given names.
+- Generic `crucible get MFID` now renders projects in addition to datasets, samples, and instruments.
+- CLI project and sample-type options use consistent canonical flags, and interactive completion now discovers flags and searches resource endpoints for identifier values.
+- CLI failures now preserve HTTP status codes while formatting API validation details and warnings for readable terminal and JSON output.
+- Human and service-account creation normalize usernames and validate the API's complete username rules, with immediate retry prompts during interactive creation.
+- Project membership methods and commands validate named roles before requests, document strict lower-role management and owner-or-self removal, and `project add-user` reports API errors through the shared status-preserving formatter.
+- Interactive creation and configuration prompts now share required, optional, default, secret, and choice handling; invalid values prompt again, API keys remain hidden, and missing required input fails clearly outside a terminal.
+- Destructive CLI confirmations now use consistent yes-or-no handling, default to cancellation, and require `--yes` when no interactive terminal is available.
+- CLI tables now adapt to terminal width while preserving full usernames, resource slugs, and MFIDs whenever space permits.
+- Project listing, resource searches, user discovery, and service-account retrieval now support raw JSON output with structured JSON validation errors.
+- Empty CLI listings identify their resource type, and mutations use consistent success messages with text fallbacks for redirected output.
+- `crucible status` now shows the configured endpoint, readiness state, client and API versions, deployed branch and commit, database latency and schema revisions, and authenticated identity.
+- Instrument search accepts an optional lifecycle-status filter in the Python client and CLI.
+- Project member tables use role-priority ordering and semantic role colors, display the owner as the project lead, and the interactive shell status bar again identifies project, user, and API context with symbols.
+- Dataset and sample relationship listing now uses canonical collection filters with cursor pagination instead of deprecated nested read routes.
+
+### Fixed
+
+- `crucible file delete` now requires interactive confirmation or an explicit `--yes` before permanently deleting a file.
+- Dataset file guidance now documents the API v3 record-first workflow, recursive uploads, additions, deletion-based replacement, and re-uploading.
+- Documentation navigation tabs now remain visible while scrolling using MkDocs Material's native sticky-tabs behavior.
+- Instrument creation no longer sends inherited response-only fields rejected by API v3.
+
+## 3.2.0
+
+### Added
+- `add_file(skip_ingestion=True)` uploads a file without requesting ingestion. Updates ingestion request table with provenance details for local parsing. 
 - Dataset, sample, and project lists accept repeated user and project access selectors.
 - Development skills for API, CLI, parser, and cast changes.
 - Agent-agnostic contributor guidance and a skill for safe client workflows.
@@ -63,7 +112,7 @@
 
 ### Fixed
 
-- CLI tables display usernames and project or instrument slugs up to their full 25-character limit.
+- CLI tables display usernames up to their full 24-character limit and project or instrument slugs up to their full 25-character limit.
 - Instrument CLI get/list output formats expanded owners correctly and `instrument list --include-metadata --json` exposes requested metadata.
 - Project and instrument lookup remains compatible with legacy slugs outside the current creation limits.
 - Access-control operations now use the API's canonical principal and permission fields.

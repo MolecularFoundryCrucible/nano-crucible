@@ -64,12 +64,7 @@ def register(kb, shell):
 
         def _switch(pid, title):
             try:
-                from crucible.cli.config import set_config_value
-                set_config_value('current_project', pid)
-                set_config_value('current_session', '')
-                shell.state['project'] = pid
-                shell.state['session'] = ''
-                print(f"  Switched to: {title}  ({pid})")
+                shell._activate_project(pid, title)
             except Exception as e:
                 logger.error(f"Error switching project: {e}")
 
@@ -127,9 +122,22 @@ def register(kb, shell):
         def _open():
             try:
                 import webbrowser
-                from .helpers import explorer_url
-                pid = last['data'].get('project_id', '')
-                url = explorer_url(uid, pid, last['type'])
+                from .helpers import (
+                    explorer_url,
+                    instrument_explorer_url,
+                    project_explorer_url,
+                    project_reference,
+                )
+                resource_type = last['type']
+                if resource_type == 'instrument':
+                    url = instrument_explorer_url(uid)
+                elif resource_type == 'project':
+                    url = project_explorer_url(last['data'].get('project_id'))
+                else:
+                    _, pid, _ = project_reference(last['data'])
+                    url = explorer_url(uid, pid, resource_type)
+                if not url:
+                    raise ValueError("No Explorer route is available for this resource.")
                 webbrowser.open(url)
             except Exception as e:
                 logger.error(f"Could not open resource: {e}")

@@ -17,6 +17,7 @@ from crucible.utils.identifiers import (
     classify_slug_reference,
     classify_user_reference,
     collapse_exact_lookup,
+    validate_username,
 )
 
 
@@ -57,6 +58,17 @@ class TestClassification:
     def test_user_dispatch(self, value, expected):
         assert classify_user_reference(value) == expected
 
+    def test_username_validation_normalizes_case_and_whitespace(self):
+        assert validate_username('  Alice_User  ') == 'alice_user'
+
+    @pytest.mark.parametrize(
+        'value',
+        ['', 'ab', 'a' * 25, '1alice', '_alice', 'alice_', 'alice--user', 'alice user'],
+    )
+    def test_username_validation_rejects_invalid_values(self, value):
+        with pytest.raises(ValueError, match='Username must be 3 to 24 characters'):
+            validate_username(value)
+
 
 class TestExactLookupCollapse:
     def test_zero_matches_is_not_found(self):
@@ -79,12 +91,23 @@ class TestExactLookupCollapse:
 class TestProjectDispatch:
     def test_mfid_uses_canonical_route(self):
         ops = make_ops(ProjectOperations)
-        ops._request = MagicMock(return_value={'unique_id': MFID, 'project_id': 'example'})
+        ops._request = MagicMock(return_value={
+            'unique_id': MFID,
+            'project_id': 'example',
+            'capabilities': {
+                'can_edit': True,
+                'can_manage_access': True,
+                'can_change_status': True,
+                'can_transfer': False,
+                'max_grant_role': 'editor',
+            },
+        })
 
         result = ops.get(MFID)
 
         ops._request.assert_called_once_with('get', f'/projects/{MFID}', params=None)
         assert result['unique_id'] == MFID
+        assert result['capabilities']['max_grant_role'] == 'editor'
 
     def test_slug_uses_one_exact_collection_request(self):
         ops = make_ops(ProjectOperations)
@@ -123,16 +146,27 @@ class TestInstrumentDispatch:
         ops = make_ops(InstrumentOperations)
         ops._request = MagicMock(return_value={
             'total': 1,
-            'items': [{'unique_id': MFID, 'instrument_id': 'beamline-1'}],
+            'items': [{
+                'unique_id': MFID,
+                'instrument_id': 'beamline-1',
+                'capabilities': {
+                    'can_edit': True,
+                    'can_manage_access': False,
+                    'can_change_status': False,
+                    'can_transfer': False,
+                    'max_grant_role': None,
+                },
+            }],
         })
 
-        ops.get('beamline-1')
+        result = ops.get('beamline-1')
 
         ops._request.assert_called_once_with(
             'get',
             '/instruments',
             params={'instrument_id': 'beamline-1', 'limit': 2, 'include_owner': True},
         )
+        assert result['capabilities']['can_edit'] is True
 
     def test_explicit_mfid_keyword_uses_canonical_route(self):
         ops = make_ops(InstrumentOperations)
@@ -224,7 +258,7 @@ class TestDeprecatedParameterCompatibility:
         ops = make_ops(DatasetOperations)
         ops._request = MagicMock(return_value={'dataset_id': MFID, 'sample_id': SECOND_MFID})
 
-        ops.add_sample(dataset_mfid=MFID, sample_mfid=SECOND_MFID)
+        ops.link_sample(dataset_mfid=MFID, sample_mfid=SECOND_MFID)
 
         ops._request.assert_called_once_with(
             'post', f'/datasets/{MFID}/samples/{SECOND_MFID}')
@@ -236,9 +270,16 @@ class TestDeprecatedParameterCompatibility:
         with pytest.warns(DeprecationWarning) as warnings:
             ops.add_sample(dataset_id=MFID, sample_id=SECOND_MFID)
 
-        assert len(warnings) == 2
+        assert len(warnings) == 3
         ops._request.assert_called_once_with(
             'post', f'/datasets/{MFID}/samples/{SECOND_MFID}')
+
+    def test_sample_dataset_link_delegates_to_dataset_operation(self):
+        ops = make_ops(SampleOperations)
+
+        ops.link_dataset(sample_mfid=MFID, dataset_mfid=SECOND_MFID)
+
+        ops._client.datasets.link_sample.assert_called_once_with(SECOND_MFID, MFID)
 
     def test_sample_dataset_filter_preserves_old_keyword(self):
         ops = make_ops(SampleOperations)
@@ -248,27 +289,79 @@ class TestDeprecatedParameterCompatibility:
             ops.list(dataset_id=MFID)
 
         ops._paginate.assert_called_once_with(
-            f'/datasets/{MFID}/samples', {}, 100, 0)
+            '/samples', {'dataset_mfid': MFID}, 100, 0)
+
+    def test_dataset_sample_filter_preserves_old_keyword(self):
+        ops = make_ops(DatasetOperations)
+        ops._paginate = MagicMock(return_value=[])
+
+        with pytest.warns(DeprecationWarning, match='sample_mfid'):
+            ops.list(sample_id=MFID)
+
+        ops._paginate.assert_called_once_with(
+            '/datasets', {'sample_mfid': MFID}, 100, 0)
 
     @pytest.mark.parametrize(
-        ('operations_class', 'method_name', 'resource'),
+        ('operations_class', 'method_name', 'verb', 'resource'),
         [
-            (DatasetOperations, 'link_parent_child', 'datasets'),
-            (SampleOperations, 'link', 'samples'),
+            (DatasetOperations, 'link', 'post', 'datasets'),
+            (DatasetOperations, 'unlink', 'delete', 'datasets'),
+            (SampleOperations, 'link', 'post', 'samples'),
+            (SampleOperations, 'unlink', 'delete', 'samples'),
         ],
     )
     def test_relationship_methods_use_role_mfid_parameters(
-            self, operations_class, method_name, resource):
+            self, operations_class, method_name, verb, resource):
         ops = make_ops(operations_class)
         ops._request = MagicMock(return_value={})
 
         getattr(ops, method_name)(parent_mfid=MFID, child_mfid=SECOND_MFID)
 
         ops._request.assert_called_once_with(
-            'post', f'/{resource}/{MFID}/children/{SECOND_MFID}')
+            verb, f'/{resource}/{MFID}/children/{SECOND_MFID}')
 
     @pytest.mark.parametrize(
-        ('operations_class', 'method_name', 'parent_keyword', 'child_keyword', 'resource'),
+        ('operations_class', 'old_method', 'new_method'),
+        [
+            (DatasetOperations, 'link_parent_child', 'link'),
+            (DatasetOperations, 'remove_child', 'unlink'),
+            (DatasetOperations, 'add_sample', 'link_sample'),
+            (DatasetOperations, 'remove_sample', 'unlink_sample'),
+            (SampleOperations, 'remove_child', 'unlink'),
+            (SampleOperations, 'add_dataset', 'link_dataset'),
+            (SampleOperations, 'remove_dataset', 'unlink_dataset'),
+        ],
+    )
+    def test_old_relationship_methods_are_deprecated_wrappers(
+            self, operations_class, old_method, new_method):
+        ops = make_ops(operations_class)
+        canonical = MagicMock(return_value={})
+        setattr(ops, new_method, canonical)
+
+        with pytest.warns(DeprecationWarning, match='deprecated'):
+            getattr(ops, old_method)(MFID, SECOND_MFID)
+
+        canonical.assert_called_once_with(MFID, SECOND_MFID)
+
+    @pytest.mark.parametrize(
+        ('old_method', 'new_method'),
+        [
+            ('add_to_dataset', 'link_dataset'),
+            ('remove_from_dataset', 'unlink_dataset'),
+        ],
+    )
+    def test_legacy_sample_dataset_order_is_preserved(self, old_method, new_method):
+        ops = make_ops(SampleOperations)
+        canonical = MagicMock(return_value={})
+        setattr(ops, new_method, canonical)
+
+        with pytest.warns(DeprecationWarning, match='deprecated'):
+            getattr(ops, old_method)(SECOND_MFID, MFID)
+
+        canonical.assert_called_once_with(MFID, SECOND_MFID)
+
+    @pytest.mark.parametrize(
+        ('operations_class', 'method_name', 'parent_keyword', 'child_keyword', 'resource', 'warning_count'),
         [
             (
                 DatasetOperations,
@@ -276,6 +369,7 @@ class TestDeprecatedParameterCompatibility:
                 'parent_dataset_id',
                 'child_dataset_id',
                 'datasets',
+                3,
             ),
             (
                 DatasetOperations,
@@ -283,6 +377,7 @@ class TestDeprecatedParameterCompatibility:
                 'parent_dataset_mfid',
                 'child_dataset_mfid',
                 'datasets',
+                3,
             ),
             (
                 SampleOperations,
@@ -290,6 +385,7 @@ class TestDeprecatedParameterCompatibility:
                 'parent_id',
                 'child_id',
                 'samples',
+                2,
             ),
             (
                 SampleOperations,
@@ -297,12 +393,13 @@ class TestDeprecatedParameterCompatibility:
                 'parent_sample_mfid',
                 'child_sample_mfid',
                 'samples',
+                2,
             ),
         ],
     )
     def test_deprecated_relationship_keywords_remain_compatible(
             self, operations_class, method_name, parent_keyword,
-            child_keyword, resource):
+            child_keyword, resource, warning_count):
         ops = make_ops(operations_class)
         ops._request = MagicMock(return_value={})
 
@@ -312,7 +409,7 @@ class TestDeprecatedParameterCompatibility:
                 child_keyword: SECOND_MFID,
             })
 
-        assert len(warnings) == 2
+        assert len(warnings) == warning_count
         ops._request.assert_called_once_with(
             'post', f'/{resource}/{MFID}/children/{SECOND_MFID}')
 

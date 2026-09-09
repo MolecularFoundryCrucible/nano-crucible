@@ -37,12 +37,9 @@ def execute(args):
 
         term.header("Whoami")
 
-        first = user.get('first_name', '')
-        last  = user.get('last_name', '')
-        name  = f"{first} {last}".strip() or None
         uid = user.get('unique_id')
         _p("Username", user.get('username') or term.dim('(not set)'))
-        _p("Name",     name)
+        _p("Name",     term.fmt_name(user, fallback_username=False))
         _p(term.user_id_label(uid), term.user_id_link(uid))
         _p("Email",    user.get('email'))
         if user.get('is_service_account'):

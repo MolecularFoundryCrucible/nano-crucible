@@ -124,9 +124,29 @@ class FileOperations(BaseResource):
         logger.info(f"Downloaded {name} to {output_path}")
         return output_path
 
-    def request_ingestion(self, file_id: str,
+
+
+    def _skip_ingestion(self, file_id) -> Dict:
+
+        log_message = f"Skipping ingestion for file {file_id}"
+                   
+        logger.info(log_message)
+        params = {'status': 'not_requested'}
+
+        ingestion_request = self._request('post', f'/files/{file_id}/ingest',
+                                          params=params)
+
+        logger.debug(f"Ingestion request created: id={ingestion_request.get('id')}, "
+                     f"status={ingestion_request.get('status')}")
+        
+        return ingestion_request
+
+
+    def request_ingestion(self,
+                          file_id: str,
                           ingestion_class: Optional[str] = None,
                           wait_for_response: bool = False) -> Dict:
+        
         """Request ingestion of an uploaded file.
 
         Args:
@@ -138,15 +158,14 @@ class FileOperations(BaseResource):
         Returns:
             Dict: IngestionRequest record (id, status, ...)
         """
-        params = {}
+        params = {'status':'requested'}
         if ingestion_class:
             params['ingestion_class'] = ingestion_class
-
+            
         logger.info(f"Requesting ingestion for file {file_id}"
                     + (f" (class={ingestion_class})" if ingestion_class else ""))
 
-        ingestion_request = self._request('post', f'/files/{file_id}/ingest',
-                                          params=params or None)
+        ingestion_request = self._request('post', f'/files/{file_id}/ingest', params=params)
 
         logger.debug(f"Ingestion request created: id={ingestion_request.get('id')}, "
                      f"status={ingestion_request.get('status')}")
@@ -156,6 +175,7 @@ class FileOperations(BaseResource):
 
         return ingestion_request
 
+
     def delete(self, file_id: str) -> None:
         """Delete a file record by its MFID.
 
@@ -163,6 +183,7 @@ class FileOperations(BaseResource):
             file_id: File MFID (AssociatedFile mfid)
         """
         self._request('delete', f'/files/{file_id}')
+
 
     def update(self, file_id: str, **updates) -> Dict:
         """Update fields on a file record.
@@ -175,6 +196,7 @@ class FileOperations(BaseResource):
             Dict: Updated file record.
         """
         return self._parse(self._request('patch', f'/files/{file_id}', json=updates))
+
 
     def get_download_link(self, file_id: str) -> str:
         """Get a signed download URL for a single file.

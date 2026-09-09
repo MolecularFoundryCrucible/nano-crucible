@@ -64,10 +64,12 @@ def _show_deletion_request(record, client=None):
     _p("Status",        term.status_label(record.get('status')))
     _p("Reason",        record.get('reason'))
     _p("Requested",     term.fmt_ts(record.get('request_time')))
-    _p("Requester",     names.get(record.get('requester_id'), record.get('requester_id')))
+    requester_id = record.get('requester_id')
+    _p("Requester",     term.user_link(names.get(requester_id, requester_id), requester_id))
     if record.get('reviewer_notes') or record.get('review_time'):
         _p("Review Time",  term.fmt_ts(record.get('review_time')))
-        _p("Reviewer",     names.get(record.get('reviewer_id'), record.get('reviewer_id')))
+        reviewer_id = record.get('reviewer_id')
+        _p("Reviewer",     term.user_link(names.get(reviewer_id, reviewer_id), reviewer_id))
         _p("Review Notes", record.get('reviewer_notes'))
 
 
@@ -251,7 +253,7 @@ def _execute_list_deleted(args):
 
         term.header(f"Deleted Resources ({len(records)})")
         if not records:
-            print(f"  {term.dim('No records found.')}")
+            print(f"  {term.dim('No deleted resources found.')}")
             return
 
         from .helpers import explorer_url, resolve_usernames
@@ -264,7 +266,10 @@ def _execute_list_deleted(args):
                 r.get('resource_type') or '-',
                 r.get('resource_name') or '-',
                 term.fmt_date(r.get('deleted_at')),
-                names.get(r.get('requester_id'), r.get('requester_id')) or '-',
+                term.user_link(
+                    names.get(r.get('requester_id'), r.get('requester_id')),
+                    r.get('requester_id'),
+                ) or '-',
             )
             for r in records
         ]
@@ -283,7 +288,7 @@ def _execute_get_deleted(args):
         client = CrucibleClient()
         record = client.deletions.get_deleted(args.audit_id)
         _p = term.field_printer(16)
-        from .helpers import explorer_url
+        from .helpers import explorer_url, project_explorer_url
         rid  = record.get('resource_id') or ''
         proj = record.get('project_id')
         rtype = record.get('resource_type')
@@ -291,10 +296,10 @@ def _execute_get_deleted(args):
         _p("Resource ID",    term.mfid_link(rid, explorer_url(rid, proj, rtype)))
         _p("Resource Type",  rtype)
         _p("Resource Name",  record.get('resource_name'))
-        _p("Project",        proj)
+        _p("Project",        term.project_link(proj, project_explorer_url(proj)))
         _p("Deleted At",     term.fmt_ts(record.get('deleted_at')))
-        _p("Requester",      record.get('requester_id'))
-        _p("Reviewer",       record.get('reviewer_id'))
+        _p("Requester",      term.user_id_link(record.get('requester_id')))
+        _p("Reviewer",       term.user_id_link(record.get('reviewer_id')))
         _p("Reason",         record.get('reason'))
         _p("Reviewer Notes", record.get('reviewer_notes'))
 
@@ -309,7 +314,7 @@ def _execute_request(args):
     try:
         client = CrucibleClient()
         record = client.deletions.request(args.resource_id, reason=args.reason)
-        logger.info(f"✓ Deletion request submitted (ID: {record.get('id')})")
+        term.success(f"Deletion request submitted (ID: {record.get('id')})", args)
         print()
         _show_deletion_request(record, client=client)
     except Exception as e:
@@ -349,7 +354,10 @@ def _execute_list(args):
                 record.get('resource_type') or '-',
                 record.get('resource_name') or '-',
                 term.status_label(record.get('status') or ''),
-                names.get(record.get('requester_id'), record.get('requester_id')) or '-',
+                term.user_link(
+                    names.get(record.get('requester_id'), record.get('requester_id')),
+                    record.get('requester_id'),
+                ) or '-',
                 term.fmt_date(record.get('request_time')),
             )
             for record in records
@@ -387,7 +395,7 @@ def _execute_approve(args):
     for rid in args.request_id:
         try:
             record = client.deletions.approve(rid, reviewer_notes=args.notes)
-            logger.info(f"✓ Deletion request {rid} approved")
+            term.success(f"Deletion request {rid} approved", args)
             print()
             _show_deletion_request(record, client=client)
         except Exception as e:
@@ -408,7 +416,7 @@ def _execute_delete(args):
     try:
         client = CrucibleClient()
         result = client.deletions.delete(args.resource_id, force=args.force)
-        logger.info(result.get('detail', f"Resource {args.resource_id} permanently deleted"))
+        term.success(result.get('detail', f"Resource {args.resource_id} permanently deleted"), args)
     except _req.exceptions.HTTPError as e:
         if e.response is not None and e.response.status_code == 409:
             logger.error(f"No approved deletion request for '{args.resource_id}' - "
@@ -439,7 +447,7 @@ def _execute_reject(args):
     for rid in args.request_id:
         try:
             record = client.deletions.reject(rid, reviewer_notes=args.notes)
-            logger.info(f"✓ Deletion request {rid} rejected")
+            term.success(f"Deletion request {rid} rejected", args)
             print()
             _show_deletion_request(record, client=client)
         except Exception as e:

@@ -56,6 +56,35 @@ class BaseResource:
             params['accessible_to_project'] = projects
         return params
 
+    @staticmethod
+    def _project_scope_params(
+        project_id: Optional[str] = None,
+        project_mfid: Optional[str] = None,
+        project_scope: Optional[str] = None,
+    ) -> dict:
+        from ..constants import PROJECT_SCOPES
+        from ..utils.identifiers import is_mfid
+
+        if project_scope is not None and project_id is None and project_mfid is None:
+            raise ValueError("project_scope requires project_id or project_mfid.")
+        if project_scope is not None and project_scope not in PROJECT_SCOPES:
+            raise ValueError(
+                f"project_scope must be one of: {', '.join(PROJECT_SCOPES)}.")
+        if project_id is not None and (
+                not isinstance(project_id, str) or not project_id):
+            raise ValueError("project_id must be a non-empty string.")
+        if project_mfid is not None and not is_mfid(project_mfid):
+            raise ValueError("project_mfid must be an exact 26-character MFID.")
+
+        params = {}
+        if project_id is not None:
+            params['project_id'] = project_id
+        if project_mfid is not None:
+            params['project_mfid'] = project_mfid
+        if project_scope is not None:
+            params['project_scope'] = project_scope
+        return params
+
     def _paginate(self, endpoint: str, params: dict,
                   limit: int = DEFAULT_LIMIT, offset: int = 0) -> list:
         """Fetch all matching records from a paginated envelope endpoint.

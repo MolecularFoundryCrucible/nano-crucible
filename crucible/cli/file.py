@@ -31,7 +31,7 @@ def _status_label(file_record: dict) -> str:
     """Short colored status for a file record: ingested / pending / a non-gcs backend name."""
     backend = file_record.get('storage_backend') or 'gcs'
     if backend != 'gcs':
-        return term.cyan(backend)
+        return backend
     return term.green('ingested') if file_record.get('storage_path') else term.yellow('pending')
 
 
@@ -110,9 +110,14 @@ def _execute_list(args):
             mfid         = f.get('mfid', '')
             dataset_mfid = f.get('dataset_mfid', '')
             status       = _status_label(f)
-            rows.append((term.cyan(name), size, term.dim(mfid), term.dim(dataset_mfid), status))
+            rows.append((name, size, term.cyan(mfid), term.cyan(dataset_mfid), status))
 
-        term.table(rows, ['File', 'Size', 'MFID', 'Dataset', 'Status'], max_widths=[40, 10, 30, 30, 10])
+        term.table(
+            rows,
+            ['File', 'Size', 'MFID', 'Dataset', 'Status'],
+            max_widths=[40, 10, 26, 26, 10],
+            min_widths=[4, 4, 26, 26, 6],
+        )
 
     except Exception as e:
         from .helpers import fail
@@ -144,15 +149,15 @@ def _execute_get(args):
 
         _p = term.field_printer(12)
         term.header("File")
-        _p("MFID",    f.get('mfid'))
-        _p("Dataset", f.get('dataset_mfid'))
+        _p("MFID",    term.cyan(f.get('mfid')) if f.get('mfid') else None)
+        _p("Dataset", term.cyan(f.get('dataset_mfid')) if f.get('dataset_mfid') else None)
         _p("Name",    _bare_name(f))
         _p("Size",    term.fmt_size(f.get('size')))
         _p("SHA256",  f.get('sha256_hash'))
 
         backend = f.get('storage_backend') or 'gcs'
         if backend != 'gcs':
-            _p("Status",   term.cyan(f"Cataloged ({backend})"))
+            _p("Status",   f"Cataloged ({backend})")
             _p("Location", f.get('storage_path') or term.dim("(not set)"))
             if f.get('access_note'):
                 _p("Access note", f['access_note'])
@@ -160,7 +165,7 @@ def _execute_get(args):
             _p("Status", term.green("Ingested"))
             try:
                 url = client.files.get_download_link(args.file_id)
-                _p("Download", term.hyperlink(term.cyan("link"), url))
+                _p("Download", term.navigation_link(_bare_name(f), url))
             except Exception:
                 _p("Download", term.dim("unavailable"))
         else:
@@ -212,7 +217,7 @@ def _execute_download(args):
                 logger.error(f"Failed to download: {e}")
             sys.exit(1)
 
-        print(f"  {term.green('✓')} {output_path}")
+        term.success(f"Downloaded {output_path}", args)
 
     except SystemExit:
         raise
@@ -225,27 +230,43 @@ def _register_delete(subparsers):
     parser = subparsers.add_parser(
         'delete',
         help='Delete a file by MFID',
-        description='Permanently delete a file record and its stored data.',
+        description=(
+            'Permanently delete a file record and its stored data. '
+            'Prompts for confirmation unless -y is given.'
+        ),
         formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     crucible file delete mf_abc123
+    crucible file delete mf_abc123 --yes
 """,
     )
-    parser.add_argument('file_id', metavar='FILE_ID', help='File MFID')
+    parser.add_argument('file_id', metavar='FILE_MFID', help='File MFID')
+    parser.add_argument(
+        '-y', '--yes', action='store_true',
+        help='Confirm deletion without prompting',
+    )
     parser.set_defaults(func=_execute_delete)
 
 
 def _execute_delete(args):
     """Execute 'crucible file delete'."""
     from crucible.client import CrucibleClient
+    from .helpers import prompt_confirm
+    confirmed = args.yes or prompt_confirm(
+        f"Delete file {args.file_id}? This cannot be undone.",
+        option='--yes',
+    )
+    if not confirmed:
+        print("Aborted.")
+        return
     try:
         client = CrucibleClient()
         client.files.delete(args.file_id)
-        print(f"  {term.green('✓')} Deleted {args.file_id}")
+        term.success(f"Deleted {args.file_id}", args)
     except Exception as e:
         from .helpers import fail
-        fail("", e, args)
+        fail("deleting file", e, args)
 
 
 def _register_ingestion(subparsers):

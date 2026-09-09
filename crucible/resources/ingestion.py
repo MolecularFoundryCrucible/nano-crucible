@@ -76,13 +76,15 @@ class IngestionOperations(BaseResource):
                ingestion_githash: Optional[str] = None,
                ingestion_class: Optional[str] = None,
                timezone: str = "America/Los_Angeles") -> Dict:
-        """Update the status of an ingestion request. Admin only.
+        """Update the status of an ingestion request. Requires edit access to the
+        parent dataset.
 
         Args:
             request_id: Ingestion request ID
             status: New status ('complete', 'in_progress', 'failed')
-            ingestion_githash: Git hash of the ingestion worker version
-            ingestion_class: Ingestion class used
+            ingestion_githash: Git hash of the ingestion worker version. Omitted
+                from the request when None, leaving any stored value intact.
+            ingestion_class: Ingestion class used. Omitted when None.
             timezone: Timezone for the completion timestamp
 
         Returns:
@@ -93,9 +95,11 @@ class IngestionOperations(BaseResource):
         patch_json = {
             'id': request_id,
             'status': status,
-            'ingestion_githash': ingestion_githash,
-            'ingestion_class': ingestion_class,
         }
+        if ingestion_githash is not None:
+            patch_json['ingestion_githash'] = ingestion_githash
+        if ingestion_class is not None:
+            patch_json['ingestion_class'] = ingestion_class
         if status == "complete":
             patch_json["time_completed"] = get_tz_isoformat(timezone)
 

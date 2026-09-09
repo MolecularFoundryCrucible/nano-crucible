@@ -12,14 +12,23 @@ Crucible supports links between datasets and between datasets and samples. Links
 
 ```python
 # Link a dataset to a sample
-client.samples.add_dataset(sample_mfid=sample_mfid, dataset_mfid=dataset_mfid)
+client.samples.link_dataset(sample_mfid=sample_mfid, dataset_mfid=dataset_mfid)
 
 # Or equivalently from the dataset side
-client.datasets.add_sample(dataset_mfid=dataset_mfid, sample_mfid=sample_mfid)
+client.datasets.link_sample(dataset_mfid=dataset_mfid, sample_mfid=sample_mfid)
 
 # Remove a link
-client.samples.remove_dataset(sample_mfid=sample_mfid, dataset_mfid=dataset_mfid)
+client.samples.unlink_dataset(sample_mfid=sample_mfid, dataset_mfid=dataset_mfid)
 ```
+
+List the readable resources on either side of the relationship through the canonical collection filters:
+
+```python
+datasets = client.datasets.list(sample_mfid=sample_mfid)
+samples = client.samples.list(dataset_mfid=dataset_mfid)
+```
+
+These methods use cursor pagination and return only related resources the caller may read. The older nested relationship reads remain an API compatibility surface but are not used by current Nano methods.
 
 ---
 
@@ -29,21 +38,45 @@ Use parent-child links to represent processing pipelines:
 
 ```python
 # Establish raw → processed relationship
-client.datasets.link_parent_child(
+client.datasets.link(
     parent_mfid=raw_dataset_mfid,
     child_mfid=processed_dataset_mfid,
+    relationship_type='is_derived_from',   # optional
 )
 
 # Remove it
-client.datasets.remove_child(
+client.datasets.unlink(
     parent_mfid=raw_dataset_mfid,
     child_mfid=processed_dataset_mfid,
 )
 
-# Navigate
+# Navigate, optionally filtering by the kind of link
 parents = client.datasets.list_parents(processed_dataset_mfid)
-children = client.datasets.list_children(raw_dataset_mfid)
+children = client.datasets.list_children(
+    raw_dataset_mfid, relationship_type='is_derived_from')
 ```
+
+---
+
+## Relationship types
+
+Parent-child links — dataset → dataset and sample → sample — can record what
+kind of link they are. The value describes the **child relative to the
+parent**, so a link `(parent=A, child=B, 'is_part_of')` reads "B is_part_of A".
+
+| Value | Meaning |
+| --- | --- |
+| `is_derived_from` | The child was produced from the parent (processing, measurement, synthesis) |
+| `is_part_of` | The child is a component or subset of the parent |
+
+The type is optional. Omitting it leaves the link untyped, which is also how
+every link created before relationship types existed reads. Because the server
+treats a supplied type as an overwrite, re-linking an existing pair **without**
+`relationship_type` preserves whatever type is already stored rather than
+clearing it — pass the new value explicitly to change it.
+
+Dataset ↔ sample associations have no parent-child direction, so they carry no
+relationship type. Passing one raises `ValueError`.
 
 ---
 
@@ -54,10 +87,11 @@ children = client.datasets.list_children(raw_dataset_mfid)
 client.samples.link(
     parent_mfid=boule_sample_mfid,
     child_mfid=wafer_sample_mfid,
+    relationship_type='is_part_of',   # optional
 )
 
 # Remove it
-client.samples.remove_child(
+client.samples.unlink(
     parent_mfid=boule_sample_mfid,
     child_mfid=wafer_sample_mfid,
 )
@@ -77,6 +111,9 @@ If you have two IDs and don't want to look up their types first:
 # Works for dataset-sample, dataset-dataset, or sample-sample pairs
 client.link(dataset_mfid, sample_mfid)
 client.unlink(dataset_mfid, sample_mfid)
+
+# A relationship type may be given for parent-child pairs only
+client.link(parent_mfid, child_mfid, relationship_type='is_derived_from')
 ```
 
 ---
@@ -87,6 +124,8 @@ client.unlink(dataset_mfid, sample_mfid)
 # Returns immediate links for any resource MFID
 links = client.get_links(dataset_mfid)
 ```
+
+Each link exposes `direction` as `source`, `target`, or `undirected`. Nano also retains the legacy `relationship` alias with the corresponding `parent`, `child`, or `associated` value for compatibility with existing applications.
 
 ---
 

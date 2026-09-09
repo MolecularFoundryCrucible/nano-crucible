@@ -104,13 +104,12 @@ def _explorer_url(base_url, project_id, entity_type, uid):
 
 def _id_str(uid, entity_type, project_id, base_url, *, highlight=False):
     url = _explorer_url(base_url, project_id, entity_type, uid)
-    if highlight:
-        return term.hyperlink(term.bold(term.green(uid)), url)
-    return term.hyperlink(term.cyan(uid), url)
+    return term.navigation_link(uid, url, emphasized=highlight)
 
 
 def _print_node(node_id, nodes_by_id, adj, depth, max_depth, visited,
-                project_id, base_url, prefix='', is_last=True):
+                project_id, base_url, link_types, parent_id=None,
+                prefix='', is_last=True):
     node = nodes_by_id.get(node_id)
     if not node:
         return
@@ -123,7 +122,13 @@ def _print_node(node_id, nodes_by_id, adj, depth, max_depth, visited,
     etype = node.get('entity_type', '')
     tag   = term.dim(_TYPE_LABEL.get(etype, '[?]'))
 
-    print(f"{prefix}{connector}{tag} {_id_str(uid, etype, project_id, base_url)}  {name}")
+    # Only a real edge has a relationship_type. When a node was contracted
+    # away, this pair spans several original edges with possibly different
+    # types, so the lookup misses and the annotation is correctly omitted.
+    rel = link_types.get((parent_id, node_id))
+    suffix = f"  {term.dim(rel)}" if rel else ''
+
+    print(f"{prefix}{connector}{tag} {_id_str(uid, etype, project_id, base_url)}  {name}{suffix}")
     visited.add(node_id)
 
     kids = adj.get(node_id, [])
@@ -135,7 +140,7 @@ def _print_node(node_id, nodes_by_id, adj, depth, max_depth, visited,
         return
     for i, kid_id in enumerate(kids):
         _print_node(kid_id, nodes_by_id, adj, depth + 1, max_depth, visited,
-                    project_id, base_url,
+                    project_id, base_url, link_types, parent_id=node_id,
                     prefix=prefix + ext, is_last=(i == len(kids) - 1))
 
 
@@ -165,21 +170,24 @@ def execute(args):
     # Fetch root entity once for project_id (needed for explorer URLs)
     project_id = None
     try:
-        root_ent   = client.get(args.resource_id)
+        root_ent   = client.get(args.resource_id, include_datasets=False)
         project_id = root_ent.get('project_id')
     except Exception:
         pass
     base_url = _cfg.graph_explorer_url if project_id else None
 
     # Raw adjacency + in-degree
-    raw_adj   = {n['id']: [] for n in nodes}
-    in_degree = {n['id']: 0  for n in nodes}
+    raw_adj    = {n['id']: [] for n in nodes}
+    in_degree  = {n['id']: 0  for n in nodes}
+    link_types = {}
     for e in edges:
         s, t = e['source'], e['target']
         if s in raw_adj:
             raw_adj[s].append(t)
         if t in in_degree:
             in_degree[t] += 1
+        if e.get('relationship_type'):
+            link_types[(s, t)] = e['relationship_type']
 
     root_node = nodes_by_id.get(args.resource_id, {})
     root_name = root_node.get('name') or args.resource_id
@@ -251,4 +259,5 @@ def execute(args):
     for i, kid_id in enumerate(kids):
         _print_node(kid_id, nodes_by_id, adj, depth=1, max_depth=args.depth,
                     visited=visited, project_id=project_id, base_url=base_url,
+                    link_types=link_types, parent_id=args.resource_id,
                     prefix='', is_last=(i == len(kids) - 1))

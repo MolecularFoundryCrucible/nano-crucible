@@ -55,6 +55,7 @@ class Config:
     def __init__(self):
         """Initialize and load configuration."""
         self._data = {}
+        self._sources = {}
         self._client = None
         self._load()
 
@@ -65,6 +66,7 @@ class Config:
             env_value = os.environ.get(mapping['env'])
             if env_value is not None:
                 self._data[key] = env_value
+                self._sources[key] = 'environment'
 
         # 2. Load from INI config file
         config_file = self.config_file_path
@@ -89,6 +91,7 @@ class Config:
 
                 if value is not None:
                     self._data[key] = value
+                    self._sources[key] = 'config file'
 
         return
 
@@ -171,7 +174,7 @@ class Config:
     @property
     def current_project(self):
         """
-        Get the current/default project ID.
+        Get the current project ID.
 
         Returns:
             str or None: The current project ID if configured, None otherwise
@@ -181,11 +184,17 @@ class Config:
     @property
     def current_session(self):
         """
-        Get the current/default session name.
+        Return the deprecated default session name.
 
         Returns:
             str or None: The current session name if configured, None otherwise
         """
+        import warnings
+        warnings.warn(
+            "'current_session' is deprecated and is no longer used by the interactive shell.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         return self._data.get('current_session') or None
 
     @property
@@ -288,8 +297,13 @@ class Config:
     def reload(self):
         """Reload configuration from all sources."""
         self._data.clear()
+        self._sources.clear()
         self._client = None
         self._load()
+
+    def source(self, key):
+        """Return the source of an effective configuration value."""
+        return self._sources.get(key)
 
 
 # Global singleton config instance
@@ -361,7 +375,7 @@ def get_graph_explorer_url():
 
 def get_current_project():
     """
-    Get the current/default project ID from configuration.
+    Get the current project ID from configuration.
 
     Priority order:
     1. CRUCIBLE_CURRENT_PROJECT environment variable
@@ -408,7 +422,7 @@ def create_config_file(api_key, api_url=None, cache_dir=None,
         api_url (str, optional): Custom API URL
         cache_dir (str, optional): Custom cache directory path
         graph_explorer_url (str, optional): Graph Explorer URL
-        current_project (str, optional): Default project ID
+        current_project (str, optional): Current project ID
         editor (str, optional): Preferred editor command
         connect_timeout (int, optional): TCP connect timeout in seconds
         read_timeout (int, optional): HTTP read timeout in seconds
@@ -441,7 +455,7 @@ def create_config_file(api_key, api_url=None, cache_dir=None,
         f.write("# Crucible Graph Explorer URL\n")
         f.write(f"graph_explorer_url = {graph_explorer_url or default_graph_explorer_url}\n\n")
 
-        f.write("# Default project ID (leave commented out to prompt each time)\n")
+        f.write("# Current project ID (leave commented out to prompt each time)\n")
         if current_project is not None:
             f.write(f"current_project = {current_project}\n")
         else:

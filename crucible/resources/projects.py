@@ -10,7 +10,7 @@ import logging
 from typing import Optional, List, Dict, Sequence, Union
 from .base import BaseResource
 from .capabilities import AccessControlMixin, OwnershipMixin
-from ..constants import DEFAULT_LIMIT
+from ..constants import DEFAULT_LIMIT, PROJECT_MEMBER_ROLES
 from ..models import Project, ProjectMember
 from ..utils.deprecation import _deprecated_parameter
 from ..utils.identifiers import (
@@ -185,9 +185,13 @@ class ProjectOperations(OwnershipMixin, AccessControlMixin, BaseResource):
             >>> result = client.projects.create(project)
         """
         if isinstance(project, Project):
-            project_details = project.model_dump(exclude_none=True)
+            project_details = project.model_dump(
+                exclude={'capabilities'},
+                exclude_none=True,
+            )
         else:
             project_details = dict(project)
+            project_details.pop('capabilities', None)
 
         validate_slug(project_details.get('project_id'), 'project')
 
@@ -251,12 +255,21 @@ class ProjectOperations(OwnershipMixin, AccessControlMixin, BaseResource):
         """
         if kwargs.get('project_id') is not None:
             validate_slug(kwargs['project_id'], 'project')
+        if 'capabilities' in kwargs:
+            raise ValueError("Project capabilities are response-only.")
         return self._request('patch', f'/projects/{proj_id}', json=kwargs)
 
     @staticmethod
     def _parse_members(raw) -> List[ProjectMember]:
         """Validate a project member list returned by a mutation endpoint."""
         return [ProjectMember.model_validate(member) for member in raw]
+
+    @staticmethod
+    def _validate_member_role(role: str) -> str:
+        if role not in PROJECT_MEMBER_ROLES:
+            allowed = ', '.join(PROJECT_MEMBER_ROLES)
+            raise ValueError(f"Project member role must be one of: {allowed}.")
+        return role
 
     def _resolve_member_unique_id(self, user_unique_id: Optional[str] = None,
                                   email: Optional[str] = None,
@@ -283,7 +296,8 @@ class ProjectOperations(OwnershipMixin, AccessControlMixin, BaseResource):
                     username: Optional[str] = None) -> List[ProjectMember]:
         """Remove a user from a project.
 
-        **Requires admin permissions.**
+        Project owners and platform administrators may remove members. A member
+        may also remove themselves.
 
         Email and username inputs are resolved before the canonical membership request.
 
@@ -306,9 +320,11 @@ class ProjectOperations(OwnershipMixin, AccessControlMixin, BaseResource):
                 role: Optional[str] = None) -> List[ProjectMember]:
         """Add a user to a project.
 
-        **Requires editor or above in the project.** You may only grant a role
-        at or below your own - an editor can seat a contributor but never an
-        admin. Cannot seat someone as owner (use transfer_ownership() instead).
+        **Requires editor or above in the project.** The granted role must be
+        strictly below the caller's role. Editors may grant contributor or
+        viewer, admins may also grant editor, and owners may also grant admin.
+        Platform administrators retain their bypass. Ownership changes use
+        transfer_ownership().
 
         Email and username inputs are resolved before the canonical membership request.
 
@@ -323,7 +339,7 @@ class ProjectOperations(OwnershipMixin, AccessControlMixin, BaseResource):
             List[ProjectMember]: Updated list of project users
         """
         canonical_id = self._resolve_member_unique_id(user_unique_id, email, username)
-        params = {'role': role} if role else {}
+        params = {'role': self._validate_member_role(role)} if role is not None else {}
         raw = self._request(
             'post', f'/projects/{project_id}/users/{canonical_id}', params=params)
         return self._parse_members(raw)
@@ -333,10 +349,10 @@ class ProjectOperations(OwnershipMixin, AccessControlMixin, BaseResource):
                          role: str) -> List[ProjectMember]:
         """Change a member's role in a project.
 
-        **Requires editor or above in the project.** The cap binds on both
-        ends: you may not grant a role above your own, nor change a member who
-        already holds one above your own. Cannot touch owner standing at all
-        (use transfer_ownership() instead).
+        **Requires editor or above in the project.** Both the member's current
+        role and their requested role must be strictly below the caller's role.
+        Platform administrators retain their bypass. Ownership changes use
+        transfer_ownership().
 
         Args:
             project_id (str): Unique project identifier
@@ -346,6 +362,7 @@ class ProjectOperations(OwnershipMixin, AccessControlMixin, BaseResource):
         Returns:
             List[ProjectMember]: Updated list of project users
         """
+        role = self._validate_member_role(role)
         raw = self._request(
             'patch', f'/projects/{project_id}/users/{user_unique_id}',
             params={'role': role})

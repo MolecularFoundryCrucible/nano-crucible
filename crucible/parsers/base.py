@@ -27,13 +27,15 @@ class BaseParser:
                  metadata=None, keywords=None, mfid=None,
                  measurement=None, dataset_name=None,
                  session_name=None, public=False, instrument_name=None,
-                 data_format=None, data_type=None, timestamp=None):
+                 data_format=None, data_type=None, timestamp=None,
+                 project_mfid=None, instrument_id=None, instrument_mfid=None):
         """
         Initialize the parser with dataset properties.
 
         Args:
             files_to_upload (str, list, or None): File(s) to upload. Can be a single file path (str) or list of file paths
             project_id (str, optional): Crucible project ID
+            project_mfid (str, optional): Canonical Crucible project MFID
             metadata (dict, str, or Path, optional): Scientific metadata as dict or path to JSON file
             keywords (list, optional): Keywords for the dataset
             mfid (str, optional): Unique dataset identifier
@@ -42,6 +44,8 @@ class BaseParser:
             session_name (str, optional): Session name for grouping datasets
             public (bool, optional): Whether dataset is public. Defaults to False.
             instrument_name (str, optional): Instrument name
+            instrument_id (str, optional): Registered instrument ID
+            instrument_mfid (str, optional): Canonical registered instrument MFID
             data_format (str, optional): Data format type
         """
         # Use parser's defaults if not provided
@@ -62,6 +66,7 @@ class BaseParser:
 
         # Dataset properties
         self.project_id      = project_id
+        self.project_mfid    = project_mfid
         self.files_to_upload = files_to_upload
         self.mfid            = mfid
         self.measurement     = measurement
@@ -71,6 +76,8 @@ class BaseParser:
         self.owner_orcid     = owner_orcid
         self.public          = public
         self.instrument_name = instrument_name
+        self.instrument_id   = instrument_id
+        self.instrument_mfid = instrument_mfid
         self.data_format     = data_format
         self.data_type       = data_type
         self.thumbnail       = None
@@ -244,12 +251,15 @@ class BaseParser:
             unique_id      = self.mfid,
             measurement    = self.measurement,
             project_id     = self.project_id,
+            project_mfid   = self.project_mfid,
             owner_orcid    = self.owner_orcid,  # API key handles user authentication
             dataset_name   = self.dataset_name,
             session_name   = self.session_name,
             timestamp      = self.timestamp,
             public         = self.public,
             instrument_name = self.instrument_name,
+            instrument_id   = self.instrument_id,
+            instrument_mfid = self.instrument_mfid,
             data_format    = self.data_format,
             data_type      = self.data_type,
         )

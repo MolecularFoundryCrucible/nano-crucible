@@ -392,10 +392,10 @@ class CastExecutor:
 
     def _apply_link(self, link: Link, src_id: str, tgt_id: str, client):
         if link.kind == 'dataset_child':
-            client.datasets.link_parent_child(src_id, tgt_id)
+            client.datasets.link(src_id, tgt_id)
             logger.info(f"Linked dataset parent {src_id} -> child {tgt_id}")
         elif link.kind == 'dataset_sample':
-            client.datasets.add_sample(src_id, tgt_id)
+            client.datasets.link_sample(src_id, tgt_id)
             logger.info(f"Linked dataset {src_id} <-> sample {tgt_id}")
         elif link.kind == 'sample_child':
             client.samples.link(src_id, tgt_id)

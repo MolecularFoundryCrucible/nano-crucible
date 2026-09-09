@@ -42,7 +42,7 @@ def register_subcommand(subparsers):
     )
     clear_p.add_argument(
         '-y', '--yes', action='store_true',
-        help='Skip confirmation prompt'
+        help='Confirm removal without prompting'
     )
     clear_p.set_defaults(func=_execute_clear)
 
@@ -159,6 +159,7 @@ def _execute_show(args):
 
 def _execute_clear(args):
     from crucible.config import config
+    from .helpers import prompt_confirm
     cache_dir = config.cache_dir
     datasets_dir = os.path.join(cache_dir, 'datasets')
 
@@ -169,13 +170,15 @@ def _execute_clear(args):
             logger.error(f"Dataset '{args.dataset}' not found in cache.")
             return
         size = _dir_size(target)
-        if not args.yes:
-            confirm = input(f"Remove {args.dataset} ({_human(size)}) from cache? [y/N] ")
-            if confirm.strip().lower() != 'y':
-                logger.info("Aborted.")
-                return
+        confirmed = args.yes or prompt_confirm(
+            f"Remove {args.dataset} ({_human(size)}) from cache?",
+            option='--yes',
+        )
+        if not confirmed:
+            logger.info("Aborted.")
+            return
         shutil.rmtree(target)
-        logger.info(f"✓ Removed {args.dataset} ({_human(size)})")
+        term.success(f"Removed {args.dataset} ({_human(size)})", args)
         return
 
     # --- older-than filter ---
@@ -192,26 +195,28 @@ def _execute_clear(args):
             logger.info(f"No cached datasets older than {args.older_than} day(s).")
             return
         total = sum(_dir_size(e.path) for e in targets)
-        if not args.yes:
-            confirm = input(
-                f"Remove {len(targets)} dataset(s) not accessed in {args.older_than}+ days "
-                f"({_human(total)})? [y/N] "
-            )
-            if confirm.strip().lower() != 'y':
-                logger.info("Aborted.")
-                return
+        confirmed = args.yes or prompt_confirm(
+            f"Remove {len(targets)} dataset(s) not accessed in "
+            f"{args.older_than}+ days ({_human(total)})?",
+            option='--yes',
+        )
+        if not confirmed:
+            logger.info("Aborted.")
+            return
         for entry in targets:
             shutil.rmtree(entry.path)
-        logger.info(f"✓ Removed {len(targets)} dataset(s) ({_human(total)})")
+        term.success(f"Removed {len(targets)} dataset(s) ({_human(total)})", args)
         return
 
     # --- clear everything ---
     total = _dir_size(cache_dir)
-    if not args.yes:
-        confirm = input(f"Clear entire cache at {cache_dir} ({_human(total)})? [y/N] ")
-        if confirm.strip().lower() != 'y':
-            logger.info("Aborted.")
-            return
+    confirmed = args.yes or prompt_confirm(
+        f"Clear entire cache at {cache_dir} ({_human(total)})?",
+        option='--yes',
+    )
+    if not confirmed:
+        logger.info("Aborted.")
+        return
     shutil.rmtree(cache_dir)
     os.makedirs(cache_dir, exist_ok=True)
-    logger.info(f"✓ Cache cleared ({_human(total)} freed)")
+    term.success(f"Cache cleared ({_human(total)} freed)", args)

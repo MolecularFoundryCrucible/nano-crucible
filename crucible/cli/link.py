@@ -18,6 +18,8 @@ logger = logging.getLogger(__name__)
 
 def register_subcommand(subparsers):
     """Register the link subcommand."""
+    from crucible.constants import RELATIONSHIP_TYPES
+
     parser = subparsers.add_parser(
         'link',
         help='Link Crucible resources (datasets, samples)',
@@ -33,6 +35,9 @@ Examples:
 
     # Link sample to dataset
     crucible link -d DATASET_MFID -s SAMPLE_MFID
+
+    # Record what kind of link it is (parent-child links only)
+    crucible link -p PARENT_MFID -c CHILD_MFID --relationship-type is_part_of
 """
     )
 
@@ -62,6 +67,15 @@ Examples:
         help='Sample MFID'
     )
 
+    parser.add_argument(
+        '--relationship-type',
+        choices=RELATIONSHIP_TYPES,
+        metavar='TYPE',
+        help=f"Kind of link, describing the child relative to the parent "
+             f"({', '.join(RELATIONSHIP_TYPES)}). Only applies to "
+             f"dataset-to-dataset and sample-to-sample links."
+    )
+
     parser.set_defaults(func=execute)
 
 
@@ -71,7 +85,14 @@ def execute(args):
 
     # Determine parent and child IDs
     if args.dataset and args.sample:
-        # Case 1: Explicit dataset + sample flags
+        # Case 1: Explicit dataset + sample flags. The pair is known here
+        # without a lookup, so reject the type now rather than after two
+        # round trips inside client.link().
+        if args.relationship_type:
+            logger.error(
+                "--relationship-type does not apply when linking a sample to a "
+                "dataset; it is only meaningful for -p/--parent with -c/--child.")
+            sys.exit(1)
         parent_id = args.dataset
         child_id = args.sample
         logger.info(f"Linking sample '{child_id}' to dataset '{parent_id}'...")
@@ -87,8 +108,8 @@ def execute(args):
 
     # Use the unified link method
     try:
-        CrucibleClient().link(parent_id, child_id)
-        logger.info("Successfully linked resources")
+        CrucibleClient().link(parent_id, child_id, args.relationship_type)
+        term.success("Linked resources", args)
     except Exception as e:
         logger.error(f"Failed to link resources: {e}")
         sys.exit(1)

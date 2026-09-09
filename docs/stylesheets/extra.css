@@ -45,11 +45,3 @@
 .md-grid {
   max-width: 1440px;
 }
-
-/* Keep the navigation tabs pinned below the header while scrolling.
- * navigation.tabs.sticky is Insiders-only, so we replicate it in CSS. */
-.md-tabs {
-  position: sticky;
-  top: 2.4rem;
-  z-index: 4;
-}

@@ -65,19 +65,30 @@ def execute(args):
         url = graph_explorer_url
     else:
         try:
-            resource = config.client.get(mfid)
+            resource = config.client.get(mfid, include_datasets=False)
         except Exception as e:
             logger.error(f"Resource '{mfid}' not found: {e}")
             sys.exit(1)
 
-        resource_type = resource.get("resource_type")
-        dtype = "samples" if resource_type == "sample" else "datasets"
-        project_id = resource.get("project_id")
-        if not project_id:
-            logger.error(f"Resource '{mfid}' has no project_id")
+        from .helpers import (
+            explorer_url,
+            instrument_explorer_url,
+            project_explorer_url,
+            project_reference,
+        )
+        resource_type = resource.get('resource_type')
+        if resource_type == 'instrument':
+            url = instrument_explorer_url(mfid)
+        elif resource_type == 'project':
+            url = project_explorer_url(resource.get('project_id'))
+        elif resource_type in ('dataset', 'sample'):
+            _, project_id, _ = project_reference(resource)
+            url = explorer_url(mfid, project_id, resource_type)
+        else:
+            url = None
+        if not url:
+            logger.error(f"Resource '{mfid}' has no supported Explorer route")
             sys.exit(1)
-
-        url = f"{graph_explorer_url}/{project_id}/{dtype}/{mfid}"
 
     if args.print_url:
         # Just print the URL for scripting

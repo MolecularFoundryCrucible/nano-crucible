@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Top-level get subcommand — retrieve any resource by MFID.
+Top-level get subcommand - retrieve any resource by MFID.
 
-Automatically detects whether the ID refers to a dataset or sample
-and delegates to the appropriate display function.
+Automatically detects the resource type and delegates to its display function.
 """
 
 import sys
@@ -20,13 +19,13 @@ def register_subcommand(subparsers):
     parser = subparsers.add_parser(
         'get',
         help='Get a resource by MFID (auto-detects type)',
-        description='Retrieve a dataset or sample — resource type is detected automatically.',
+        description='Retrieve a dataset, sample, project, or instrument by MFID with automatic type detection.',
         formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     crucible get 0td7evvtg5wb90005k1j97ak94
     crucible get 0td7evvtg5wb90005k1j97ak94 -v
-    crucible get 0td7evvtg5wb90005k1j97ak94 --graph
+    crucible get 0td7evvtg5wb90005k1j97ak94 --no-graph
     crucible get 0td7evvtg5wb90005k1j97ak94 --include-metadata
 """
     )
@@ -34,7 +33,7 @@ Examples:
     parser.add_argument(
         'resource_id',
         metavar='MFID',
-        help='Resource MFID (dataset or sample)'
+        help='Dataset, sample, project, or instrument MFID'
     )
     parser.add_argument(
         '-v', '--verbose',
@@ -84,7 +83,8 @@ def execute(args):
     try:
         client   = CrucibleClient()
         resource = client.get(args.resource_id, include_metadata=include_metadata,
-                              include_links=graph, include_owner=True)
+                              include_links=graph, include_owner=True,
+                              include_datasets=output == 'json')
         if resource is None:
             logger.error(f"Resource not found: {args.resource_id}")
             sys.exit(1)
@@ -118,6 +118,13 @@ def execute(args):
                 print(json.dumps(resource, indent=2, default=str))
             else:
                 _show_instrument(resource, include_metadata=include_metadata)
+
+        elif resource_type == 'project':
+            from .project import _show_project
+            if output == 'json':
+                print(json.dumps(resource, indent=2, default=str))
+            else:
+                _show_project(resource, include_metadata=include_metadata)
 
         else:
             logger.error(f"Unknown resource type '{resource_type}' for: {args.resource_id}")

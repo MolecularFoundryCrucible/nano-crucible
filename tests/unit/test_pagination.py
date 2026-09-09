@@ -6,6 +6,8 @@ import pytest
 
 from crucible.constants import API_PAGE_MAX
 from crucible.resources.base import BaseResource
+from crucible.resources.datasets import DatasetOperations
+from crucible.resources.samples import SampleOperations
 
 
 def make_resource():
@@ -93,3 +95,52 @@ def test_negative_limit_is_rejected():
         resource._paginate('/users', {}, limit=-1)
 
     request.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ('operations_class', 'filter_name', 'endpoint'),
+    [
+        (DatasetOperations, 'sample_mfid', '/datasets'),
+        (SampleOperations, 'dataset_mfid', '/samples'),
+    ],
+)
+def test_relationship_filters_follow_collection_cursors(
+        operations_class, filter_name, endpoint):
+    client = MagicMock()
+    client._request.side_effect = [
+        {
+            'items': records(0, API_PAGE_MAX),
+            'next_cursor': 'relationship-page-2',
+        },
+        {
+            'items': records(API_PAGE_MAX, 1),
+            'next_cursor': None,
+        },
+    ]
+    operations = operations_class(client)
+
+    result = operations.list(
+        **{filter_name: '0tkn2knjast3h0008nyq9zps2c'},
+        limit=API_PAGE_MAX + 1,
+    )
+
+    assert client._request.call_args_list == [
+        call(
+            'get',
+            endpoint,
+            params={
+                filter_name: '0tkn2knjast3h0008nyq9zps2c',
+                'limit': API_PAGE_MAX,
+            },
+        ),
+        call(
+            'get',
+            endpoint,
+            params={
+                filter_name: '0tkn2knjast3h0008nyq9zps2c',
+                'limit': 1,
+                'cursor': 'relationship-page-2',
+            },
+        ),
+    ]
+    assert len(result) == API_PAGE_MAX + 1

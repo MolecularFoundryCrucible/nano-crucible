@@ -8,31 +8,371 @@ shell, keybindings, etc.) and don't belong in term.py (display-only) or
 shell.py (which would create circular imports).
 """
 
+import argparse
+import json
+import logging
 import re
 import sys
-import logging
 from concurrent.futures import ThreadPoolExecutor
+
 from ..utils.identifiers import MFID_PATTERN, classify_user_reference
 
 logger = logging.getLogger(__name__)
 
 _MFID_RE = MFID_PATTERN
+_NO_DEFAULT = object()
+
+
+class DeprecatedAliasAction(argparse.Action):
+    """Store an option value and warn when a deprecated spelling was used."""
+
+    def __init__(self, option_strings, dest, deprecated_options=(), replacement=None, **kwargs):
+        self.deprecated_options = set(deprecated_options)
+        self.replacement = replacement
+        super().__init__(option_strings, dest, **kwargs)
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        if option_string in self.deprecated_options:
+            from . import term
+
+            label = term.yellow('Warning:', stream=sys.stderr)
+            print(
+                f"{label} {option_string} is deprecated; use {self.replacement} instead.",
+                file=sys.stderr,
+            )
+        setattr(namespace, self.dest, values)
+
+
+def _error_details(error):
+    response = getattr(error, 'response', None)
+    if response is None:
+        return None, None, []
+
+    status = getattr(response, 'status_code', None)
+    reason = getattr(response, 'reason', None)
+    detail = None
+    try:
+        payload = response.json()
+        if isinstance(payload, dict):
+            detail = payload.get('detail') or payload.get('message') or payload.get('error')
+        elif payload:
+            detail = payload
+    except (ValueError, AttributeError):
+        text = getattr(response, 'text', '').strip()
+        detail = text or None
+
+    items = detail if isinstance(detail, list) else [detail] if detail is not None else []
+    details = []
+    for item in items:
+        if isinstance(item, dict):
+            location = item.get('loc') or []
+            if isinstance(location, (str, int)):
+                location = [location]
+            location = [str(part) for part in location if part not in ('body', 'query', 'path')]
+            entry = {'message': str(item.get('msg') or item.get('message') or item)}
+            if location:
+                entry['field'] = '.'.join(location)
+            if item.get('type'):
+                entry['type'] = str(item['type'])
+            details.append(entry)
+        else:
+            details.append({'message': str(item)})
+    return status, reason, details
+
+
+def format_cli_error(action: str, error: Exception) -> dict:
+    import requests
+
+    status, reason, details = _error_details(error)
+    if status is not None:
+        error_type = 'http_error'
+    elif isinstance(error, requests.exceptions.Timeout):
+        error_type = 'timeout'
+        reason = 'Request timed out'
+    elif isinstance(error, requests.exceptions.ConnectionError):
+        error_type = 'connection_error'
+        reason = 'Connection failed'
+    else:
+        error_type = type(error).__name__
+
+    if not details and str(error):
+        details = [{'message': str(error)}]
+
+    result = {
+        'type': error_type,
+        'message': f"Failed while {action}." if action else 'Command failed.',
+        'details': details,
+    }
+    if status is not None:
+        result['status'] = status
+    if reason:
+        result['reason'] = str(reason)
+    return result
+
+
+def print_cli_error(data: dict, as_json: bool = False) -> None:
+    from . import term
+
+    if as_json:
+        print(json.dumps({'error': data}, default=str), file=sys.stderr)
+        return
+
+    title = 'Error'
+    if data.get('status') is not None:
+        title += f" {data['status']}"
+    if data.get('reason'):
+        title += f" {data['reason']}"
+    print(term.red(title, stream=sys.stderr), file=sys.stderr)
+    print(data['message'], file=sys.stderr)
+
+    details = data.get('details') or []
+    if details:
+        print(file=sys.stderr)
+        field_width = max((len(item.get('field', '')) for item in details), default=0)
+        for item in details:
+            field = item.get('field')
+            message = item.get('message', '')
+            if field:
+                label = term.bold(field.ljust(field_width), stream=sys.stderr)
+                print(f"  {label}  {message}", file=sys.stderr)
+            else:
+                print(f"  {message}", file=sys.stderr)
+
+
+def show_warning(message) -> None:
+    from . import term
+
+    label = term.yellow('Warning:', stream=sys.stderr)
+    print(f"{label} {message}", file=sys.stderr)
+
+
+def add_relationship_type_filter(parser) -> None:
+    """Add the --relationship-type filter to a parent/child listing command."""
+    from ..constants import RELATIONSHIP_TYPES
+
+    parser.add_argument(
+        '--relationship-type',
+        choices=RELATIONSHIP_TYPES,
+        metavar='TYPE',
+        help=f"Only show links of this kind ({', '.join(RELATIONSHIP_TYPES)}). "
+             f"Untyped links are excluded when this is set."
+    )
+
+
+def format_relationship_type(link) -> str:
+    """Render a link's relationship_type as a dim trailing annotation.
+
+    Links created before typing existed carry no type, so show a dim dash
+    rather than dropping the column and making the rows ragged.
+    """
+    from . import term
+
+    return term.dim(link.get('relationship_type') or '—')
+
+
+def _interactive_stdin() -> bool:
+    return hasattr(sys.stdin, 'isatty') and sys.stdin.isatty()
+
+
+def _prompt_unavailable(label: str, option: str = None) -> None:
+    from . import term
+
+    message = f"Cannot prompt for {label.lower()} because stdin is not interactive."
+    if option:
+        message += f" Provide {option}."
+    print(term.red('Error', stream=sys.stderr), file=sys.stderr)
+    print(message, file=sys.stderr)
+    raise SystemExit(2)
+
+
+def _prompt_value(label: str, *, optional: bool = False, default=_NO_DEFAULT,
+                  validator=None, option: str = None, secret: bool = False,
+                  hint: str = None):
+    from . import term
+
+    if not _interactive_stdin():
+        if default is not _NO_DEFAULT:
+            value = str(default)
+            try:
+                return validator(value) if validator else value
+            except ValueError as error:
+                print(term.red('Invalid value', stream=sys.stderr), file=sys.stderr)
+                print(str(error), file=sys.stderr)
+                if option:
+                    print(f"Provide {option} to override the configured default.", file=sys.stderr)
+                raise SystemExit(2)
+        if optional:
+            return None
+        _prompt_unavailable(label, option)
+
+    if default is not _NO_DEFAULT:
+        suffix = term.dim(f" [{default}]")
+    elif optional:
+        detail = f"optional; {hint}" if hint else "optional"
+        suffix = term.dim(f" ({detail})")
+    else:
+        suffix = term.dim(" (required)")
+    if hint and not optional:
+        suffix += term.dim(f" ({hint})")
+    prompt = f"{term.bold(label)}{suffix}: "
+
+    reader = input
+    if secret:
+        import getpass
+        reader = getpass.getpass
+
+    while True:
+        try:
+            value = reader(prompt).strip()
+        except EOFError:
+            _prompt_unavailable(label, option)
+        if not value:
+            if default is not _NO_DEFAULT:
+                value = str(default)
+            if optional:
+                return None
+            elif default is _NO_DEFAULT:
+                error = ValueError(f"{label} is required.")
+                print(term.red('Invalid value', stream=sys.stderr), file=sys.stderr)
+                print(str(error), file=sys.stderr)
+                continue
+        if value:
+            try:
+                return validator(value) if validator else value
+            except ValueError as validation_error:
+                error = validation_error
+
+        print(term.red('Invalid value', stream=sys.stderr), file=sys.stderr)
+        print(str(error), file=sys.stderr)
+
+
+def prompt_required(label: str, validator=None, option: str = None):
+    return _prompt_value(label, validator=validator, option=option)
+
+
+def prompt_optional(label: str, validator=None, default=_NO_DEFAULT,
+                    option: str = None, hint: str = None):
+    return _prompt_value(
+        label,
+        optional=default is _NO_DEFAULT,
+        default=default,
+        validator=validator,
+        option=option,
+        hint=hint,
+    )
+
+
+def prompt_secret(label: str, option: str = None) -> str:
+    return _prompt_value(label, option=option, secret=True)
+
+
+def prompt_choice(label: str, choices, default=_NO_DEFAULT, option: str = None) -> str:
+    allowed = tuple(choices)
+
+    def validate(value):
+        normalized = value.lower()
+        if normalized not in allowed:
+            raise ValueError(f"{label} must be one of: {', '.join(allowed)}.")
+        return normalized
+
+    return _prompt_value(
+        label,
+        default=default,
+        validator=validate,
+        option=option,
+        hint='/'.join(allowed),
+    )
+
+
+def prompt_confirm(message: str, *, default: bool = False, option: str = None) -> bool:
+    from . import term
+
+    if not _interactive_stdin():
+        _prompt_unavailable('confirmation', option)
+
+    hint = '[Y/n]' if default else '[y/N]'
+    prompt = f"{term.yellow(message)} {term.dim(hint)} "
+    while True:
+        try:
+            response = input(prompt).strip().lower()
+        except EOFError:
+            _prompt_unavailable('confirmation', option)
+        if not response:
+            return default
+        if response in ('y', 'yes'):
+            return True
+        if response in ('n', 'no'):
+            return False
+        print(term.red('Invalid response', stream=sys.stderr), file=sys.stderr)
+        print("Enter 'yes' or 'no'.", file=sys.stderr)
+
+
+def prompt_username(label: str = 'Username') -> str:
+    from ..utils.identifiers import validate_username
+
+    return prompt_required(label, validator=validate_username, option='--username')
+
+
+def validate_email(value: str) -> str:
+    email = value.strip().lower()
+    if not re.fullmatch(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', email):
+        raise ValueError("Email must be a valid address such as user@example.org.")
+    return email
+
+
+def validate_user_reference(value: str) -> str:
+    _, normalized = classify_user_reference(value)
+    return normalized
+
+
+def validate_mfid(value: str) -> str:
+    from ..utils.identifiers import validate_mfid as validate
+
+    return validate(value)
+
+
+def validate_orcid(value: str) -> str:
+    from ..utils.identifiers import is_orcid
+
+    if not is_orcid(value):
+        raise ValueError("ORCID must use the canonical 0000-0000-0000-000X format.")
+    return value
+
+
+def validate_project_ids(value: str) -> str:
+    from ..utils.identifiers import validate_slug
+
+    project_ids = [item.strip() for item in value.split(',') if item.strip()]
+    if not project_ids:
+        raise ValueError("Provide at least one project ID.")
+    for project_id in project_ids:
+        validate_slug(project_id, 'project')
+    return ','.join(project_ids)
+
+
+def validate_http_url(value: str) -> str:
+    from urllib.parse import urlparse
+
+    parsed = urlparse(value)
+    if parsed.scheme not in ('http', 'https') or not parsed.netloc:
+        raise ValueError("URL must be an absolute HTTP or HTTPS URL.")
+    return value.rstrip('/')
+
+
+def install_warning_formatter() -> None:
+    import warnings
+
+    def showwarning(message, category, filename, lineno, file=None, line=None):
+        show_warning(message)
+
+    warnings.showwarning = showwarning
 
 
 def fail(action: str, error: Exception, args=None) -> None:
-    """Log a CLI error and exit(1), printing a traceback if --debug was passed.
-
-    `action` is the same trailing text every _execute_* function already
-    writes by hand, e.g. fail("deleting dataset", e, args) logs
-    "Error deleting dataset: <e>". Pass action="" for the bare "Error: <e>" form.
-
-    `args` may be an argparse Namespace (checks args.debug) or a plain bool
-    (some helpers like _edit_dataset take a bare `debug` flag, not the full
-    Namespace) — pass whichever is in scope at the call site.
-
-    Never returns — exits the process, same as every call site did manually.
-    """
-    logger.error(f"Error {action}: {error}" if action else f"Error: {error}")
+    """Display a structured CLI error and exit with status 1."""
+    data = format_cli_error(action, error)
+    as_json = not isinstance(args, bool) and getattr(args, 'json', False)
+    print_cli_error(data, as_json=as_json)
     debug = args if isinstance(args, bool) else getattr(args, 'debug', False)
     if debug:
         import traceback
@@ -125,26 +465,6 @@ def fetch_service_accounts(client):
         return None
 
 
-def fetch_instruments(client):
-    """Return [(instrument_id, instrument_name, unique_id), ...] for instruments.
-
-    Instruments are a small, globally-readable set (not admin-gated),
-    so fetch-all-once is appropriate here rather than live search.
-    """
-    try:
-        return [
-            (
-                i.get('instrument_id') or '',
-                i.get('instrument_name') or '',
-                i.get('unique_id') or '',
-            )
-            for i in client.instruments.list()
-            if i.get('instrument_id') and i.get('unique_id')
-        ]
-    except Exception:
-        return []
-
-
 def resolve_usernames(client, orcids):
     """Batch-resolve ORCIDs to usernames. Returns {orcid: username_or_orcid}."""
     orcids = sorted({o for o in orcids if o})
@@ -174,21 +494,43 @@ def fetch_user_label(client, whoami_info=None):
 
 
 def fetch_current_project():
-    """Return the current project ID from config, or a placeholder."""
+    """Return the current project ID from config."""
     try:
         from crucible.config import config
-        return config.current_project or '(no project set)'
+        return config.current_project or None
     except Exception:
-        return '?'
+        return None
 
 
-def fetch_current_session():
-    """Return the current session name from config, or empty string."""
+def fetch_project_context():
+    """Return the configured project ID and its source."""
     try:
         from crucible.config import config
-        return config.current_session or ''
+        project_id = config.current_project or None
+        return project_id, config.source('current_project') if project_id else None
     except Exception:
-        return ''
+        return None, None
+
+
+def resolve_project_context(args=None, project_id=None):
+    """Return the effective CLI project ID and its source."""
+    if project_id:
+        return project_id, 'argument'
+    shell_state = getattr(args, '_shell_state', None) if args is not None else None
+    if shell_state is not None:
+        shell_project = shell_state.get('project')
+        if shell_project:
+            return shell_project, shell_state.get('project_source') or 'config file'
+    project_id, source = fetch_project_context()
+    if project_id and source == 'environment':
+        import warnings
+        warnings.warn(
+            "CRUCIBLE_CURRENT_PROJECT is deprecated because it can silently redirect operations. "
+            "Use an explicit --project-id or save the current project with the interactive shell.",
+            FutureWarning,
+            stacklevel=2,
+        )
+    return project_id, source
 
 
 def fetch_api_label():
@@ -204,20 +546,80 @@ def fetch_api_label():
         return 'api: ?'
 
 
+def fetch_api_attention():
+    """Return whether the configured API differs from the package default."""
+    try:
+        from crucible.config import config
+        from crucible.config.config import Config
+        return config.api_url.rstrip('/') != Config.DEFAULT_API_URL.rstrip('/')
+    except Exception:
+        return False
+
+
 def explorer_url(resource_id: str, project_id: str, resource_type: str) -> str:
     """Build a graph explorer URL for a dataset or sample.
 
     Returns None if the graph_explorer_url is not configured or any argument is missing.
     """
-    try:
-        from crucible.config import config
-        base = (config.graph_explorer_url or '').rstrip('/')
-    except Exception:
-        return None
+    base = _graph_explorer_base()
     if not base or not resource_id or not project_id:
         return None
     dtype = 'samples' if resource_type == 'sample' else 'datasets'
     return f"{base}/{project_id}/{dtype}/{resource_id}"
+
+
+def _graph_explorer_base():
+    try:
+        from crucible.config import config
+        return (config.graph_explorer_url or '').rstrip('/') or None
+    except Exception:
+        return None
+
+
+def project_explorer_url(project_id: str) -> str:
+    """Build the Graph Explorer URL for a project."""
+    base = _graph_explorer_base()
+    if not base or not project_id:
+        return None
+    return f"{base}/{project_id}/"
+
+
+def instrument_explorer_url(instrument_mfid: str) -> str:
+    """Build the Graph Explorer URL for an instrument."""
+    base = _graph_explorer_base()
+    if not base or not instrument_mfid:
+        return None
+    return f"{base}/instrument/{instrument_mfid}"
+
+
+def user_explorer_url(user_unique_id: str) -> str:
+    """Build the Graph Explorer URL for a user."""
+    base = _graph_explorer_base()
+    if not base or not user_unique_id:
+        return None
+    return f"{base}/user/{user_unique_id}"
+
+
+def project_reference(resource):
+    """Return the display title, project ID, and Explorer URL for a resource."""
+    reference = resource.get('project') or {}
+    project_id = reference.get('project_id') or resource.get('project_id')
+    return (
+        reference.get('title'),
+        project_id,
+        project_explorer_url(project_id),
+    )
+
+
+def instrument_reference(resource):
+    """Return the display name, instrument ID, and Explorer URL for a dataset."""
+    reference = resource.get('instrument') or {}
+    instrument_mfid = reference.get('unique_id')
+    return (
+        reference.get('instrument_name') or resource.get('instrument_name'),
+        reference.get('instrument_id') or resource.get('instrument_id'),
+        instrument_explorer_url(instrument_mfid),
+    )
 
 
 def cast_value(value: str):
@@ -345,7 +747,7 @@ def show_transfer_ownership(result, confirm: bool) -> None:
     prev_name = term.fmt_name(prev.model_dump(), default=prev.unique_id) if prev else '-'
     new_name = term.fmt_name(result.new_owner.model_dump(), default=result.new_owner.unique_id)
     if confirm:
-        logger.info(f"✓ Ownership of {result.resource_id} transferred: {prev_name} -> {new_name}")
+        term.success(f"Ownership of {result.resource_id} transferred: {prev_name} -> {new_name}")
     else:
         logger.info(f"Preview: ownership of {result.resource_id} would transfer from {prev_name} to {new_name}")
         logger.info("Re-run with --confirm to execute.")
@@ -374,7 +776,8 @@ def show_reassign_project(result, confirm: bool) -> None:
     """Print the preview or outcome of a BaseResource.reassign_project() call."""
     prev = result.previous_project_id or '-'
     if confirm:
-        logger.info(f"✓ {result.resource_id} moved from project '{prev}' to '{result.new_project_id}'")
+        from . import term
+        term.success(f"{result.resource_id} moved from project '{prev}' to '{result.new_project_id}'")
     else:
         logger.info(f"Preview: {result.resource_id} would move from project '{prev}' to '{result.new_project_id}'")
         logger.info("Re-run with --confirm to execute.")

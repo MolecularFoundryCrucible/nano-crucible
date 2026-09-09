@@ -49,8 +49,10 @@ def register_subcommand(subparsers):
     _register_get(instrument_subparsers)
     _register_create(instrument_subparsers)
     _register_update(instrument_subparsers)
+    _register_set_status(instrument_subparsers)
     _register_edit(instrument_subparsers)
     _register_transfer_ownership(instrument_subparsers)
+    _register_list_service_accounts(instrument_subparsers)
     _register_bind_sa(instrument_subparsers)
     _register_unbind_sa(instrument_subparsers)
     from ._access import register_access_commands
@@ -141,7 +143,7 @@ def _register_create(subparsers):
     parser = subparsers.add_parser(
         'create',
         help='Create a new instrument',
-        description='Register a new instrument in Crucible',
+        description='Register a new instrument as an authenticated human user',
         formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
@@ -210,6 +212,8 @@ Examples:
 def _execute_create(args):
     """Execute the 'instrument create' subcommand."""
     from crucible.client import CrucibleClient
+    from .helpers import prompt_optional, prompt_required, validate_user_reference
+    from ..utils.identifiers import validate_slug
 
     instrument_name = args.instrument_name
     instrument_id = args.instrument_id
@@ -222,25 +226,17 @@ def _execute_create(args):
         print("")
 
     if instrument_name is None:
-        while True:
-            instrument_name = input("Instrument name: ").strip()
-            if instrument_name:
-                break
-            logger.error("Instrument name is required.")
+        instrument_name = prompt_required("Instrument name", option='--name')
 
     if instrument_id is None:
-        while True:
-            instrument_id = input("Instrument ID (unique slug): ").strip()
-            if instrument_id:
-                break
-            logger.error("Instrument ID is required.")
+        instrument_id = prompt_required(
+            "Instrument ID",
+            validator=lambda value: validate_slug(value, 'instrument'),
+            option='--instrument-id',
+        )
 
     if location is None:
-        while True:
-            location = input("Location: ").strip()
-            if location:
-                break
-            logger.error("Location is required.")
+        location = prompt_required("Location", option='--location')
 
     manufacturer = args.manufacturer
     model = args.model
@@ -249,17 +245,13 @@ def _execute_create(args):
 
     if interactive:
         if manufacturer is None:
-            val = input("Manufacturer (optional, press Enter to skip): ").strip()
-            manufacturer = val or None
+            manufacturer = prompt_optional("Manufacturer")
         if model is None:
-            val = input("Model (optional, press Enter to skip): ").strip()
-            model = val or None
+            model = prompt_optional("Model")
         if instrument_type is None:
-            val = input("Type (optional, press Enter to skip): ").strip()
-            instrument_type = val or None
+            instrument_type = prompt_optional("Type")
         if description is None:
-            val = input("Description (optional, press Enter to skip): ").strip()
-            description = val or None
+            description = prompt_optional("Description")
 
     metadata_dict = None
     if getattr(args, 'metadata', None):
@@ -272,6 +264,8 @@ def _execute_create(args):
 
     try:
         from crucible.models import Instrument
+        if owner is not None:
+            owner = validate_user_reference(owner)
         client = CrucibleClient()
 
         instrument = Instrument(
@@ -287,7 +281,7 @@ def _execute_create(args):
 
         result = client.instruments.create(instrument, scientific_metadata=metadata_dict)
 
-        logger.info("✓ Instrument created")
+        term.success("Instrument created", args)
         _show_instrument(result)
 
     except Exception as e:
@@ -315,18 +309,24 @@ def _execute_list(args):
         if not instruments:
             print(f"  {term.dim('No instruments found.')}")
         else:
-            rows = [
-                (
-                    i.get('instrument_name') or '-',
-                    i.get('instrument_id') or '-',
-                    i.get('unique_id') or '-',
-                    term.fmt_owner(i) or '-',
-                    i.get('status') or '-',
+            from .helpers import instrument_explorer_url
+            def _instrument_row(instrument):
+                uid = instrument.get('unique_id')
+                instrument_id = instrument.get('instrument_id')
+                url = instrument_explorer_url(uid)
+                return (
+                    term.navigation_link(instrument.get('instrument_name'), url) or '-',
+                    instrument_id or '-',
+                    term.mfid_link(
+                        uid, url if not instrument.get('instrument_name') else None,
+                    ) or '-',
+                    term.fmt_owner(instrument) or '-',
+                    term.status_label(instrument.get('status')),
                 )
-                for i in instruments
-            ]
-            term.table(rows, ['Name', 'ID', 'MFID', 'Owner', 'Status'],
-                       max_widths=[16, 25, 26, 25, 12])
+            rows = [_instrument_row(instrument) for instrument in instruments]
+            term.table(rows, ['Name', 'Instrument ID', 'MFID', 'Owner', 'Status'],
+                       max_widths=[24, 25, 26, 25, 12],
+                       min_widths=[4, 25, 26, 5, 6])
 
     except Exception as e:
         from .helpers import fail
@@ -337,24 +337,38 @@ def _show_instrument(instrument, include_metadata=False):
     """Display instrument fields."""
     _p = term.field_printer(14)
 
-    verbose = include_metadata  # reuse flag for verbose fields
+    from .helpers import instrument_explorer_url
+
     term.header("Instrument")
     uid = instrument.get('unique_id')
-    _p("Name",         instrument.get('instrument_name'))
-    _p("ID",           instrument.get('instrument_id'))
-    _p("MFID",         term.cyan(uid) if uid else None)
+    instrument_url = instrument_explorer_url(uid)
+    name = instrument.get('instrument_name')
+    _p("Name",          term.bold(name) if name else term.dim('-'))
+    _p("Instrument ID", instrument.get('instrument_id'))
+    _p("MFID",          term.mfid_link(uid, instrument_url))
     _p("Type",         instrument.get('instrument_type'))
     _p("Manufacturer", instrument.get('manufacturer'))
     _p("Model",        instrument.get('model'))
-    _p("Owner",        term.fmt_owner(instrument))
-    _p("Status",       instrument.get('status'))
     _p("Location",     instrument.get('location'))
     _p("Description",  instrument.get('description'))
     if instrument.get('other_id'):
         _p("Other ID",     f"{instrument['other_id']}  ({instrument.get('other_id_source', '')})")
-    if verbose:
-        _p("Created",      term.fmt_ts(instrument.get('creation_time')))
-        _p("Modified",     term.fmt_ts(instrument.get('modification_time')))
+
+    term.subheader("Access")
+    _p("Owner",  term.fmt_owner(instrument))
+    _p("Status", term.status_label(instrument.get('status')))
+
+    timing = (
+        ("Created", instrument.get('creation_time')),
+        ("Modified", instrument.get('modification_time')),
+    )
+    if any(value for _, value in timing):
+        term.subheader("Timing")
+        for label, value in timing:
+            if value:
+                _p(label, term.fmt_ts(value))
+
+    if include_metadata:
         from .helpers import show_scientific_metadata
         show_scientific_metadata(instrument.get('scientific_metadata'))
 
@@ -465,14 +479,14 @@ def _execute_update(args):
 
         if fields:
             result = client.instruments.update(args.unique_id, **fields)
-            logger.info("✓ Instrument updated")
+            term.success("Instrument updated", args)
             _show_instrument(result)
 
         if metadata_dict is not None:
             overwrite = getattr(args, 'overwrite', False)
             client.instruments.update_scientific_metadata(args.unique_id, metadata_dict, overwrite=overwrite)
             action = "replaced" if overwrite else "updated"
-            logger.info(f"✓ Scientific metadata {action} for instrument {args.unique_id}")
+            term.success(f"Scientific metadata {action} for instrument {args.unique_id}", args)
 
     except Exception as e:
         from .helpers import fail
@@ -519,6 +533,89 @@ def _execute_transfer_ownership(args):
         fail("transferring instrument ownership", e, args)
 
 
+def _register_set_status(subparsers):
+    parser = subparsers.add_parser(
+        'set-status',
+        help='Change an instrument lifecycle status',
+        description='Set an instrument to active, maintenance, or decommissioned',
+        formatter_class=term.ColorHelpFormatter,
+        epilog="""
+Examples:
+    crucible instrument set-status INSTRUMENT_MFID maintenance
+""",
+    )
+    parser.add_argument('instrument_mfid', metavar='INSTRUMENT_MFID', help='Instrument MFID')
+    parser.add_argument(
+        'status',
+        choices=['active', 'maintenance', 'decommissioned'],
+        help='New lifecycle status',
+    )
+    parser.set_defaults(func=_execute_set_status)
+
+
+def _execute_set_status(args):
+    from crucible.client import CrucibleClient
+    from .helpers import fail
+
+    try:
+        instrument = CrucibleClient().instruments.set_status(
+            args.instrument_mfid, args.status)
+        term.success(
+            f"Instrument {args.instrument_mfid} status changed to {args.status}", args)
+        _show_instrument(instrument)
+    except Exception as e:
+        fail("changing instrument status", e, args)
+
+
+def _register_list_service_accounts(subparsers):
+    parser = subparsers.add_parser(
+        'list-service-accounts',
+        help='List service accounts bound to an instrument',
+        description='List the instrument operator service accounts',
+        formatter_class=term.ColorHelpFormatter,
+        epilog="""
+Examples:
+    crucible instrument list-service-accounts INSTRUMENT_MFID
+""",
+    )
+    parser.add_argument('instrument_mfid', metavar='INSTRUMENT_MFID', help='Instrument MFID')
+    parser.set_defaults(func=_execute_list_service_accounts)
+
+
+def _service_account_rows(members):
+    return [
+        (
+            member.username or '-',
+            term.fmt_name(member.model_dump(), default='-', fallback_username=False),
+            term.cyan(member.unique_id) if member.unique_id else '-',
+            member.role or '-',
+        )
+        for member in members
+    ]
+
+
+def _execute_list_service_accounts(args):
+    from crucible.client import CrucibleClient
+    from .helpers import fail, sort_members
+
+    try:
+        members = sort_members(
+            CrucibleClient().instruments.list_service_accounts(args.instrument_mfid))
+        term.header(f"Instrument Service Accounts ({len(members)})")
+        if not members:
+            print(f"  {term.dim('No service accounts found.')}")
+            return
+        rows = _service_account_rows(members)
+        term.table(
+            rows,
+            ['Username', 'Name', 'MFID', 'Role'],
+            max_widths=[25, 25, 26, 12],
+            min_widths=[24, 4, 26, 6],
+        )
+    except Exception as e:
+        fail("listing instrument service accounts", e, args)
+
+
 def _register_bind_sa(subparsers):
     """Register the 'instrument bind-sa' subcommand."""
     parser = subparsers.add_parser(
@@ -548,9 +645,8 @@ def _execute_bind_sa(args):
     try:
         client = CrucibleClient()
         members = sort_members(client.instruments.bind_service_account(args.instrument_mfid, args.sa_id))
-        logger.info(f"✓ Service account {args.sa_id} bound to instrument {args.instrument_mfid}")
-        rows = [(m.username or '-', term.fmt_name(m.model_dump(), default='-', fallback_username=False),
-                 m.unique_id or '-', m.role or '-') for m in members]
+        term.success(f"Service account {args.sa_id} bound to instrument {args.instrument_mfid}", args)
+        rows = _service_account_rows(members)
         term.table(rows, ['Username', 'Name', 'ID', 'Role'], max_widths=[25, 25, 30, 12])
     except Exception as e:
         fail("binding service account", e, args)
@@ -585,9 +681,8 @@ def _execute_unbind_sa(args):
     try:
         client = CrucibleClient()
         members = sort_members(client.instruments.unbind_service_account(args.instrument_mfid, args.sa_id))
-        logger.info(f"✓ Service account {args.sa_id} unbound from instrument {args.instrument_mfid}")
-        rows = [(m.username or '-', term.fmt_name(m.model_dump(), default='-', fallback_username=False),
-                 m.unique_id or '-', m.role or '-') for m in members]
+        term.success(f"Service account {args.sa_id} unbound from instrument {args.instrument_mfid}", args)
+        rows = _service_account_rows(members)
         term.table(rows, ['Username', 'Name', 'ID', 'Role'], max_widths=[25, 25, 30, 12])
     except Exception as e:
         fail("unbinding service account", e, args)
@@ -698,25 +793,47 @@ Examples:
     parser.add_argument('query', metavar='QUERY', help='Search term (min 3 chars)')
     parser.add_argument('--limit', '-l', type=int, default=20, metavar='N',
                         help='Maximum results (default: 20, max: 50)')
+    parser.add_argument(
+        '--status',
+        choices=['active', 'maintenance', 'decommissioned'],
+        help='Filter by lifecycle status',
+    )
+    parser.add_argument('--json', action='store_true', default=False,
+                        help='Output as JSON array')
     parser.set_defaults(func=_execute_search)
 
 
 def _execute_search(args):
     if len(args.query) < 3:
-        logger.error("Search term must be at least 3 characters")
-        sys.exit(1)
+        from .helpers import fail
+        fail("searching instruments", ValueError("Search term must be at least 3 characters."), args)
     from crucible.client import CrucibleClient
     try:
         client  = CrucibleClient()
-        results = client.instruments.search(args.query, limit=args.limit)
+        results = client.instruments.search(
+            args.query, limit=args.limit, status=getattr(args, 'status', None))
+        if getattr(args, 'json', False):
+            print(json.dumps(results, indent=2, default=str))
+            return
         term.header(f"Instruments matching '{args.query}' ({len(results)})")
         if not results:
             print(f"  {term.dim('No results found.')}")
             return
-        rows = [(r.get('instrument_name', '-'), r.get('instrument_type') or '-',
-                 r.get('manufacturer') or '-', r.get('unique_id', '-')) for r in results]
-        term.table(rows, ['Name', 'Type', 'Manufacturer', 'MFID'],
-                   max_widths=[25, 20, 20, 26])
+        from .helpers import instrument_explorer_url
+        def _instrument_row(instrument):
+            uid = instrument.get('unique_id')
+            name = instrument.get('instrument_name')
+            url = instrument_explorer_url(uid)
+            return (
+                term.navigation_link(name, url) if name else '-',
+                instrument.get('instrument_id') or '-',
+                instrument.get('instrument_type') or '-',
+                term.mfid_link(uid, url if not name else None) or '-',
+            )
+        rows = [_instrument_row(instrument) for instrument in results]
+        term.table(rows, ['Name', 'Instrument ID', 'Type', 'MFID'],
+                   max_widths=[25, 25, 20, 26],
+                   min_widths=[4, 25, 4, 26])
     except Exception as e:
         from .helpers import fail
         fail("", e, args)
@@ -733,6 +850,8 @@ def _register_search_metadata(subparsers):
         parser.add_argument('query', metavar='QUERY', help='Search query string')
         parser.add_argument('--limit', '-l', type=int, default=50, metavar='N',
                             help='Maximum results (default: 50)')
+        parser.add_argument('--json', action='store_true', default=False,
+                            help='Output as JSON array')
         parser.set_defaults(func=_execute_search_metadata)
 
 
@@ -741,6 +860,9 @@ def _execute_search_metadata(args):
     try:
         client  = CrucibleClient()
         results = client.instruments.search_metadata(args.query, limit=args.limit)
+        if getattr(args, 'json', False):
+            print(json.dumps(results, indent=2, default=str))
+            return
         term.header(f"Metadata search: {args.query} ({len(results)})")
         if not results:
             print(f"  {term.dim('No results found.')}")

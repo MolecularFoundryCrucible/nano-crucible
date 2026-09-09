@@ -4,11 +4,13 @@
 Terminal display utilities for the Crucible CLI.
 
 Provides TTY-aware color helpers, formatted headers, relative timestamps,
-human-readable sizes, and compact table rendering.  All color/style functions
-are no-ops when stdout is not a TTY (e.g. when piping or redirecting).
+human-readable sizes, and compact table rendering. Color and style functions
+are no-ops when their output stream is not a TTY.
 """
 
+import os
 import re
+import shutil
 import sys
 from datetime import datetime, timezone
 
@@ -26,46 +28,112 @@ def _dlen(s: str) -> int:
 
 # ── TTY detection ──────────────────────────────────────────────────────────────
 
-def _tty() -> bool:
-    return hasattr(sys.stdout, 'isatty') and sys.stdout.isatty()
+_COLOR_ENABLED = 'NO_COLOR' not in os.environ
+
+
+def configure_color(enabled: bool = True) -> None:
+    global _COLOR_ENABLED
+    _COLOR_ENABLED = bool(enabled) and 'NO_COLOR' not in os.environ
+
+
+def color_enabled() -> bool:
+    return _COLOR_ENABLED
+
+
+def _tty(stream=None) -> bool:
+    stream = stream or sys.stdout
+    return _COLOR_ENABLED and hasattr(stream, 'isatty') and stream.isatty()
+
+
+def _interactive(stream=None) -> bool:
+    stream = stream or sys.stdout
+    return hasattr(stream, 'isatty') and stream.isatty()
+
+
+def _styled(s: str, code: str, stream=None) -> str:
+    use_color = _tty() if stream is None else _tty(stream)
+    return f"\033[{code}m{s}\033[0m" if use_color else s
 
 
 # ── ANSI helpers ───────────────────────────────────────────────────────────────
 
-def bold(s: str) -> str:
-    return f"\033[1m{s}\033[0m" if _tty() else s
+def bold(s: str, stream=None) -> str:
+    return _styled(s, '1', stream)
 
-def cyan(s: str) -> str:
-    return f"\033[36m{s}\033[0m" if _tty() else s
+def cyan(s: str, stream=None) -> str:
+    return _styled(s, '36', stream)
 
-def green(s: str) -> str:
-    return f"\033[32m{s}\033[0m" if _tty() else s
+def blue(s: str, stream=None) -> str:
+    return _styled(s, '34', stream)
 
-def yellow(s: str) -> str:
-    return f"\033[33m{s}\033[0m" if _tty() else s
+def magenta(s: str, stream=None) -> str:
+    return _styled(s, '35', stream)
 
-def red(s: str) -> str:
-    return f"\033[31m{s}\033[0m" if _tty() else s
+def gold(s: str, stream=None) -> str:
+    return _styled(s, '38;5;220', stream)
+
+def green(s: str, stream=None) -> str:
+    return _styled(s, '32', stream)
+
+def gray(s: str, stream=None) -> str:
+    return _styled(s, '90', stream)
+
+def yellow(s: str, stream=None) -> str:
+    return _styled(s, '33', stream)
+
+def red(s: str, stream=None) -> str:
+    return _styled(s, '31', stream)
+
+def underline(s: str, stream=None) -> str:
+    return _styled(s, '4', stream)
 
 def hyperlink(text: str, url: str | None) -> str:
-    """Wrap *text* in an OSC 8 clickable hyperlink when stdout is a TTY."""
-    if url and _tty():
+    """Wrap *text* in an OSC 8 hyperlink for interactive terminal output."""
+    if url and _interactive():
         return f"\033]8;;{url}\007{text}\033]8;;\007"
     return text
+
+
+def navigation_link(text: str, url: str | None, *, emphasized: bool = False) -> str | None:
+    """Render a navigable value with consistent color and link affordance."""
+    if not text:
+        return None
+    rendered = cyan(str(text)) if url else str(text)
+    if emphasized:
+        rendered = bold(rendered)
+    if url and _interactive():
+        rendered = underline(rendered)
+    return hyperlink(rendered, url)
+
+
+def identifier_link(identifier: str, url: str | None = None) -> str | None:
+    """Render an identifier in cyan and link it when a destination is available."""
+    if not identifier:
+        return None
+    return navigation_link(identifier, url) if url else cyan(identifier)
 
 
 def orcid_link(orcid: str) -> str | None:
     """Render an ORCID in cyan as a clickable link to https://orcid.org/."""
     if not orcid:
         return None
-    return hyperlink(cyan(orcid), f"https://orcid.org/{orcid}")
+    return identifier_link(orcid, f"https://orcid.org/{orcid}")
 
 
 def user_id_link(user_id: str) -> str | None:
-    """Render a canonical user ORCID or MFID with the appropriate link style."""
+    """Render a canonical user ID linked to its Crucible Explorer profile."""
     if not user_id:
         return None
-    return orcid_link(user_id) if is_orcid(user_id) else mfid_link(user_id)
+    from .helpers import user_explorer_url
+    return identifier_link(user_id, user_explorer_url(user_id))
+
+
+def user_link(label: str, user_id: str) -> str | None:
+    """Link a user label to its Crucible Explorer profile."""
+    if not label:
+        return None
+    from .helpers import user_explorer_url
+    return navigation_link(label, user_explorer_url(user_id))
 
 
 def user_id_label(user_id: str) -> str:
@@ -74,13 +142,19 @@ def user_id_label(user_id: str) -> str:
 
 
 def fmt_name(person: dict, default: str | None = None, fallback_username: bool = True) -> str | None:
-    """Join first_name + last_name from a user-shaped dict.
+    """Format given names as initials followed by the complete family name.
 
     Falls back to username (unless fallback_username=False), then to default,
     if both name fields are empty.
     """
-    parts = [person.get('first_name') or '', person.get('last_name') or '']
-    name = ' '.join(p for p in parts if p)
+    first_name = (person.get('first_name') or '').strip()
+    last_name = (person.get('last_name') or '').strip()
+    initials = []
+    for given_name in first_name.split():
+        parts = [part for part in given_name.split('-') if part]
+        if parts:
+            initials.append('-'.join(f'{part[0].upper()}.' for part in parts))
+    name = ' '.join([*initials, last_name]).strip()
     if name:
         return name
     if fallback_username and person.get('username'):
@@ -92,18 +166,16 @@ def fmt_owner(resource: dict) -> str | None:
     """Format the owner of a resource.
 
     If include_owner was used and the owner object is present, returns
-    'First Last (@username)' and links it only when the canonical owner ID is
-    an ORCID. Falls back to the canonical owner identifier.
+    'F. Lastname (@username)' linked to the Crucible Explorer profile. Falls
+    back to the canonical owner identifier.
     """
     owner = resource.get('owner')
     owner_id = resource.get('owner_orcid')
     if owner:
-        name  = fmt_name(owner, default=owner_id or '-')
+        name = fmt_name(owner, default=owner_id or '-')
         uname = owner.get('username')
-        label = f"{name} (@{uname})" if uname else name
-        if is_orcid(owner_id):
-            return hyperlink(cyan(label), f"https://orcid.org/{owner_id}")
-        return cyan(label)
+        linked_name = user_link(name, owner_id)
+        return f"{linked_name}  {dim(f'(@{uname})')}" if uname else linked_name
     return user_id_link(owner_id)
 
 
@@ -111,7 +183,7 @@ def project_link(pid: str, url: str | None = None) -> str | None:
     """Render a project ID in cyan, optionally as a clickable OSC 8 hyperlink."""
     if not pid:
         return None
-    return hyperlink(cyan(pid), url)
+    return identifier_link(pid, url)
 
 
 def mfid_link(uid: str, url: str | None = None) -> str | None:
@@ -121,10 +193,54 @@ def mfid_link(uid: str, url: str | None = None) -> str | None:
     """
     if not uid:
         return None
-    return hyperlink(cyan(uid), url)
+    return identifier_link(uid, url)
 
-def dim(s: str) -> str:
-    return f"\033[2m{s}\033[0m" if _tty() else s
+def dim(s: str, stream=None) -> str:
+    return _styled(s, '2', stream)
+
+
+def success(message: str, args=None) -> None:
+    if getattr(args, 'json', False):
+        return
+    print(f"{green('Success:')} {message}")
+
+
+def status_marker(status: str, stream=None) -> str:
+    styles = {
+        'success': ('✓', 'OK', green),
+        'warning': ('!', 'WARNING', yellow),
+        'error': ('×', 'ERROR', red),
+        'info': ('-', 'INFO', dim),
+    }
+    if status not in styles:
+        raise ValueError(f"Unknown status marker: {status}")
+    symbol, label, style = styles[status]
+    return style(symbol if _interactive(stream) else label, stream=stream)
+
+
+def _standing_label(standing: str, *, owner_label: str, stream=None) -> str:
+    if not standing:
+        return '-'
+    normalized = standing.lower()
+    styles = {
+        'owner': gold,
+        'admin': magenta,
+        'editor': blue,
+        'contributor': lambda value, stream=None: value,
+        'viewer': gray,
+    }
+    display = owner_label if normalized == 'owner' else standing
+    return styles.get(normalized, dim)(display, stream=stream)
+
+
+def role_label(role: str, stream=None) -> str:
+    """Color a project role while preserving plain redirected output."""
+    return _standing_label(role, owner_label='lead', stream=stream)
+
+
+def permission_label(permission: str, stream=None) -> str:
+    """Color an ACL permission while preserving its canonical name."""
+    return _standing_label(permission, owner_label='owner', stream=stream)
 
 
 # ── Structural helpers ─────────────────────────────────────────────────────────
@@ -234,6 +350,9 @@ def fmt_date(ts) -> str:
 
 
 _STATUS_COLORS = {
+    'active':   green,
+    'maintenance': yellow,
+    'decommissioned': dim,
     'pending':  yellow,
     'approved': green,
     'complete': green,
@@ -252,6 +371,13 @@ def status_label(status: str) -> str:
     if not status:
         return '-'
     return _STATUS_COLORS.get(status, lambda s: s)(status)
+
+
+def fmt_bool(value) -> str:
+    """Format a nullable boolean for human-readable output."""
+    if value is None:
+        return '-'
+    return 'yes' if value else 'no'
 
 
 def fmt_size(size) -> str | None:
@@ -382,28 +508,75 @@ def open_editor_json(data: dict) -> dict | None:
 
 # ── Table renderer ─────────────────────────────────────────────────────────────
 
+def _truncate_styled_text(text: str, width: int) -> str:
+    remaining = max(0, width - 1)
+    parts = []
+    for token in re.split(r'(\033\[[0-9;]*m)', text):
+        if not token:
+            continue
+        if token.startswith('\033['):
+            if remaining:
+                parts.append(token)
+            continue
+        if remaining:
+            visible = token[:remaining]
+            parts.append(visible)
+            remaining -= len(visible)
+            if not remaining:
+                break
+    truncated = ''.join(parts) + '…'
+    if '\033[' in text:
+        truncated += '\033[0m'
+    return truncated
+
+
 def _truncate_cell(s: str, width: int) -> str:
-    """Truncate *s* to *width* visible chars, preserving OSC 8 hyperlinks."""
+    """Truncate *s* while preserving terminal styles and hyperlinks."""
     m = _OSC8_RE.search(s)
     if m:
-        url  = m.group(1)
-        plain = _ANSI_RE.sub('', s)        # visible text only
-        if len(plain) > width - 1:
-            plain = plain[:width - 1] + '…'
-        colored = cyan(plain)
-        if url and _tty():
-            return f"\033]8;;{url}\007{colored}\033]8;;\007"
-        return colored
-    # No OSC 8 — strip ANSI and truncate plainly
-    return _ANSI_RE.sub('', s)[:width - 1] + '…'
+        url = m.group(1)
+        truncated = _truncate_styled_text(m.group(2), width)
+        if url and _interactive():
+            return f"\033]8;;{url}\007{truncated}\033]8;;\007"
+        return truncated
+    return _truncate_styled_text(s, width)
 
-def table(rows: list, headers: list, max_widths: list | None = None) -> None:
+
+def _table_output_width() -> int:
+    if hasattr(sys.stdout, 'isatty') and sys.stdout.isatty():
+        return shutil.get_terminal_size(fallback=(100, 24)).columns
+    return 100
+
+
+def _shrink_widths(widths: list, floors: list, target: int) -> list:
+    result = list(widths)
+    while sum(result) > target:
+        candidates = [i for i, width in enumerate(result) if width > floors[i]]
+        if not candidates:
+            break
+        index = max(
+            candidates,
+            key=lambda i: (result[i] - floors[i], result[i], -i),
+        )
+        result[index] -= 1
+    return result
+
+
+def _fit_cell(value: str, width: int) -> str:
+    if _dlen(value) > width:
+        value = _truncate_cell(value, width)
+    return value + ' ' * (width - _dlen(value))
+
+
+def table(rows: list, headers: list, max_widths: list | None = None,
+          min_widths: list | None = None) -> None:
     """
     Print a compact aligned table to stdout.
 
     *rows*       — list of tuples/lists, one per row.
     *headers*    — column header strings (printed dim + uppercased).
     *max_widths* — optional per-column width caps (values are truncated with ``…``).
+    *min_widths* - optional preferred minimums used while fitting the terminal.
     """
     if not rows:
         return
@@ -412,20 +585,47 @@ def table(rows: list, headers: list, max_widths: list | None = None) -> None:
         for i, cell in enumerate(row):
             widths[i] = max(widths[i], _dlen(str(cell) if cell is not None else '-'))
     if max_widths:
-        widths = [min(w, m) for w, m in zip(widths, max_widths)]
+        for i, maximum in enumerate(max_widths[:len(widths)]):
+            widths[i] = min(widths[i], maximum)
 
-    header_line = "  " + "  ".join(h.upper().ljust(widths[i]) for i, h in enumerate(headers))
+    header_floors = [min(width, max(1, len(str(header))))
+                     for width, header in zip(widths, headers)]
+    preferred_floors = list(header_floors)
+    if min_widths:
+        for i, minimum in enumerate(min_widths[:len(widths)]):
+            preferred_floors[i] = min(
+                widths[i],
+                max(header_floors[i], minimum),
+            )
+
+    indent = '  '
+    separator = '  '
+    output_width = max(1, _table_output_width())
+    minimum_cells = len(headers)
+    if output_width < len(indent) + len(separator) * (len(headers) - 1) + minimum_cells:
+        indent = ''
+    if output_width < len(indent) + len(separator) * (len(headers) - 1) + minimum_cells:
+        separator = ' '
+    if output_width < len(indent) + len(separator) * (len(headers) - 1) + minimum_cells:
+        separator = ''
+    overhead = len(indent) + len(separator) * (len(headers) - 1)
+    content_width = max(len(headers), output_width - overhead)
+    widths = _shrink_widths(widths, preferred_floors, content_width)
+    widths = _shrink_widths(widths, header_floors, content_width)
+    widths = _shrink_widths(widths, [1] * len(widths), content_width)
+
+    header_line = indent + separator.join(
+        _fit_cell(str(header).upper(), widths[i])
+        for i, header in enumerate(headers)
+    ).rstrip()
     print(dim(header_line))
 
     for row in rows:
-        parts = []
-        for i, cell in enumerate(row):
-            s = str(cell) if cell is not None else '-'
-            dw = _dlen(s)
-            if dw > widths[i]:
-                s = _truncate_cell(s, widths[i])
-            parts.append(s + ' ' * (widths[i] - _dlen(s)))
-        print("  " + "  ".join(parts).rstrip())
+        parts = [
+            _fit_cell(str(cell) if cell is not None else '-', widths[i])
+            for i, cell in enumerate(row)
+        ]
+        print(indent + separator.join(parts).rstrip())
 
 
 # ── Colored argparse help formatter ────────────────────────────────────────────
@@ -457,7 +657,7 @@ class ColorHelpFormatter(_argparse.RawDescriptionHelpFormatter):
             is_tty = _os.isatty(1)
         except Exception:
             is_tty = _tty()
-        if not is_tty:
+        if not _COLOR_ENABLED or not is_tty:
             return text
 
         out = []

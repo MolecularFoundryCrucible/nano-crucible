@@ -35,17 +35,53 @@ class PublicUser(BaseModel):
     model_config = ConfigDict(from_attributes=True, extra='allow')
 
 
+class ResourceCapabilities(BaseModel):
+    """Caller-specific actions available for an exact resource response."""
+
+    can_edit: bool
+    can_manage_access: bool
+    can_change_status: bool
+    can_transfer: bool
+    max_grant_role: Optional[Literal['viewer', 'contributor', 'editor', 'admin']] = None
+
+    model_config = ConfigDict(from_attributes=True, extra='allow')
+
+
+class InstrumentReference(BaseModel):
+    """Lightweight instrument identity embedded in dataset responses."""
+
+    unique_id: str
+    instrument_id: Optional[str] = None
+    instrument_name: str
+
+    model_config = ConfigDict(from_attributes=True, extra='allow')
+
+
+class ProjectReference(BaseModel):
+    """Lightweight project identity embedded in dataset responses."""
+
+    unique_id: str
+    project_id: str
+    title: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True, extra='allow')
+
+
 class Sample(CrucibleResource):
     sample_name: Optional[str] = None
     sample_type: Optional[str] = None
     owner_orcid: Optional[str] = None
     owner: Optional[Union[str, PublicUser]] = None
     project_id: Optional[str] = None
+    project_mfid: Optional[str] = None
+    project: Optional[ProjectReference] = None
+    project_relation: Optional[Literal['assigned', 'shared']] = None
     description: Optional[str] = None
     timestamp: Optional[str] = None
     datasets: Optional[List[Dict]] = None
     deletion_request: Optional[Dict] = None
     links: Optional[List[Dict]] = None
+    capabilities: Optional[ResourceCapabilities] = None
 
 
 class Dataset(CrucibleResource):
@@ -53,8 +89,13 @@ class Dataset(CrucibleResource):
     owner_orcid: Optional[str] = None
     owner: Optional[Union[str, PublicUser]] = None
     project_id: Optional[str] = None
+    project_mfid: Optional[str] = None
     instrument_name: Optional[str] = None
     instrument_id: Optional[str] = None
+    instrument_mfid: Optional[str] = None
+    instrument: Optional[InstrumentReference] = None
+    project: Optional[ProjectReference] = None
+    project_relation: Optional[Literal['assigned', 'shared']] = None
     measurement: Optional[str] = None
     data_type: Optional[str] = None
     session_name: Optional[str] = None
@@ -63,6 +104,7 @@ class Dataset(CrucibleResource):
     timestamp: Optional[str] = None
     deletion_request: Optional[Dict] = None
     links: Optional[List[Dict]] = None
+    capabilities: Optional[ResourceCapabilities] = None
 
 
 class Instrument(CrucibleResource):
@@ -78,6 +120,7 @@ class Instrument(CrucibleResource):
     other_id: Optional[str] = None
     other_id_source: Optional[str] = None
     status: Optional[str] = None
+    capabilities: Optional[ResourceCapabilities] = None
 
 
 class Project(BaseModel):
@@ -95,6 +138,7 @@ class Project(BaseModel):
     creation_time: Optional[str] = None
     modification_time: Optional[str] = None
     members: Optional[List['ProjectMember']] = None
+    capabilities: Optional[ResourceCapabilities] = None
 
     model_config = ConfigDict(from_attributes=True, extra='allow')
 

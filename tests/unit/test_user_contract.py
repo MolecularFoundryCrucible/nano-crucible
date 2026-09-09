@@ -72,6 +72,32 @@ def test_create_requires_username():
     operations._request.assert_not_called()
 
 
+def test_create_normalizes_username_before_request():
+    operations = make_ops()
+
+    operations.create({
+        'username': '  Test-User-One  ',
+        'first_name': 'Test',
+        'last_name': 'User One',
+    })
+
+    assert operations._request.call_args.kwargs['json']['user_info']['username'] == 'test-user-one'
+
+
+@pytest.mark.parametrize('username', ['ab', '1test-user', 'test--user', 'a' * 25])
+def test_create_rejects_invalid_username(username):
+    operations = make_ops()
+
+    with pytest.raises(ValueError, match='Username must be 3 to 24 characters'):
+        operations.create({
+            'username': username,
+            'first_name': 'Test',
+            'last_name': 'User One',
+        })
+
+    operations._request.assert_not_called()
+
+
 def test_update_rejects_service_account_conversion():
     operations = make_ops()
 

@@ -28,9 +28,30 @@ def is_orcid(value: str) -> bool:
     return isinstance(value, str) and bool(ORCID_PATTERN.fullmatch(value))
 
 
+def validate_mfid(value: str) -> str:
+    """Validate an exact canonical MFID."""
+    if not is_mfid(value):
+        raise ValueError("MFID must be exactly 26 lowercase Crockford Base32 characters.")
+    return value
+
+
 def is_slug(value: str) -> bool:
     """Return whether a value is a valid 3-to-25-character resource slug."""
     return isinstance(value, str) and bool(SLUG_PATTERN.fullmatch(value))
+
+
+def validate_username(value: str) -> str:
+    """Normalize and validate a username accepted by the API."""
+    if not isinstance(value, str):
+        raise ValueError("Username must be a string.")
+    username = value.strip().lower()
+    if not 3 <= len(username) <= 24 or not USERNAME_PATTERN.fullmatch(username):
+        raise ValueError(
+            "Username must be 3 to 24 characters, start with a letter, contain "
+            "only lowercase letters, digits, underscores, or hyphens, and have "
+            "no leading, trailing, or consecutive separators."
+        )
+    return username
 
 
 def validate_slug(value: str, resource_name: str) -> str:
@@ -67,13 +88,13 @@ def classify_user_reference(value: str) -> Tuple[str, str]:
     if is_orcid(value) or is_mfid(value):
         return 'unique_id', value
 
-    username = value.lower()
-    if 3 <= len(username) <= 24 and USERNAME_PATTERN.fullmatch(username):
-        return 'username', username
-    raise ValueError(
-        "Invalid user reference. Pass an ORCID, user MFID, email, "
-        "or a valid 3-to-24-character username."
-    )
+    try:
+        return 'username', validate_username(value)
+    except ValueError as error:
+        raise ValueError(
+            "Invalid user reference. Pass an ORCID, user MFID, email, "
+            "or a valid 3-to-24-character username."
+        ) from error
 
 
 def require_canonical_identifier(record: Dict, resource_name: str) -> Dict:

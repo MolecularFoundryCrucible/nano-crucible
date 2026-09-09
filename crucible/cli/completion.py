@@ -7,6 +7,8 @@ Completion subcommand for installing shell autocomplete.
 import sys
 import os
 
+from . import term
+
 
 def register_subcommand(subparsers):
     """Register the completion subcommand."""
@@ -97,7 +99,7 @@ def install_completion(shell):
         if os.path.exists(rc_file):
             with open(rc_file, 'r') as f:
                 if completion_line in f.read():
-                    print(f"✓ Completion already installed in {rc_file}")
+                    term.success(f"Completion already installed in {rc_file}")
                     print("  Run 'source ~/.bashrc' or restart your terminal to activate.")
                     return
 
@@ -105,7 +107,7 @@ def install_completion(shell):
         with open(rc_file, 'a') as f:
             f.write(f'\n# Crucible CLI completion\n{completion_line}\n')
 
-        print(f"✓ Added completion to {rc_file}")
+        term.success(f"Added completion to {rc_file}")
         print("  Run 'source ~/.bashrc' or restart your terminal to activate.")
 
     elif shell == 'zsh':
@@ -121,7 +123,7 @@ def install_completion(shell):
             with open(rc_file, 'r') as f:
                 content = f.read()
                 if 'register-python-argcomplete crucible' in content:
-                    print(f"✓ Completion already installed in {rc_file}")
+                    term.success(f"Completion already installed in {rc_file}")
                     print("  Run 'source ~/.zshrc' or restart your terminal to activate.")
                     return
 
@@ -131,7 +133,7 @@ def install_completion(shell):
             for line in completion_lines:
                 f.write(f'{line}\n')
 
-        print(f"✓ Added completion to {rc_file}")
+        term.success(f"Added completion to {rc_file}")
         print("  Run 'source ~/.zshrc' or restart your terminal to activate.")
 
     elif shell == 'fish':
@@ -149,7 +151,7 @@ def install_completion(shell):
             )
             with open(completion_file, 'w') as f:
                 f.write(result.stdout)
-            print(f"✓ Created completion file: {completion_file}")
+            term.success(f"Created completion file: {completion_file}")
             print("  Restart your terminal to activate.")
         except subprocess.CalledProcessError as e:
             print(f"Error generating fish completion: {e}", file=sys.stderr)
@@ -163,7 +165,7 @@ def install_completion(shell):
         if os.path.exists(rc_file):
             with open(rc_file, 'r') as f:
                 if completion_line in f.read():
-                    print(f"✓ Completion already installed in {rc_file}")
+                    term.success(f"Completion already installed in {rc_file}")
                     print("  Run 'source ~/.tcshrc' or restart your terminal to activate.")
                     return
 
@@ -171,7 +173,8 @@ def install_completion(shell):
         with open(rc_file, 'a') as f:
             f.write(f'\n# Crucible CLI completion\n{completion_line}\n')
 
-        print(f"✓ Added completion to {rc_file}")
+        term.success(f"Added completion to {rc_file}")
         print("  Run 'source ~/.tcshrc' or restart your terminal to activate.")
 
-    print("\n✓ Installation complete!")
+    print()
+    term.success("Installation complete")

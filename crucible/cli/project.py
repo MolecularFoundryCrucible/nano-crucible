@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 from . import term
 from ..config import config as _config
+from ..constants import PROJECT_MEMBER_ROLES
 
 try:
     import argcomplete
@@ -101,6 +102,13 @@ def _register_list(subparsers):
         help='Include scientific metadata in results'
     )
 
+    parser.add_argument(
+        '--json',
+        action='store_true',
+        default=False,
+        help='Output as JSON array'
+    )
+
     parser.set_defaults(func=_execute_list)
 
 
@@ -172,12 +180,23 @@ Examples:
 """
     )
 
+    from .helpers import DeprecatedAliasAction
     parser.add_argument(
-        '--project-id', '-id',
+        '--project-id', '-i',
         required=False,
         default=None,
         metavar='ID',
         help='Unique project identifier (e.g., "my-project"). If not provided, will prompt interactively.'
+    )
+    parser.add_argument(
+        '-id',
+        action=DeprecatedAliasAction,
+        deprecated_options={'-id'},
+        replacement='--project-id',
+        dest='project_id',
+        default=argparse.SUPPRESS,
+        metavar='ID',
+        help=argparse.SUPPRESS,
     )
 
     parser.add_argument(
@@ -254,7 +273,7 @@ def _register_add_user(subparsers):
     parser = subparsers.add_parser(
         'add-user',
         help='Add a user to a project',
-        description='Add a user to a project by ORCID, MFID, username, or email (requires admin permissions)',
+        description='Add a user to a project by ORCID, MFID, username, or email (requires editor or above; the granted role must be below your role)',
         formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
@@ -275,7 +294,7 @@ Examples:
 
     parser.add_argument('--user', '-u', metavar='USER', default=None,
                         help='ORCID, MFID, username, or email of the user')
-    parser.add_argument('--role', metavar='ROLE', default=None,
+    parser.add_argument('--role', choices=PROJECT_MEMBER_ROLES, default=None,
                         help='Role to grant (default: contributor)')
 
     group = parser.add_mutually_exclusive_group()
@@ -319,7 +338,7 @@ def _register_remove_user(subparsers):
     parser = subparsers.add_parser(
         'remove-user',
         help='Remove a user from a project',
-        description='Remove a user from a project by ORCID, MFID, username, or email (requires admin permissions)',
+        description='Remove yourself from a project, or remove a member as project owner or platform administrator',
         formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
@@ -352,28 +371,29 @@ def _execute_list(args):
         projects = client.projects.list(limit=args.limit,
                                         include_metadata=getattr(args, 'include_metadata', False))
 
-        try:
-            from crucible.config import config
-            _base = config.graph_explorer_url.rstrip('/')
-        except Exception:
-            _base = None
+        if getattr(args, 'json', False):
+            print(json.dumps(projects, indent=2, default=str))
+            return
 
         term.header(f"Projects ({len(projects)})")
         if not projects:
             print(f"  {term.dim('No projects found.')}")
         else:
-            rows = [
-                (
-                    term.project_link(p.get('project_id'),
-                                      f"{_base}/{p.get('project_id')}" if _base else None),
-                    p.get('title') or '-',
-                    p.get('organization') or '-',
-                    _lead_name(p) or '-',
+            from .helpers import project_explorer_url
+            def _project_row(project):
+                project_id = project.get('project_id')
+                title = project.get('title')
+                url = project_explorer_url(project_id)
+                return (
+                    project_id if title else term.project_link(project_id, url),
+                    term.navigation_link(title, url) if title else '-',
+                    project.get('organization') or '-',
+                    _lead_name(project) or '-',
                 )
-                for p in projects
-            ]
-            term.table(rows, ['ID', 'Title', 'Organization', 'Lead'],
-                       max_widths=[25, 30, 20, 25])
+            rows = [_project_row(project) for project in projects]
+            term.table(rows, ['Project ID', 'Title', 'Organization', 'Lead'],
+                       max_widths=[25, 30, 20, 25],
+                       min_widths=[25, 5, 12, 4])
 
     except Exception as e:
         from .helpers import fail
@@ -383,42 +403,71 @@ def _execute_list(args):
 def _lead_name(project):
     """Return the lead's display name or canonical identifier."""
     lead = project.get('lead') or {}
-    return term.fmt_name(
+    user_id = (
+        lead.get('unique_id')
+        or project.get('project_lead')
+        or project.get('project_lead_orcid')
+    )
+    name = term.fmt_name(
         lead,
-        default=project.get('project_lead_orcid'),
+        default=user_id,
         fallback_username=False,
     )
+    return term.user_link(name, user_id)
 
 
-def _show_project(project, include_metadata=False):
+def _show_project(project, include_metadata=False, include_members=False):
     """Display project fields."""
     _p = term.field_printer(14)
 
-    try:
-        from crucible.config import config
-        _base = config.graph_explorer_url.rstrip('/')
-    except Exception:
-        _base = None
+    from .helpers import project_explorer_url
 
     term.header("Project")
     pid = project.get('project_id')
-    _p("ID",           term.project_link(pid, f"{_base}/{pid}" if _base and pid else None))
-    _p("Title",        project.get('title'))
+    uid = project.get('unique_id')
+    project_url = project_explorer_url(pid)
+    title = project.get('title')
+    _p("Title",        term.bold(title) if title else term.dim('-'))
+    _p("Project ID",   pid)
+    _p("MFID",         term.mfid_link(uid, project_url))
     _p("Organization", project.get('organization'))
-    _p("Lead",         _lead_name(project))
-    _p("Status",       project.get('status'))
+    _p("Status",       term.status_label(project.get('status')))
+
+    lead = _lead_name(project)
+    if lead:
+        term.subheader("People")
+        _p("Lead", lead)
+
+    timing = (
+        ("Created", project.get('creation_time')),
+        ("Modified", project.get('modification_time')),
+    )
+    if any(value for _, value in timing):
+        term.subheader("Timing")
+        for label, value in timing:
+            if value:
+                _p(label, term.fmt_ts(value))
 
     if include_metadata:
         from .helpers import show_scientific_metadata
         show_scientific_metadata(project.get('scientific_metadata'))
 
     members = project.get('members')
-    if members:
+    if include_members or members:
         from .helpers import sort_members
-        members = sort_members(members)
-        term.header(f"Members ({len(members)})")
-        rows = [(m.get('username') or '-', term.fmt_name(m, default='-', fallback_username=False),
-                 m.get('role') or '-') for m in members]
+        members = sort_members(members or [])
+        term.subheader(f"Members ({len(members)})")
+        if not members:
+            print(f"  {term.dim('No members found.')}")
+            return
+        rows = [(
+            m.get('username') or '-',
+            term.user_link(
+                term.fmt_name(m, default='-', fallback_username=False),
+                m.get('unique_id'),
+            ),
+            term.role_label(m.get('role')),
+        ) for m in members]
         term.table(rows, ['Username', 'Name', 'Role'], max_widths=[25, 25, 12])
 
 
@@ -441,7 +490,11 @@ def _execute_get(args):
             import json
             print(json.dumps(project, indent=2, default=str))
         else:
-            _show_project(project, include_metadata=include_metadata)
+            _show_project(
+                project,
+                include_metadata=include_metadata,
+                include_members=include_members,
+            )
 
     except Exception as e:
         from .helpers import fail
@@ -450,8 +503,9 @@ def _execute_get(args):
 
 def _execute_create(args):
     """Execute the 'project create' subcommand."""
-    import re
     from crucible.client import CrucibleClient
+    from .helpers import prompt_optional, prompt_required, validate_user_reference
+    from ..utils.identifiers import validate_slug
     # Interactive mode if any required arguments are missing
     project_id = args.project_id
     organization = args.organization
@@ -464,45 +518,29 @@ def _execute_create(args):
         term.header("Create Project")
         print("")
 
-    # Prompt for project_id
     if project_id is None:
-        while True:
-            project_id = input("Project ID (e.g., my-project): ").strip()
-            if project_id:
-                if re.match(r'^[a-zA-Z0-9_-]+$', project_id):
-                    break
-                else:
-                    logger.error("Invalid project ID. Use only letters, numbers, hyphens, and underscores.")
-            else:
-                logger.error("Project ID is required.")
+        project_id = prompt_required(
+            "Project ID",
+            validator=lambda value: validate_slug(value, 'project'),
+            option='--project-id',
+        )
 
-    # Prompt for organization
     if organization is None:
-        while True:
-            organization = input("Organization (e.g., LBNL, Argonne): ").strip()
-            if organization:
-                break
-            else:
-                logger.error("Organization is required.")
+        organization = prompt_required("Organization", option='--organization')
 
-    # Prompt for project lead
     if project_lead is None:
-        while True:
-            project_lead = input("Project lead ORCID, MFID, username, or email: ").strip()
-            if project_lead:
-                break
-            else:
-                logger.error("Project lead is required.")
+        project_lead = prompt_required(
+            "Project lead",
+            validator=validate_user_reference,
+            option='--lead',
+        )
 
-    # Optional fields — only prompt in interactive mode
     if interactive:
         if title is None:
-            val = input("Project title (optional, press Enter to skip): ").strip()
-            title = val or None
+            title = prompt_optional("Project title")
 
         if status is None:
-            val = input("Status (optional, press Enter to skip): ").strip()
-            status = val or None
+            status = prompt_optional("Status")
 
     metadata_dict = None
     if getattr(args, 'metadata', None):
@@ -515,6 +553,7 @@ def _execute_create(args):
 
     try:
         from crucible.models import Project
+        project_lead = validate_user_reference(project_lead)
         client = CrucibleClient()
 
         project = Project(
@@ -526,7 +565,7 @@ def _execute_create(args):
         )
         result = client.projects.create(project, scientific_metadata=metadata_dict)
 
-        logger.info("✓ Project created")
+        term.success("Project created", args)
         _show_project(result)
 
     except Exception as e:
@@ -548,9 +587,13 @@ def _execute_list_users(args):
         else:
             rows = []
             for u in users:
-                name     = term.fmt_name(u.model_dump(), default='-', fallback_username=False)
+                name = term.user_link(
+                    term.fmt_name(
+                        u.model_dump(), default='-', fallback_username=False),
+                    u.unique_id,
+                )
                 username = u.username or '-'
-                role     = u.role or '-'
+                role     = term.role_label(u.role)
                 rows.append((username, name, role))
             term.table(rows, ['Username', 'Name', 'Role'], max_widths=[25, 25, 12])
 
@@ -590,7 +633,6 @@ def _execute_add_user(args):
         sys.exit(1)
 
     try:
-        import requests as _req
         client = CrucibleClient()
         role = getattr(args, 'role', None)
         users = client.projects.add_user(user_unique_id=orcid, project_id=args.project_id,
@@ -604,19 +646,9 @@ def _execute_add_user(args):
             if match:
                 name = ' '.join(p for p in (match.first_name or '', match.last_name or '') if p) or name
 
-        logger.info(f"\n✓ {name} added to project {args.project_id} successfully!")
+        print()
+        term.success(f"{name} added to project {args.project_id}", args)
 
-    except _req.exceptions.HTTPError as e:
-        if e.response is not None and e.response.status_code == 404:
-            identifier = orcid or username or email
-            logger.error(f"Not found: check that '{identifier}' has a Crucible account "
-                         f"and that project '{args.project_id}' exists")
-        else:
-            logger.error(f"Error adding user to project: {e}")
-        if getattr(args, "debug", False):
-            import traceback
-            traceback.print_exc()
-        sys.exit(1)
     except Exception as e:
         from .helpers import fail
         fail("adding user to project", e, args)
@@ -654,7 +686,7 @@ def _execute_update(args):
 
         if fields:
             result = client.projects.update(current_project_id, **fields)
-            logger.info("✓ Project updated")
+            term.success("Project updated", args)
             _show_project(result)
             current_project_id = result.get('project_id', current_project_id)
 
@@ -662,7 +694,7 @@ def _execute_update(args):
             overwrite = getattr(args, 'overwrite', False)
             client.projects.update_scientific_metadata(current_project_id, metadata_dict, overwrite=overwrite)
             action = "replaced" if overwrite else "updated"
-            logger.info(f"✓ Scientific metadata {action} for project {current_project_id}")
+            term.success(f"Scientific metadata {action} for project {current_project_id}", args)
 
     except Exception as e:
         from .helpers import fail
@@ -713,7 +745,7 @@ def _execute_remove_user(args):
             email=None if user_unique_id else email,
             username=None if user_unique_id else username,
         )
-        logger.info(f"Removed {name} from project '{args.project_id}'")
+        term.success(f"Removed {name} from project '{args.project_id}'", args)
 
     except _req.exceptions.HTTPError as e:
         if e.response is not None and e.response.status_code == 404:
@@ -735,7 +767,7 @@ def _register_update_user_role(subparsers):
     parser = subparsers.add_parser(
         'update-user-role',
         help="Change a member's role in a project",
-        description='Change a project member\'s role (requires editor or above; cannot grant/change owner)',
+        description='Change a project member\'s role (current and requested roles must both be below your role; ownership is transfer-only)',
         formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
@@ -751,7 +783,8 @@ Examples:
         'user_unique_id', metavar='USER_ID',
         help="Member's canonical ORCID or user MFID",
     )
-    parser.add_argument('role', metavar='ROLE', help='New role to grant')
+    parser.add_argument('role', choices=PROJECT_MEMBER_ROLES,
+                        help='New role to grant')
     parser.set_defaults(func=_execute_update_user_role)
 
 
@@ -764,11 +797,17 @@ def _execute_update_user_role(args):
         client = CrucibleClient()
         users = sort_members(client.projects.update_user_role(
             args.project_id, args.user_unique_id, args.role))
-        logger.info(
-            f"✓ {args.user_unique_id} is now '{args.role}' in project '{args.project_id}'"
-        )
-        rows = [(u.username or '-', term.fmt_name(u.model_dump(), default='-', fallback_username=False),
-                 u.role or '-') for u in users]
+        term.success(
+            f"{args.user_unique_id} is now '{args.role}' in project '{args.project_id}'", args)
+        rows = [(
+            u.username or '-',
+            term.user_link(
+                term.fmt_name(
+                    u.model_dump(), default='-', fallback_username=False),
+                u.unique_id,
+            ),
+            term.role_label(u.role),
+        ) for u in users]
         term.table(rows, ['Username', 'Name', 'Role'], max_widths=[25, 25, 12])
     except Exception as e:
         fail("updating user role", e, args)
@@ -836,7 +875,7 @@ def _execute_request_join(args):
     try:
         client = CrucibleClient()
         record = client.projects.request_join(args.project_id, reason=args.reason)
-        logger.info("✓ Join request submitted")
+        term.success("Join request submitted", args)
         _show_join_request(record, client=client)
     except Exception as e:
         from .helpers import fail
@@ -873,7 +912,7 @@ def _execute_list_join_requests(args):
                                                       limit=args.limit)
         term.header(f"Join Requests · {args.project_id} ({len(records)})")
         if not records:
-            print(f"  {term.dim('None found.')}")
+            print(f"  {term.dim('No join requests found.')}")
             return
         term.table(_table_rows(records, client=client),
                   ['ID', 'Group', 'Status', 'Requester', 'Requested'],
@@ -988,24 +1027,43 @@ Examples:
     parser.add_argument('query', metavar='QUERY', help='Search term (min 3 chars)')
     parser.add_argument('--limit', '-l', type=int, default=20, metavar='N',
                         help='Maximum results (default: 20, max: 50)')
+    parser.add_argument('--json', action='store_true', default=False,
+                        help='Output as JSON array')
     parser.set_defaults(func=_execute_search)
 
 
 def _execute_search(args):
     if len(args.query) < 3:
-        logger.error("Search term must be at least 3 characters")
-        sys.exit(1)
+        from .helpers import fail
+        fail("searching projects", ValueError("Search term must be at least 3 characters."), args)
     from crucible.client import CrucibleClient
     try:
         client  = CrucibleClient()
         results = client.projects.search(args.query, limit=args.limit)
+        if getattr(args, 'json', False):
+            print(json.dumps(results, indent=2, default=str))
+            return
         term.header(f"Projects matching '{args.query}' ({len(results)})")
         if not results:
             print(f"  {term.dim('No results found.')}")
             return
-        rows = [(r.get('project_id', '-'), r.get('title') or '-',
-                 r.get('organization') or '-') for r in results]
-        term.table(rows, ['ID', 'Title', 'Organization'], max_widths=[25, 30, 20])
+        from .helpers import project_explorer_url
+        def _project_row(project):
+            project_id = project.get('project_id')
+            title = project.get('title')
+            url = project_explorer_url(project_id)
+            return (
+                project_id if title else term.project_link(project_id, url),
+                term.navigation_link(title, url) if title else '-',
+                project.get('organization') or '-',
+            )
+        rows = [_project_row(project) for project in results]
+        term.table(
+            rows,
+            ['Project ID', 'Title', 'Organization'],
+            max_widths=[25, 30, 20],
+            min_widths=[25, 5, 12],
+        )
     except Exception as e:
         from .helpers import fail
         fail("", e, args)
@@ -1022,6 +1080,8 @@ def _register_search_metadata(subparsers):
         parser.add_argument('query', metavar='QUERY', help='Search query string')
         parser.add_argument('--limit', '-l', type=int, default=50, metavar='N',
                             help='Maximum results (default: 50)')
+        parser.add_argument('--json', action='store_true', default=False,
+                            help='Output as JSON array')
         parser.set_defaults(func=_execute_search_metadata)
 
 
@@ -1030,6 +1090,9 @@ def _execute_search_metadata(args):
     try:
         client  = CrucibleClient()
         results = client.projects.search_metadata(args.query, limit=args.limit)
+        if getattr(args, 'json', False):
+            print(json.dumps(results, indent=2, default=str))
+            return
         term.header(f"Metadata search: {args.query} ({len(results)})")
         if not results:
             print(f"  {term.dim('No results found.')}")

@@ -4,10 +4,14 @@
 |---|---|---|
 | `dataset_name` | Human-readable name for the dataset | create, update |
 | `project_id` | Project this dataset belongs to | create; later changes use `reassign_project()` |
+| `project_mfid` | Canonical project selector for creation | create |
 | `measurement` | Industry-standard experiment type (e.g. `"Raman Spectroscopy"`) | create, update |
 | `data_type` | Institution-specific data organization descriptor (e.g. `"ScopeFoundry H5 file"`) | create, update |
 | `instrument_name` | Name of the instrument as registered in Crucible | create |
 | `instrument_id` | Instrument identifier | create |
+| `instrument_mfid` | Canonical registered instrument selector for creation | create |
+| `instrument` | Current instrument identity and display fields, including its canonical MFID | server-assigned |
+| `project` | Current project identity and display fields, including its canonical MFID | server-assigned |
 | `data_format` | File type or extension (e.g. `"h5"`, `"dat"`) | create, update |
 | `session_name` | Optional tag grouping datasets collected in the same session | create, update |
 | `timestamp` | When the data was collected (ISO 8601 format) | create, update |
@@ -18,8 +22,17 @@
 | `size` | Total file size in bytes | server-assigned |
 | `creation_time` | When the record was created | server-assigned |
 | `modification_time` | When the record was last modified | server-assigned |
+| `capabilities` | Optional caller-specific actions calculated for an exact response | server-assigned |
 
 Instrument assignment is fixed at creation for now. Generic dataset updates may resubmit the current `instrument_id` or `instrument_name` for compatibility, but changing or clearing either value returns HTTP 409 until a dedicated reassignment operation is available.
+
+List datasets assigned to a canonical instrument across every project visible to the caller with:
+
+```python
+datasets = client.datasets.list(instrument_mfid="0tkn2knjast3h0008nyq9zps2c")
+```
+
+The equivalent CLI command is `crucible dataset list --instrument-mfid 0tkn2knjast3h0008nyq9zps2c`. Supplying this explicit filter does not apply the saved current project, while combining it with `--project-id` intentionally narrows the results to that project. Legacy datasets without a canonical instrument MFID are not included.
 
 ### Relationships
 
@@ -28,13 +41,13 @@ Instrument assignment is fixed at creation for now. Generic dataset updates may 
 | **Files** | `files` in `create()`; `add_file(dataset_mfid, file_path)` to add later | Zero or more files can be attached to a dataset. Each file is uploaded to cloud storage and triggers an ingestion process to parse metadata and generate thumbnails. |
 | **Scientific metadata** | `scientific_metadata` in `create()`; `metadata` in `update_scientific_metadata()` / `replace_scientific_metadata()` | A free-form JSON object for experiment-specific parameters. Stored separately from structured fields and searchable across datasets. |
 | **Thumbnails** | `add_thumbnail(dataset_mfid, image)` | Small preview images representing the data or results. Generated automatically by ingestors where supported, or uploaded manually. |
-| **Samples** | `sample_mfid` in `add_sample(dataset_mfid, sample_mfid)` | A dataset can be linked to one or more samples, and a sample to one or more datasets, capturing which material was measured. |
-| **Parent/child datasets** | `parent_mfid`, `child_mfid` in `link_parent_child()` | Datasets can be linked in a directed hierarchy to represent processing pipelines, such as raw to calibrated to analyzed. |
+| **Samples** | `sample_mfid` in `link_sample(dataset_mfid, sample_mfid)` | A dataset can be linked to one or more samples, and a sample to one or more datasets, capturing which material was measured. |
+| **Parent/child datasets** | `parent_mfid`, `child_mfid` in `link()` | Datasets can be linked in a directed hierarchy to represent processing pipelines, such as raw to calibrated to analyzed. |
 
 # Working with Datasets
 ## Creating a dataset
 
-Pass a `Dataset` model and optional files to `client.datasets.create()`:
+Dataset records and associated files are separate API resources. Create the dataset record first, then add files using its returned MFID:
 
 ```python
 from crucible.models import Dataset
@@ -46,15 +59,38 @@ result = client.datasets.create(
         instrument_name="Beamline 12.3.2",
         project_id="my-project",
     ),
-    files=["xrd_run5.xy"],
     scientific_metadata={"wavelength_angstrom": 0.7749, "temperature_K": 300},
     keywords=["XRD", "powder"],
 )
 
 dataset_mfid = result["dataset_mfid"]
+client.datasets.add_file(dataset_mfid, "xrd_run5.xy")
 ```
 
-You can upload multiple files in one call:
+Applications may use canonical MFIDs instead of human-readable IDs. The API also accepts both forms when they resolve to the same resource:
+
+```python
+dataset = Dataset(
+    dataset_name="XRD run 5",
+    project_id="my-project",
+    project_mfid="0tkn2knjast3h0008nyq9zps2c",
+    instrument_id="beamline-123",
+    instrument_mfid="0tk8pf1me0h3h0003fp91vr037",
+)
+```
+
+Conflicting ID and MFID selectors produce an API validation error. Nano forwards the supplied selectors without resolving one into the other.
+
+Files are optional. The CLI can create a record that receives its files later:
+
+```bash
+crucible dataset create --project-id my-project --name "Planned experiment"
+crucible dataset add-file DATASET_MFID -i results.dat
+```
+
+The CLI defaults to human-readable `--project-id` and `--instrument-id` selectors. Integrations can use `--project-mfid` and `--instrument-mfid`; matching ID and MFID flags may be combined.
+
+For convenience, `create()` can perform these operations in sequence when `files` is supplied. Files are not part of the API dataset-creation request, and a failure while adding one does not roll back the created dataset record:
 
 ```python
 result = client.datasets.create(
@@ -68,7 +104,7 @@ result = client.datasets.create(
     1. **POST** `/datasets` creates the dataset record and returns its `unique_id` MFID.
     2. **POST** `/resources/{dataset_mfid}/metadata` adds scientific metadata when provided.
     3. **POST** `/datasets/{dataset_mfid}/keywords` adds each keyword individually when provided.
-    4. Uploads each file via GCS and triggers an ingestion request per file (if `files` is provided)
+    4. Adds each file through the associated-file and upload routes and triggers an ingestion request per file when `files` is provided
 
 
 ## Retrieving a dataset
@@ -86,11 +122,24 @@ Datasets are retrieved only by their canonical 26-character MFID. Dataset names 
 
 Singleton retrieval expands `owner` by default as a public-safe user record containing `unique_id`, `username`, `first_name`, and `last_name`. Pass `include_owner=False` to suppress expansion. List operations remain opt-in with `include_owner=True`. The canonical owner identifier remains available as `owner_orcid`.
 
+Canonical detail responses include caller-specific `capabilities` when the server has calculated them. Dataset capabilities always report `can_change_status=False` because datasets have no lifecycle-status operation. Collections and search results normally return `capabilities=None`, which means the guidance was not calculated rather than that every action is denied. The API remains authoritative for each mutation.
+
+Dataset responses include lightweight `instrument` and `project` references when those canonical relationships resolve. Use `dataset["instrument"]["unique_id"]` and `dataset["project"]["unique_id"]` for stable navigation. The flat `instrument_id`, `instrument_name`, and `project_id` fields remain available and provide display fallbacks for legacy records whose canonical relationship is unresolved. A reference exposes identity and display information only and does not imply access to the complete instrument or project.
+
 ## Listing datasets
 
 ```python
 # All datasets in a project
 datasets = client.datasets.list(project_id="my-project", limit=50)
+
+# Datasets shared with a project but assigned elsewhere or unassigned
+shared = client.datasets.list(project_id="my-project", project_scope="shared")
+
+# Assigned and shared datasets using the project's canonical MFID
+visible = client.datasets.list(
+    project_mfid="0tkn2knjast3h0008nyq9zps2c",
+    project_scope="all",
+)
 
 # Filter by measurement type
 datasets = client.datasets.list(project_id="my-project", measurement="SEM imaging")
@@ -107,6 +156,10 @@ datasets = client.datasets.list(
     accessible_to_project="my-project",
 )
 ```
+
+Pass the project slug as `project_id` or the canonical project MFID as `project_mfid`. Both may be supplied when they identify the same project; conflicting identifiers produce an API validation error. `project_scope` accepts `assigned`, `shared`, or `all` and defaults to `assigned`. Scoped collection results expose `project_relation` as `assigned` or `shared`; `project` may be `None` when a shared resource has no primary project.
+
+The `sample_mfid` relationship filter uses the normal paginated dataset collection and can be combined with compatible dataset filters such as project, instrument, and access selectors. Results follow cursor pagination and include only datasets the caller may read.
 
 Access selectors accept user MFIDs, ORCIDs, usernames, or emails and project MFIDs or project IDs. Multiple selectors use intersection semantics and only narrow resources the authenticated caller may read. Inspecting another user requires platform-administrator access, while inspecting a project requires membership in that project or platform-administrator access.
 
@@ -137,7 +190,7 @@ grants = client.datasets.list_access(dataset_mfid)
 client.datasets.set_access(dataset_mfid, "users", "0000-0002-1825-0097", "editor")
 client.datasets.revoke_access(dataset_mfid, "users", "0000-0002-1825-0097")
 client.datasets.set_public(dataset_mfid)
-client.datasets.unset_public(dataset_mfid)
+client.datasets.set_private(dataset_mfid)
 ```
 
 Normal access grants accept `viewer`, `contributor`, `editor`, or `admin`. Use `transfer_ownership()` for ownership.
@@ -149,6 +202,55 @@ Add files to an existing dataset:
 ```python
 client.datasets.add_file(dataset_mfid, "additional_file.dat")
 ```
+
+To discover files recursively, build the list locally and add each file to the existing dataset. Crucible stores the filename, not its relative directory hierarchy, so verify that basenames are unique before uploading:
+
+```python
+from collections import Counter
+from pathlib import Path
+
+source_root = Path("experiment-output")
+source_files = sorted(path for path in source_root.rglob("*") if path.is_file())
+duplicate_names = [name for name, count in Counter(path.name for path in source_files).items() if count > 1]
+if duplicate_names:
+    raise ValueError(f"Duplicate filenames in source tree: {duplicate_names}")
+
+for path in source_files:
+    client.datasets.add_file(dataset_mfid, str(path))
+```
+
+### Replacing a file
+
+File replacement is an explicit delete-and-create workflow. Find the old associated-file MFID, delete that file, and then add the replacement to the dataset:
+
+```python
+associated_files = client.datasets.list_files(dataset_mfid)
+old_file = next(file for file in associated_files if file["filename"] == "results.dat")
+
+client.files.delete(old_file["mfid"])
+client.datasets.add_file(dataset_mfid, "results.dat")
+```
+
+Deleting a file is irreversible. Verify the dataset MFID, file MFID, and filename before calling `delete()`.
+
+The CLI follows the same sequence and asks for confirmation before deleting the old file:
+
+```bash
+crucible dataset list-files DATASET_MFID
+crucible file delete FILE_MFID
+crucible dataset add-file DATASET_MFID -i results.dat
+```
+
+### Re-uploading to an existing dataset
+
+Keep the dataset MFID and add the local files to that record again. Do not call `datasets.create()` again, because that creates another dataset record:
+
+```python
+for path in source_files:
+    client.datasets.add_file(dataset_mfid, str(path))
+```
+
+An unchanged file that the API recognizes by its SHA-256 hash is not uploaded again. If a filename now represents different content, use the explicit delete-and-create workflow above.
 
 ### How the data ingestion process works
 
@@ -164,10 +266,7 @@ Ingestors will not overwrite the dataset attributes provided at dataset creation
 
 For updates to the scientific metadata, the ingestion process uses the `client.datasets.update_scientific_metadata(overwrite = False)` method. As a result, new key-value pairs parsed during the ingestion process will be appended to the existing `scientific_metadata` and newly parsed values for existing keys will be updated. If you would like to replace the entire scientific_metadata dictionary, it can be done manally with `update_scientific_metadata(overwrite=True)`.
 
-Files are deduplicated by sha256 hash. If you add the same file twice it will not be reuploaded, but ingestion will be re-requested. This operation is **idempotent**.
-
-!!! warning
-    If two files with the same name but different contents are added to the same dataset, the upload proceeds but **replaces the original file in cloud storage**. A new file record is created with a new `mfid` and hash; the old record remains but its download link points to the new file. We are actively working on updated logic to address this.
+Files are deduplicated by SHA-256 hash. If you add the same file twice, the client returns the existing associated-file record without uploading or requesting ingestion again.
 
 If no ingestion class exists for your data type, reach out on [Discord](https://discord.gg/Wrepphsgbx) or contribute to the [crucible-ingestion](https://github.com/MolecularFoundryCrucible/crucible-ingestion) repository.
 
@@ -218,7 +317,7 @@ Downloading and ingestion are GCS-only: `client.files.download()`/`client.datase
 Scientific metadata stores experiment-specific parameters as a free-form JSON object.
 
 ```python
-# Merge new keys into existing metadata (PATCH — appends/updates individual keys)
+# Merge new keys into existing metadata (PATCH - appends/updates individual keys)
 client.datasets.update_scientific_metadata(
     dataset_mfid,
     metadata={"temperature_K": 300, "pressure_bar": 1.0, "scan_rate_mV_s": 50},
@@ -248,9 +347,34 @@ keywords = client.datasets.get_keywords(dataset_mfid=dataset_mfid)
 ## Thumbnails
 
 ```python
-client.datasets.add_thumbnail(dataset_mfid, "preview.png")
+thumbnail = client.datasets.add_thumbnail(dataset_mfid, "preview.png")
 thumbnails = client.datasets.get_thumbnails(dataset_mfid)
+
+print(thumbnail["id"])
+print(thumbnail["mime_type"])
+
+client.datasets.update_thumbnail(
+    dataset_mfid,
+    thumbnail["id"],
+    thumbnail_name="overview.png",
+)
+
+client.datasets.update_thumbnail(
+    dataset_mfid,
+    thumbnail["id"],
+    image="replacement.png",
+)
 ```
+
+Thumbnail create, list, and update responses contain `id`, `dataset_id`, `thumbnail_name`, `thumbnail_b64str`, and the authoritative `mime_type`. The API currently normalizes stored thumbnails to JPEG, regardless of the extension in the user-facing thumbnail name.
+
+From the CLI, add a local image with:
+
+```bash
+crucible dataset add-thumbnail DATASET_MFID preview.png
+```
+
+Use `--name NAME` to override the thumbnail name stored by the API.
 
 ## Downloading
 
@@ -270,8 +394,8 @@ links = client.datasets.get_download_links(dataset_mfid)
 Link datasets to represent a processing pipeline:
 
 ```python
-# raw → processed
-client.datasets.link_parent_child(
+# raw to processed
+client.datasets.link(
     parent_mfid=raw_dataset_mfid,
     child_mfid=processed_dataset_mfid,
 )

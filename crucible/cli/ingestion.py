@@ -69,7 +69,7 @@ def _execute_list(args):
                 str(r.get('id', '-')),
                 term.status_label(r.get('status')),
                 r.get('ingestion_class') or '-',
-                r.get('file_mfid') or '-',
+                term.cyan(r.get('file_mfid')) if r.get('file_mfid') else '-',
                 term.fmt_ts(r.get('time_created')) or '-',
             ))
         term.table(rows, ['ID', 'Status', 'Class', 'File MFID', 'Created'],
@@ -174,7 +174,7 @@ def _execute_wait(args):
         r = client.ingestions.wait(args.request_id)
         status = r.get('status', '-')
         if status == 'complete':
-            logger.info(f"✓ Ingestion {args.request_id} completed successfully")
+            term.success(f"Ingestion {args.request_id} completed", args)
         else:
             logger.error(f"Ingestion {args.request_id} ended with status: {status}")
             sys.exit(1)

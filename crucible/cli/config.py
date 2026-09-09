@@ -86,7 +86,7 @@ Configuration keys (by section):
     api_key             Crucible API authentication key (required)
     api_url             Crucible API endpoint URL
     graph_explorer_url  Crucible Graph Explorer URL (optional)
-    current_project     Default project ID (optional)
+    current_project     Current project ID (optional)
 
   [cache]
     cache_dir           Directory for caching downloaded data
@@ -105,6 +105,9 @@ Priority order (highest to lowest):
     1. Environment variables (CRUCIBLE_API_KEY, CRUCIBLE_READ_TIMEOUT, etc.)
     2. Config file (~/.config/nano-crucible/config.ini)
     3. Defaults
+
+CRUCIBLE_CURRENT_PROJECT is deprecated. Use --project-id for automation or
+the interactive shell's 'use PROJECT_ID' command to save a selection.
 """
     )
 
@@ -208,56 +211,70 @@ Priority order (highest to lowest):
 def cmd_init(args):
     """Interactive configuration wizard."""
     from crucible.config import create_config_file, config
+    from .helpers import (
+        prompt_confirm,
+        prompt_optional,
+        prompt_secret,
+        show_warning,
+        validate_http_url,
+    )
+    from ..utils.identifiers import validate_slug
 
     term.header("Crucible Configuration Setup")
     print("")
     print("  This wizard will help you configure nano-crucible.\n")
 
+    active_overrides = [
+        name for name in (
+            'CRUCIBLE_API_KEY',
+            'CRUCIBLE_API_URL',
+            'CRUCIBLE_CACHE_DIR',
+            'CRUCIBLE_GRAPH_EXPLORER_URL',
+            'CRUCIBLE_CURRENT_PROJECT',
+        )
+        if os.environ.get(name) is not None
+    ]
+    if active_overrides:
+        show_warning(
+            "Environment variables override values saved by this wizard: "
+            + ', '.join(active_overrides)
+        )
+
     # Check if config exists
     config_file = config.config_file_path
     if config_file.exists():
         print(f"Configuration file already exists: {config_file}")
-        response = input("Overwrite it? [y/N]: ").strip().lower()
-        if response not in ['y', 'yes']:
+        if not prompt_confirm("Overwrite the existing configuration?"):
             print("Cancelled.")
             return
 
     # Get API key
     print("\n1. Crucible API Key (required)")
     print("   Get your key from: https://crucible.lbl.gov/api/v3/user_apikey")
-    api_key = input("   API Key: ").strip()
-    if not api_key:
-        print("Error: API key is required")
-        sys.exit(1)
+    api_key = prompt_secret("API Key", option='CRUCIBLE_API_KEY')
 
     # Get API URL
     from crucible.config.config import Config as _Cfg
     print("\n2. Crucible API URL (optional)")
     print(f"   Press Enter to use the built-in default ({_Cfg.DEFAULT_API_URL})")
-    api_url = input("   API URL: ").strip()
-    if not api_url:
-        api_url = None
+    api_url = prompt_optional("API URL", validator=validate_http_url)
 
     # Get cache directory
     print("\n3. Cache Directory (optional)")
     print(f"   Press Enter to use default: {config.cache_dir}")
-    cache_dir = input("   Cache Dir: ").strip()
-    if not cache_dir:
-        cache_dir = None
+    cache_dir = prompt_optional("Cache directory")
 
     # Get Graph Explorer URL
     print("\n4. Graph Explorer URL (optional)")
     print("   Press Enter to use default: https://crucible.lbl.gov/explore")
-    graph_explorer_url = input("   Graph Explorer URL: ").strip()
-    if not graph_explorer_url:
-        graph_explorer_url = None
+    graph_explorer_url = prompt_optional(
+        "Graph Explorer URL", validator=validate_http_url)
 
     # Get current project
-    print("\n5. Default Project ID (optional)")
-    print("   Project ID to use when -pid is not specified")
-    current_project = input("   Project ID: ").strip()
-    if not current_project:
-        current_project = None
+    print("\n5. Current Project ID (optional)")
+    print("   Project ID to use when --project-id is not specified")
+    current_project = prompt_optional(
+        "Project ID", validator=lambda value: validate_slug(value, 'project'))
 
     # Create config file
     try:
@@ -268,9 +285,10 @@ def cmd_init(args):
             graph_explorer_url=graph_explorer_url,
             current_project=current_project
         )
-        print(f"\n✓ Configuration saved to: {created_path}")
+        print()
+        term.success(f"Configuration saved to: {created_path}", args)
         print("\nYou can now use crucible commands!")
-        print("Example: crucible upload -i input.lmp -t lammps -pid my-project")
+        print("Example: crucible dataset create -i input.lmp -t lammps --project-id my-project")
     except Exception as e:
         logger.error(f"Error creating configuration: {e}")
         sys.exit(1)
@@ -300,6 +318,7 @@ def cmd_show(args):
     _p("api_url",              config.api_url)
     _p("graph_explorer_url",   config.graph_explorer_url)
     _p("current_project",      config.current_project)
+    _p("project source",       config.source('current_project'))
 
     # [cache]
     term.subheader("[cache]")
@@ -422,11 +441,17 @@ def set_config_value(key, value):
 
 def cmd_set(args):
     """Set a configuration value, preserving comments."""
+    if args.key == 'current_project' and os.environ.get('CRUCIBLE_CURRENT_PROJECT') is not None:
+        from .helpers import show_warning
+        show_warning(
+            "CRUCIBLE_CURRENT_PROJECT currently overrides this saved selection. "
+            "Unset the environment variable to use the saved project."
+        )
     key   = args.key
     value = args.value
     section, config_file = set_config_value(key, value)
-    print(f"✓ Set {key} = {value}  (in [{section}])")
-    print(f"✓ Saved to {config_file}")
+    term.success(f"Set {key} = {value}  (in [{section}])", args)
+    term.success(f"Saved to {config_file}", args)
 
 
 def unset_config_value(key):
@@ -494,6 +519,13 @@ def cmd_edit(args):
 
     config_file = config.config_file_path
 
+    if os.environ.get('CRUCIBLE_CURRENT_PROJECT') is not None:
+        from .helpers import show_warning
+        show_warning(
+            "CRUCIBLE_CURRENT_PROJECT overrides current_project in this file. "
+            "Unset the environment variable to use the saved project."
+        )
+
     if not config_file.exists():
         print(f"Config file does not exist: {config_file}")
         print("Create it first with: crucible config init")
@@ -509,9 +541,10 @@ def cmd_edit(args):
 
     try:
         subprocess.run(cmd + [str(config_file)], check=True)
-        print("\n✓ Config file updated")
+        print()
+        term.success("Config file updated", args)
         config.reload()
-        print("✓ Configuration reloaded")
+        term.success("Configuration reloaded", args)
     except subprocess.CalledProcessError as e:
         logger.error(f"Error editing file: {e}")
         sys.exit(1)

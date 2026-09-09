@@ -6,6 +6,7 @@ Upload subcommand for Crucible CLI.
 Handles parsing and uploading datasets to Crucible.
 """
 
+import argparse
 import sys
 import logging
 from pathlib import Path
@@ -43,35 +44,35 @@ def register_subcommand(subparsers):
         epilog="""
 Examples:
     # Generic upload (no parsing) - upload any files
-    crucible upload -i file1.dat file2.csv -pid my-project -u
+    crucible upload -i file1.dat file2.csv --project-id my-project -u
 
     # Generic upload with metadata and keywords
-    crucible upload -i data.csv -pid my-project -u \\
+    crucible upload -i data.csv --project-id my-project -u \\
         --metadata '{"temperature": 300, "pressure": 1.0}' \\
         --keywords "experiment,thermal" -m "thermal_analysis"
 
     # Generic upload with metadata from JSON file
-    crucible upload -i data.csv -pid my-project -u --metadata metadata.json
+    crucible upload -i data.csv --project-id my-project -u --metadata metadata.json
 
     # Parse and upload LAMMPS simulation
-    crucible upload -i input.lmp -t lammps -pid my-project -u
+    crucible upload -i input.lmp -t lammps --project-id my-project -u
 
     # Parse LAMMPS and add extra metadata/keywords
-    crucible upload -i input.lmp -t lammps -pid my-project -u \\
+    crucible upload -i input.lmp -t lammps --project-id my-project -u \\
         --metadata '{"experiment_id": "EXP-001"}' \\
         --keywords "validation,benchmark"
 
     # Upload with specific mfid (all aliases work: --mfid, --uuid, --unique-id, --id)
-    crucible upload -i input.lmp -t lammps -pid my-project -u --mfid abc123xyz
+    crucible upload -i input.lmp -t lammps --project-id my-project -u --mfid abc123xyz
 
     # Upload with custom dataset name
-    crucible upload -i input.lmp -t lammps -pid my-project -u -n "Water MD Simulation"
+    crucible upload -i input.lmp -t lammps --project-id my-project -u -n "Water MD Simulation"
 
     # Upload multiple files using wildcards
-    crucible upload -i *.dat -pid my-project -u -m "raw_data"
+    crucible upload -i *.dat --project-id my-project -u -m "raw_data"
 
     # Upload with session name and make public
-    crucible upload -i input.lmp -t lammps -pid my-project -u \\
+    crucible upload -i input.lmp -t lammps --project-id my-project -u \\
         --session "2024-Q1-experiments" --public
 """
     )
@@ -103,12 +104,23 @@ Examples:
         type_arg.completer = lambda **kwargs: sorted(PARSER_REGISTRY.keys())
 
     # Project ID
+    from .helpers import DeprecatedAliasAction
     parser.add_argument(
-        '-pid', '--project-id',
+        '--project-id', '-p',
         required=False,
         default=None,
         metavar='ID',
-        help='Crucible project ID (uses config current_project if not specified)'
+        help='Crucible project ID (uses the saved current project if omitted)'
+    )
+    parser.add_argument(
+        '-pid',
+        action=DeprecatedAliasAction,
+        deprecated_options={'-pid'},
+        replacement='--project-id',
+        dest='project_id',
+        default=argparse.SUPPRESS,
+        metavar='ID',
+        help=argparse.SUPPRESS,
     )
 
     # Upload flag
@@ -225,18 +237,13 @@ def execute(args):
     logger.warning("'crucible upload' is deprecated — use 'crucible dataset create -i FILE ...' instead.")
     import json
     from crucible.parsers import get_parser, BaseParser
-    from crucible.config import config
+    from .helpers import resolve_project_context
     # Set up logging based on verbose flag
-    # Get project_id - use flag if provided, otherwise fall back to config
-    project_id = args.project_id
-    project_from_config = False
+    project_id, project_source = resolve_project_context(args, args.project_id)
     if project_id is None:
-        project_id = config.current_project
-        project_from_config = True
-        if project_id is None:
-            logger.error("Error: Project ID required. Specify with -pid or set current_project in config.")
-            logger.error("  Set default: crucible config set current_project YOUR_PROJECT_ID")
-            sys.exit(1)
+        logger.error("Error: Project ID required. Specify with --project-id or set current_project in config.")
+        logger.error("  Set default: crucible config set current_project YOUR_PROJECT_ID")
+        sys.exit(1)
 
     # Expand wildcards in input files
     import glob
@@ -334,10 +341,12 @@ def execute(args):
     logger.info("\n=== Dataset Information ===")
 
     # Project and Parser
-    if project_from_config:
-        logger.info(f"Project: {project_id} (from config)")
-    else:
-        logger.info(f"Project: {project_id}")
+    project_context = {
+        'environment': 'from environment',
+        'config file': 'current project',
+    }.get(project_source)
+    suffix = f" ({project_context})" if project_context else ''
+    logger.info(f"Project: {project_id}{suffix}")
     logger.info(f"Parser: {ParserClass.__name__}")
 
     # Dataset properties
@@ -386,7 +395,8 @@ def execute(args):
                 wait_for_ingestion_response=True
             )
 
-            logger.info("\n✓ Upload successful!")
+            print()
+            term.success("Upload completed", args)
             logger.info(f"Dataset ID: {result.get('created_record', {}).get('unique_id', 'N/A')}")
 
             if result:
@@ -395,11 +405,8 @@ def execute(args):
                     logger.debug(f"  {key}: {value}")
 
         except Exception as e:
-            logger.error(f"\n✗ Upload failed: {e}")
-            if getattr(args, "debug", False):
-                import traceback
-                traceback.print_exc()
-            sys.exit(1)
+            from .helpers import fail
+            fail("uploading dataset", e, args)
     else:
         logger.info("\n(Use -u/--upload flag to upload to Crucible)")
 

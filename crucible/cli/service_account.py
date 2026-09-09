@@ -7,6 +7,7 @@ Accessible as both 'crucible service-account' and 'crucible sa'.
 All operations require admin permissions.
 """
 
+import json
 import sys
 import logging
 from . import term
@@ -64,8 +65,7 @@ def _resolve_sa(client, unique_id=None, username=None, ambiguous=False):
     if sa is None and ambiguous and unique_id:
         sa = client.service_accounts.get(username=unique_id)
     if sa is None:
-        logger.error("Service account not found")
-        sys.exit(1)
+        raise ValueError("Service account not found.")
     return sa
 
 
@@ -93,8 +93,7 @@ def _resolve_sa_ref(args):
         ref = parse_sa_ref(sa_ref)
         return ref.get('unique_id'), ref.get('username'), 'unique_id' in ref
 
-    logger.error("Provide a service account identifier: crucible sa get SA")
-    sys.exit(1)
+    raise ValueError("Provide a service account identifier: crucible sa get SA")
 
 
 def _register_create(subparsers):
@@ -109,7 +108,7 @@ Examples:
 """,
     )
     parser.add_argument('--username', '-u', default=None, metavar='USERNAME',
-                        help='Unique username (lowercase, letters/digits/hyphens/underscores). '
+                        help='Unique username (3-24 chars, starts with a letter; lowercase letters, digits, hyphens, and underscores). '
                              'Prompted interactively if omitted.')
     parser.add_argument('--unique-id', metavar='MFID',
                         help='Optional MFID — server generates one if omitted')
@@ -117,8 +116,9 @@ Examples:
 
 
 def _execute_create(args):
-    import re
     from crucible.client import CrucibleClient
+    from .helpers import prompt_optional, prompt_username
+    from ..utils.identifiers import validate_mfid, validate_username
 
     username = getattr(args, 'username', None)
     unique_id = getattr(args, 'unique_id', None)
@@ -127,20 +127,14 @@ def _execute_create(args):
         print()
         print("  Creating a new service account.")
         print()
-        while not username:
-            username = input("  Username: ").strip()
-            if not username:
-                print("  Username is required.")
-            elif not re.match(r'^[a-z0-9_-]+$', username):
-                print("  Invalid format (lowercase, digits, hyphens, underscores only).")
-                username = None
-
-        uid_input = input("  MFID (optional, press Enter to skip): ").strip()
-        if uid_input:
-            unique_id = uid_input
+        username = prompt_username()
+        unique_id = prompt_optional("MFID", validator=validate_mfid)
         print()
 
     try:
+        username = validate_username(username)
+        if unique_id is not None:
+            unique_id = validate_mfid(unique_id)
         client = CrucibleClient()
         result = client.service_accounts.create(username=username, unique_id=unique_id)
         _show_sa(result, key=result.get('api_key'))
@@ -201,6 +195,8 @@ Examples:
     group = parser.add_mutually_exclusive_group()
     group.add_argument('--unique-id', '-o', metavar='MFID',    help='(deprecated, use positional SA)')
     group.add_argument('--username',  '-u', metavar='USERNAME', help='(deprecated, use positional SA)')
+    parser.add_argument('--json', action='store_true', default=False,
+                        help='Output as JSON object')
     parser.set_defaults(func=_execute_get)
 
 
@@ -210,12 +206,15 @@ def _execute_get(args):
         unique_id, username, ambiguous = _resolve_sa_ref(args)
         client = CrucibleClient()
         sa = _resolve_sa(client, unique_id=unique_id, username=username, ambiguous=ambiguous)
-        _show_sa(sa)
+        if getattr(args, 'json', False):
+            print(json.dumps(sa, indent=2, default=str))
+        else:
+            _show_sa(sa)
     except SystemExit:
         raise
     except Exception as e:
         from .helpers import fail
-        fail("", e)
+        fail("", e, args)
 
 
 def _register_list(subparsers):
@@ -225,6 +224,8 @@ def _register_list(subparsers):
         formatter_class=term.ColorHelpFormatter,
     )
     parser.add_argument('--limit', type=int, default=100, metavar='N')
+    parser.add_argument('--json', action='store_true', default=False,
+                        help='Output as JSON array')
     parser.set_defaults(func=_execute_list)
 
 
@@ -233,17 +234,21 @@ def _execute_list(args):
     try:
         client = CrucibleClient()
         accounts = client.service_accounts.list(limit=args.limit)
+        if getattr(args, 'json', False):
+            print(json.dumps(accounts, indent=2, default=str))
+            return
         term.header(f"Service Accounts ({len(accounts)})")
         if not accounts:
-            print(f"  {term.dim('None found.')}")
+            print(f"  {term.dim('No service accounts found.')}")
             return
         rows = []
         for sa in accounts:
-            rows.append((sa.get('username') or '-', sa.get('unique_id') or '-'))
+            rows.append((sa.get('username') or '-',
+                         term.cyan(sa.get('unique_id')) if sa.get('unique_id') else '-'))
         term.table(rows, ['Username', 'MFID'], max_widths=[30, 30])
     except Exception as e:
         from .helpers import fail
-        fail("", e)
+        fail("", e, args)
 
 
 def _register_edit(subparsers):
@@ -416,7 +421,7 @@ def _execute_add_access_group(args):
         client = CrucibleClient()
         unique_id = resolve_sa_id(client, args.sa)
         client.service_accounts.add_to_access_group(unique_id, args.group_name)
-        logger.info(f"Added {args.sa} to access group '{args.group_name}'")
+        term.success(f"Added {args.sa} to access group '{args.group_name}'", args)
     except ValueError as e:
         logger.error(str(e))
         sys.exit(1)
@@ -447,7 +452,7 @@ def _execute_remove_access_group(args):
         client = CrucibleClient()
         unique_id = resolve_sa_id(client, args.sa)
         client.service_accounts.remove_from_access_group(unique_id, args.group_name)
-        logger.info(f"Removed {args.sa} from access group '{args.group_name}'")
+        term.success(f"Removed {args.sa} from access group '{args.group_name}'", args)
     except ValueError as e:
         logger.error(str(e))
         sys.exit(1)

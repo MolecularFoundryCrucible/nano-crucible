@@ -17,6 +17,7 @@ from ..utils.identifiers import (
     is_mfid,
     is_orcid,
     require_canonical_identifier,
+    validate_username,
 )
 
 logger = logging.getLogger(__name__)
@@ -239,6 +240,7 @@ class UserOperations(BaseResource):
         ]
         if missing:
             raise ValueError(f"Human user creation requires: {', '.join(missing)}.")
+        user_data['username'] = validate_username(user_data['username'])
 
         # The API accepts the legacy wire alias 'orcid' for an optional unique_id.
         if 'unique_id' in user_data:

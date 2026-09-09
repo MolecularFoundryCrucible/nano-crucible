@@ -9,7 +9,7 @@ This file is the canonical repository guidance for any coding agent. Tool-specif
 - Distribution: `nano-crucible`
 - Import package: `crucible`
 - CLI entry point: `crucible.cli:main`
-- Supported Python: 3.8 and newer
+- Supported Python: 3.9 and newer
 - Default API: `https://crucible.lbl.gov/api/v3`
 - Documentation: MkDocs Material, configured in `mkdocs.yml`
 
@@ -90,7 +90,7 @@ Do not run `tests/integration/` merely as routine validation. Those tests requir
 - Most resource models use `extra="allow"`. Removing a field from a model does not prove callers stopped sending it; search all model constructors and API payload builders for stale fields.
 - `AVAILABLE_INGESTORS` is a client-side completion list, not an authoritative statement of what the server currently supports.
 - `ingestor=None` means server-side auto-detection. The generic `ApiUploadIngestor` is not currently a fallback for unknown formats.
-- Preserve supported Python 3.8 syntax unless the project explicitly raises its minimum version.
+- Preserve supported Python 3.9 syntax unless the project explicitly raises its minimum version.
 - Keep the library quiet by default. Use package logging rather than unconditional prints; CLI presentation belongs in `crucible/cli/`.
 - Never log, print, commit, or place real API keys in examples.
 

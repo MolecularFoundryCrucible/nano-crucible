@@ -2,7 +2,7 @@
 
 ## Requirements
 
-- Python 3.8 or later
+- Python 3.9 or later
 - A Crucible account and API key ([crucible.lbl.gov](https://crucible.lbl.gov))
 
 ## Install from PyPI
@@ -40,7 +40,7 @@ Run the interactive setup wizard once after installing:
 crucible config init
 ```
 
-This prompts for your API key and writes a config file at `~/.config/nano-crucible/config.ini` (path varies by OS). All subsequent CLI and Python API calls will use it automatically — no environment variables needed.
+This securely prompts for your API key without displaying it and writes a config file at `~/.config/nano-crucible/config.ini` (path varies by OS). All subsequent CLI and Python API calls will use it automatically. If a corresponding environment variable is set, it takes precedence and the wizard reports that override.
 
 You can review or change settings at any time:
 
@@ -57,7 +57,7 @@ Useful config keys:
 |---|---|
 | `api_key` | Your Crucible API key |
 | `api_url` | Optional API override (default: `https://crucible.lbl.gov/api/v3`) |
-| `current_project` | Default project ID used by CLI commands |
+| `current_project` | Current project ID used when a command omits `--project-id` |
 
 ### Alternative: pass credentials directly in Python
 
@@ -76,6 +76,8 @@ export CRUCIBLE_API_KEY="your-api-key"
 ```
 
 Set `CRUCIBLE_API_URL` only when targeting staging or another non-default deployment. Environment variables take priority over the config file when both are present.
+
+Use explicit `--project-id` arguments for automation. `CRUCIBLE_CURRENT_PROJECT` is deprecated because it can silently redirect operations away from the project saved by the interactive shell.
 
 If an older config explicitly selects API v1 or v2, Nano displays a migration warning. Run `crucible config unset api_url` to inherit the API v3 endpoint packaged with Nano, or set the override to the desired deployment explicitly.
 
