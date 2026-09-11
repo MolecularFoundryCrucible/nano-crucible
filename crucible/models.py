@@ -221,6 +221,22 @@ class ProjectReassignment(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class InstrumentAssignment(BaseModel):
+    '''Result of PUT /datasets/{dataset_mfid}/instrument.
+
+    previous_instrument_name is the dataset's old instrument_name label. For
+    datasets whose name never named a registered instrument, it is the only
+    record of what was there, since previous_instrument is None for those.
+    '''
+
+    dataset_mfid: str
+    previous_instrument: Optional[InstrumentReference] = None
+    previous_instrument_name: Optional[str] = None
+    instrument: InstrumentReference
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class AssociatedFile(BaseModel):
     '''A file attached to a dataset.'''
 

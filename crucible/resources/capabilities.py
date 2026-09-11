@@ -1,6 +1,6 @@
 """Reusable resource capabilities backed by generic API endpoints."""
 
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from ..utils.deprecation import _deprecated
 
@@ -103,3 +103,40 @@ class ProjectAssignmentMixin:
             json={'project_id': project_id},
         )
         return ProjectReassignment.model_validate(raw)
+
+
+class InstrumentAssignmentMixin:
+    """Instrument-assignment operations for instrument-scoped resources."""
+
+    def assign_instrument(self, mfid: str, instrument_id: Optional[str] = None,
+                          instrument_mfid: Optional[str] = None) -> 'InstrumentAssignment':
+        """Assign or reassign the dataset's instrument, by slug or MFID.
+
+        Sets instrument_id, instrument_mfid, and instrument_name together from
+        the resolved instrument, and grants the instrument's access group
+        contributor on the dataset. Reassignment drops the outgoing
+        instrument's grant only. Requires manage_acl on the dataset.
+
+        instrument_name is not settable: it is a label derived from the
+        instrument, so the server always overwrites it.
+
+        Args:
+            mfid: Dataset MFID.
+            instrument_id: Registered instrument slug.
+            instrument_mfid: Canonical instrument MFID. If both are given they
+                must identify the same instrument (422 otherwise).
+
+        Returns:
+            InstrumentAssignment: the new instrument plus what it replaced.
+
+        Example:
+            >>> client.datasets.assign_instrument("<dataset-mfid>", instrument_id="xrd-1")
+        """
+        from ..models import InstrumentAssignment
+
+        if instrument_id is None and instrument_mfid is None:
+            raise ValueError("Provide instrument_id or instrument_mfid")
+        body = {k: v for k, v in (('instrument_id', instrument_id),
+                                  ('instrument_mfid', instrument_mfid)) if v is not None}
+        raw = self._request('put', f'/datasets/{mfid}/instrument', json=body)
+        return InstrumentAssignment.model_validate(raw)

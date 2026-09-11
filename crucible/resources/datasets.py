@@ -18,7 +18,8 @@ import mfid
 
 # internal modules
 from .base import BaseResource
-from .capabilities import AccessControlMixin, OwnershipMixin, ProjectAssignmentMixin
+from .capabilities import (
+    AccessControlMixin, InstrumentAssignmentMixin, OwnershipMixin, ProjectAssignmentMixin)
 from ..constants import DEFAULT_LIMIT
 from ..utils.deprecation import _deprecated, _deprecated_parameter
 from ..utils.identifiers import is_mfid, require_canonical_identifier
@@ -31,7 +32,8 @@ from .gcs.upload import upload_file_gcs
 logger = logging.getLogger(__name__)
 
 
-class DatasetOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixin, BaseResource):
+class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, OwnershipMixin,
+                        AccessControlMixin, BaseResource):
     """Dataset-related API operations.
 
     Access via: client.datasets.get(), client.datasets.list(), etc.
@@ -303,9 +305,9 @@ class DatasetOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMix
 
         'owner_orcid' and 'project_id' are no longer accepted here (422) -
         use transfer_ownership() / reassign_project() instead.
-        Instrument reassignment is not available through generic PATCH. Omit
-        'instrument_id' and 'instrument_name' unless resubmitting their current
-        values for compatibility.
+        Instrument assignment is not available through generic PATCH - use
+        assign_instrument(). Omit 'instrument_id' and 'instrument_name' unless
+        resubmitting their current values for compatibility.
 
         Args:
             dataset_mfid (str): Dataset MFID
