@@ -108,7 +108,7 @@ class ProjectAssignmentMixin:
 class InstrumentAssignmentMixin:
     """Instrument-assignment operations for instrument-scoped resources."""
 
-    def assign_instrument(self, mfid: str, instrument_id: Optional[str] = None,
+    def assign_instrument(self, dataset_mfid: str, instrument_id: Optional[str] = None,
                           instrument_mfid: Optional[str] = None) -> 'InstrumentAssignment':
         """Assign or reassign the dataset's instrument, by slug or MFID.
 
@@ -138,5 +138,5 @@ class InstrumentAssignmentMixin:
             raise ValueError("Provide instrument_id or instrument_mfid")
         body = {k: v for k, v in (('instrument_id', instrument_id),
                                   ('instrument_mfid', instrument_mfid)) if v is not None}
-        raw = self._request('put', f'/datasets/{mfid}/instrument', json=body)
+        raw = self._request('put', f'/datasets/{dataset_mfid}/instrument', json=body)
         return InstrumentAssignment.model_validate(raw)
