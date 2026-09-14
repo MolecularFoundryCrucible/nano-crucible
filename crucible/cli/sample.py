@@ -350,12 +350,12 @@ def _register_update(subparsers):
 Examples:
     crucible sample update SAMPLE_MFID --name "Silicon Wafer B"
     crucible sample update SAMPLE_MFID --description "Annealed at 900C" --type substrate
-    crucible sample update SAMPLE_MFID --public
     crucible sample update SAMPLE_MFID --metadata '{"thickness_nm": 50}'
     crucible sample update SAMPLE_MFID --metadata metadata.json --overwrite
     crucible sample update SAMPLE_MFID --set session_name=run42
 
-Use `sample reassign-project`/`sample transfer-ownership` to change project or owner.
+Use `sample set-public` or `sample set-private` to change public visibility.
+Use `sample reassign-project` or `sample transfer-ownership` to change project or owner.
 """
     )
 
@@ -394,8 +394,8 @@ Use `sample reassign-project`/`sample transfer-ownership` to change project or o
     )
 
     group = parser.add_mutually_exclusive_group()
-    group.add_argument('--public',    dest='public', action='store_true',  default=None, help='Make sample publicly visible')
-    group.add_argument('--no-public', dest='public', action='store_false',               help='Make sample private')
+    group.add_argument('--public', dest='public', action='store_true', default=None, help=argparse.SUPPRESS)
+    group.add_argument('--no-public', dest='public', action='store_false', help=argparse.SUPPRESS)
 
     parser.set_defaults(func=_execute_update, public=None)
 
@@ -408,6 +408,15 @@ def _execute_update(args):
     has_set      = bool(getattr(args, 'set_fields', None))
     has_metadata = bool(getattr(args, 'metadata', None))
     has_public   = getattr(args, 'public', None) is not None
+
+    if has_public:
+        warning = term.yellow('Warning:', stream=sys.stderr)
+        replacement = 'set-public' if args.public else 'set-private'
+        option = '--public' if args.public else '--no-public'
+        print(
+            f"{warning} {option} is deprecated; use sample {replacement} instead.",
+            file=sys.stderr,
+        )
 
     named = {k: getattr(args, k) for k in
              ('sample_name', 'sample_type', 'description', 'timestamp')
@@ -447,12 +456,16 @@ def _execute_update(args):
         client = CrucibleClient()
 
         updates.update(named)
-        if has_public:
-            updates['public'] = args.public
 
         if updates:
             client.samples.update(args.sample_id, **updates)
             term.success(f"Sample {args.sample_id} fields updated", args)
+
+        if has_public:
+            operation = client.samples.set_public if args.public else client.samples.set_private
+            operation(args.sample_id)
+            visibility = 'publicly viewable' if args.public else 'private'
+            term.success(f"Sample {args.sample_id} is now {visibility}", args)
 
         if metadata_dict is not None:
             overwrite = getattr(args, 'overwrite', False)

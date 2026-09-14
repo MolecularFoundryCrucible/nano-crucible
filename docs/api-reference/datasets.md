@@ -39,8 +39,8 @@ File operations are also available via `client.files` (by MFID) and ingestion vi
         - list_access
         - set_access
         - revoke_access
-        - publish
-        - unpublish
+        - set_public
+        - set_private
         - transfer_ownership
         - reassign_project
         - graph

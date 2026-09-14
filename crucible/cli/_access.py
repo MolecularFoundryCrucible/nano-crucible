@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 Shared CLI wiring for the generic /resources/{mfid}/access/... ACL surface
-(BaseResource.list_access/set_access/revoke_access/publish/unpublish).
+(BaseResource.list_access/set_access/revoke_access/set_public/set_private).
 
 Reused by dataset.py, sample.py, instrument.py, and project.py - each calls
 register_access_commands() with its own subparsers and the CrucibleClient
@@ -14,10 +14,10 @@ from .helpers import fail
 
 
 def register_access_commands(subparsers, resource_ops_name, id_metavar='RESOURCE_MFID'):
-    """Register 'access' (list/grant/revoke) and 'publish'/'unpublish' subcommands."""
+    """Register access and public-visibility subcommands."""
     _register_access(subparsers, resource_ops_name, id_metavar)
-    _register_publish(subparsers, resource_ops_name, id_metavar)
-    _register_unpublish(subparsers, resource_ops_name, id_metavar)
+    _register_set_public(subparsers, resource_ops_name, id_metavar)
+    _register_set_private(subparsers, resource_ops_name, id_metavar)
 
 
 def _register_access(subparsers, resource_ops_name, id_metavar):
@@ -51,26 +51,26 @@ def _register_access(subparsers, resource_ops_name, id_metavar):
     revoke_parser.set_defaults(func=_execute_revoke, _resource_ops_name=resource_ops_name)
 
 
-def _register_publish(subparsers, resource_ops_name, id_metavar):
+def _register_set_public(subparsers, resource_ops_name, id_metavar):
     parser = subparsers.add_parser(
-        'publish',
+        'set-public',
         help='Make a resource publicly viewable',
         description='Grant public viewer access (public standing is always viewer-level)',
         formatter_class=term.ColorHelpFormatter,
     )
     parser.add_argument('resource_id', metavar=id_metavar)
-    parser.set_defaults(func=_execute_publish, _resource_ops_name=resource_ops_name)
+    parser.set_defaults(func=_execute_set_public, _resource_ops_name=resource_ops_name)
 
 
-def _register_unpublish(subparsers, resource_ops_name, id_metavar):
+def _register_set_private(subparsers, resource_ops_name, id_metavar):
     parser = subparsers.add_parser(
-        'unpublish',
+        'set-private',
         help='Remove public access from a resource',
         description='Revoke public viewer access',
         formatter_class=term.ColorHelpFormatter,
     )
     parser.add_argument('resource_id', metavar=id_metavar)
-    parser.set_defaults(func=_execute_unpublish, _resource_ops_name=resource_ops_name)
+    parser.set_defaults(func=_execute_set_private, _resource_ops_name=resource_ops_name)
 
 
 def _ops(args):
@@ -128,19 +128,19 @@ def _execute_revoke(args):
         fail("revoking access", e, args)
 
 
-def _execute_publish(args):
+def _execute_set_public(args):
     try:
         ops = _ops(args)
-        ops.publish(args.resource_id)
+        ops.set_public(args.resource_id)
         term.success(f"{args.resource_id} is now publicly viewable", args)
     except Exception as e:
-        fail("publishing resource", e, args)
+        fail("making resource public", e, args)
 
 
-def _execute_unpublish(args):
+def _execute_set_private(args):
     try:
         ops = _ops(args)
-        ops.unpublish(args.resource_id)
+        ops.set_private(args.resource_id)
         term.success(f"Public access removed from {args.resource_id}", args)
     except Exception as e:
-        fail("unpublishing resource", e, args)
+        fail("making resource private", e, args)

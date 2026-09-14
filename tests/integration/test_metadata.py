@@ -171,14 +171,12 @@ def test_instrument_get_metadata(client):
 # ── public/private toggle ─────────────────────────────────────────────────────
 
 def test_dataset_public_toggle(client, new_dataset):
-    result = client.datasets.update(new_dataset, public=True)
-    assert result.get('public') is True
-    result = client.datasets.update(new_dataset, public=False)
-    assert result.get('public') is False
+    grant = client.datasets.set_public(new_dataset)
+    assert grant.permission == 'viewer'
+    client.datasets.set_private(new_dataset)
 
 
 def test_sample_public_toggle(client, new_sample):
-    result = client.samples.update(new_sample, public=True)
-    assert result.get('public') is True
-    result = client.samples.update(new_sample, public=False)
-    assert result.get('public') is False
+    grant = client.samples.set_public(new_sample)
+    assert grant.permission == 'viewer'
+    client.samples.set_private(new_sample)

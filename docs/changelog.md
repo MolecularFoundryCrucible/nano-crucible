@@ -24,7 +24,7 @@
 - Instrument search results now show the user-facing instrument ID instead of manufacturer metadata.
 - `crucible dataset create` can create a dataset record without `--input`; file-dependent options still require at least one input file.
 - Dataset and sample relationship methods now consistently use `link`, `unlink`, `link_sample`, `unlink_sample`, `link_dataset`, and `unlink_dataset`; previous method names remain as deprecated wrappers.
-- Python resource namespaces now use `publish()` and `unpublish()` for public access; `set_public()` and `unset_public()` remain as deprecated compatibility aliases.
+- Public visibility now uses `set_public()` and `set_private()` in Python and `set-public` and `set-private` in the CLI; previous method names, command names, and update visibility options remain deprecated compatibility aliases that delegate to the dedicated access routes.
 - The interactive shell now remembers the project selected by `use PROJECT_ID`, `unuse` clears it, and project context sources are visible; `CRUCIBLE_CURRENT_PROJECT` is deprecated because it can silently redirect operations.
 - The interactive shell status bar now renders the Crucible dark blue, light blue, and orange brand palette in true color on capable terminals while keeping autocomplete menus visually plain.
 - Sample detail methods can suppress the deprecated embedded dataset expansion; existing Python and JSON behavior remains compatible, while human CLI workflows avoid loading it.

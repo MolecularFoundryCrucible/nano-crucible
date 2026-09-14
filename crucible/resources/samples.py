@@ -303,7 +303,7 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
             timestamp (str, optional): User-defined timestamp
             owner_orcid (str, optional): Deprecated - the API no longer accepts this
                 field here; use client.samples.transfer_ownership() instead.
-            public (bool, optional): Whether the sample is publicly visible
+            public (bool, optional): Deprecated - use set_public() or set_private()
             project_id (str, optional): Deprecated - the API no longer accepts this
                 field here; use client.samples.reassign_project() instead.
             parents (List[Dict], optional): Parent samples to link
@@ -343,18 +343,29 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
                 "and is ignored; use client.samples.reassign_project() instead.",
                 DeprecationWarning, stacklevel=2
             )
+        if public is not None:
+            warnings.warn(
+                "Parameter 'public' is deprecated; use set_public() or set_private() "
+                "instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            if not isinstance(public, bool):
+                raise ValueError("public must be true, false, or None.")
 
         sample_info = {
             "sample_name": sample_name,
             "sample_type": sample_type,
-            "public": public,
             "description": description,
             "timestamp": timestamp,
         }
 
         sample_info = {k: v for k, v in sample_info.items() if v is not None}
 
-        upd_samp = self._request('patch', f"/samples/{sample_mfid}", json=sample_info)
+        if sample_info:
+            upd_samp = self._request('patch', f"/samples/{sample_mfid}", json=sample_info)
+        else:
+            upd_samp = self.get(sample_mfid)
 
         for p in parents:
             parent_sample_mfid = p['unique_id']
@@ -367,6 +378,11 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
             child_sample_mfid = chd['unique_id']
             self._request(
                 'post', f"/samples/{parent_sample_mfid}/children/{child_sample_mfid}")
+
+        if public is not None:
+            operation = self.set_public if public else self.set_private
+            operation(sample_mfid)
+            upd_samp['public'] = public
 
         return upd_samp
 

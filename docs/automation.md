@@ -53,21 +53,19 @@ These common operations read from Crucible without changing records:
 - listing files, links, metadata, access entries, or ingestion requests
 - downloading records and files to a new local destination
 
-These operations change the live service and should have an explicit target and
-purpose:
+These operations change the live service and should have an explicit target and purpose:
 
 - creating or updating datasets, samples, projects, instruments, or users
 - uploading files or cataloging external file locations
 - linking resources or changing scientific metadata
-- publishing, granting access, reassigning projects, or transferring ownership
+- changing public visibility, granting access, reassigning projects, or transferring ownership
 - requesting ingestion or deletion
 
 For unattended automation, log the operation, project ID, and affected resource ID. Do not log authorization headers, API keys, signed download URLs, or sensitive local paths.
 
 ## Create records predictably
 
-Use Pydantic models for shared fields and a separate dictionary for flexible
-scientific metadata:
+Use Pydantic models for shared fields and a separate dictionary for flexible scientific metadata:
 
 ```python
 from crucible import CrucibleClient

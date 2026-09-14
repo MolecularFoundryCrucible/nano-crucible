@@ -47,8 +47,8 @@ Running `crucible` without a command starts the interactive shell. See the [CLI 
 | `dataset list-access-groups MFID` | Deprecated compatibility command; use `dataset access list` |
 | `dataset add-access-group MFID GROUP` | Deprecated compatibility command; use `dataset access grant` |
 | `dataset access ...` | List, grant, or revoke direct access entries |
-| `dataset publish MFID` | Make a dataset publicly viewable |
-| `dataset unpublish MFID` | Remove public access from a dataset |
+| `dataset set-public MFID` | Make a dataset publicly viewable |
+| `dataset set-private MFID` | Remove public access from a dataset |
 | `dataset parsers` | List installed client-side parsers |
 | `dataset ingestors` | List server-advertised ingestion classes |
 
@@ -72,7 +72,7 @@ The `--type`, `--ingestor`, `--no-upload`, `--backend`, and `--access-note` opti
 
 Use `dataset list --project-id PROJECT --project-scope shared` to show resources shared with a project but assigned elsewhere or unassigned. Use `--project-scope all` to combine assigned and shared resources. `--project-mfid` accepts the canonical project MFID instead of a project ID. The interactive shell completes both identifiers through project search. Human-readable scoped results include the resource's actual project and its `assigned` or `shared` relation.
 
-Fields normally updated through `dataset update --set` include `dataset_name`, `measurement`, `data_type`, `session_name`, `data_format`, `timestamp`, and `public`. Use `reassign-project` and `transfer-ownership` for project and owner changes. Instrument reassignment remains unavailable and is not exposed as ordinary metadata editing.
+Fields normally updated through `dataset update --set` include `dataset_name`, `measurement`, `data_type`, `session_name`, `data_format`, and `timestamp`. Use `set-public` or `set-private` for public visibility, `reassign-project` for project changes, and `transfer-ownership` for owner changes. Instrument reassignment remains unavailable and is not exposed as ordinary metadata editing.
 
 ## Sample commands
 
@@ -95,10 +95,10 @@ Fields normally updated through `dataset update --set` include `dataset_name`, `
 | `sample remove-dataset MFID` | Unlink a dataset from a sample |
 | `sample list-datasets MFID` | List datasets linked to a sample |
 | `sample access ...` | List, grant, or revoke direct access entries |
-| `sample publish MFID` | Make a sample publicly viewable |
-| `sample unpublish MFID` | Remove public access from a sample |
+| `sample set-public MFID` | Make a sample publicly viewable |
+| `sample set-private MFID` | Remove public access from a sample |
 
-Fields normally updated through `sample update` include `sample_name`, `sample_type`, `description`, `timestamp`, and `public`. Use `reassign-project` and `transfer-ownership` for project and owner changes.
+Fields normally updated through `sample update` include `sample_name`, `sample_type`, `description`, and `timestamp`. Use `set-public` or `set-private` for public visibility, `reassign-project` for project changes, and `transfer-ownership` for owner changes.
 
 Sample creation accepts `--project-id` or `--project-mfid`, including both when they resolve to the same project. Interactive creation continues to prompt for the human-readable project ID.
 
@@ -123,8 +123,8 @@ Sample creation accepts `--project-id` or `--project-mfid`, including both when 
 | `project request-join ID` | Request membership in a project |
 | `project list-join-requests ID` | List project join requests |
 | `project access ...` | List, grant, or revoke direct access entries |
-| `project publish ID` | Make a project publicly viewable |
-| `project unpublish ID` | Remove public access from a project |
+| `project set-public ID` | Make a project publicly viewable |
+| `project set-private ID` | Remove public access from a project |
 
 `project add-user` and `project update-user-role` require editor or above and accept `viewer`, `contributor`, `editor`, or `admin`. The target member's current role and requested role must both be below the caller's role. Editors can manage viewers and contributors, admins can also manage editors, and owners can also manage admins. Platform administrators retain their bypass. Use `project transfer-ownership` to change ownership.
 
@@ -150,6 +150,11 @@ The `access grant` commands accept `viewer`, `contributor`, `editor`, or `admin`
 | `instrument edit MFID` | Edit instrument fields interactively |
 | `instrument search QUERY [--status STATUS]` | Search names, types, and manufacturers with optional lifecycle filtering |
 | `instrument search-metadata QUERY` | Search scientific metadata; `search-md` is an alias |
+| `instrument access ...` | List, grant, or revoke direct access entries |
+| `instrument set-public MFID` | Make an instrument publicly viewable |
+| `instrument set-private MFID` | Remove public access from an instrument |
+
+The deprecated `publish` and `unpublish` command names remain temporarily available as aliases for `set-public` and `set-private`.
 
 ## User commands
 

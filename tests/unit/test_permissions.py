@@ -166,42 +166,84 @@ class TestRevokeAccess:
 
 
 class TestPublicAccess:
-    def test_publish_no_permission_param(self, dataset_ops):
+    def test_set_public_no_permission_param(self, dataset_ops):
         dataset_ops._request = MagicMock(return_value={
             'principal_id': 'public',
             'principal_type': 'public',
             'permission': 'viewer',
         })
 
-        result = dataset_ops.publish('ds-1')
+        result = dataset_ops.set_public('ds-1')
 
         dataset_ops._request.assert_called_once_with('put', '/resources/ds-1/access/public')
         assert isinstance(result, AccessGrant)
 
-    def test_unpublish(self, dataset_ops):
+    def test_set_private(self, dataset_ops):
         dataset_ops._request = MagicMock(return_value=None)
 
-        dataset_ops.unpublish('ds-1')
+        dataset_ops.set_private('ds-1')
 
         dataset_ops._request.assert_called_once_with('delete', '/resources/ds-1/access/public')
 
-    def test_set_public_warns_and_publishes(self, dataset_ops):
-        dataset_ops.publish = MagicMock(return_value='grant')
+    def test_publish_warns_and_sets_public(self, dataset_ops):
+        dataset_ops.set_public = MagicMock(return_value='grant')
 
-        with pytest.warns(DeprecationWarning, match=r'set_public\(\) is deprecated'):
-            result = dataset_ops.set_public('ds-1')
+        with pytest.warns(DeprecationWarning, match=r'publish\(\) is deprecated'):
+            result = dataset_ops.publish('ds-1')
 
-        dataset_ops.publish.assert_called_once_with('ds-1')
+        dataset_ops.set_public.assert_called_once_with('ds-1')
         assert result == 'grant'
 
-    def test_unset_public_warns_and_unpublishes(self, dataset_ops):
-        dataset_ops.unpublish = MagicMock(return_value={'detail': 'removed'})
+    @pytest.mark.parametrize('method_name', ['unpublish', 'unset_public'])
+    def test_private_aliases_warn_and_set_private(self, dataset_ops, method_name):
+        dataset_ops.set_private = MagicMock(return_value={'detail': 'removed'})
 
-        with pytest.warns(DeprecationWarning, match=r'unset_public\(\) is deprecated'):
-            result = dataset_ops.unset_public('ds-1')
+        with pytest.warns(DeprecationWarning, match=rf'{method_name}\(\) is deprecated'):
+            result = getattr(dataset_ops, method_name)('ds-1')
 
-        dataset_ops.unpublish.assert_called_once_with('ds-1')
+        dataset_ops.set_private.assert_called_once_with('ds-1')
         assert result == {'detail': 'removed'}
+
+    def test_dataset_update_public_delegates_to_access_route(self, dataset_ops):
+        dataset_ops._request = MagicMock(side_effect=[
+            {'unique_id': 'ds-1', 'dataset_name': 'Updated'},
+            {
+                'principal_id': 'public',
+                'principal_type': 'public',
+                'permission': 'viewer',
+            },
+        ])
+
+        with pytest.warns(DeprecationWarning, match="'public' update field"):
+            result = dataset_ops.update('ds-1', dataset_name='Updated', public=True)
+
+        assert dataset_ops._request.call_args_list == [
+            (("patch", "/datasets/ds-1"), {'json': {'dataset_name': 'Updated'}}),
+            (("put", "/resources/ds-1/access/public"),),
+        ]
+        assert result['public'] is True
+
+    def test_sample_update_public_delegates_to_access_route(self):
+        client = MagicMock()
+        from crucible.resources.samples import SampleOperations
+        sample_ops = SampleOperations(client)
+        sample_ops._request = MagicMock(side_effect=[
+            {'unique_id': 'sample-1', 'sample_name': 'Updated'},
+            {
+                'principal_id': 'public',
+                'principal_type': 'public',
+                'permission': 'viewer',
+            },
+        ])
+
+        with pytest.warns(DeprecationWarning, match="Parameter 'public'"):
+            result = sample_ops.update('sample-1', sample_name='Updated', public=True)
+
+        assert sample_ops._request.call_args_list == [
+            (("patch", "/samples/sample-1"), {'json': {'sample_name': 'Updated'}}),
+            (("put", "/resources/sample-1/access/public"),),
+        ]
+        assert result['public'] is True
 
 
 class TestEffectiveDatasetAccess:

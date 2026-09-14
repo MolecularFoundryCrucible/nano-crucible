@@ -9,3 +9,9 @@ Access via `client.instruments`.
         - get
         - create
         - update
+        - list_access
+        - set_access
+        - revoke_access
+        - set_public
+        - set_private
+        - transfer_ownership
