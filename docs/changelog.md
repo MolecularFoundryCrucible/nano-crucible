@@ -5,6 +5,7 @@
 ### Changed
 
 - The minimum supported Python version is now 3.10.
+- The configuration file and its directory are now created with owner-only permissions, and existing files are restricted when a value is set or unset.
 
 ## 3.2.1
 

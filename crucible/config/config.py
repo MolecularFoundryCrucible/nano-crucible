@@ -401,6 +401,19 @@ def get_client():
     return config.client
 
 
+def restrict_config_permissions(config_file):
+    """Restrict a config file to owner-only access.
+
+    The file holds the API key in cleartext, so it should not be readable by
+    other users. Failures are logged and ignored because some filesystems do
+    not support POSIX modes.
+    """
+    try:
+        os.chmod(config_file, 0o600)
+    except OSError as exc:
+        logger.debug("Could not restrict permissions on %s: %s", config_file, exc)
+
+
 def create_config_file(api_key, api_url=None, cache_dir=None,
                        graph_explorer_url=None, current_project=None,
                        editor=None, connect_timeout=None, read_timeout=None,
@@ -434,6 +447,10 @@ def create_config_file(api_key, api_url=None, cache_dir=None,
     """
     config_dir = Path(user_config_dir("nano-crucible"))
     config_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        os.chmod(config_dir, 0o700)
+    except OSError as exc:
+        logger.debug("Could not restrict permissions on %s: %s", config_dir, exc)
     config_file = config_dir / "config.ini"
 
     default_cache_dir           = str(user_cache_dir("nano-crucible"))
@@ -521,6 +538,8 @@ def create_config_file(api_key, api_url=None, cache_dir=None,
         f.write("\n")
         f.write("# Concurrent upload threads (benchmarked optimum: 8)\n")
         f.write("# max_workers = 8\n")
+
+    restrict_config_permissions(config_file)
 
     logger.info(f"Created config file: {config_file}")
 

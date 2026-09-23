@@ -407,7 +407,7 @@ def set_config_value(key, value):
     """
     from configupdater import ConfigUpdater
     from crucible.config import config
-    from crucible.config.config import Config
+    from crucible.config.config import Config, restrict_config_permissions
 
     mapping = Config._CONFIG_MAP[key]
     section = mapping['section']
@@ -434,6 +434,7 @@ def set_config_value(key, value):
             updater.remove_option('crucible', ini_key)
 
     config_file.write_text(str(updater))
+    restrict_config_permissions(config_file)
     config.reload()
     return section, config_file
 
@@ -457,7 +458,7 @@ def unset_config_value(key):
     """Remove a config-file value and reload configuration."""
     from configupdater import ConfigUpdater
     from crucible.config import config
-    from crucible.config.config import Config
+    from crucible.config.config import Config, restrict_config_permissions
 
     mapping = Config._CONFIG_MAP[key]
     section = mapping['section']
@@ -480,6 +481,7 @@ def unset_config_value(key):
 
         if removed:
             config_file.write_text(str(updater))
+            restrict_config_permissions(config_file)
 
     config.reload()
     return removed, config_file, mapping['env']
