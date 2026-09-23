@@ -8,7 +8,7 @@ management system.
 """
 
 __version__ = "3.2.1"
-__author__ = "mkywall","roncofaber"
+__author__ = ("mkywall", "roncofaber")
 
 import logging
 import sys

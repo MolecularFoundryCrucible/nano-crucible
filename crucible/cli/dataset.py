@@ -241,8 +241,6 @@ except ImportError:
 from ..config import config as _config
 from ..constants import PROJECT_SCOPES
 
-#%%
-
 def register_subcommand(subparsers):
     """
     Register the dataset subcommand with the main parser.

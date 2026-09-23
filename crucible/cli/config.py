@@ -20,8 +20,6 @@ def _mask_secret(value: str) -> str:
     """Render a secret as eight asterisks and its last four characters."""
     return f"{'*' * 8}\u2026{value[-4:]}"
 
-#%%
-
 def get_default_editor():
     """Get the best available editor for the current platform."""
     import shutil

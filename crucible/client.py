@@ -18,8 +18,6 @@ from .utils.identifiers import is_mfid, require_canonical_identifier
 
 logger = logging.getLogger(__name__)
 
-#%%
-
 class CrucibleClient:
     def __init__(self, api_url: Optional[str] = None, api_key: Optional[str] = None):
         """
