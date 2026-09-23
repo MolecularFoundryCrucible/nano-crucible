@@ -10,7 +10,7 @@ import logging
 from typing import Any, Optional, List, Dict, Sequence, Union
 from .base import BaseResource
 from .capabilities import AccessControlMixin, OwnershipMixin, ProjectAssignmentMixin
-from ..constants import DEFAULT_LIMIT
+from ..constants import DEFAULT_LIMIT, VISIBILITIES
 from ..utils.deprecation import _deprecated, _deprecated_parameter
 from ..utils.identifiers import is_mfid, require_canonical_identifier
 
@@ -115,6 +115,13 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
              project_id: Optional[str] = None,
              project_mfid: Optional[str] = None,
              project_scope: Optional[str] = None,
+             sort: Optional[str] = None,
+             direction: Optional[str] = None,
+             visibility: Optional[str] = None,
+             affiliation: Optional[Union[str, Sequence[str]]] = None,
+             include_total: Optional[bool] = None,
+             creation_time_gte=None, creation_time_lte=None,
+             modification_time_gte=None, modification_time_lte=None,
              **kwargs: Any) -> List[Dict]:
         """List samples with optional filtering and automatic pagination.
 
@@ -138,6 +145,18 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
             project_mfid: Canonical project MFID used to scope results by project relationship
             project_scope: Project relationship to include: assigned, shared, or all.
                            Requires project_id or project_mfid and defaults to assigned.
+            sort: Explicit ordering, one of crucible.constants.RESOURCE_SORTS.
+                  Omit to keep the legacy unique_id descending order.
+            direction: Sort direction, asc or desc. Requires sort.
+            visibility: Restrict results by public visibility: all, public, or private.
+            affiliation: Caller relationship each result must have, currently
+                         only 'owner'. Accepts a single value or a sequence.
+            include_total: Request the exact authorization-filtered total. Omit
+                           to keep the endpoint's default behavior.
+            creation_time_gte / creation_time_lte: Inclusive creation-time bounds.
+                Accepts a datetime, date, or ISO 8601 string.
+            modification_time_gte / modification_time_lte: Inclusive
+                modification-time bounds, same accepted types.
             **kwargs: Query parameters for filtering samples
 
         Returns:
@@ -152,8 +171,25 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
             project_id, project_mfid, project_scope)
         if parent_mfid and dataset_mfid is None and project_params:
             raise ValueError("Project scope is supported only by the top-level sample list")
+        collection_params = {}
+        collection_params.update(self._ordering_params(sort, direction))
+        collection_params.update(self._affiliation_params(affiliation))
+        collection_params.update(self._choice_params(
+            visibility=(visibility, VISIBILITIES)))
+        collection_params.update(self._time_range_params(
+            creation_time_gte=creation_time_gte,
+            creation_time_lte=creation_time_lte,
+            modification_time_gte=modification_time_gte,
+            modification_time_lte=modification_time_lte))
+        if include_total is not None:
+            collection_params['include_total'] = include_total
+        if parent_mfid and dataset_mfid is None and collection_params:
+            raise ValueError(
+                "Ordering, visibility, affiliation, and time filters are "
+                "supported only by the top-level sample list")
         params.update(selectors)
         params.update(project_params)
+        params.update(collection_params)
         if dataset_mfid is not None:
             params['dataset_mfid'] = dataset_mfid
         if include_metadata:

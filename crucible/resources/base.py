@@ -86,6 +86,86 @@ class BaseResource:
         return params
 
     @staticmethod
+    def _ordering_params(sort: Optional[str] = None,
+                         direction: Optional[str] = None,
+                         sorts=None) -> dict:
+        """Build validated sort and direction query parameters.
+
+        The API returns 422 for a direction without a sort, so that pairing is
+        rejected locally.
+        """
+        from ..constants import RESOURCE_SORTS, SORT_DIRECTIONS
+
+        sorts = RESOURCE_SORTS if sorts is None else sorts
+        if direction is not None and sort is None:
+            raise ValueError("direction requires sort.")
+        if sort is not None and sort not in sorts:
+            raise ValueError(f"sort must be one of: {', '.join(sorts)}.")
+        if direction is not None and direction not in SORT_DIRECTIONS:
+            raise ValueError(
+                f"direction must be one of: {', '.join(SORT_DIRECTIONS)}.")
+
+        params = {}
+        if sort is not None:
+            params['sort'] = sort
+        if direction is not None:
+            params['direction'] = direction
+        return params
+
+    @staticmethod
+    def _time_range_params(**bounds) -> dict:
+        """Normalize datetime or ISO-string time bounds into query parameters."""
+        from datetime import date, datetime
+
+        params = {}
+        for name, value in bounds.items():
+            if value is None:
+                continue
+            if isinstance(value, (datetime, date)):
+                params[name] = value.isoformat()
+            elif isinstance(value, str) and value:
+                params[name] = value
+            else:
+                raise ValueError(
+                    f"{name} must be a datetime, date, or non-empty ISO 8601 string.")
+        return params
+
+    @staticmethod
+    def _choice_params(**choices) -> dict:
+        """Validate single-choice query parameters against their allowed values.
+
+        Each keyword maps to a ``(value, allowed)`` pair. ``None`` values are
+        omitted so the server default applies.
+        """
+        params = {}
+        for name, (value, allowed) in choices.items():
+            if value is None:
+                continue
+            if value not in allowed:
+                raise ValueError(
+                    f"{name} must be one of: {', '.join(allowed)}.")
+            params[name] = value
+        return params
+
+    @staticmethod
+    def _affiliation_params(affiliation) -> dict:
+        """Build the repeated affiliation query parameter."""
+        from ..constants import AFFILIATIONS
+
+        if affiliation is None:
+            return {}
+        values = [affiliation] if isinstance(affiliation, str) else list(affiliation)
+        if not values:
+            return {}
+        if len(values) > 5:
+            raise ValueError("At most 5 affiliation values may be supplied")
+        for value in values:
+            if value not in AFFILIATIONS:
+                raise ValueError(
+                    f"affiliation values must be one of: {', '.join(AFFILIATIONS)}.")
+        return {'affiliation': values}
+
+    @staticmethod
     def _validate_filter_params(params: dict, allowed, endpoint: str) -> dict:
         """Reject query parameters the endpoint does not accept.
 
