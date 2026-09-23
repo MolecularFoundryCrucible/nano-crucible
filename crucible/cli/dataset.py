@@ -401,6 +401,9 @@ Examples:
         help='Filter by canonical instrument MFID across accessible projects'
     )
 
+    from .helpers import add_listing_filters
+    add_listing_filters(parser)
+
     parser.add_argument(
         '--group-by',
         dest='group_by',
@@ -1889,7 +1892,7 @@ def _execute_list(args):
     """Execute the 'dataset list' subcommand."""
     from crucible.config import config
     from crucible.client import CrucibleClient
-    from .helpers import resolve_project_context
+    from .helpers import resolve_project_context, listing_filter_kwargs
     project_id = args.project_id
     project_mfid = getattr(args, 'project_mfid', None)
     project_scope = getattr(args, 'project_scope', None)
@@ -1925,6 +1928,7 @@ def _execute_list(args):
         filters['instrument_name'] = args.instrument_name
     if instrument_mfid:
         filters['instrument_mfid'] = instrument_mfid
+    filters.update(listing_filter_kwargs(args))
     project_filters = {}
     if project_id is not None:
         project_filters['project_id'] = project_id

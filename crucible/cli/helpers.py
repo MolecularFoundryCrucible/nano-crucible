@@ -159,6 +159,76 @@ def add_relationship_type_filter(parser) -> None:
     )
 
 
+def add_listing_filters(parser) -> None:
+    """Add the shared ordering, visibility, and time-range filters to a listing command."""
+    from ..constants import RESOURCE_SORTS, SORT_DIRECTIONS, VISIBILITIES
+
+    parser.add_argument(
+        '--sort',
+        choices=RESOURCE_SORTS,
+        default=None,
+        metavar='FIELD',
+        help=f"Order results by {', '.join(RESOURCE_SORTS)} (default: newest first)"
+    )
+    parser.add_argument(
+        '--direction',
+        choices=SORT_DIRECTIONS,
+        default=None,
+        metavar='DIR',
+        help=f"Sort direction ({', '.join(SORT_DIRECTIONS)}). Requires --sort."
+    )
+    parser.add_argument(
+        '--visibility',
+        choices=VISIBILITIES,
+        default=None,
+        metavar='LEVEL',
+        help=f"Restrict results by visibility ({', '.join(VISIBILITIES)})"
+    )
+    parser.add_argument(
+        '--mine',
+        action='store_true',
+        default=False,
+        help='Only show resources you own'
+    )
+    parser.add_argument(
+        '--owner',
+        default=None,
+        dest='owner_id',
+        metavar='USER',
+        help='Filter by owner user ID'
+    )
+    parser.add_argument(
+        '--created-after', dest='creation_time_gte', default=None, metavar='WHEN',
+        help='Only show resources created at or after this time (ISO 8601 or YYYY-MM-DD)'
+    )
+    parser.add_argument(
+        '--created-before', dest='creation_time_lte', default=None, metavar='WHEN',
+        help='Only show resources created at or before this time'
+    )
+    parser.add_argument(
+        '--modified-after', dest='modification_time_gte', default=None, metavar='WHEN',
+        help='Only show resources modified at or after this time'
+    )
+    parser.add_argument(
+        '--modified-before', dest='modification_time_lte', default=None, metavar='WHEN',
+        help='Only show resources modified at or before this time'
+    )
+
+
+def listing_filter_kwargs(args) -> dict:
+    """Collect the shared listing filters from parsed args into list() keywords."""
+    kwargs = {}
+    for name in ('sort', 'direction', 'visibility', 'owner_id',
+                 'creation_time_gte', 'creation_time_lte',
+                 'modification_time_gte', 'modification_time_lte'):
+        value = getattr(args, name, None)
+        if value is not None:
+            kwargs[name] = value
+    if getattr(args, 'mine', False):
+        kwargs['affiliation'] = 'owner'
+    return kwargs
+
+
 def format_relationship_type(link) -> str:
     """Render a link's relationship_type as a dim trailing annotation.
 
