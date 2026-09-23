@@ -503,8 +503,12 @@ def _execute_get(args):
 def _execute_create(args):
     """Execute the 'project create' subcommand."""
     from crucible.client import CrucibleClient
-    from .helpers import prompt_optional, prompt_required, validate_user_reference
+    from .helpers import (prompt_optional, prompt_required, require_capability,
+                          validate_user_reference)
     from ..utils.identifiers import validate_slug
+
+    require_capability(CrucibleClient(), 'can_create_project', 'create projects')
+
     # Interactive mode if any required arguments are missing
     project_id = args.project_id
     organization = args.organization

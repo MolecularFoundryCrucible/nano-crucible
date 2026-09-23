@@ -119,8 +119,15 @@ Examples:
 
 def _execute_create(args):
     from crucible.client import CrucibleClient
-    from .helpers import prompt_optional, prompt_username
+    from .helpers import prompt_optional, prompt_username, require_capability
     from ..utils.identifiers import validate_mfid, validate_username
+
+    # These calls always request elevation, so an administrator is permitted
+    # even without the standing capability.
+    gate = CrucibleClient()
+    if not gate.can_elevate:
+        require_capability(gate, 'can_manage_service_accounts',
+                           'manage service accounts')
 
     username = getattr(args, 'username', None)
     unique_id = getattr(args, 'unique_id', None)

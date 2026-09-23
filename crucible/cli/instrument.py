@@ -212,8 +212,12 @@ Examples:
 def _execute_create(args):
     """Execute the 'instrument create' subcommand."""
     from crucible.client import CrucibleClient
-    from .helpers import prompt_optional, prompt_required, validate_user_reference
+    from .helpers import (prompt_optional, prompt_required, require_capability,
+                          validate_user_reference)
     from ..utils.identifiers import validate_slug
+
+    require_capability(CrucibleClient(), 'can_register_instrument',
+                       'register instruments')
 
     instrument_name = args.instrument_name
     instrument_id = args.instrument_id
