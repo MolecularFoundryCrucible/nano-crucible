@@ -12,6 +12,7 @@ from typing import Optional, List, Dict
 
 from .base import BaseResource
 from ..constants import DEFAULT_LIMIT
+from ..utils.io import storage_display_name
 
 logger = logging.getLogger(__name__)
 
@@ -95,14 +96,7 @@ class FileOperations(BaseResource):
 
         url = self.get_download_link(file_id)
 
-        sp       = file_record.get('storage_path', '')
-        prefix   = 'mf-storage-prod/'
-        if sp.startswith(prefix):
-            after  = sp[len(prefix):]
-            _, _, name = after.partition('/')
-        else:
-            import os as _os
-            name = _os.path.basename(file_record.get('filename') or file_id)
+        name = storage_display_name(file_record) or file_id
 
         import os
         output_path = os.path.join(output_dir, name)

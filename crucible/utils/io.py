@@ -224,3 +224,26 @@ def data2thumbnail(image) -> str:
         f"Unsupported thumbnail type: {type(image)}. "
         f"Supported types: str, Path, PIL.Image, matplotlib.Figure, numpy.ndarray"
     )
+
+
+def storage_display_name(file_record: dict, dataset_mfid: str = None) -> str:
+    """Return the display filename for a file record.
+
+    Strips the GCS bucket and dataset prefix from ``storage_path`` when
+    present. Falls back to the basename of ``filename`` for records that are
+    not yet ingested or live on another storage backend.
+    """
+    from ..constants import GCS_BUCKET_PREFIX
+
+    storage_path = file_record.get('storage_path') or ''
+    if storage_path.startswith(GCS_BUCKET_PREFIX):
+        after_bucket = storage_path[len(GCS_BUCKET_PREFIX):]
+        if dataset_mfid is not None:
+            prefix = f'{dataset_mfid}/'
+            if after_bucket.startswith(prefix):
+                return after_bucket[len(prefix):]
+        _, _, name = after_bucket.partition('/')
+        return name or after_bucket
+    if storage_path:
+        return os.path.basename(storage_path)
+    return os.path.basename(file_record.get('filename') or '')

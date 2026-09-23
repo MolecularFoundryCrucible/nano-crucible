@@ -17,22 +17,14 @@ import os
 import tempfile
 from typing import Dict, List, Optional
 
+from ...utils.io import storage_display_name
+
 logger = logging.getLogger(__name__)
 
 
 def bare_name(file_record: Dict, dsid: str) -> str:
-    """Extract the display filename from a file record.
-
-    Strips the GCS bucket and dataset prefix from storage_path when present,
-    falls back to the filename field.
-    """
-    sp     = file_record.get('storage_path') or ''
-    prefix = f'mf-storage-prod/{dsid}/'
-    if sp.startswith(prefix):
-        return sp[len(prefix):]
-    if sp:
-        return os.path.basename(sp)
-    return os.path.basename(file_record.get('filename') or '')
+    """Extract the display filename from a file record."""
+    return storage_display_name(file_record, dsid)
 
 
 def download_dataset_files(client, dsid: str, output_dir: str,
