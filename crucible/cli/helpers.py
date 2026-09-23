@@ -229,6 +229,100 @@ def listing_filter_kwargs(args) -> dict:
     return kwargs
 
 
+def register_facets_command(subparsers, resource: str, fields, examples: str):
+    """Register a '<resource> facets FIELD' subcommand."""
+    from . import term
+    from ..constants import FACET_SORTS, SORT_DIRECTIONS
+
+    parser = subparsers.add_parser(
+        'facets',
+        help=f'Count {resource}s grouped by a field',
+        description=f'Group {resource}s into value buckets with counts, '
+                    f'without fetching the records themselves',
+        formatter_class=term.ColorHelpFormatter,
+        epilog=examples,
+    )
+    parser.add_argument(
+        'field',
+        metavar='FIELD',
+        choices=fields,
+        help=f"Field to group by: {', '.join(fields)}"
+    )
+    parser.add_argument(
+        '--sort', choices=FACET_SORTS, default=None, metavar='BY',
+        help=f"Order buckets by {', '.join(FACET_SORTS)} (default: value)"
+    )
+    parser.add_argument(
+        '--direction', choices=SORT_DIRECTIONS, default=None, metavar='DIR',
+        help=f"Bucket ordering direction ({', '.join(SORT_DIRECTIONS)})"
+    )
+    parser.add_argument(
+        '--limit', '-l', type=int, default=100, metavar='N',
+        help='Maximum number of buckets to return (default: 100)'
+    )
+    parser.add_argument(
+        '--project-id', '-p', default=None, metavar='ID',
+        help='Restrict counts to this project'
+    )
+    parser.add_argument(
+        '--project-mfid', default=None, metavar='MFID',
+        help='Restrict counts to this canonical project MFID'
+    )
+    parser.add_argument(
+        '--mine', action='store_true', default=False,
+        help=f'Only count {resource}s you own'
+    )
+    parser.add_argument(
+        '--json', action='store_true', default=False,
+        help='Output as JSON'
+    )
+    return parser
+
+
+def execute_facets_command(args, resource: str):
+    """Execute a '<resource> facets FIELD' subcommand."""
+    import json
+    from . import term
+    from ..client import CrucibleClient
+
+    try:
+        client = CrucibleClient()
+        filters = {}
+        if args.project_id:
+            filters['project_id'] = args.project_id
+        if args.project_mfid:
+            filters['project_mfid'] = args.project_mfid
+        if args.mine:
+            filters['affiliation'] = 'owner'
+
+        operations = getattr(client, f'{resource}s')
+        response = operations.facets(
+            args.field, limit=args.limit, sort=args.sort,
+            direction=args.direction, **filters)
+
+        if args.json:
+            print(json.dumps(response, indent=2, default=str))
+            return
+
+        buckets = response.get('items') or []
+        term.header(f"{args.field} · {len(buckets)} values")
+        if not buckets:
+            print(f"  {term.dim(f'No {resource}s matched.')}")
+            return
+
+        rows = [
+            (bucket.get('label') or bucket.get('value') or term.dim('(none)'),
+             bucket.get('count'))
+            for bucket in buckets
+        ]
+        term.table(rows, ['VALUE', 'COUNT'])
+        if response.get('next_cursor'):
+            print(f"\n  {term.dim('More values available; raise --limit to see them.')}")
+
+    except Exception as e:
+        fail(f"retrieving {resource} facets", e, args)
+
+
 def format_relationship_type(link) -> str:
     """Render a link's relationship_type as a dim trailing annotation.
 

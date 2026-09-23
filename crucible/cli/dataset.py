@@ -290,6 +290,7 @@ def register_subcommand(subparsers):
     _register_add_access_group(dataset_subparsers)
     from ._access import register_access_commands
     register_access_commands(dataset_subparsers, 'datasets', id_metavar='DATASET_MFID')
+    _register_facets(dataset_subparsers)
     _register_parsers(dataset_subparsers)
     _register_ingestors(dataset_subparsers)
 
@@ -1804,6 +1805,30 @@ def _execute_list_keywords(args):
     except Exception as e:
         from .helpers import fail
         fail("retrieving keywords", e, args)
+
+
+def _register_facets(subparsers):
+    """Register the 'dataset facets' subcommand."""
+    from .helpers import register_facets_command
+    from crucible.constants import DATASET_FACET_FIELDS
+
+    parser = register_facets_command(
+        subparsers, 'dataset', DATASET_FACET_FIELDS,
+        examples="""
+Examples:
+    crucible dataset facets measurement
+    crucible dataset facets instrument --sort count --direction desc
+    crucible dataset facets data_format --project-id my-project
+    crucible dataset facets owner --mine --json
+"""
+    )
+    parser.set_defaults(func=_execute_facets)
+
+
+def _execute_facets(args):
+    """Execute the 'dataset facets' subcommand."""
+    from .helpers import execute_facets_command
+    execute_facets_command(args, 'dataset')
 
 
 def _register_list_access_groups(subparsers):

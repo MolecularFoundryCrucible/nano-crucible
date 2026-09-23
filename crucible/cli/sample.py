@@ -62,6 +62,7 @@ def register_subcommand(subparsers):
     _register_add_dataset(sample_subparsers)
     _register_remove_dataset(sample_subparsers)
     _register_remove_child(sample_subparsers)
+    _register_facets(sample_subparsers)
     from ._access import register_access_commands
     register_access_commands(sample_subparsers, 'samples', id_metavar='SAMPLE_MFID')
 
@@ -719,6 +720,30 @@ Examples:
     from .helpers import add_relationship_type_filter
     add_relationship_type_filter(parser)
     parser.set_defaults(func=_execute_list_children)
+
+
+def _register_facets(subparsers):
+    """Register the 'sample facets' subcommand."""
+    from .helpers import register_facets_command
+    from crucible.constants import SAMPLE_FACET_FIELDS
+
+    parser = register_facets_command(
+        subparsers, 'sample', SAMPLE_FACET_FIELDS,
+        examples="""
+Examples:
+    crucible sample facets sample_type
+    crucible sample facets owner --sort count --direction desc
+    crucible sample facets project --project-id my-project
+    crucible sample facets sample_type --mine --json
+"""
+    )
+    parser.set_defaults(func=_execute_facets)
+
+
+def _execute_facets(args):
+    """Execute the 'sample facets' subcommand."""
+    from .helpers import execute_facets_command
+    execute_facets_command(args, 'sample')
 
 
 def _register_list_datasets(subparsers):
