@@ -408,11 +408,12 @@ def create_config_file(api_key, api_url=None, cache_dir=None,
     """
     Create a configuration file with the given API key and optional settings.
 
-    The file uses four INI sections:
+    The file uses five INI sections:
       [crucible]  – API connection settings
       [cache]     – cache directory
       [display]   – UI preferences (editor, group-by defaults)
       [network]   – request timeouts
+      [upload]    – multipart upload tuning
 
     Old single-section [crucible] files are still read correctly — the loader
     falls back to [crucible] for any key not found in its designated section.

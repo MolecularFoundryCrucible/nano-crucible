@@ -311,9 +311,6 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
         resubmitting their current values for compatibility.
 
         The deprecated 'public' field delegates to set_public() or set_private().
-        Instrument reassignment is not available through generic PATCH. Omit
-        'instrument_id' and 'instrument_name' unless resubmitting their current
-        values for compatibility.
 
         Args:
             dataset_mfid (str): Dataset MFID
