@@ -124,8 +124,8 @@ class LAMMPSParser(BaseParser):
 
         # Note: dump files are parsed but not uploaded by default
         # They are stored in scientific_metadata for reference
-    
-    
+
+
     # main driver: reads input file and find relevant associated files
     @staticmethod
     def read_lmp_input_file(input_file):
@@ -174,22 +174,19 @@ class LAMMPSParser(BaseParser):
             data["log_files"]  = ["log.lammps"]
 
         return data
-    
+
     @staticmethod
     def read_data_file(data_file):
-        
+
         try:
             import ase.io.lammpsdata
         except:
             raise ImportError("ASE needs to be installed for LMP ingestor to work!")
-            
+
         lmp_metadata = {}
 
         ase_atoms = ase.io.lammpsdata.read_lammps_data(data_file)
-        
-        #TODO this should not stay like that --> should be a json
-        # lmp_metadata["atoms"] = ase_atoms
-        
+
         # store some info about the system to metadata
         lmp_metadata['elements'] = list(set(ase_atoms.get_chemical_symbols()))
         lmp_metadata['natoms']   = len(ase_atoms.get_chemical_symbols())
@@ -197,7 +194,7 @@ class LAMMPSParser(BaseParser):
 
         # what else do we want from the data_file
 
-        return lmp_metadata, ase_atoms    
+        return lmp_metadata, ase_atoms
 
     @staticmethod
     def read_log_file(log_file):
@@ -207,11 +204,11 @@ class LAMMPSParser(BaseParser):
         # just read the first
         with open(log_file) as f:
             first_line = f.readline()
-            
+
         data["lammps_version"] = first_line.strip()
 
         return data
-    
+
     @staticmethod
     def render_thumbnail(ase_atoms, mfid: str):
 
@@ -240,10 +237,10 @@ class LAMMPSParser(BaseParser):
 
         # Create file path
         file_path = os.path.join(thumbnail_dir, filename)
-        
+
         # Make sure atoms are wrapped
         ase_atoms.wrap()
-        
+
         # Write directly to file
         write(file_path, ase_atoms,
               format='png',

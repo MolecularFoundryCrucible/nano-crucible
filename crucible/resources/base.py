@@ -198,7 +198,6 @@ class BaseResource:
     @_deprecated_parameter('resource_id', 'resource_mfid')
     def replace_scientific_metadata(self, resource_mfid: str, metadata: dict) -> dict:
         """Create new scientific metadata entry for a resource."""
-        # this is kind of redundant with API but its better here? #TODO
         return self._request(
             'post', f'/resources/{resource_mfid}/metadata',
             json=metadata, params={'overwrite': True})
