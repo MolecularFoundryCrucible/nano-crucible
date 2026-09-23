@@ -252,6 +252,31 @@ class AssociatedFile(BaseModel):
     model_config = ConfigDict(from_attributes=True, populate_by_name=True, extra='allow')
 
 
+class ServiceAccountKeyStatus(BaseModel):
+    '''Issue and expiry state of a service account's current API key.'''
+
+    created_at: Optional[str] = None
+    expires_at: Optional[str] = None
+    valid: Optional[bool] = None
+
+    model_config = ConfigDict(from_attributes=True, extra='allow')
+
+
+class ServiceAccountAdmin(BaseModel):
+    '''A service account as seen by an administrator, with role and key state.'''
+
+    unique_id: Optional[str] = None
+    username: Optional[str] = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    email: Optional[str] = None
+    is_service_account: Optional[bool] = True
+    platform_role: Optional[str] = None
+    api_key_status: Optional[ServiceAccountKeyStatus] = None
+
+    model_config = ConfigDict(from_attributes=True, extra='allow')
+
+
 class FacetBucket(BaseModel):
     '''One grouped value and its count from a facet response.
 

@@ -11,7 +11,7 @@ import logging
 from typing import Dict, List, Optional
 
 from .base import BaseResource
-from ..constants import DEFAULT_LIMIT
+from ..constants import DEFAULT_LIMIT, PLATFORM_ROLES
 from ..utils.identifiers import validate_mfid, validate_username
 
 logger = logging.getLogger(__name__)
@@ -58,6 +58,67 @@ class ServiceAccountOperations(BaseResource):
             HTTPError 404: unique_id does not correspond to a service account.
         """
         return self._request('post', f'/service_accounts/{unique_id}/rotate_key')
+
+    @staticmethod
+    def _parse(raw: Dict) -> Dict:
+        """Validate a raw admin service-account dict through its Pydantic model."""
+        from ..models import ServiceAccountAdmin
+        return ServiceAccountAdmin.model_validate(raw).model_dump()
+
+    def get_admin(self, service_account_mfid: str) -> Dict:
+        """Get a service account's administrative record. Admin only.
+
+        Unlike get(), this returns the platform role and API key status, which
+        the shared user endpoints do not expose.
+
+        Args:
+            service_account_mfid: Service account MFID.
+
+        Returns:
+            Dict: unique_id, username, first_name, last_name, email,
+                  platform_role, and api_key_status (created_at, expires_at,
+                  valid).
+        """
+        raw = self._request(
+            'get', f'/service_accounts/{validate_mfid(service_account_mfid)}')
+        return self._parse(raw)
+
+    def list_admin(self, q: Optional[str] = None,
+                   limit: int = DEFAULT_LIMIT, offset: int = 0) -> List[Dict]:
+        """List service accounts with their administrative records. Admin only.
+
+        Args:
+            q: Optional search string, at least 3 characters.
+            limit: Maximum number of results.
+            offset: Starting position in the full result set.
+
+        Returns:
+            List of service account records including platform_role.
+        """
+        params = {}
+        if q is not None:
+            params['q'] = q
+        raw = self._paginate('/service_accounts', params, limit, offset)
+        return [self._parse(record) for record in raw]
+
+    def set_platform_role(self, service_account_mfid: str,
+                          platform_role: str) -> Dict:
+        """Set a service account's platform-wide role. Admin only.
+
+        Args:
+            service_account_mfid: Service account MFID.
+            platform_role: One of crucible.constants.PLATFORM_ROLES.
+
+        Returns:
+            Dict: The updated administrative record.
+        """
+        if platform_role not in PLATFORM_ROLES:
+            raise ValueError(
+                f"platform_role must be one of: {', '.join(PLATFORM_ROLES)}.")
+        raw = self._request(
+            'patch', f'/service_accounts/{validate_mfid(service_account_mfid)}',
+            json={'platform_role': platform_role})
+        return self._parse(raw)
 
     def get(self, service_account_mfid: Optional[str] = None,
             username: Optional[str] = None,

@@ -59,3 +59,83 @@ def test_interactive_create_uses_validated_username(monkeypatch):
 
     client.service_accounts.create.assert_called_once_with(
         username='smoke-test', unique_id=None)
+
+
+ADMIN_RECORD = {
+    'unique_id': '0td7evvtg5wb90005k1j97ak94',
+    'username': 'robot',
+    'first_name': 'Robot',
+    'last_name': 'Account',
+    'platform_role': 'contributor',
+    'api_key_status': {'created_at': '2026-01-01', 'expires_at': '2027-01-01',
+                       'valid': True},
+}
+
+
+def test_get_admin_reads_the_service_account_endpoint():
+    operations = make_ops()
+    operations._request.return_value = ADMIN_RECORD
+
+    result = operations.get_admin('0td7evvtg5wb90005k1j97ak94')
+
+    operations._request.assert_called_once_with(
+        'get', '/service_accounts/0td7evvtg5wb90005k1j97ak94')
+    assert result['platform_role'] == 'contributor'
+    assert result['api_key_status']['valid'] is True
+
+
+def test_get_admin_rejects_a_non_mfid():
+    operations = make_ops()
+
+    with pytest.raises(ValueError):
+        operations.get_admin('robot')
+
+    operations._request.assert_not_called()
+
+
+def test_list_admin_forwards_the_search_string():
+    operations = make_ops()
+    operations._request.return_value = {'total': 1, 'items': [ADMIN_RECORD]}
+
+    result = operations.list_admin(q='rob', limit=10)
+
+    assert operations._request.call_args.kwargs['params']['q'] == 'rob'
+    assert result[0]['username'] == 'robot'
+
+
+def test_list_admin_omits_the_search_string_by_default():
+    operations = make_ops()
+    operations._request.return_value = {'total': 0, 'items': []}
+
+    operations.list_admin()
+
+    assert 'q' not in operations._request.call_args.kwargs['params']
+
+
+def test_set_platform_role_patches_the_service_account():
+    operations = make_ops()
+    operations._request.return_value = ADMIN_RECORD
+
+    operations.set_platform_role('0td7evvtg5wb90005k1j97ak94', 'contributor')
+
+    operations._request.assert_called_once_with(
+        'patch', '/service_accounts/0td7evvtg5wb90005k1j97ak94',
+        json={'platform_role': 'contributor'})
+
+
+def test_set_platform_role_rejects_an_unknown_role():
+    operations = make_ops()
+
+    with pytest.raises(ValueError, match='platform_role must be one of'):
+        operations.set_platform_role('0td7evvtg5wb90005k1j97ak94', 'superuser')
+
+    operations._request.assert_not_called()
+
+
+def test_admin_parse_preserves_unknown_server_fields():
+    operations = make_ops()
+    operations._request.return_value = {**ADMIN_RECORD, 'future_field': 'kept'}
+
+    result = operations.get_admin('0td7evvtg5wb90005k1j97ak94')
+
+    assert result['future_field'] == 'kept'

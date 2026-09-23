@@ -33,6 +33,8 @@ def register_subcommand(subparsers):
         _register_list(sa_subparsers)
         _register_edit(sa_subparsers)
         _register_update(sa_subparsers)
+        _register_show(sa_subparsers)
+        _register_set_role(sa_subparsers)
         _register_list_access_groups(sa_subparsers)
         _register_add_access_group(sa_subparsers)
         _register_remove_access_group(sa_subparsers)
@@ -246,6 +248,88 @@ def _execute_list(args):
             rows.append((sa.get('username') or '-',
                          term.cyan(sa.get('unique_id')) if sa.get('unique_id') else '-'))
         term.table(rows, ['Username', 'MFID'], max_widths=[30, 30])
+    except Exception as e:
+        from .helpers import fail
+        fail("", e, args)
+
+
+def _register_show(subparsers):
+    parser = subparsers.add_parser(
+        'show',
+        help='Show a service account with its role and key status (admin only)',
+        description='Show the administrative record for a service account, '
+                    'including its platform role and API key status.',
+        formatter_class=term.ColorHelpFormatter,
+        epilog="""
+Examples:
+    crucible service-account show SA_MFID
+    crucible service-account show SA_MFID --json
+"""
+    )
+    parser.add_argument('sa', metavar='SA_MFID', help='Service account MFID')
+    parser.add_argument('--json', action='store_true', default=False,
+                        help='Output as JSON object')
+    parser.set_defaults(func=_execute_show)
+
+
+def _execute_show(args):
+    from crucible.client import CrucibleClient
+    try:
+        client = CrucibleClient()
+        sa = client.service_accounts.get_admin(args.sa)
+        if getattr(args, 'json', False):
+            print(json.dumps(sa, indent=2, default=str))
+            return
+        _show_sa(sa)
+        _p = term.field_printer(14)
+        _p("Role", sa.get('platform_role'))
+        status = sa.get('api_key_status') or {}
+        if status:
+            valid = status.get('valid')
+            _p("Key", term.green('valid') if valid else term.red('invalid'))
+            _p("Issued", term.fmt_ts(status.get('created_at')))
+            _p("Expires", term.fmt_ts(status.get('expires_at')))
+        else:
+            _p("Key", term.dim('none issued'))
+    except Exception as e:
+        from .helpers import fail
+        fail("", e, args)
+
+
+def _register_set_role(subparsers):
+    from crucible.constants import PLATFORM_ROLES
+
+    parser = subparsers.add_parser(
+        'set-role',
+        help='Set a service account platform role (admin only)',
+        description='Set the platform-wide role granted to a service account.',
+        formatter_class=term.ColorHelpFormatter,
+        epilog="""
+Examples:
+    crucible service-account set-role SA_MFID contributor
+    crucible service-account set-role SA_MFID none
+"""
+    )
+    parser.add_argument('sa', metavar='SA_MFID', help='Service account MFID')
+    parser.add_argument('platform_role', metavar='ROLE', choices=PLATFORM_ROLES,
+                        help=f"Platform role: {', '.join(PLATFORM_ROLES)}")
+    parser.add_argument('--json', action='store_true', default=False,
+                        help='Output as JSON object')
+    parser.set_defaults(func=_execute_set_role)
+
+
+def _execute_set_role(args):
+    from crucible.client import CrucibleClient
+    try:
+        client = CrucibleClient()
+        sa = client.service_accounts.set_platform_role(
+            args.sa, args.platform_role)
+        if getattr(args, 'json', False):
+            print(json.dumps(sa, indent=2, default=str))
+            return
+        term.success(
+            f"Set {sa.get('username') or args.sa} role to {args.platform_role}",
+            args)
     except Exception as e:
         from .helpers import fail
         fail("", e, args)
