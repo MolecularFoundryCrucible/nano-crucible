@@ -54,7 +54,7 @@
 ## 3.2.0
 
 ### Added
-- `add_file(skip_ingestion=True)` uploads a file without requesting ingestion. Updates ingestion request table with provenance details for local parsing. 
+- `add_file(skip_ingestion=True)` uploads a file without requesting ingestion. Updates ingestion request table with provenance details for local parsing.
 - Dataset, sample, and project lists accept repeated user and project access selectors.
 - Development skills for API, CLI, parser, and cast changes.
 - Agent-agnostic contributor guidance and a skill for safe client workflows.

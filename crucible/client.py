@@ -99,7 +99,7 @@ class CrucibleClient:
         self.ingestions = IngestionOperations(self)
         self.service_accounts = ServiceAccountOperations(self)
         self.access_groups = AccessGroupOperations(self)
-    
+
     def _request(self, method: str, endpoint: str, **kwargs) -> Any:
         """Make an HTTP request to the API.
 
@@ -144,12 +144,12 @@ class CrucibleClient:
         except (json.JSONDecodeError, ValueError) as e:
             logger.warning(f"Failed to parse JSON response from {url}: {e}")
             return response
-    
+
     def _wait_for_request_completion(self, reqid: str, sleep_interval: int = 1) -> Dict:
         """Internal: delegate to client.ingestions.wait()."""
         return self.ingestions.wait(reqid, sleep_interval=sleep_interval)
 
-    
+
     #%% GENERIC METHODS
 
     def live(self) -> Dict:
@@ -437,7 +437,7 @@ class CrucibleClient:
                 f"Cannot unlink resources: {resource_mfid_a} is {type_a}, "
                 f"{resource_mfid_b} is {type_b}."
             )
-    
+
     @_deprecated("client.datasets.download() or client.samples.download()")
     @_deprecated_parameter('resource_id', 'resource_mfid')
     def download(self, resource_mfid: str, output_dir: str = 'crucible-downloads',

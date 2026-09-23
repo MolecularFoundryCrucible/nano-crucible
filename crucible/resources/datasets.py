@@ -305,11 +305,11 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
 
         'owner_orcid' and 'project_id' are no longer accepted here (422) -
         use transfer_ownership() / reassign_project() instead.
-        
+
         Instrument assignment is not available through generic PATCH - use
         assign_instrument(). Omit 'instrument_id' and 'instrument_name' unless
         resubmitting their current values for compatibility.
-        
+
         The deprecated 'public' field delegates to set_public() or set_private().
         Instrument reassignment is not available through generic PATCH. Omit
         'instrument_id' and 'instrument_name' unless resubmitting their current
@@ -629,7 +629,7 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
     #%% Upload Methods
 
     @_deprecated_parameter('dsid', 'dataset_mfid')
-    def add_file(self, 
+    def add_file(self,
                  dataset_mfid: str,
                  file_path: str,
                  ingestion_class: Optional[str] = None,
@@ -653,7 +653,7 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
             chunk_size_mb: Override chunk size in MiB (uses config/default if None).
             max_workers: Override number of upload threads (uses config/default if None).
             skip_ingestion: Upload the file without requesting ingestion. Request it
-                later with client.files.request_ingestion(mfid). 
+                later with client.files.request_ingestion(mfid).
 
         Returns:
             Dict: {'associated_file': AssociatedFileRead, 'ingestion_request': IngestionRequest}
@@ -661,8 +661,8 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
         file_size = os.path.getsize(file_path)
         filename  = os.path.basename(file_path)
 
-        file_record, was_existing = upload_file_gcs(self._client, 
-                                                    dataset_mfid, 
+        file_record, was_existing = upload_file_gcs(self._client,
+                                                    dataset_mfid,
                                                     file_path,
                                                     multipart=multipart,
                                                     chunk_size_mb=chunk_size_mb,
@@ -729,7 +729,7 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
                             multipart: bool = True,
                             chunk_size_mb: Optional[int] = None,
                             max_workers: Optional[int] = None) -> Dict:
-        
+
         return self.add_file(dataset_mfid=dataset_mfid, file_path=file_path,
                              ingestion_class=ingestion_class,
                              wait_for_ingestion_response=wait_for_ingestion_response,

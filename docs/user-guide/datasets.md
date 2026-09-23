@@ -262,7 +262,7 @@ When a file is added to a dataset, three things happen:
 
 Data type-specific ingestion classes parse scientific metadata, structured metadata, and thumbnails from the file. If an ingestion class is specified via the `ingestor` parameter, that class is used. Otherwise available classes are scanned from most to least specific, if there are no ingestion classes that support the data type, then metadata and thumbnails will not be extracted from the file.
 
-Ingestors will not overwrite the dataset attributes provided at dataset creation. Structured metadata for the primary dataset record (eg. timestamp, dataset_name, data_type) can be updated using the `client.datasets.update()` method. 
+Ingestors will not overwrite the dataset attributes provided at dataset creation. Structured metadata for the primary dataset record (eg. timestamp, dataset_name, data_type) can be updated using the `client.datasets.update()` method.
 
 For updates to the scientific metadata, the ingestion process uses the `client.datasets.update_scientific_metadata(overwrite = False)` method. As a result, new key-value pairs parsed during the ingestion process will be appended to the existing `scientific_metadata` and newly parsed values for existing keys will be updated. If you would like to replace the entire scientific_metadata dictionary, it can be done manally with `update_scientific_metadata(overwrite=True)`.
 

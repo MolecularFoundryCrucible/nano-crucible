@@ -129,7 +129,7 @@ class FileOperations(BaseResource):
     def _skip_ingestion(self, file_id) -> Dict:
 
         log_message = f"Skipping ingestion for file {file_id}"
-                   
+
         logger.info(log_message)
         params = {'status': 'not_requested'}
 
@@ -138,7 +138,7 @@ class FileOperations(BaseResource):
 
         logger.debug(f"Ingestion request created: id={ingestion_request.get('id')}, "
                      f"status={ingestion_request.get('status')}")
-        
+
         return ingestion_request
 
 
@@ -146,7 +146,7 @@ class FileOperations(BaseResource):
                           file_id: str,
                           ingestion_class: Optional[str] = None,
                           wait_for_response: bool = False) -> Dict:
-        
+
         """Request ingestion of an uploaded file.
 
         Args:
@@ -161,7 +161,7 @@ class FileOperations(BaseResource):
         params = {'status':'requested'}
         if ingestion_class:
             params['ingestion_class'] = ingestion_class
-            
+
         logger.info(f"Requesting ingestion for file {file_id}"
                     + (f" (class={ingestion_class})" if ingestion_class else ""))
 

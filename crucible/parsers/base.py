@@ -265,7 +265,7 @@ class BaseParser:
         )
 
         return crucible_dataset
-    
+
     def upload_dataset(self, ingestor=None,
                        verbose=False, wait_for_ingestion_response=True):
         """

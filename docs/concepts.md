@@ -10,7 +10,7 @@ Users can be members of access groups and projects.
 Human users may use an ORCID as their canonical identifier or receive a generated MFID when created without one.
 Crucible API keys are required for working with the Crucible API locally.
 
-If your integration requires a service account with elevated privileges, please join [Discord](https://discord.gg/Wrepphsgbx) and submit a request for a service account. 
+If your integration requires a service account with elevated privileges, please join [Discord](https://discord.gg/Wrepphsgbx) and submit a request for a service account.
 
 
 ## Projects
@@ -34,9 +34,9 @@ A **dataset** is the core data object in Crucible. It can combine:
 
 - **Files** — the actual measurement data (optional).
 - **Structured metadata** — general attributes collected about each dataset regardless of data type, such as `measurement`, `data_type`, `instrument_name`, `session_name`, `timestamp`, and `data_format`. Other information such as `creation_time`, `modification_time`, and download path will be generated and recorded on the server side.
-- **Scientific metadata** — free-form key-value pairs for experiment-specific parameters, notes, and comments that are considered necessary for reproducibility and provenance. The structure is intentionally flexible to accommodate a variety of use cases and reduce input burden for experimentalists as well as allow adaptibility over time. However, it is recommended to standardize the structure of the scientific data for specific data types within a project or organization to promote higher quality data curation and enable downstream analytics. 
+- **Scientific metadata** — free-form key-value pairs for experiment-specific parameters, notes, and comments that are considered necessary for reproducibility and provenance. The structure is intentionally flexible to accommodate a variety of use cases and reduce input burden for experimentalists as well as allow adaptibility over time. However, it is recommended to standardize the structure of the scientific data for specific data types within a project or organization to promote higher quality data curation and enable downstream analytics.
 - **Keywords** — searchable tags associated with each dataset
-- **Thumbnails** - Small, low resolution images to represent the results or underlying data in the dataset. 
+- **Thumbnails** - Small, low resolution images to represent the results or underlying data in the dataset.
 
 
 Datasets can be linked to each other in parent-child relationships to represent processing pipelines (e.g., raw data → calibrated → analyzed) or collections of related data.
