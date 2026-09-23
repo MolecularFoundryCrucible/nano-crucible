@@ -302,6 +302,14 @@ class FacetResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True, extra='allow')
 
 
+class DeletionRequestCapabilities(BaseModel):
+    '''What the calling user may do with a deletion request.'''
+
+    can_review: Optional[bool] = None
+
+    model_config = ConfigDict(from_attributes=True, extra='allow')
+
+
 class DeletionRequest(BaseModel):
     '''A pending or resolved request to delete a resource.'''
 
@@ -310,13 +318,17 @@ class DeletionRequest(BaseModel):
     resource_id: Optional[str] = None
     resource_name: Optional[str] = None
     project_id: Optional[str] = None
+    project_mfid: Optional[str] = None
     requester_id: Optional[str] = None
+    requester: Optional[Dict] = None
     reason: Optional[str] = None
     status: Optional[str] = None          # "pending" | "approved" | "rejected"
     request_time: Optional[str] = None
     review_time: Optional[str] = None
     reviewer_id: Optional[str] = None
+    reviewer: Optional[Dict] = None
     reviewer_notes: Optional[str] = None
+    capabilities: Optional[DeletionRequestCapabilities] = None
 
     model_config = ConfigDict(from_attributes=True, populate_by_name=True, extra='allow')
 
@@ -364,10 +376,13 @@ class DeletionAuditLog(BaseModel):
     resource_type: Optional[str] = None
     resource_name: Optional[str] = None
     project_id: Optional[str] = None
+    project_mfid: Optional[str] = None
     requester_id: Optional[str] = None
+    requester: Optional[Dict] = None
     reason: Optional[str] = None
     request_time: Optional[str] = None
     reviewer_id: Optional[str] = None
+    reviewer: Optional[Dict] = None
     reviewer_notes: Optional[str] = None
     review_time: Optional[str] = None
     deleted_at: Optional[str] = None

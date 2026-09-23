@@ -46,7 +46,8 @@ MFID = '0tkn2knjast3h0008nyq9zps2c'
     ),
     (
         deletion_cli._execute_list_deleted,
-        SimpleNamespace(resource_id=None, requester_id=None, reviewer_id=None, limit=100),
+        SimpleNamespace(resource_id=None, requester_id=None, reviewer_id=None, limit=100,
+                        scope=None, project_id=None, project_mfid=None, direction=None),
         'No deleted resources found.',
     ),
 ])

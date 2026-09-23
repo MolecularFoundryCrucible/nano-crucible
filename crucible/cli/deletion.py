@@ -71,6 +71,9 @@ def _show_deletion_request(record, client=None):
         reviewer_id = record.get('reviewer_id')
         _p("Reviewer",     term.user_link(names.get(reviewer_id, reviewer_id), reviewer_id))
         _p("Review Notes", record.get('reviewer_notes'))
+    capabilities = record.get('capabilities') or {}
+    if capabilities.get('can_review') is not None:
+        _p("Can Review", "yes" if capabilities['can_review'] else "no")
 
 
 # ── Subcommand registration ───────────────────────────────────────────────────
@@ -111,10 +114,22 @@ Examples:
     crucible deletion list                    # pending only (default)
     crucible deletion list --status approved
     crucible deletion list --status all
+    crucible deletion list --scope reviewable
+    crucible deletion list --sort resource_name --direction asc
 """,
     )
+    from ..constants import (DELETION_REQUEST_SCOPES, DELETION_REQUEST_SORTS,
+                             SORT_DIRECTIONS)
     parser.add_argument('--status', choices=['pending', 'approved', 'rejected', 'all'],
                         default='pending', help='Filter by status (default: pending)')
+    parser.add_argument('--scope', choices=list(DELETION_REQUEST_SCOPES), default=None,
+                        help='Requests to select (default: accessible)')
+    parser.add_argument('--project-mfid', metavar='MFID', dest='project_mfid', default=None,
+                        help='Limit to resources in this project MFID')
+    parser.add_argument('--sort', choices=list(DELETION_REQUEST_SORTS), default=None,
+                        help='Field to order by')
+    parser.add_argument('--direction', choices=list(SORT_DIRECTIONS), default=None,
+                        help='Sort direction')
     parser.set_defaults(func=_execute_list)
 
 
@@ -208,14 +223,24 @@ Examples:
     crucible deletion list-deleted
     crucible deletion list-deleted --resource mf-abc123
     crucible deletion list-deleted --requester 0000-0002-1825-0097
+    crucible deletion list-deleted --scope submitted
 """,
     )
+    from ..constants import DELETION_AUDIT_SCOPES, SORT_DIRECTIONS
     parser.add_argument('--resource',  metavar='MFID',  dest='resource_id',  default=None,
                         help='Filter by resource MFID')
     parser.add_argument('--requester', metavar='ORCID', dest='requester_id', default=None,
                         help='Filter by requester ORCID')
     parser.add_argument('--reviewer',  metavar='ORCID', dest='reviewer_id',  default=None,
                         help='Filter by reviewer ORCID')
+    parser.add_argument('--scope', choices=list(DELETION_AUDIT_SCOPES), default=None,
+                        help='Entries to select (default: all)')
+    parser.add_argument('--project-id', metavar='ID', dest='project_id', default=None,
+                        help='Filter by project slug captured at deletion time')
+    parser.add_argument('--project-mfid', metavar='MFID', dest='project_mfid', default=None,
+                        help='Filter by project MFID captured at deletion time')
+    parser.add_argument('--direction', choices=list(SORT_DIRECTIONS), default=None,
+                        help='Sort direction on deletion time')
     parser.add_argument('--limit', type=int, default=50, metavar='N',
                         help='Maximum number of results (default: 50)')
     parser.set_defaults(func=_execute_list_deleted)
@@ -249,6 +274,10 @@ def _execute_list_deleted(args):
             requester_id=args.requester_id,
             reviewer_id=args.reviewer_id,
             limit=args.limit,
+            scope=args.scope,
+            project_id=args.project_id,
+            project_mfid=args.project_mfid,
+            direction=args.direction,
         )
 
         term.header(f"Deleted Resources ({len(records)})")
@@ -329,7 +358,15 @@ def _execute_list(args):
         client = CrucibleClient()
 
         status = None if args.status == 'all' else args.status
-        records = sorted(client.deletions.list(status=status), key=lambda r: r.get('id') or 0)
+        records = client.deletions.list(
+            status=status,
+            scope=args.scope,
+            project_mfid=args.project_mfid,
+            sort=args.sort,
+            direction=args.direction,
+        )
+        if args.sort is None:
+            records = sorted(records, key=lambda r: r.get('id') or 0)
 
         term.header(f"Deletion Requests — {args.status} ({len(records)})")
 

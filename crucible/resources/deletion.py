@@ -10,7 +10,9 @@ POST /resources/{id}/delete, admins approve or reject them via /deletion_request
 from typing import Dict, List, Optional
 
 from .base import BaseResource
-from ..constants import DEFAULT_LIMIT
+from ..constants import (DEFAULT_LIMIT, DELETION_AUDIT_SCOPES,
+                         DELETION_REQUEST_SCOPES, DELETION_REQUEST_SORTS,
+                         SORT_DIRECTIONS)
 from ..models import DeletionRequest, DeletionAuditLog
 
 
@@ -41,14 +43,24 @@ class DeletionOperations(BaseResource):
         return self._parse(raw)
 
     def list(self, status: Optional[str] = None, limit: int = DEFAULT_LIMIT,
-             offset: int = 0) -> List[Dict]:
-        """List deletion requests. Admin only.
+             offset: int = 0, scope: Optional[str] = None,
+             project_mfid: Optional[str] = None,
+             sort: Optional[str] = None,
+             direction: Optional[str] = None) -> List[Dict]:
+        """List deletion requests.
 
         Args:
             status: Filter by status — "pending", "approved", or "rejected".
                     Omit to return all requests.
             limit (int): Maximum number of results to return (default: 100)
             offset (int): Starting position in the full result set (default: 0)
+            scope: One of crucible.constants.DELETION_REQUEST_SCOPES. The
+                   server defaults to "accessible"; "submitted" returns only
+                   the caller's own requests and "reviewable" only those the
+                   caller may act on.
+            project_mfid: Limit to resources assigned to this project MFID.
+            sort: One of crucible.constants.DELETION_REQUEST_SORTS.
+            direction: "asc" or "desc".
 
         Returns:
             List[Dict]: Matching DeletionRequest records.
@@ -56,6 +68,12 @@ class DeletionOperations(BaseResource):
         params = {}
         if status is not None:
             params["status"] = status
+        if project_mfid is not None:
+            params['project_mfid'] = project_mfid
+        params.update(self._choice_params(
+            scope=(scope, DELETION_REQUEST_SCOPES),
+            sort=(sort, DELETION_REQUEST_SORTS),
+            direction=(direction, SORT_DIRECTIONS)))
         raw = self._paginate("/deletion_requests", params, limit, offset)
         return [self._parse(r) for r in raw]
 
@@ -102,8 +120,12 @@ class DeletionOperations(BaseResource):
     def list_deleted(self, resource_id: Optional[str] = None,
                    requester_id: Optional[str] = None,
                    reviewer_id: Optional[str] = None,
-                   limit: int = DEFAULT_LIMIT) -> List[Dict]:
-        """List hard-deletion audit log entries. Admin only.
+                   limit: int = DEFAULT_LIMIT,
+                   scope: Optional[str] = None,
+                   project_id: Optional[str] = None,
+                   project_mfid: Optional[str] = None,
+                   direction: Optional[str] = None) -> List[Dict]:
+        """List hard-deletion audit log entries.
 
         Returns a permanent record of every resource that was hard-deleted,
         ordered by deletion time descending. Audit entries survive even after
@@ -114,6 +136,13 @@ class DeletionOperations(BaseResource):
             requester_id: Filter by the ORCID of who requested deletion.
             reviewer_id: Filter by the ORCID of who approved deletion.
             limit: Maximum number of results.
+            scope: One of crucible.constants.DELETION_AUDIT_SCOPES. The server
+                   defaults to "all" (the platform-wide administrator audit);
+                   "submitted" returns only the caller's own deletions.
+            project_id: Project slug captured at deletion time.
+            project_mfid: Project MFID captured at deletion time. Entries
+                          predating project MFID snapshots will not match.
+            direction: "asc" or "desc" on deletion time.
 
         Returns:
             List[Dict]: DeletionAuditLog records.
@@ -125,6 +154,13 @@ class DeletionOperations(BaseResource):
             params['requester_id'] = requester_id
         if reviewer_id:
             params['reviewer_id'] = reviewer_id
+        if project_id is not None:
+            params['project_id'] = project_id
+        if project_mfid is not None:
+            params['project_mfid'] = project_mfid
+        params.update(self._choice_params(
+            scope=(scope, DELETION_AUDIT_SCOPES),
+            direction=(direction, SORT_DIRECTIONS)))
         raw = self._paginate('/deletion_audit', params, limit=limit)
         return [DeletionAuditLog(**r).model_dump() for r in raw]
 
