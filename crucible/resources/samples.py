@@ -209,7 +209,8 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
         return self._paginate(f"/samples/{parent_mfid}/children", params, limit, offset)
 
     def create(self, sample=None, scientific_metadata: Optional[Dict] = None,
-               parents: List[Dict] = [], children: List[Dict] = [],
+               parents: Optional[List[Dict]] = None,
+               children: Optional[List[Dict]] = None,
                **kwargs) -> Dict:
         """Create a new sample record.
 
@@ -272,9 +273,9 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
             self._request('post', "/samples", json=sample_info))
         sample_mfid = new_samp['unique_id']
 
-        for p in parents:
+        for p in parents or []:
             self._request('post', f"/samples/{p['unique_id']}/children/{sample_mfid}")
-        for chd in children:
+        for chd in children or []:
             self._request('post', f"/samples/{sample_mfid}/children/{chd['unique_id']}")
 
         if scientific_metadata:
@@ -288,7 +289,8 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
                owner_orcid: Optional[str] = None,
                project_id: Optional[str] = None, sample_type: Optional[str] = None,
                public: Optional[bool] = None,
-               parents: List[Dict] = [], children: List[Dict] = [],
+               parents: Optional[List[Dict]] = None,
+               children: Optional[List[Dict]] = None,
                # deprecated aliases (creation_time/modification_time are server-assigned)
                date_created: Optional[str] = None, creation_date: Optional[str] = None,
                owner_id: Optional[int] = None,
@@ -367,13 +369,13 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
         else:
             upd_samp = self.get(sample_mfid)
 
-        for p in parents:
+        for p in parents or []:
             parent_sample_mfid = p['unique_id']
             child_sample_mfid = upd_samp['unique_id']
             self._request(
                 'post', f"/samples/{parent_sample_mfid}/children/{child_sample_mfid}")
 
-        for chd in children:
+        for chd in children or []:
             parent_sample_mfid = upd_samp['unique_id']
             child_sample_mfid = chd['unique_id']
             self._request(
