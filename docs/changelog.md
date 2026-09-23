@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Changed
+
+- The minimum supported Python version is now 3.10.
+
 ## 3.2.1
 
 ### Added
