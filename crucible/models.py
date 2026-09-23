@@ -252,6 +252,31 @@ class AssociatedFile(BaseModel):
     model_config = ConfigDict(from_attributes=True, populate_by_name=True, extra='allow')
 
 
+class FacetBucket(BaseModel):
+    '''One grouped value and its count from a facet response.
+
+    Owner, project, and instrument facets also carry a typed reference object
+    under the matching key, preserved by extra='allow'.
+    '''
+
+    value: Optional[str] = None
+    label: Optional[str] = None
+    count: Optional[int] = None
+
+    model_config = ConfigDict(from_attributes=True, extra='allow')
+
+
+class FacetResponse(BaseModel):
+    '''A page of facet buckets for one grouping field.'''
+
+    field: Optional[str] = None
+    items: List[FacetBucket] = []
+    limit: Optional[int] = None
+    next_cursor: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True, extra='allow')
+
+
 class DeletionRequest(BaseModel):
     '''A pending or resolved request to delete a resource.'''
 

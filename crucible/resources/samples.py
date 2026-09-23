@@ -10,7 +10,7 @@ import logging
 from typing import Any, Optional, List, Dict, Sequence, Union
 from .base import BaseResource
 from .capabilities import AccessControlMixin, OwnershipMixin, ProjectAssignmentMixin
-from ..constants import DEFAULT_LIMIT, VISIBILITIES
+from ..constants import DEFAULT_LIMIT, SAMPLE_FACET_FIELDS, VISIBILITIES
 from ..utils.deprecation import _deprecated, _deprecated_parameter
 from ..utils.identifiers import is_mfid, require_canonical_identifier
 
@@ -212,6 +212,31 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
                 )
         raw = self._paginate(endpoint, params, limit, offset)
         return [self._parse(s) for s in raw]
+
+    def facets(self, field: str, limit: int = 100,
+               sort: Optional[str] = None, direction: Optional[str] = None,
+               cursor: Optional[str] = None, **filters) -> Dict:
+        """Group samples into value buckets with counts, without fetching records.
+
+        Args:
+            field: Field to group by, one of
+                   crucible.constants.SAMPLE_FACET_FIELDS.
+            limit: Maximum number of buckets to return (default: 100, max 1000).
+            sort: Bucket ordering, one of crucible.constants.FACET_SORTS
+                  (default: value).
+            direction: Bucket ordering direction, asc or desc (default: asc).
+            cursor: Continuation cursor from a previous response's next_cursor.
+            **filters: Any sample list filter, restricting which samples
+                       contribute to the counts.
+
+        Returns:
+            Dict: field, items (buckets with value, label, count, and a typed
+                  owner/project reference where applicable), limit, and
+                  next_cursor.
+        """
+        return self._facets('/samples/facets', field, SAMPLE_FACET_FIELDS,
+                            SAMPLE_FACET_PARAMS, limit=limit, sort=sort,
+                            direction=direction, cursor=cursor, filters=filters)
 
     def count(self, project_id: Optional[str] = None,
               project_mfid: Optional[str] = None,

@@ -165,6 +165,32 @@ class BaseResource:
                     f"affiliation values must be one of: {', '.join(AFFILIATIONS)}.")
         return {'affiliation': values}
 
+    def _facets(self, endpoint: str, field: str, fields, allowed,
+                limit: int = 100, sort: Optional[str] = None,
+                direction: Optional[str] = None,
+                cursor: Optional[str] = None,
+                filters: Optional[dict] = None) -> dict:
+        """Fetch one page of facet buckets for a grouping field."""
+        from ..constants import FACET_SORTS, SORT_DIRECTIONS
+        from ..models import FacetResponse
+
+        if field not in fields:
+            raise ValueError(f"field must be one of: {', '.join(fields)}.")
+
+        params = {k: v for k, v in (filters or {}).items() if v is not None}
+        params['field'] = field
+        params['limit'] = limit
+        # Unlike the list endpoints, facets carry their own sort default and
+        # accept a direction on its own.
+        params.update(self._choice_params(
+            sort=(sort, FACET_SORTS), direction=(direction, SORT_DIRECTIONS)))
+        if cursor is not None:
+            params['cursor'] = cursor
+        self._validate_filter_params(params, allowed, endpoint)
+
+        raw = self._request('get', endpoint, params=params)
+        return FacetResponse.model_validate(raw).model_dump()
+
     @staticmethod
     def _validate_filter_params(params: dict, allowed, endpoint: str) -> dict:
         """Reject query parameters the endpoint does not accept.

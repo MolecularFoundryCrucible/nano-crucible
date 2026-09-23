@@ -20,7 +20,7 @@ import mfid
 from .base import BaseResource
 from .capabilities import (
     AccessControlMixin, InstrumentAssignmentMixin, OwnershipMixin, ProjectAssignmentMixin)
-from ..constants import DEFAULT_LIMIT, VISIBILITIES
+from ..constants import DATASET_FACET_FIELDS, DEFAULT_LIMIT, VISIBILITIES
 from ..utils.deprecation import _deprecated, _deprecated_parameter
 from ..utils.identifiers import is_mfid, require_canonical_identifier
 from ..models import AssociatedFile
@@ -218,6 +218,31 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
         self._validate_filter_params(params, DATASET_LIST_PARAMS, '/datasets')
         raw = self._paginate('/datasets', params, limit, offset)
         return [self._parse(d) for d in raw]
+
+    def facets(self, field: str, limit: int = 100,
+               sort: Optional[str] = None, direction: Optional[str] = None,
+               cursor: Optional[str] = None, **filters) -> Dict:
+        """Group datasets into value buckets with counts, without fetching records.
+
+        Args:
+            field: Field to group by, one of
+                   crucible.constants.DATASET_FACET_FIELDS.
+            limit: Maximum number of buckets to return (default: 100, max 1000).
+            sort: Bucket ordering, one of crucible.constants.FACET_SORTS
+                  (default: value).
+            direction: Bucket ordering direction, asc or desc (default: asc).
+            cursor: Continuation cursor from a previous response's next_cursor.
+            **filters: Any dataset list filter, restricting which datasets
+                       contribute to the counts.
+
+        Returns:
+            Dict: field, items (buckets with value, label, count, and a typed
+                  owner/project/instrument reference where applicable), limit,
+                  and next_cursor.
+        """
+        return self._facets('/datasets/facets', field, DATASET_FACET_FIELDS,
+                            DATASET_FACET_PARAMS, limit=limit, sort=sort,
+                            direction=direction, cursor=cursor, filters=filters)
 
     def count(self, project_id: Optional[str] = None,
               project_mfid: Optional[str] = None,
