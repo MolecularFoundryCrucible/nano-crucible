@@ -136,4 +136,4 @@ def execute(args):
 
     except Exception as e:
         from .helpers import fail
-        fail("retrieving {args.resource_id}", e, args)
+        fail(f"retrieving {args.resource_id}", e, args)

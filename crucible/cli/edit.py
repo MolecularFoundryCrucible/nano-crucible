@@ -63,4 +63,4 @@ def execute(args):
 
     except Exception as e:
         from .helpers import fail
-        fail("editing {args.resource_id}", e, args)
+        fail(f"editing {args.resource_id}", e, args)
