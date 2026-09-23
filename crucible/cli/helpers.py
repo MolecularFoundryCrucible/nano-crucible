@@ -544,6 +544,22 @@ def fail(action: str, error: Exception, args=None) -> None:
     sys.exit(1)
 
 
+def require_capability(client, capability: str, action: str) -> None:
+    """Exit early when the caller's account cannot perform an action.
+
+    Checked before interactive prompts so the user is not asked to fill in a
+    form the server will reject. An unreadable profile leaves capabilities
+    empty, in which case the attempt proceeds and the API decides.
+    """
+    from . import term
+
+    capabilities = getattr(client, 'capabilities', None)
+    if capabilities and not capabilities.get(capability):
+        print(term.red('Not permitted', stream=sys.stderr), file=sys.stderr)
+        print(f"Your account is not permitted to {action}.", file=sys.stderr)
+        sys.exit(1)
+
+
 def parse_user_ref(value: str) -> dict:
     """Sniff a user identifier's format and return a kwargs dict for users.get()/users.resolve().
 
@@ -608,7 +624,8 @@ def fetch_projects(client):
 def fetch_deletions(client):
     """Return pending deletion requests, or None if the user lacks permission."""
     try:
-        return client.deletions.list(status='pending')
+        scope = 'reviewable' if client.can_elevate else None
+        return client.deletions.list(status='pending', scope=scope)
     except Exception:
         return None
 
@@ -616,7 +633,8 @@ def fetch_deletions(client):
 def fetch_join_requests(client):
     """Return pending join requests, or None if the user lacks permission."""
     try:
-        return client.access_groups.list_join_requests(status='pending')
+        return client.access_groups.list_join_requests(
+            status='pending', privilege_mode=client._admin_mode())
     except Exception:
         return None
 

@@ -48,13 +48,14 @@ def _elevated_now():
 
 
 def _set_elevated(on):
-    """Set or clear elevation for every client built during this process."""
+    """Set or clear elevation for every client built during this process.
+
+    Turning it off pins "normal" rather than clearing the key, because sending
+    no header at all leaves a platform administrator elevated.
+    """
     from ..config import config
 
-    if on:
-        config._data['privilege_mode'] = 'elevated'
-    else:
-        config._data.pop('privilege_mode', None)
+    config._data['privilege_mode'] = 'elevated' if on else 'normal'
 
 
 def _get_subparser_map(parser):
@@ -1139,8 +1140,9 @@ class CrucibleShell:
         )
         deletions     = fetch_deletions(self.client)
         join_requests = fetch_join_requests(self.client)
-        self.is_admin = deletions is not None
-        service_accounts = fetch_service_accounts(self.client) if self.is_admin else None
+        self.is_admin = self.client.can_elevate or deletions is not None
+        service_accounts = (fetch_service_accounts(self.client)
+                            if self._can_manage_service_accounts() else None)
 
         project_id, project_source = fetch_project_context()
         self.state = {
@@ -1158,6 +1160,11 @@ class CrucibleShell:
             'recent_mfids':      deque(maxlen=15),
         }
 
+    def _can_manage_service_accounts(self):
+        """Whether service-account administration is reachable for this caller."""
+        return bool(self.client.can_elevate
+                    or self.client.capabilities.get('can_manage_service_accounts'))
+
     def _apply_elevated(self, on):
         """Set elevation for the session, its state, and the shared client.
 
@@ -1167,7 +1174,7 @@ class CrucibleShell:
         _set_elevated(on)
         self.state['elevated'] = on
         if self.client is not None:
-            self.client.privilege_mode = 'elevated' if on else None
+            self.client.privilege_mode = 'elevated' if on else 'normal'
 
     def refresh(self):
         """Re-fetch projects, user info, deletions, join requests, and service accounts. Updates state + completer."""
@@ -1184,7 +1191,7 @@ class CrucibleShell:
             new_deletions        = del_f.result()
             new_join_requests    = jr_f.result()
             new_service_accounts = sa_f.result()
-        self.is_admin = new_deletions is not None
+        self.is_admin = self.client.can_elevate or new_deletions is not None
         self.state['projects']         = new_projects
         self.state['user_label']       = fetch_user_label(self.client)
         project_id, project_source = fetch_project_context()
@@ -1531,6 +1538,9 @@ class CrucibleShell:
                 print("Usage: elevated on | elevated off")
                 return True
             on = (action == 'on')
+            if on and self.client is not None and not self.client.can_elevate:
+                print("Your account is not eligible for elevated privilege.")
+                return True
             self._apply_elevated(on)
             if on:
                 print("Elevated privilege enabled. Requests now ask for "

@@ -358,9 +358,15 @@ def _execute_list(args):
         client = CrucibleClient()
 
         status = None if args.status == 'all' else args.status
+        # A reviewer's queue is the point of this command, and "accessible" no
+        # longer includes other people's requests now that reads default to
+        # normal mode.
+        scope = args.scope
+        if scope is None and client.can_elevate:
+            scope = 'reviewable'
         records = client.deletions.list(
             status=status,
-            scope=args.scope,
+            scope=scope,
             project_mfid=args.project_mfid,
             sort=args.sort,
             direction=args.direction,

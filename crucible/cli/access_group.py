@@ -136,6 +136,7 @@ def _execute_list(args):
         records = client.access_groups.list_join_requests(
             group_name=args.group_name, status=status,
             requester_id=args.requester_id, limit=args.limit,
+            privilege_mode=(None if args.group_name else client._admin_mode()),
         )
         term.header(f"Join Requests — {args.status} ({len(records)})")
         if not records:

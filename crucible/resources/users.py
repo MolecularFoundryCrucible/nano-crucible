@@ -148,7 +148,8 @@ class UserOperations(BaseResource):
         Returns:
             Dict: {valid: bool, created_at: str, expires_at: str}
         """
-        return self._request('get', f'/users/{user_unique_id}/apikey/verify')
+        return self._request('get', f'/users/{user_unique_id}/apikey/verify',
+                             privilege_mode=self._client._admin_mode())
 
     @_deprecated_parameter('orcids', 'user_unique_ids')
     def resolve(self, user_unique_ids: Optional[List[str]] = None,

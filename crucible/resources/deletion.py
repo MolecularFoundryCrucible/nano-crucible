@@ -74,7 +74,10 @@ class DeletionOperations(BaseResource):
             scope=(scope, DELETION_REQUEST_SCOPES),
             sort=(sort, DELETION_REQUEST_SORTS),
             direction=(direction, SORT_DIRECTIONS)))
-        raw = self._paginate("/deletion_requests", params, limit, offset)
+        mode = (self._client._admin_mode()
+                if scope == 'reviewable' else None)
+        raw = self._paginate("/deletion_requests", params, limit, offset,
+                             privilege_mode=mode)
         return [self._parse(r) for r in raw]
 
     def get(self, request_id: int) -> Dict:
@@ -86,7 +89,8 @@ class DeletionOperations(BaseResource):
         Returns:
             Dict: The DeletionRequest record.
         """
-        raw = self._request("get", f"/deletion_requests/{request_id}")
+        raw = self._request("get", f"/deletion_requests/{request_id}",
+                            privilege_mode=self._client._admin_mode())
         return self._parse(raw)
 
     def approve(self, request_id: int, reviewer_notes: Optional[str] = None) -> Dict:
@@ -161,7 +165,10 @@ class DeletionOperations(BaseResource):
         params.update(self._choice_params(
             scope=(scope, DELETION_AUDIT_SCOPES),
             direction=(direction, SORT_DIRECTIONS)))
-        raw = self._paginate('/deletion_audit', params, limit=limit)
+        mode = (self._client._admin_mode()
+                if scope in (None, 'all') else None)
+        raw = self._paginate('/deletion_audit', params, limit=limit,
+                             privilege_mode=mode)
         return [DeletionAuditLog(**r).model_dump() for r in raw]
 
     def get_deleted(self, audit_id: int) -> Dict:
@@ -176,7 +183,8 @@ class DeletionOperations(BaseResource):
         Raises:
             HTTPError 404: Audit entry not found.
         """
-        raw = self._request('get', f'/deletion_audit/{audit_id}')
+        raw = self._request('get', f'/deletion_audit/{audit_id}',
+                            privilege_mode=self._client._admin_mode())
         return DeletionAuditLog(**raw).model_dump()
 
     def delete(self, resource_id: str, force: bool = False) -> Dict:
@@ -197,7 +205,8 @@ class DeletionOperations(BaseResource):
             HTTPError 404: Resource not found.
         """
         params = {'force': True} if force else None
-        return self._request('delete', f'/resources/{resource_id}', params=params)
+        return self._request('delete', f'/resources/{resource_id}', params=params,
+                             privilege_mode=self._client._admin_mode())
 
     def _review(self, request_id: int, status: str,
                 reviewer_notes: Optional[str] = None) -> Dict:
@@ -205,5 +214,6 @@ class DeletionOperations(BaseResource):
         params = {"status": status}
         if reviewer_notes is not None:
             params["reviewer_notes"] = reviewer_notes
-        raw = self._request("patch", f"/deletion_requests/{request_id}", params=params)
+        raw = self._request("patch", f"/deletion_requests/{request_id}", params=params,
+                            privilege_mode=self._client._admin_mode())
         return self._parse(raw)

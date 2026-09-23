@@ -30,13 +30,13 @@ def sent_headers(client):
     return client._session.request.call_args.kwargs.get('headers')
 
 
-def test_no_header_is_sent_by_default(make_client):
+def test_normal_is_sent_by_default(make_client):
     client = make_client()
 
     client._request('get', '/datasets')
 
-    assert client.privilege_mode is None
-    assert sent_headers(client) is None
+    assert client.privilege_mode == 'normal'
+    assert sent_headers(client)['Crucible-Privilege-Mode'] == 'normal'
 
 
 def test_client_level_mode_is_sent_on_every_request(make_client):
@@ -178,8 +178,8 @@ def test_shell_toggle_updates_its_long_lived_client():
     assert config.privilege_mode == 'elevated'
 
     instance._apply_elevated(False)
-    assert instance.client.privilege_mode is None
-    assert config.privilege_mode is None
+    assert instance.client.privilege_mode == 'normal'
+    assert config.privilege_mode == 'normal'
 
 
 def test_shell_toggle_tolerates_a_client_that_is_not_built_yet():
@@ -195,3 +195,92 @@ def test_shell_toggle_tolerates_a_client_that_is_not_built_yet():
     assert instance.state['elevated'] is True
 
     instance._apply_elevated(False)
+
+
+def make_admin_client(make_client, resource, response, can_elevate=True):
+    """Build a client whose named resource records its _request calls.
+
+    Resources bind the client's _request at construction, so the stub has to
+    replace the resource's own reference rather than the client's.
+    """
+    client = make_client()
+    client._authorization = {'can_elevate': can_elevate}
+    client._capabilities = {}
+    request = MagicMock(return_value=response)
+    getattr(client, resource)._request = request
+    return client, request
+
+
+def test_service_account_admin_always_elevates(make_client):
+    client, request = make_admin_client(
+        make_client, 'service_accounts', {'unique_id': 'x'}, can_elevate=False)
+
+    client.service_accounts.set_platform_role(
+        '0td7evvtg5wb90005k1j97ak94', 'contributor')
+
+    assert request.call_args.kwargs['privilege_mode'] == 'elevated'
+
+
+def test_deletion_review_elevates_only_for_eligible_callers(make_client):
+    for can_elevate, expected in ((True, 'elevated'), (False, None)):
+        client, request = make_admin_client(
+            make_client, 'deletions', {'id': 1}, can_elevate=can_elevate)
+
+        client.deletions.get(1)
+
+        assert request.call_args.kwargs.get('privilege_mode') == expected
+
+
+def test_reviewable_scope_elevates_but_accessible_does_not(make_client):
+    for scope, expected in (('reviewable', 'elevated'), ('accessible', None)):
+        client, request = make_admin_client(
+            make_client, 'deletions', {'total': 0, 'items': []})
+
+        client.deletions.list(scope=scope)
+
+        assert request.call_args.kwargs.get('privilege_mode') == expected
+
+
+def test_capabilities_are_fetched_in_normal_mode_and_cached(make_client):
+    client = make_client()
+    profile = {'authorization': {'can_elevate': True},
+               'capabilities': {'can_create_project': True}}
+    with patch.object(client.account, 'profile',
+                      return_value=profile) as fetch:
+        assert client.can_elevate is True
+        assert client.capabilities['can_create_project'] is True
+        assert client.authorization['can_elevate'] is True
+
+    fetch.assert_called_once_with(privilege_mode='normal')
+
+
+def test_unreadable_profile_degrades_to_no_authority(make_client):
+    client = make_client()
+    with patch.object(client.account, 'profile', side_effect=RuntimeError):
+        assert client.can_elevate is False
+        assert client.capabilities == {}
+
+
+def test_require_capability_blocks_a_disallowed_action(capsys):
+    from crucible.cli.helpers import require_capability
+
+    client = MagicMock(capabilities={'can_create_project': False})
+
+    with pytest.raises(SystemExit):
+        require_capability(client, 'can_create_project', 'create projects')
+
+    assert 'not permitted to create projects' in capsys.readouterr().err
+
+
+def test_require_capability_allows_a_permitted_action():
+    from crucible.cli.helpers import require_capability
+
+    client = MagicMock(capabilities={'can_create_project': True})
+
+    require_capability(client, 'can_create_project', 'create projects')
+
+
+def test_require_capability_defers_to_the_api_when_unknown():
+    from crucible.cli.helpers import require_capability
+
+    require_capability(MagicMock(capabilities={}), 'can_create_project', 'x')

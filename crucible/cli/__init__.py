@@ -264,7 +264,8 @@ Examples:
 
     # Every client built during this invocation reads the mode from the config
     # singleton, so setting it once here covers all of them without writing the
-    # config file.
+    # config file. Admin-only operations request elevation per call, so this
+    # only governs ordinary reads and writes.
     from ..config import config as _config
     if getattr(args, 'elevated', False):
         _config._data['privilege_mode'] = 'elevated'

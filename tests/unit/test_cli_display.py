@@ -58,6 +58,8 @@ def test_empty_listings_name_their_subject(execute, args, expected, monkeypatch,
         account=SimpleNamespace(join_requests=lambda **kwargs: []),
         service_accounts=SimpleNamespace(list=lambda **kwargs: []),
         deletions=SimpleNamespace(list_deleted=lambda **kwargs: []),
+        can_elevate=False,
+        _admin_mode=lambda: None,
     )
     monkeypatch.setattr('crucible.client.CrucibleClient', lambda: client)
 
