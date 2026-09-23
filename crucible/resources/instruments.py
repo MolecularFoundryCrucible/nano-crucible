@@ -7,7 +7,7 @@ Provides organized access to instrument-related API endpoints.
 """
 
 import logging
-from typing import Optional, List, Dict
+from typing import TYPE_CHECKING, Any, Optional, List, Dict, Union
 from .base import BaseResource
 from .capabilities import AccessControlMixin, OwnershipMixin
 from ..constants import DEFAULT_LIMIT
@@ -19,6 +19,9 @@ from ..utils.identifiers import (
     require_canonical_identifier,
     validate_slug,
 )
+
+if TYPE_CHECKING:
+    from ..models import Instrument, ProjectMember
 
 logger = logging.getLogger(__name__)
 
@@ -171,7 +174,8 @@ class InstrumentOperations(OwnershipMixin, AccessControlMixin, BaseResource):
         raw = self._request('get', '/instruments', params=params)
         return self._parse(collapse_exact_lookup(raw, 'instrument', instrument_name))
 
-    def create(self, instrument, scientific_metadata: Optional[Dict] = None) -> Dict:
+    def create(self, instrument: Union['Instrument', Dict],
+               scientific_metadata: Optional[Dict] = None) -> Dict:
         """Create a new instrument as an authenticated human caller.
 
         Service accounts cannot create instruments. If the instrument already
@@ -246,7 +250,7 @@ class InstrumentOperations(OwnershipMixin, AccessControlMixin, BaseResource):
             self.update_scientific_metadata(result['unique_id'], scientific_metadata)
         return self._parse(result)
 
-    def update(self, unique_id: str, **kwargs) -> Dict:
+    def update(self, unique_id: str, **kwargs: Any) -> Dict:
         """Partially update an instrument record.
 
         **Requires editor permission.**

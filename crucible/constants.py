@@ -16,6 +16,9 @@ PROJECT_SCOPES = ('assigned', 'shared', 'all')
 # the server is authoritative for what it currently accepts.
 RELATIONSHIP_TYPES = ('is_derived_from', 'is_part_of')
 
+# GCS bucket that dataset file storage_path values are prefixed with.
+GCS_BUCKET_PREFIX = 'mf-storage-prod/'
+
 # Multipart upload defaults (tuned via benchmarking — see testing/tune_results.jsonl)
 UPLOAD_CHUNK_SIZE_MB = 64   # GCS XML multipart part size in MiB
 UPLOAD_MAX_WORKERS   = 8    # concurrent upload threads

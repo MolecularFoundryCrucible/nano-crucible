@@ -7,7 +7,7 @@ Pydantic models for Crucible API request and response objects.
 from pydantic import BaseModel, ConfigDict
 from typing import Dict, List, Literal, Optional, Union
 
-#%% Base model
+# Base model
 
 class CrucibleResource(BaseModel):
     """Shared fields common to all Crucible resources."""
@@ -22,7 +22,7 @@ class CrucibleResource(BaseModel):
     model_config = ConfigDict(from_attributes=True, populate_by_name=True, extra='allow')
 
 
-#%% Models
+# Models
 
 class PublicUser(BaseModel):
     """Public-safe user record embedded in resource responses."""

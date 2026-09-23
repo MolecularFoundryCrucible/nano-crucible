@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Changed
+
+- The minimum supported Python version is now 3.10.
+- The configuration file and its directory are now created with owner-only permissions, and existing files are restricted when a value is set or unset.
+- Installing the package no longer pulls in `ipywidgets` or `python-dotenv`.
+
 ## 3.2.1
 
 ### Added
@@ -54,7 +60,7 @@
 ## 3.2.0
 
 ### Added
-- `add_file(skip_ingestion=True)` uploads a file without requesting ingestion. Updates ingestion request table with provenance details for local parsing. 
+- `add_file(skip_ingestion=True)` uploads a file without requesting ingestion. Updates ingestion request table with provenance details for local parsing.
 - Dataset, sample, and project lists accept repeated user and project access selectors.
 - Development skills for API, CLI, parser, and cast changes.
 - Agent-agnostic contributor guidance and a skill for safe client workflows.

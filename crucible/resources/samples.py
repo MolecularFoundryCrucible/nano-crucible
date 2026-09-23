@@ -7,10 +7,10 @@ Provides organized access to sample-related API endpoints.
 """
 
 import logging
-from typing import Optional, List, Dict, Sequence, Union
+from typing import Any, Optional, List, Dict, Sequence, Union
 from .base import BaseResource
 from .capabilities import AccessControlMixin, OwnershipMixin, ProjectAssignmentMixin
-from ..constants import DEFAULT_LIMIT, API_PAGE_MAX
+from ..constants import DEFAULT_LIMIT
 from ..utils.deprecation import _deprecated, _deprecated_parameter
 from ..utils.identifiers import is_mfid, require_canonical_identifier
 
@@ -91,7 +91,7 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
              project_id: Optional[str] = None,
              project_mfid: Optional[str] = None,
              project_scope: Optional[str] = None,
-             **kwargs) -> List[Dict]:
+             **kwargs: Any) -> List[Dict]:
         """List samples with optional filtering and automatic pagination.
 
         Args:
@@ -166,7 +166,7 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
     @_deprecated_parameter('sample_mfid', 'child_mfid')
     def list_parents(self, child_mfid: str, limit: int = DEFAULT_LIMIT,
                      offset: int = 0, relationship_type: Optional[str] = None,
-                     **kwargs) -> List[Dict]:
+                     **kwargs: Any) -> List[Dict]:
         """List the parents of a given sample with optional filtering.
 
         Args:
@@ -189,7 +189,7 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
     @_deprecated_parameter('sample_mfid', 'parent_mfid')
     def list_children(self, parent_mfid: str, limit: int = DEFAULT_LIMIT,
                       offset: int = 0, relationship_type: Optional[str] = None,
-                      **kwargs) -> List[Dict]:
+                      **kwargs: Any) -> List[Dict]:
         """List the children of a given sample with optional filtering.
 
         Args:
@@ -209,7 +209,8 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
         return self._paginate(f"/samples/{parent_mfid}/children", params, limit, offset)
 
     def create(self, sample=None, scientific_metadata: Optional[Dict] = None,
-               parents: List[Dict] = [], children: List[Dict] = [],
+               parents: Optional[List[Dict]] = None,
+               children: Optional[List[Dict]] = None,
                **kwargs) -> Dict:
         """Create a new sample record.
 
@@ -272,9 +273,9 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
             self._request('post', "/samples", json=sample_info))
         sample_mfid = new_samp['unique_id']
 
-        for p in parents:
+        for p in parents or []:
             self._request('post', f"/samples/{p['unique_id']}/children/{sample_mfid}")
-        for chd in children:
+        for chd in children or []:
             self._request('post', f"/samples/{sample_mfid}/children/{chd['unique_id']}")
 
         if scientific_metadata:
@@ -288,7 +289,8 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
                owner_orcid: Optional[str] = None,
                project_id: Optional[str] = None, sample_type: Optional[str] = None,
                public: Optional[bool] = None,
-               parents: List[Dict] = [], children: List[Dict] = [],
+               parents: Optional[List[Dict]] = None,
+               children: Optional[List[Dict]] = None,
                # deprecated aliases (creation_time/modification_time are server-assigned)
                date_created: Optional[str] = None, creation_date: Optional[str] = None,
                owner_id: Optional[int] = None,
@@ -367,13 +369,13 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
         else:
             upd_samp = self.get(sample_mfid)
 
-        for p in parents:
+        for p in parents or []:
             parent_sample_mfid = p['unique_id']
             child_sample_mfid = upd_samp['unique_id']
             self._request(
                 'post', f"/samples/{parent_sample_mfid}/children/{child_sample_mfid}")
 
-        for chd in children:
+        for chd in children or []:
             parent_sample_mfid = upd_samp['unique_id']
             child_sample_mfid = chd['unique_id']
             self._request(
@@ -513,7 +515,7 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
 
     @_deprecated_parameter('sample_id', 'sample_mfid')
     def graph(self, sample_mfid: str, recursive: bool = False,
-              as_networkx: bool = False):
+              as_networkx: bool = False) -> Any:
         """Return the graph of entities connected to this sample.
 
         Delegates to client.graphs.get(). See GraphOperations.get() for full docs.

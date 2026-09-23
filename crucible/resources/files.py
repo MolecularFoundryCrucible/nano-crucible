@@ -12,6 +12,7 @@ from typing import Optional, List, Dict
 
 from .base import BaseResource
 from ..constants import DEFAULT_LIMIT
+from ..utils.io import storage_display_name
 
 logger = logging.getLogger(__name__)
 
@@ -95,14 +96,7 @@ class FileOperations(BaseResource):
 
         url = self.get_download_link(file_id)
 
-        sp       = file_record.get('storage_path', '')
-        prefix   = 'mf-storage-prod/'
-        if sp.startswith(prefix):
-            after  = sp[len(prefix):]
-            _, _, name = after.partition('/')
-        else:
-            import os as _os
-            name = _os.path.basename(file_record.get('filename') or file_id)
+        name = storage_display_name(file_record) or file_id
 
         import os
         output_path = os.path.join(output_dir, name)
@@ -129,7 +123,7 @@ class FileOperations(BaseResource):
     def _skip_ingestion(self, file_id) -> Dict:
 
         log_message = f"Skipping ingestion for file {file_id}"
-                   
+
         logger.info(log_message)
         params = {'status': 'not_requested'}
 
@@ -138,7 +132,7 @@ class FileOperations(BaseResource):
 
         logger.debug(f"Ingestion request created: id={ingestion_request.get('id')}, "
                      f"status={ingestion_request.get('status')}")
-        
+
         return ingestion_request
 
 
@@ -146,7 +140,7 @@ class FileOperations(BaseResource):
                           file_id: str,
                           ingestion_class: Optional[str] = None,
                           wait_for_response: bool = False) -> Dict:
-        
+
         """Request ingestion of an uploaded file.
 
         Args:
@@ -161,7 +155,7 @@ class FileOperations(BaseResource):
         params = {'status':'requested'}
         if ingestion_class:
             params['ingestion_class'] = ingestion_class
-            
+
         logger.info(f"Requesting ingestion for file {file_id}"
                     + (f" (class={ingestion_class})" if ingestion_class else ""))
 

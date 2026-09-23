@@ -340,7 +340,6 @@ def _sample_updatable_fields():
 
 def _register_update(subparsers):
     """Register the 'sample update' subcommand."""
-    fields = _sample_updatable_fields()
     parser = subparsers.add_parser(
         'update',
         help='Update sample fields or scientific metadata',

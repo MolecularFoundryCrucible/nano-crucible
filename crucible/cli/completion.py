@@ -37,7 +37,7 @@ def register_subcommand(subparsers):
 def execute(args):
     """Execute the completion installation."""
     try:
-        import argcomplete
+        import argcomplete  # noqa: F401
     except ImportError:
         print("Error: argcomplete is not installed", file=sys.stderr)
         print("Install it with: pip install argcomplete", file=sys.stderr)

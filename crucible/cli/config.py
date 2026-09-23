@@ -10,13 +10,15 @@ import sys
 import os
 import logging
 import subprocess
-from pathlib import Path
 
 from . import term
 
 logger = logging.getLogger(__name__)
 
-#%%
+
+def _mask_secret(value: str) -> str:
+    """Render a secret as eight asterisks and its last four characters."""
+    return f"{'*' * 8}\u2026{value[-4:]}"
 
 def get_default_editor():
     """Get the best available editor for the current platform."""
@@ -311,7 +313,7 @@ def cmd_show(args):
     term.subheader("[crucible]  API connection")
     try:
         api_key = config.api_key
-        masked = f"{'*' * 8}…{api_key[-4:]}" if not args.secrets else api_key
+        masked = api_key if args.secrets else _mask_secret(api_key)
         _p("api_key",           masked)
     except ValueError:
         _p("api_key",           None)
@@ -350,7 +352,8 @@ def cmd_show(args):
     if active:
         term.subheader("Environment overrides")
         for env_key, value in active.items():
-            display = f"{'*' * 8}…{value[-4:]}" if 'API_KEY' in env_key and not args.secrets else value
+            secret = 'API_KEY' in env_key and not args.secrets
+            display = _mask_secret(value) if secret else value
             print(f"  {env_key}  {display}")
 
 
@@ -408,7 +411,7 @@ def set_config_value(key, value):
     """
     from configupdater import ConfigUpdater
     from crucible.config import config
-    from crucible.config.config import Config
+    from crucible.config.config import Config, restrict_config_permissions
 
     mapping = Config._CONFIG_MAP[key]
     section = mapping['section']
@@ -435,6 +438,7 @@ def set_config_value(key, value):
             updater.remove_option('crucible', ini_key)
 
     config_file.write_text(str(updater))
+    restrict_config_permissions(config_file)
     config.reload()
     return section, config_file
 
@@ -458,7 +462,7 @@ def unset_config_value(key):
     """Remove a config-file value and reload configuration."""
     from configupdater import ConfigUpdater
     from crucible.config import config
-    from crucible.config.config import Config
+    from crucible.config.config import Config, restrict_config_permissions
 
     mapping = Config._CONFIG_MAP[key]
     section = mapping['section']
@@ -481,6 +485,7 @@ def unset_config_value(key):
 
         if removed:
             config_file.write_text(str(updater))
+            restrict_config_permissions(config_file)
 
     config.reload()
     return removed, config_file, mapping['env']
@@ -510,7 +515,7 @@ def cmd_path(args):
         print(f"(exists, {config_file.stat().st_size} bytes)")
     else:
         print("(does not exist yet)")
-        print(f"\nCreate it with: crucible config init")
+        print("\nCreate it with: crucible config init")
 
 
 def cmd_edit(args):

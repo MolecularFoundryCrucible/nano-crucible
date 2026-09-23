@@ -3,12 +3,18 @@ name: Publish Python distribution to PyPI
 on:
   release:
     types: [published]
-    
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "Publish to PyPI after building (leave unchecked for a build-only dry run)"
+        type: boolean
+        default: false
+
 jobs:
   build:
     name: Build distribution
     runs-on: ubuntu-latest
-  
+
     steps:
         - uses: actions/checkout@v4
           with:
@@ -26,11 +32,7 @@ jobs:
           with:
             python-version: "3.x"
         - name: Install pypa/build
-          run: >-
-           python3 -m
-           pip install
-           build
-           --user
+          run: python3 -m pip install build --user
         - name: Build a binary wheel and a source tarball
           run: python -m build
         - name: Store the distribution packages
@@ -39,10 +41,10 @@ jobs:
             name: python-package-distributions
             path: dist/
 
-  publish-to-pypi:        
+  publish-to-pypi:
     name: Publish Python distribution to PyPI
-    # if: startsWith(github.event.ref, 'refs/tags/') # only if tagged
-    
+    if: github.event_name == 'release' || inputs.publish
+
     needs:
     - build
     runs-on: ubuntu-latest

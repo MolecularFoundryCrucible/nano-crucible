@@ -15,6 +15,8 @@ import logging
 logger = logging.getLogger(__name__)
 
 from . import term
+from ..constants import GCS_BUCKET_PREFIX
+from ..utils.io import storage_display_name
 
 
 def _build_file_display(af_list, link_map, dsid):
@@ -24,19 +26,17 @@ def _build_file_display(af_list, link_map, dsid):
     ingested, backend ('gcs' unless the file is cataloged elsewhere).
     link_map is {mfid: signed_url} from get_download_links.
     """
-    import os as _os
-    prefix_sp = f'mf-storage-prod/{dsid}/'
+    prefix_sp = f'{GCS_BUCKET_PREFIX}{dsid}/'
     result = []
     for f in af_list:
         mfid         = f.get('mfid')
         storage_path = f.get('storage_path') or ''
         backend      = f.get('storage_backend') or 'gcs'
         if storage_path.startswith(prefix_sp):
-            name     = storage_path[len(prefix_sp):]
+            name     = storage_display_name(f, dsid)
             ingested = True
         else:
-            staging  = f.get('filename') or ''
-            name     = _os.path.basename(staging) or mfid
+            name     = storage_display_name(f) or mfid
             ingested = False
         result.append({
             'mfid':     mfid,
@@ -240,8 +240,6 @@ except ImportError:
 #internal modules
 from ..config import config as _config
 from ..constants import PROJECT_SCOPES
-
-#%%
 
 def register_subcommand(subparsers):
     """
@@ -753,7 +751,6 @@ def _dataset_updatable_fields():
 
 def _register_update(subparsers):
     """Register the 'dataset update' subcommand."""
-    import argparse
     fields = _dataset_updatable_fields()
 
     def _add_args(p):
@@ -1771,7 +1768,6 @@ def _execute_add_keyword(args):
 
 def _register_list_keywords(subparsers):
     """Register the 'dataset list-keywords' subcommand."""
-    import argparse
 
     def _add_args(p):
         p.add_argument('dataset_id', metavar='DATASET_MFID', help='Dataset MFID')

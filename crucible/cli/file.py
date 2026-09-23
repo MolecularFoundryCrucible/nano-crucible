@@ -7,24 +7,17 @@ Operations that take a dataset ID (list-files, add-file, bulk download)
 live under 'crucible dataset'. Operations that take a file MFID live here.
 """
 
-import os
 import sys
 import logging
 from . import term
+from ..utils.io import storage_display_name
 
 logger = logging.getLogger(__name__)
 
 
 def _bare_name(file_record: dict) -> str:
     """Extract display filename from a file record."""
-    sp = file_record.get('storage_path') or ''
-    if sp.startswith('mf-storage-prod/'):
-        # strip mf-storage-prod/{dsid}/
-        after_bucket = sp[len('mf-storage-prod/'):]
-        _, _, name = after_bucket.partition('/')
-        return name or after_bucket
-    staging = file_record.get('filename') or ''
-    return os.path.basename(staging) or file_record.get('mfid', '')
+    return storage_display_name(file_record) or file_record.get('mfid', '')
 
 
 def _status_label(file_record: dict) -> str:

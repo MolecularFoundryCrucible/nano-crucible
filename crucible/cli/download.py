@@ -79,4 +79,4 @@ def execute(args):
             logger.info(path)
     except Exception as e:
         from .helpers import fail
-        fail("downloading {args.resource_id}", e, args)
+        fail(f"downloading {args.resource_id}", e, args)

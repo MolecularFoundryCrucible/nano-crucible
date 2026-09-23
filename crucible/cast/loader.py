@@ -125,7 +125,6 @@ def _collect_relationships(entity_type: str, body: dict, local_id: str, ctx: _Lo
     """
     if entity_type == 'dataset':
         child_kind  = 'dataset_child'
-        child_type  = 'dataset'
         sample_kind = 'dataset_sample'
 
         for item in body.get('children', []):
