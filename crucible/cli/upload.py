@@ -20,7 +20,7 @@ except ImportError:
     mfid = None
 
 try:
-    import argcomplete
+    import argcomplete  # noqa: F401
     from argcomplete.completers import FilesCompleter
     ARGCOMPLETE_AVAILABLE = True
 except ImportError:
