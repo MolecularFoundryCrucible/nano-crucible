@@ -1158,6 +1158,17 @@ class CrucibleShell:
             'recent_mfids':      deque(maxlen=15),
         }
 
+    def _apply_elevated(self, on):
+        """Set elevation for the session, its state, and the shared client.
+
+        Subcommands build a fresh client that reads the config, but the shell's
+        own long-lived client read it once at startup, so it needs updating too.
+        """
+        _set_elevated(on)
+        self.state['elevated'] = on
+        if self.client is not None:
+            self.client.privilege_mode = 'elevated' if on else None
+
     def refresh(self):
         """Re-fetch projects, user info, deletions, join requests, and service accounts. Updates state + completer."""
         from .helpers import (
@@ -1520,8 +1531,7 @@ class CrucibleShell:
                 print("Usage: elevated on | elevated off")
                 return True
             on = (action == 'on')
-            _set_elevated(on)
-            self.state['elevated'] = on
+            self._apply_elevated(on)
             if on:
                 print("Elevated privilege enabled. Requests now ask for "
                       "platform-administrator access.")
@@ -1537,15 +1547,16 @@ class CrucibleShell:
             # An inline --elevated applies to this command only; the session
             # toggle is what persists.
             inline_elevated = getattr(args, 'elevated', False)
+            session_elevated = self.state.get('elevated', False)
             if inline_elevated:
-                _set_elevated(True)
+                self._apply_elevated(True)
             if hasattr(args, 'func'):
                 args._shell_state = self.state
                 try:
                     args.func(args)
                 finally:
                     if inline_elevated:
-                        _set_elevated(self.state.get('elevated', False))
+                        self._apply_elevated(session_elevated)
                 from .helpers import fetch_project_context
                 project_id, project_source = fetch_project_context()
                 self.state['project'] = project_id

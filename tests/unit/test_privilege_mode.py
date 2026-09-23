@@ -162,3 +162,36 @@ def test_shell_toolbar_shows_the_elevated_badge():
     markup = instance._toolbar().value
 
     assert 'ELEVATED' in markup
+
+
+def test_shell_toggle_updates_its_long_lived_client():
+    from crucible.cli import shell
+    from crucible.config import config
+
+    config._data.pop('privilege_mode', None)
+    instance = shell.CrucibleShell.__new__(shell.CrucibleShell)
+    instance.state = {'elevated': False}
+    instance.client = MagicMock(privilege_mode=None)
+
+    instance._apply_elevated(True)
+    assert instance.client.privilege_mode == 'elevated'
+    assert config.privilege_mode == 'elevated'
+
+    instance._apply_elevated(False)
+    assert instance.client.privilege_mode is None
+    assert config.privilege_mode is None
+
+
+def test_shell_toggle_tolerates_a_client_that_is_not_built_yet():
+    from crucible.cli import shell
+    from crucible.config import config
+
+    config._data.pop('privilege_mode', None)
+    instance = shell.CrucibleShell.__new__(shell.CrucibleShell)
+    instance.state = {'elevated': False}
+    instance.client = None
+
+    instance._apply_elevated(True)
+    assert instance.state['elevated'] is True
+
+    instance._apply_elevated(False)
