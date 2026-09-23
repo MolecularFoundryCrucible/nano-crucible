@@ -31,6 +31,36 @@ from .gcs.upload import upload_file_gcs
 # set up logging
 logger = logging.getLogger(__name__)
 
+# Query parameters accepted by GET /datasets. The API rejects anything else
+# with 422 extra_forbidden.
+DATASET_LIST_PARAMS = frozenset({
+    'accessible_to_project', 'accessible_to_user', 'affiliation',
+    'anchor_mfid', 'creation_time_gte', 'creation_time_lte', 'cursor',
+    'data_format', 'data_format_is_null', 'data_type', 'dataset_name',
+    'direction', 'include_links', 'include_metadata', 'include_owner',
+    'include_total', 'instrument_mfid', 'instrument_mfid_is_null',
+    'instrument_name', 'keyword', 'limit', 'measurement',
+    'measurement_is_null', 'modification_time_gte',
+    'modification_time_lte', 'offset', 'owner_id', 'owner_id_is_null',
+    'owner_orcid', 'project_id', 'project_mfid', 'project_mfid_is_null',
+    'project_scope', 'public', 'sample_mfid', 'session_name',
+    'session_name_is_null', 'size', 'sort', 'timestamp', 'unique_id',
+    'visibility',
+})
+
+# Query parameters accepted by GET /datasets/facets.
+DATASET_FACET_PARAMS = frozenset({
+    'accessible_to_project', 'accessible_to_user', 'affiliation',
+    'creation_time_gte', 'creation_time_lte', 'cursor', 'data_format',
+    'data_format_is_null', 'direction', 'field', 'instrument_mfid',
+    'instrument_mfid_is_null', 'limit', 'measurement',
+    'measurement_is_null', 'modification_time_gte',
+    'modification_time_lte', 'owner_id', 'owner_id_is_null', 'project_id',
+    'project_mfid', 'project_mfid_is_null', 'project_scope',
+    'sample_mfid', 'session_name', 'session_name_is_null', 'sort',
+    'visibility',
+})
+
 
 class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, OwnershipMixin,
                         AccessControlMixin, BaseResource):
@@ -155,6 +185,7 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
                 "pagination; results start from the newest dataset.",
                 DeprecationWarning, stacklevel=2,
             )
+        self._validate_filter_params(params, DATASET_LIST_PARAMS, '/datasets')
         raw = self._paginate('/datasets', params, limit, offset)
         return [self._parse(d) for d in raw]
 
@@ -165,6 +196,7 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
         params = {k: v for k, v in kwargs.items() if v is not None}
         params.update(self._project_scope_params(
             project_id, project_mfid, project_scope))
+        self._validate_filter_params(params, DATASET_LIST_PARAMS, '/datasets')
         result = self._request('get', '/datasets', params={**params, 'limit': 1})
         return result['total']
 

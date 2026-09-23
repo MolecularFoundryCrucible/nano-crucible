@@ -85,6 +85,42 @@ class BaseResource:
             params['project_scope'] = project_scope
         return params
 
+    @staticmethod
+    def _validate_filter_params(params: dict, allowed, endpoint: str) -> dict:
+        """Reject query parameters the endpoint does not accept.
+
+        The API rejects unknown query parameters with 422 extra_forbidden, so
+        catching them here turns an opaque server error into a local one that
+        names the offending key.
+
+        Args:
+            params: Query parameters about to be sent.
+            allowed: Container of accepted parameter names.
+            endpoint: API path, used in the error message.
+
+        Returns:
+            dict: The same params, unchanged, when every key is accepted.
+
+        Raises:
+            ValueError: If any key is not accepted by the endpoint.
+        """
+        unknown = [key for key in params if key not in allowed]
+        if not unknown:
+            return params
+
+        import difflib
+        details = []
+        for key in sorted(unknown):
+            close = difflib.get_close_matches(key, sorted(allowed), n=3)
+            if close:
+                details.append(f"{key!r} (did you mean {', '.join(repr(c) for c in close)}?)")
+            else:
+                details.append(repr(key))
+        raise ValueError(
+            f"{endpoint} does not accept these filters: {'; '.join(details)}. "
+            f"Accepted filters: {', '.join(sorted(allowed))}."
+        )
+
     def _paginate(self, endpoint: str, params: dict,
                   limit: int = DEFAULT_LIMIT, offset: int = 0) -> list:
         """Fetch all matching records from a paginated envelope endpoint.

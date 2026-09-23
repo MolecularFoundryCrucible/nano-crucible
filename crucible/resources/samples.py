@@ -16,6 +16,30 @@ from ..utils.identifiers import is_mfid, require_canonical_identifier
 
 logger = logging.getLogger(__name__)
 
+# Query parameters accepted by GET /samples. The API rejects anything else
+# with 422 extra_forbidden.
+SAMPLE_LIST_PARAMS = frozenset({
+    'accessible_to_project', 'accessible_to_user', 'affiliation',
+    'anchor_mfid', 'creation_time_gte', 'creation_time_lte', 'cursor',
+    'dataset_mfid', 'description', 'direction', 'include_datasets',
+    'include_links', 'include_metadata', 'include_owner', 'include_total',
+    'limit', 'modification_time_gte', 'modification_time_lte', 'offset',
+    'owner_id', 'owner_id_is_null', 'owner_orcid', 'project_id',
+    'project_mfid', 'project_mfid_is_null', 'project_scope', 'public',
+    'sample_name', 'sample_type', 'sample_type_is_null', 'sort',
+    'timestamp', 'unique_id', 'visibility',
+})
+
+# Query parameters accepted by GET /samples/facets.
+SAMPLE_FACET_PARAMS = frozenset({
+    'accessible_to_project', 'accessible_to_user', 'affiliation',
+    'creation_time_gte', 'creation_time_lte', 'cursor', 'dataset_mfid',
+    'direction', 'field', 'limit', 'modification_time_gte',
+    'modification_time_lte', 'owner_id', 'owner_id_is_null', 'project_id',
+    'project_mfid', 'project_mfid_is_null', 'project_scope',
+    'sample_type', 'sample_type_is_null', 'sort', 'visibility',
+})
+
 
 class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixin, BaseResource):
     """Sample-related API operations.
@@ -142,6 +166,7 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
             endpoint = f"/samples/{parent_mfid}/children"
         else:
             endpoint = "/samples"
+            self._validate_filter_params(params, SAMPLE_LIST_PARAMS, endpoint)
             if offset:
                 import warnings
                 warnings.warn(
@@ -159,6 +184,7 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
         params = {k: v for k, v in kwargs.items() if v is not None}
         params.update(self._project_scope_params(
             project_id, project_mfid, project_scope))
+        self._validate_filter_params(params, SAMPLE_LIST_PARAMS, '/samples')
         result = self._request('get', '/samples', params={**params, 'limit': 1})
         return result['total']
 
