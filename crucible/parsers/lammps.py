@@ -12,8 +12,6 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-#%%
-
 def store_variable(varname, varvalue, vardict):
     vardict[varname] = varvalue
     return
@@ -180,8 +178,9 @@ class LAMMPSParser(BaseParser):
 
         try:
             import ase.io.lammpsdata
-        except:
-            raise ImportError("ASE needs to be installed for LMP ingestor to work!")
+        except ImportError as exc:
+            raise ImportError(
+                "ASE needs to be installed for LMP ingestor to work!") from exc
 
         lmp_metadata = {}
 
