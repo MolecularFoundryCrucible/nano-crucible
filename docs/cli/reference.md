@@ -13,7 +13,13 @@ Project options use `--project-id` with the conventional `-p` short alias. Sampl
 | `--elevated` | Request platform-administrator elevation instead of normal ACL-derived access; place it before the command |
 | `--no-color` | Disable ANSI colors while retaining interactive terminal hyperlinks; place it before the command |
 
+Commands run in normal, ACL-derived mode by default, so a platform administrator sees their own access rather than every record on the platform. `--elevated` widens that for one command. Administrator-only commands, such as `service-account show`, `service-account set-role`, and deletion review, elevate on their own and do not need the flag.
+
 Elevation can also come from the `privilege_mode` config key or the `CRUCIBLE_PRIVILEGE_MODE` environment variable. Because neither is visible on the command line, the CLI prints a notice to stderr when a command runs elevated without `--elevated`. In the interactive shell, `elevated on|off` toggles it for the session and an `ELEVATED` badge appears in the toolbar.
+
+`deletion list` shows the caller's review queue by default when they can review requests. Pass `--scope` to choose a different view.
+
+Commands that create projects, instruments, or service accounts check the caller's account capabilities first and refuse immediately rather than prompting for values the API would reject.
 
 Running `crucible` without a command starts the interactive shell. See the [CLI overview](index.md) for setup, shell completion, and interactive usage.
 

@@ -10,9 +10,14 @@
 - Deletion request and audit lists accept scope, project, sort, and direction filters, and deletion request details show whether the caller can review them.
 - A `privilege_mode` client keyword, `privilege_mode` config key, and global `--elevated` CLI flag request platform-administrator elevation.
 - The interactive shell toggles elevation with `elevated on|off` and shows an `ELEVATED` toolbar badge, and one-shot commands print a notice when elevation comes from configuration rather than the flag.
+- `client.authorization`, `client.capabilities`, and `client.can_elevate` expose the caller's platform role and account capabilities, read once from `/account/profile`.
+- Project, instrument, and service-account creation refuse up front when the caller's account capabilities do not allow it.
 
 ### Changed
 
+- Requests now send `Crucible-Privilege-Mode: normal` by default. Previously no header was sent, which left a platform administrator seeing every record on ordinary list and read commands. Use `--elevated`, `elevated on`, or `privilege_mode='elevated'` to restore the wider view.
+- Administrator-only operations request elevation per call, so service-account administration and deletion review keep working without enabling elevation globally.
+- `crucible deletion list` defaults to the `reviewable` scope for callers who can review, keeping the queue visible now that ordinary reads are ACL-scoped.
 - Unrecognized dataset and sample list filters now raise a local `ValueError` naming the closest valid parameter instead of a server-side 422.
 - The minimum supported Python version is now 3.10.
 - The configuration file and its directory are now created with owner-only permissions, and existing files are restricted when a value is set or unset.

@@ -39,7 +39,7 @@ Shell-specific commands:
 | `refresh` | Re-fetch project list and user info |
 | `reload` | Re-exec the process (picks up code changes) |
 | `debug on` / `debug off` | Toggle debug logging |
-| `elevated on` / `elevated off` | Toggle platform-administrator elevation; an `ELEVATED` badge appears in the toolbar while it is on |
+| `elevated on` / `elevated off` | Toggle platform-administrator elevation; an `ELEVATED` badge appears in the toolbar while it is on. Ordinary commands run in normal, ACL-derived mode until it is turned on |
 | `help` | List available commands |
 | `exit` / `quit` | Exit the shell |
 
