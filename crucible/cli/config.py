@@ -15,6 +15,11 @@ from . import term
 
 logger = logging.getLogger(__name__)
 
+
+def _mask_secret(value: str) -> str:
+    """Render a secret as eight asterisks and its last four characters."""
+    return f"{'*' * 8}\u2026{value[-4:]}"
+
 #%%
 
 def get_default_editor():
@@ -310,7 +315,7 @@ def cmd_show(args):
     term.subheader("[crucible]  API connection")
     try:
         api_key = config.api_key
-        masked = f"{'*' * 8}…{api_key[-4:]}" if not args.secrets else api_key
+        masked = api_key if args.secrets else _mask_secret(api_key)
         _p("api_key",           masked)
     except ValueError:
         _p("api_key",           None)
@@ -349,7 +354,8 @@ def cmd_show(args):
     if active:
         term.subheader("Environment overrides")
         for env_key, value in active.items():
-            display = f"{'*' * 8}…{value[-4:]}" if 'API_KEY' in env_key and not args.secrets else value
+            secret = 'API_KEY' in env_key and not args.secrets
+            display = _mask_secret(value) if secret else value
             print(f"  {env_key}  {display}")
 
 
