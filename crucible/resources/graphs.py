@@ -7,7 +7,7 @@ Provides access to entity graph traversal endpoints.
 """
 
 import logging
-from typing import Any, Optional
+from typing import Any
 from .base import BaseResource
 from ..utils.deprecation import _deprecated_parameter
 
@@ -43,7 +43,6 @@ class GraphOperations(BaseResource):
         data = self._request(
             "get", f"/entity_graph_cte/{resource_mfid}", params=params)
         if as_networkx:
-            import networkx as nx
             from networkx.readwrite import json_graph
             return json_graph.node_link_graph(data, directed=True)
         return data
@@ -61,7 +60,6 @@ class GraphOperations(BaseResource):
         """
         data = self._request("get", f"/project_graph/{project_id}")
         if as_networkx:
-            import networkx as nx
             from networkx.readwrite import json_graph
             return json_graph.node_link_graph(data, directed=True)
         return data

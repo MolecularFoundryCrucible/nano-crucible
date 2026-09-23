@@ -10,7 +10,7 @@ import logging
 from typing import Any, Optional, List, Dict, Sequence, Union
 from .base import BaseResource
 from .capabilities import AccessControlMixin, OwnershipMixin, ProjectAssignmentMixin
-from ..constants import DEFAULT_LIMIT, API_PAGE_MAX
+from ..constants import DEFAULT_LIMIT
 from ..utils.deprecation import _deprecated, _deprecated_parameter
 from ..utils.identifiers import is_mfid, require_canonical_identifier
 

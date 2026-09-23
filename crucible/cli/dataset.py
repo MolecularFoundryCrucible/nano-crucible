@@ -753,7 +753,6 @@ def _dataset_updatable_fields():
 
 def _register_update(subparsers):
     """Register the 'dataset update' subcommand."""
-    import argparse
     fields = _dataset_updatable_fields()
 
     def _add_args(p):
@@ -1771,7 +1770,6 @@ def _execute_add_keyword(args):
 
 def _register_list_keywords(subparsers):
     """Register the 'dataset list-keywords' subcommand."""
-    import argparse
 
     def _add_args(p):
         p.add_argument('dataset_id', metavar='DATASET_MFID', help='Dataset MFID')

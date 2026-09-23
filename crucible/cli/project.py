@@ -244,7 +244,6 @@ Examples:
 
 def _register_list_users(subparsers):
     """Register the 'project list-users' subcommand."""
-    import argparse
 
     def _add_args(p):
         pid_arg = p.add_argument('project_id', metavar='PROJECT_ID', help='Project ID')

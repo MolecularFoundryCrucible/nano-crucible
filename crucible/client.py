@@ -6,17 +6,14 @@ Main client for Crucible API.
 Provides organized access to API endpoints.
 """
 
-import time
 import requests
 import json
 import logging
 from requests.adapters import HTTPAdapter
 from urllib.parse import urlparse
 from urllib3.util.retry import Retry
-from typing import Optional, List, Dict, Any, Union
-from .models import Dataset, Project
-from .constants import DEFAULT_LIMIT
-from .utils.deprecation import _deprecated, _deprecated_parameter, _removed
+from typing import Optional, List, Dict, Any
+from .utils.deprecation import _deprecated, _deprecated_parameter
 from .utils.identifiers import is_mfid, require_canonical_identifier
 
 logger = logging.getLogger(__name__)

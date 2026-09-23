@@ -10,7 +10,6 @@ import sys
 import os
 import logging
 import subprocess
-from pathlib import Path
 
 from . import term
 
@@ -510,7 +509,7 @@ def cmd_path(args):
         print(f"(exists, {config_file.stat().st_size} bytes)")
     else:
         print("(does not exist yet)")
-        print(f"\nCreate it with: crucible config init")
+        print("\nCreate it with: crucible config init")
 
 
 def cmd_edit(args):

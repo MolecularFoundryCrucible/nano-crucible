@@ -655,8 +655,7 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
         Returns:
             Dict: {'associated_file': AssociatedFileRead, 'ingestion_request': IngestionRequest}
         """
-        file_size = os.path.getsize(file_path)
-        filename  = os.path.basename(file_path)
+        filename = os.path.basename(file_path)
 
         file_record, was_existing = upload_file_gcs(self._client,
                                                     dataset_mfid,

@@ -653,7 +653,6 @@ Examples:
 
 def _register_list_access_groups(subparsers):
     """Register the 'user list-access-groups' subcommand."""
-    import argparse
     parser = subparsers.add_parser(
         'list-access-groups',
         help='List access groups for a user',
@@ -671,7 +670,6 @@ Examples:
 
 def _register_list_projects(subparsers):
     """Register the 'user list-projects' subcommand."""
-    import argparse
     parser = subparsers.add_parser(
         'list-projects',
         help='List projects for a user',
