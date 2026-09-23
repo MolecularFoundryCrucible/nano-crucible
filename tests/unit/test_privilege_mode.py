@@ -112,3 +112,53 @@ def test_without_the_flag_no_mode_is_set(monkeypatch):
         main()
 
     assert seen['mode'] is None
+
+
+def test_config_sourced_elevation_is_announced(monkeypatch, capsys):
+    from crucible.cli import main
+    from crucible.config import config
+
+    monkeypatch.setitem(config._data, 'privilege_mode', 'elevated')
+    monkeypatch.setitem(config._sources, 'privilege_mode', 'config file')
+
+    with patch('crucible.cli.dataset._execute_list'):
+        monkeypatch.setattr('sys.argv', ['crucible', 'dataset', 'list'])
+        main()
+
+    assert 'Elevated privilege is active from config file' in capsys.readouterr().err
+
+
+def test_explicit_flag_is_not_announced(monkeypatch, capsys):
+    from crucible.cli import main
+    from crucible.config import config
+
+    config._data.pop('privilege_mode', None)
+
+    with patch('crucible.cli.dataset._execute_list'):
+        monkeypatch.setattr('sys.argv', ['crucible', '--elevated', 'dataset', 'list'])
+        main()
+
+    assert 'Elevated privilege is active' not in capsys.readouterr().err
+    config._data.pop('privilege_mode', None)
+
+
+def test_shell_toggle_sets_and_clears_the_config_mode():
+    from crucible.cli.shell import _elevated_now, _set_elevated
+
+    _set_elevated(True)
+    assert _elevated_now() is True
+
+    _set_elevated(False)
+    assert _elevated_now() is False
+
+
+def test_shell_toolbar_shows_the_elevated_badge():
+    from crucible.cli import shell
+
+    instance = shell.CrucibleShell.__new__(shell.CrucibleShell)
+    instance.state = {'elevated': True, 'debug': False, 'project': None,
+                      'user_label': 'me', 'api_label': 'v3'}
+
+    markup = instance._toolbar().value
+
+    assert 'ELEVATED' in markup

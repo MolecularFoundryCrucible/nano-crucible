@@ -13,6 +13,8 @@ Project options use `--project-id` with the conventional `-p` short alias. Sampl
 | `--elevated` | Request platform-administrator elevation instead of normal ACL-derived access; place it before the command |
 | `--no-color` | Disable ANSI colors while retaining interactive terminal hyperlinks; place it before the command |
 
+Elevation can also come from the `privilege_mode` config key or the `CRUCIBLE_PRIVILEGE_MODE` environment variable. Because neither is visible on the command line, the CLI prints a notice to stderr when a command runs elevated without `--elevated`. In the interactive shell, `elevated on|off` toggles it for the session and an `ELEVATED` badge appears in the toolbar.
+
 Running `crucible` without a command starts the interactive shell. See the [CLI overview](index.md) for setup, shell completion, and interactive usage.
 
 `--json` is available for dataset, sample, and instrument `list` and `get`; project `list` and `get`; generic `get`; user `get`, `list`, and `search`; service-account `get` and `list`; account `show`; and dataset, sample, project, and instrument name or metadata searches. Collection and search commands return arrays, while singleton commands return objects.

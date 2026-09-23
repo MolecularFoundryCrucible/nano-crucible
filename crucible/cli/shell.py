@@ -40,6 +40,23 @@ _BANNER_PIXEL_COLORS = {
 }
 
 
+def _elevated_now():
+    """True when the config singleton currently requests elevated privilege."""
+    from ..config import config
+
+    return config.privilege_mode == 'elevated'
+
+
+def _set_elevated(on):
+    """Set or clear elevation for every client built during this process."""
+    from ..config import config
+
+    if on:
+        config._data['privilege_mode'] = 'elevated'
+    else:
+        config._data.pop('privilege_mode', None)
+
+
 def _get_subparser_map(parser):
     """Return {name: subparser} for a parser's subcommands, or {} if none."""
     for action in parser._actions:
@@ -85,6 +102,7 @@ try:
                 'tb-api-attention':    'noinherit',
                 'tb-clock':            'noinherit',
                 'tb-debug':            'noinherit',
+                'tb-elevated':         'noinherit',
             }
         return {
             'bottom-toolbar':      f'noinherit bg:{_BRAND_DARK_BLUE} fg:{_BRAND_LIGHT_BLUE}',
@@ -95,6 +113,7 @@ try:
             'tb-api-attention':    f'noinherit bg:{_BRAND_DARK_BLUE} fg:{_BRAND_ORANGE} bold',
             'tb-clock':            f'noinherit bg:{_BRAND_DARK_BLUE} fg:{_BRAND_LIGHT_BLUE}',
             'tb-debug':            f'noinherit bg:{_BRAND_ORANGE} fg:{_BRAND_DARK_BLUE} bold',
+            'tb-elevated':         f'noinherit bg:#b00020 fg:{_BRAND_OFF_WHITE} bold',
         }
 
     def _shell_color_depth():
@@ -437,7 +456,8 @@ try:
         # completion in _complete_generic(). Order matters only in that a
         # resource name should appear in exactly one entry (verified: no overlaps).
         _RESOURCE_HANDLERS = {
-            'debug':           '_complete_debug',
+            'debug':           '_complete_on_off',
+            'elevated':        '_complete_on_off',
             'use':             '_complete_use',
             'deletion':        '_complete_deletion',
             'ag':              '_complete_access_group',
@@ -466,7 +486,7 @@ try:
 
             if not words or (len(words) == 1 and not trailing_space):
                 prefix = words[0] if words else ''
-                candidates = list(self._top) + ['use', 'unuse', 'refresh', 'reload', 'debug', 'cd', 'ls', 'pwd']
+                candidates = list(self._top) + ['use', 'unuse', 'refresh', 'reload', 'debug', 'elevated', 'cd', 'ls', 'pwd']
                 for name in candidates:
                     if name.startswith(prefix):
                         yield Completion(name + ' ', start_position=-len(prefix))
@@ -483,7 +503,7 @@ try:
 
             yield from self._complete_generic(ctx)
 
-        def _complete_debug(self, ctx):
+        def _complete_on_off(self, ctx):
             text, words, trailing_space, resource = ctx
             if len(words) > 2:
                 return True
@@ -1131,6 +1151,7 @@ class CrucibleShell:
             'api_label':         fetch_api_label(),
             'api_attention':     fetch_api_attention(),
             'debug':             False,
+            'elevated':          _elevated_now(),
             'deletions':         deletions or [],
             'join_requests':     join_requests or [],
             'service_accounts':  service_accounts or [],
@@ -1191,6 +1212,7 @@ class CrucibleShell:
         clock_str = f' {clock} '
         separator = ' │ '
         debug_str = ' DEBUG ' if self.state.get('debug') else ''
+        elevated_str = ' ELEVATED ' if self.state.get('elevated') else ''
 
         try:
             term_width = get_app().output.get_size().columns
@@ -1199,9 +1221,12 @@ class CrucibleShell:
 
         fixed_width = (
             _vlen(left_str) + _vlen(mid_str) + _vlen(api_str)
-            + _vlen(clock_str) + 3 * _vlen(separator) + len(debug_str)
+            + _vlen(clock_str) + 3 * _vlen(separator)
+            + len(debug_str) + len(elevated_str)
         )
         if debug_str:
+            fixed_width += _vlen(separator)
+        if elevated_str:
             fixed_width += _vlen(separator)
         pad = ' ' * max(0, term_width - fixed_width)
         api_tag = 'tb-api-attention' if self.state.get('api_attention') else 'tb-api'
@@ -1209,11 +1234,16 @@ class CrucibleShell:
             f'<tb-separator>{separator}</tb-separator><tb-debug>{debug_str}</tb-debug>'
             if debug_str else ''
         )
+        elevated_segment = (
+            f'<tb-separator>{separator}</tb-separator>'
+            f'<tb-elevated>{elevated_str}</tb-elevated>'
+            if elevated_str else ''
+        )
         return _shell_html(
             f'<tb-project>{left_str}</tb-project>'
             f'<tb-separator>{separator}</tb-separator>{mid_str}'
             f'<tb-separator>{separator}</tb-separator><{api_tag}>{api_str}</{api_tag}>'
-            f'{pad}{debug_segment}'
+            f'{pad}{elevated_segment}{debug_segment}'
             f'<tb-separator>{separator}</tb-separator><tb-clock>{clock_str}</tb-clock>'
         )
 
@@ -1307,6 +1337,7 @@ class CrucibleShell:
                 ('refresh',       're-fetch projects, user info, deletions'),
                 ('reload',        'restart the shell process'),
                 ('debug on|off',  'toggle debug logging'),
+                ('elevated on|off', 'toggle platform-administrator elevation'),
                 ('v',             'toggle verbose view for last fetched resource'),
                 ('! CMD',         'run a shell command'),
                 ('ls [PATH]',     'list directory'),
@@ -1478,14 +1509,43 @@ class CrucibleShell:
             print(f"Debug {'enabled' if on else 'disabled'}.")
             return True
 
+        if line == 'elevated' or line.startswith('elevated '):
+            parts   = line.split()
+            current = self.state.get('elevated', False)
+            if len(parts) == 1:
+                print(f"Elevated privilege is {'on' if current else 'off'}.")
+                return True
+            action = parts[1].lower()
+            if action not in ('on', 'off'):
+                print("Usage: elevated on | elevated off")
+                return True
+            on = (action == 'on')
+            _set_elevated(on)
+            self.state['elevated'] = on
+            if on:
+                print("Elevated privilege enabled. Requests now ask for "
+                      "platform-administrator access.")
+            else:
+                print("Elevated privilege disabled.")
+            return True
+
         words = line.split()
         try:
             argv = _remap_deprecated(shlex.split(line))
             args = self.parser.parse_args(argv)
             setup_logging(debug=getattr(args, 'debug', False) or self.state.get('debug', False))
+            # An inline --elevated applies to this command only; the session
+            # toggle is what persists.
+            inline_elevated = getattr(args, 'elevated', False)
+            if inline_elevated:
+                _set_elevated(True)
             if hasattr(args, 'func'):
                 args._shell_state = self.state
-                args.func(args)
+                try:
+                    args.func(args)
+                finally:
+                    if inline_elevated:
+                        _set_elevated(self.state.get('elevated', False))
                 from .helpers import fetch_project_context
                 project_id, project_source = fetch_project_context()
                 self.state['project'] = project_id
