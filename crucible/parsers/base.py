@@ -306,6 +306,6 @@ class BaseParser:
 
         if self.thumbnail is not None:
             self.client.datasets.add_thumbnail(dataset_id, self.thumbnail)
-            logger.info(f"  Thumbnail uploaded")
+            logger.info("  Thumbnail uploaded")
 
         return result
