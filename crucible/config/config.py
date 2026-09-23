@@ -35,6 +35,7 @@ class Config:
         'graph_explorer_url': {'env': 'CRUCIBLE_GRAPH_EXPLORER_URL', 'ini': 'graph_explorer_url', 'section': 'crucible'},
         'current_project':    {'env': 'CRUCIBLE_CURRENT_PROJECT',    'ini': 'current_project',    'section': 'crucible'},
         'current_session':    {'env': 'CRUCIBLE_CURRENT_SESSION',    'ini': 'current_session',    'section': 'crucible'},
+        'privilege_mode':     {'env': 'CRUCIBLE_PRIVILEGE_MODE',     'ini': 'privilege_mode',     'section': 'crucible'},
         # [cache]
         'cache_dir':          {'env': 'CRUCIBLE_CACHE_DIR',          'ini': 'cache_dir',          'section': 'cache'},
         # [display] – UI preferences
@@ -196,6 +197,21 @@ class Config:
             stacklevel=2,
         )
         return self._data.get('current_session') or None
+
+    @property
+    def privilege_mode(self):
+        """Authorization mode sent with each request, or None to send nothing.
+
+        Returns:
+            str or None: "normal", "elevated", or None.
+        """
+        from ..constants import PRIVILEGE_MODES
+
+        value = self._data.get('privilege_mode') or None
+        if value is not None and value not in PRIVILEGE_MODES:
+            raise ValueError(
+                f"privilege_mode must be one of: {', '.join(PRIVILEGE_MODES)}.")
+        return value
 
     @property
     def editor(self):

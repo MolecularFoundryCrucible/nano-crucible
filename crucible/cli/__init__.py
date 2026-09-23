@@ -168,6 +168,9 @@ Examples:
 
     # Debug mode (place before subcommand)
     crucible --debug dataset list
+
+    # Platform-administrator elevation (place before subcommand)
+    crucible --elevated deletion list
 """
     )
 
@@ -182,6 +185,13 @@ Examples:
         action='store_true',
         default=False,
         help='Enable debug logging (HTTP calls, raw API responses, tracebacks)'
+    )
+
+    parser.add_argument(
+        '--elevated',
+        action='store_true',
+        default=False,
+        help='Request platform-administrator elevation instead of normal ACL-derived access'
     )
 
     parser.add_argument(
@@ -251,6 +261,13 @@ Examples:
 
     # Configure logging once for the entire CLI
     setup_logging(debug=getattr(args, 'debug', False))
+
+    # Every client built during this invocation reads the mode from the config
+    # singleton, so setting it once here covers all of them without writing the
+    # config file.
+    if getattr(args, 'elevated', False):
+        from ..config import config as _config
+        _config._data['privilege_mode'] = 'elevated'
 
     # If no command specified, start interactive shell
     if args.command is None:

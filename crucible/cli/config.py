@@ -146,7 +146,7 @@ the interactive shell's 'use PROJECT_ID' command to save a selection.
     get_parser.add_argument(
         'key',
         choices=['api_key', 'api_url', 'graph_explorer_url', 'current_project',
-                 'cache_dir',
+                 'privilege_mode', 'cache_dir',
                  'editor', 'sample_group_by', 'dataset_group_by',
                  'include_metadata', 'include_links',
                  'connect_timeout', 'read_timeout', 'default_limit',
@@ -163,7 +163,7 @@ the interactive shell's 'use PROJECT_ID' command to save a selection.
     set_parser.add_argument(
         'key',
         choices=['api_key', 'api_url', 'graph_explorer_url', 'current_project',
-                 'cache_dir',
+                 'privilege_mode', 'cache_dir',
                  'editor', 'sample_group_by', 'dataset_group_by',
                  'include_metadata', 'include_links',
                  'connect_timeout', 'read_timeout', 'default_limit',
@@ -183,7 +183,7 @@ the interactive shell's 'use PROJECT_ID' command to save a selection.
     unset_parser.add_argument(
         'key',
         choices=['api_key', 'api_url', 'graph_explorer_url', 'current_project',
-                 'cache_dir',
+                 'privilege_mode', 'cache_dir',
                  'editor', 'sample_group_by', 'dataset_group_by',
                  'include_metadata', 'include_links',
                  'connect_timeout', 'read_timeout', 'default_limit',

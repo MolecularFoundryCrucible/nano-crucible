@@ -13,19 +13,26 @@ from requests.adapters import HTTPAdapter
 from urllib.parse import urlparse
 from urllib3.util.retry import Retry
 from typing import Optional, List, Dict, Any
+from .constants import PRIVILEGE_MODES
 from .utils.deprecation import _deprecated, _deprecated_parameter
 from .utils.identifiers import is_mfid, require_canonical_identifier
 
 logger = logging.getLogger(__name__)
 
 class CrucibleClient:
-    def __init__(self, api_url: Optional[str] = None, api_key: Optional[str] = None):
+    def __init__(self, api_url: Optional[str] = None, api_key: Optional[str] = None,
+                 privilege_mode: Optional[str] = None):
         """
         Initialize the Crucible API client.
 
         Args:
             api_url: Base URL for the Crucible API (loads from config or the package default if not provided)
             api_key: API key for authentication (loads from config if not provided)
+            privilege_mode: "normal" or "elevated". Sent as the
+                Crucible-Privilege-Mode header on every request. Elevated mode
+                is what lets a platform administrator see beyond their own
+                ACL-derived access. Loads from config if not provided; when
+                neither is set no header is sent and the server default applies.
 
         Raises:
             ValueError: If api_key is not provided and not found in config
@@ -37,6 +44,12 @@ class CrucibleClient:
             api_url = _config.api_url
         if api_key is None:
             api_key = _config.api_key
+        if privilege_mode is None:
+            privilege_mode = _config.privilege_mode
+        elif privilege_mode not in PRIVILEGE_MODES:
+            raise ValueError(
+                f"privilege_mode must be one of: {', '.join(PRIVILEGE_MODES)}.")
+        self.privilege_mode = privilege_mode
 
         if not api_url:
             raise ValueError("api_url is required. Provide it directly or run 'crucible config init'")
@@ -95,12 +108,14 @@ class CrucibleClient:
         self.service_accounts = ServiceAccountOperations(self)
         self.access_groups = AccessGroupOperations(self)
 
-    def _request(self, method: str, endpoint: str, **kwargs) -> Any:
+    def _request(self, method: str, endpoint: str,
+                 privilege_mode: Optional[str] = None, **kwargs) -> Any:
         """Make an HTTP request to the API.
 
         Args:
             method: HTTP method (get, post, put, delete)
             endpoint: API endpoint path
+            privilege_mode: Per-call override of the client's privilege mode.
             **kwargs: Additional arguments to pass to requests
 
         Returns:
@@ -114,6 +129,14 @@ class CrucibleClient:
         url = f"{self.api_url}/{endpoint.lstrip('/')}"
         logger.debug(f"{method.upper()} {url}")
         timeout = (self._config.connect_timeout, self._config.read_timeout)
+        mode = privilege_mode if privilege_mode is not None else self.privilege_mode
+        if mode is not None:
+            if mode not in PRIVILEGE_MODES:
+                raise ValueError(
+                    f"privilege_mode must be one of: {', '.join(PRIVILEGE_MODES)}.")
+            headers = dict(kwargs.pop('headers', None) or {})
+            headers.setdefault('Crucible-Privilege-Mode', mode)
+            kwargs['headers'] = headers
         response = self._session.request(method, url, timeout=timeout, **kwargs)
         logger.debug(f"Status: {response.status_code}")
         logger.debug(f"Response: {response.text}")
