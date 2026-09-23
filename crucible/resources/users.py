@@ -7,7 +7,7 @@ Provides organized access to user-related API endpoints.
 """
 
 import logging
-from typing import Optional, Dict, List
+from typing import TYPE_CHECKING, Any, Optional, Dict, List, Sequence, Union
 from .base import BaseResource
 from ..constants import DEFAULT_LIMIT
 from ..utils.deprecation import _deprecated, _deprecated_parameter
@@ -19,6 +19,9 @@ from ..utils.identifiers import (
     require_canonical_identifier,
     validate_username,
 )
+
+if TYPE_CHECKING:
+    from ..models import User
 
 logger = logging.getLogger(__name__)
 
@@ -172,7 +175,8 @@ class UserOperations(BaseResource):
             body['emails'] = emails
         return self._request('post', '/users/resolve', json=body)
 
-    def list(self, limit: int = DEFAULT_LIMIT, offset: int = 0, **kwargs) -> List[Dict]:
+    def list(self, limit: int = DEFAULT_LIMIT, offset: int = 0,
+             **kwargs: Any) -> List[Dict]:
         """List users visible to the authenticated caller.
 
         Platform administrators see the full directory. Other callers see
@@ -197,7 +201,8 @@ class UserOperations(BaseResource):
         users = self._paginate('/users', params, limit, offset)
         return sorted(users, key=lambda u: u.get('id') or 0)
 
-    def create(self, user, project_ids=None) -> Dict:
+    def create(self, user: Union['User', Dict],
+               project_ids: Optional[Sequence[str]] = None) -> Dict:
         """Create a human user with an ORCID or a server-assigned MFID.
 
         If supplied, the ORCID must be canonical. When it is omitted, the API
@@ -332,7 +337,7 @@ class UserOperations(BaseResource):
         return self._paginate(f'/users/{user_unique_id}/projects', {}, limit, offset)
 
     @_deprecated_parameter('orcid', 'user_unique_id')
-    def update(self, user_unique_id: str, **kwargs) -> Dict:
+    def update(self, user_unique_id: str, **kwargs: Any) -> Dict:
         """Partially update a user record.
 
         **Requires admin permissions.**

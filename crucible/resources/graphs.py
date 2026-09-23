@@ -7,7 +7,7 @@ Provides access to entity graph traversal endpoints.
 """
 
 import logging
-from typing import Optional
+from typing import Any, Optional
 from .base import BaseResource
 from ..utils.deprecation import _deprecated_parameter
 
@@ -23,7 +23,7 @@ class GraphOperations(BaseResource):
 
     @_deprecated_parameter('entity_id', 'resource_mfid')
     def get(self, resource_mfid: str, recursive: bool = False,
-            as_networkx: bool = False):
+            as_networkx: bool = False) -> Any:
         """Return the graph of entities connected to a dataset or sample MFID.
 
         By default returns only first-degree neighbours (direct parents,
@@ -48,7 +48,7 @@ class GraphOperations(BaseResource):
             return json_graph.node_link_graph(data, directed=True)
         return data
 
-    def project(self, project_id: str, as_networkx: bool = False):
+    def project(self, project_id: str, as_networkx: bool = False) -> Any:
         """Return the full graph of all entities in a project.
 
         Args:

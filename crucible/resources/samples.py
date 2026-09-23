@@ -7,7 +7,7 @@ Provides organized access to sample-related API endpoints.
 """
 
 import logging
-from typing import Optional, List, Dict, Sequence, Union
+from typing import Any, Optional, List, Dict, Sequence, Union
 from .base import BaseResource
 from .capabilities import AccessControlMixin, OwnershipMixin, ProjectAssignmentMixin
 from ..constants import DEFAULT_LIMIT, API_PAGE_MAX
@@ -91,7 +91,7 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
              project_id: Optional[str] = None,
              project_mfid: Optional[str] = None,
              project_scope: Optional[str] = None,
-             **kwargs) -> List[Dict]:
+             **kwargs: Any) -> List[Dict]:
         """List samples with optional filtering and automatic pagination.
 
         Args:
@@ -166,7 +166,7 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
     @_deprecated_parameter('sample_mfid', 'child_mfid')
     def list_parents(self, child_mfid: str, limit: int = DEFAULT_LIMIT,
                      offset: int = 0, relationship_type: Optional[str] = None,
-                     **kwargs) -> List[Dict]:
+                     **kwargs: Any) -> List[Dict]:
         """List the parents of a given sample with optional filtering.
 
         Args:
@@ -189,7 +189,7 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
     @_deprecated_parameter('sample_mfid', 'parent_mfid')
     def list_children(self, parent_mfid: str, limit: int = DEFAULT_LIMIT,
                       offset: int = 0, relationship_type: Optional[str] = None,
-                      **kwargs) -> List[Dict]:
+                      **kwargs: Any) -> List[Dict]:
         """List the children of a given sample with optional filtering.
 
         Args:
@@ -513,7 +513,7 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
 
     @_deprecated_parameter('sample_id', 'sample_mfid')
     def graph(self, sample_mfid: str, recursive: bool = False,
-              as_networkx: bool = False):
+              as_networkx: bool = False) -> Any:
         """Return the graph of entities connected to this sample.
 
         Delegates to client.graphs.get(). See GraphOperations.get() for full docs.
