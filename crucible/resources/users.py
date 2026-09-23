@@ -21,7 +21,7 @@ from ..utils.identifiers import (
 )
 
 if TYPE_CHECKING:
-    from ..models import User
+    from ..models import EffectiveResourceAccess, User
 
 logger = logging.getLogger(__name__)
 

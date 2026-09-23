@@ -1,8 +1,16 @@
 """Reusable resource capabilities backed by generic API endpoints."""
 
-from typing import Dict, List, Optional
+from typing import TYPE_CHECKING, Dict, List, Optional
 
 from ..utils.deprecation import _deprecated
+
+if TYPE_CHECKING:
+    from ..models import (
+        AccessGrant,
+        InstrumentAssignment,
+        OwnershipTransfer,
+        ProjectReassignment,
+    )
 
 
 class AccessControlMixin:

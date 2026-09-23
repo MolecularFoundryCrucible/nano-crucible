@@ -21,7 +21,7 @@ from ..utils.identifiers import (
 )
 
 if TYPE_CHECKING:
-    from ..models import Instrument
+    from ..models import Instrument, ProjectMember
 
 logger = logging.getLogger(__name__)
 
