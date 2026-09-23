@@ -25,6 +25,14 @@ client = CrucibleClient(api_key="your-key")
 | `client.graphs` | `GraphOperations` | Entity graph traversal |
 | `client.deletions` | `DeletionOperations` | Deletion request management |
 
+## Privilege mode
+
+Administrative endpoints distinguish normal ACL-derived authorization from explicit platform-administrator elevation. Pass `privilege_mode="elevated"` to send the `Crucible-Privilege-Mode` header on every request, or set the `privilege_mode` config key or `CRUCIBLE_PRIVILEGE_MODE` environment variable. When none is set, no header is sent and the server default applies.
+
+```python
+client = CrucibleClient(privilege_mode="elevated")
+```
+
 ## Reference
 
 ::: crucible.client.CrucibleClient

@@ -2,8 +2,17 @@
 
 ## Unreleased
 
+### Added
+
+- Dataset and sample lists accept sort, direction, visibility, affiliation, owner, and creation or modification time-range filters in the Python client and CLI.
+- `client.datasets.facets()`, `client.samples.facets()`, and the matching `dataset facets` and `sample facets` CLI commands group results by a field and return value counts.
+- Service-account administration: `get_admin()`, `list_admin()`, and `set_platform_role()` in Python, plus `service-account show` and `service-account set-role` in the CLI.
+- Deletion request and audit lists accept scope, project, sort, and direction filters, and deletion request details show whether the caller can review them.
+- A `privilege_mode` client keyword, `privilege_mode` config key, and global `--elevated` CLI flag request platform-administrator elevation.
+
 ### Changed
 
+- Unrecognized dataset and sample list filters now raise a local `ValueError` naming the closest valid parameter instead of a server-side 422.
 - The minimum supported Python version is now 3.10.
 - The configuration file and its directory are now created with owner-only permissions, and existing files are restricted when a value is set or unset.
 - Installing the package no longer pulls in `ipywidgets` or `python-dotenv`.

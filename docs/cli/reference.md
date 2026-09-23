@@ -10,6 +10,7 @@ Project options use `--project-id` with the conventional `-p` short alias. Sampl
 |---|---|
 | `--version` | Print the installed client version and exit |
 | `--debug` | Enable Crucible debug logging; place it before the command |
+| `--elevated` | Request platform-administrator elevation instead of normal ACL-derived access; place it before the command |
 | `--no-color` | Disable ANSI colors while retaining interactive terminal hyperlinks; place it before the command |
 
 Running `crucible` without a command starts the interactive shell. See the [CLI overview](index.md) for setup, shell completion, and interactive usage.
@@ -28,6 +29,7 @@ Running `crucible` without a command starts the interactive shell. See the [CLI 
 | `dataset reassign-project MFID PROJECT` | Move a dataset to another project |
 | `dataset transfer-ownership MFID USER` | Transfer dataset ownership |
 | `dataset delete MFID` | Permanently delete a dataset after confirmation |
+| `dataset facets FIELD` | Group datasets into value buckets with counts |
 | `dataset search QUERY` | Search dataset names |
 | `dataset search-metadata QUERY` | Search scientific metadata; `search-md` is an alias |
 | `dataset link` | Link parent and child datasets; `--relationship-type` records the kind of link |
@@ -72,6 +74,10 @@ The `--type`, `--ingestor`, `--no-upload`, `--backend`, and `--access-note` opti
 
 Use `dataset list --project-id PROJECT --project-scope shared` to show resources shared with a project but assigned elsewhere or unassigned. Use `--project-scope all` to combine assigned and shared resources. `--project-mfid` accepts the canonical project MFID instead of a project ID. The interactive shell completes both identifiers through project search. Human-readable scoped results include the resource's actual project and its `assigned` or `shared` relation.
 
+`dataset list` and `sample list` also accept `--sort created|updated|name` with `--direction asc|desc`, `--visibility all|public|private`, `--mine` to restrict results to resources you own, `--owner USER`, and the time bounds `--created-after`, `--created-before`, `--modified-after`, and `--modified-before`. `--direction` requires `--sort`.
+
+`dataset facets FIELD` and `sample facets FIELD` count how many records fall into each value of a grouping field without fetching the records. Dataset fields are `session`, `measurement`, `data_format`, `owner`, `instrument`, and `project`; sample fields are `sample_type`, `owner`, and `project`. Both accept `--sort value|label|count`, `--direction`, `--limit`, the project selectors, `--mine`, and `--json`.
+
 Fields normally updated through `dataset update --set` include `dataset_name`, `measurement`, `data_type`, `session_name`, `data_format`, and `timestamp`. Use `set-public` or `set-private` for public visibility, `reassign-project` for project changes, and `transfer-ownership` for owner changes. Instrument reassignment remains unavailable and is not exposed as ordinary metadata editing.
 
 ## Sample commands
@@ -85,6 +91,7 @@ Fields normally updated through `dataset update --set` include `dataset_name`, `
 | `sample edit MFID` | Edit sample fields interactively |
 | `sample reassign-project MFID PROJECT` | Move a sample to another project |
 | `sample transfer-ownership MFID USER` | Transfer sample ownership |
+| `sample facets FIELD` | Group samples into value buckets with counts |
 | `sample search QUERY` | Search sample names |
 | `sample search-metadata QUERY` | Search scientific metadata; `search-md` is an alias |
 | `sample link` | Link parent and child samples; `--relationship-type` records the kind of link |
@@ -214,6 +221,8 @@ Service-account creation uses the same username rules and interactive validation
 | `sa list` | List service accounts |
 | `sa update USER` | Update a service account |
 | `sa edit USER` | Edit a service account interactively |
+| `sa show USER` | Show a service account with its platform role and API key status |
+| `sa set-role USER ROLE` | Set a service account's platform role |
 | `sa list-access-groups USER` | List access groups for a service account |
 | `sa add-access-group USER GROUP` | Deprecated; use `project add-user` or `instrument bind-sa` |
 | `sa remove-access-group USER GROUP` | Deprecated; use `project remove-user` or `instrument unbind-sa` |
@@ -259,6 +268,8 @@ The deletion-request workflow is separate from direct permanent deletion. Review
 | `deletion delete RESOURCE` | Permanently delete a resource |
 | `deletion list-deleted` | List permanent-deletion audit records |
 | `deletion get-deleted ID` | Show a permanent-deletion audit record |
+
+`deletion list` accepts `--scope accessible|submitted|reviewable`, `--project-mfid`, `--sort request_time|resource_name|project_id|requester_name|status`, and `--direction`. `deletion list-deleted` accepts `--scope all|submitted`, `--project-id`, `--project-mfid`, and `--direction`. `deletion get` shows whether you may review the request.
 
 ## Cast command
 

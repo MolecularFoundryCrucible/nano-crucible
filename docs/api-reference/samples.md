@@ -8,6 +8,7 @@ Access via `client.samples`.
         - get
         - list
         - count
+        - facets
         - search
         - create
         - update

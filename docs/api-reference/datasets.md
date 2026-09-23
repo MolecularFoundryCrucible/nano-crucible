@@ -10,6 +10,7 @@ File operations are also available via `client.files` (by MFID) and ingestion vi
         - get
         - list
         - count
+        - facets
         - search
         - create
         - update

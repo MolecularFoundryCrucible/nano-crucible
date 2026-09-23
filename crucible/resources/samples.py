@@ -6,6 +6,7 @@ Sample resource operations for Crucible API.
 Provides organized access to sample-related API endpoints.
 """
 
+from datetime import date, datetime
 import logging
 from typing import Any, Optional, List, Dict, Sequence, Union
 from .base import BaseResource
@@ -120,8 +121,10 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
              visibility: Optional[str] = None,
              affiliation: Optional[Union[str, Sequence[str]]] = None,
              include_total: Optional[bool] = None,
-             creation_time_gte=None, creation_time_lte=None,
-             modification_time_gte=None, modification_time_lte=None,
+             creation_time_gte: Optional[Union[str, date, datetime]] = None,
+             creation_time_lte: Optional[Union[str, date, datetime]] = None,
+             modification_time_gte: Optional[Union[str, date, datetime]] = None,
+             modification_time_lte: Optional[Union[str, date, datetime]] = None,
              **kwargs: Any) -> List[Dict]:
         """List samples with optional filtering and automatic pagination.
 
@@ -153,10 +156,13 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
                          only 'owner'. Accepts a single value or a sequence.
             include_total: Request the exact authorization-filtered total. Omit
                            to keep the endpoint's default behavior.
-            creation_time_gte / creation_time_lte: Inclusive creation-time bounds.
-                Accepts a datetime, date, or ISO 8601 string.
-            modification_time_gte / modification_time_lte: Inclusive
-                modification-time bounds, same accepted types.
+            creation_time_gte: Inclusive lower creation-time bound. Accepts a
+                datetime, date, or ISO 8601 string.
+            creation_time_lte: Inclusive upper creation-time bound, same types.
+            modification_time_gte: Inclusive lower modification-time bound,
+                same types.
+            modification_time_lte: Inclusive upper modification-time bound,
+                same types.
             **kwargs: Query parameters for filtering samples
 
         Returns:
@@ -226,7 +232,7 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
                   (default: value).
             direction: Bucket ordering direction, asc or desc (default: asc).
             cursor: Continuation cursor from a previous response's next_cursor.
-            **filters: Any sample list filter, restricting which samples
+            **filters (Any): Any sample list filter, restricting which samples
                        contribute to the counts.
 
         Returns:

@@ -12,6 +12,7 @@ import logging
 import requests
 import warnings
 from pathlib import Path
+from datetime import date, datetime
 from typing import Optional, List, Dict, Sequence, Union
 
 import mfid
@@ -135,8 +136,10 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
              visibility: Optional[str] = None,
              affiliation: Optional[Union[str, Sequence[str]]] = None,
              include_total: Optional[bool] = None,
-             creation_time_gte=None, creation_time_lte=None,
-             modification_time_gte=None, modification_time_lte=None,
+             creation_time_gte: Optional[Union[str, date, datetime]] = None,
+             creation_time_lte: Optional[Union[str, date, datetime]] = None,
+             modification_time_gte: Optional[Union[str, date, datetime]] = None,
+             modification_time_lte: Optional[Union[str, date, datetime]] = None,
              **kwargs) -> List[Dict]:
         """List datasets with optional filtering and automatic pagination.
 
@@ -168,10 +171,13 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
                          only 'owner'. Accepts a single value or a sequence.
             include_total: Request the exact authorization-filtered total. Omit
                            to keep the endpoint's default behavior.
-            creation_time_gte / creation_time_lte: Inclusive creation-time bounds.
-                Accepts a datetime, date, or ISO 8601 string.
-            modification_time_gte / modification_time_lte: Inclusive
-                modification-time bounds, same accepted types.
+            creation_time_gte: Inclusive lower creation-time bound. Accepts a
+                datetime, date, or ISO 8601 string.
+            creation_time_lte: Inclusive upper creation-time bound, same types.
+            modification_time_gte: Inclusive lower modification-time bound,
+                same types.
+            modification_time_lte: Inclusive upper modification-time bound,
+                same types.
             **kwargs (Any): Query parameters for filtering. Supported fields include:
                 keyword, unique_id, public, dataset_name, owner_orcid, project_id,
                 instrument_name, timestamp, size, data_format, data_type, measurement,
@@ -232,7 +238,7 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
                   (default: value).
             direction: Bucket ordering direction, asc or desc (default: asc).
             cursor: Continuation cursor from a previous response's next_cursor.
-            **filters: Any dataset list filter, restricting which datasets
+            **filters (Any): Any dataset list filter, restricting which datasets
                        contribute to the counts.
 
         Returns:
