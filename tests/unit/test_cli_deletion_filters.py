@@ -21,7 +21,7 @@ def client():
     fake.can_elevate = False
     fake.deletions.list.return_value = []
     fake.deletions.list_deleted.return_value = []
-    with patch('crucible.client.CrucibleClient', return_value=fake):
+    with patch('crucible.config.get_client', return_value=fake):
         yield fake
 
 

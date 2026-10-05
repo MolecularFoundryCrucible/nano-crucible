@@ -74,14 +74,14 @@ Examples:
 def execute(args):
     """Execute the top-level get command."""
     import json
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     output = getattr(args, 'output', None)
     verbose = getattr(args, 'verbose', False)
     graph = getattr(args, 'graph', True)
     include_metadata = output == 'json' or getattr(args, 'include_metadata', False) or _config.include_metadata
 
     try:
-        client   = CrucibleClient()
+        client   = get_client()
         resource = client.get(args.resource_id, include_metadata=include_metadata,
                               include_links=graph, include_owner=True,
                               include_datasets=output == 'json')

@@ -405,7 +405,7 @@ Use `sample reassign-project` or `sample transfer-ownership` to change project o
 
 def _execute_update(args):
     """Execute the 'sample update' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     from .helpers import cast_value
 
     has_set      = bool(getattr(args, 'set_fields', None))
@@ -456,7 +456,7 @@ def _execute_update(args):
             sys.exit(1)
 
     try:
-        client = CrucibleClient()
+        client = get_client()
 
         updates.update(named)
 
@@ -502,11 +502,11 @@ Examples:
 
 def _execute_reassign_project(args):
     """Execute the 'sample reassign-project' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     from .helpers import fail, show_reassign_project
 
     try:
-        client = CrucibleClient()
+        client = get_client()
         result = client.samples.reassign_project(args.sample_id, args.project_id, confirm=args.confirm)
         show_reassign_project(result, args.confirm)
     except Exception as e:
@@ -534,11 +534,11 @@ Examples:
 
 def _execute_transfer_ownership(args):
     """Execute the 'sample transfer-ownership' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     from .helpers import fail, show_transfer_ownership
 
     try:
-        client = CrucibleClient()
+        client = get_client()
         result = client.samples.transfer_ownership(args.sample_id, args.new_owner, confirm=args.confirm)
         show_transfer_ownership(result, args.confirm)
     except Exception as e:
@@ -619,9 +619,9 @@ def _edit_sample(sid, client, debug=False):
 
 def _execute_edit(args):
     """Execute the 'sample edit' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
     except Exception as e:
         from .helpers import fail
         fail("connecting", e)
@@ -767,7 +767,7 @@ Examples:
 def _execute_list(args):
     """Execute the 'sample list' subcommand."""
     from crucible.config import config
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     from .helpers import resolve_project_context, listing_filter_kwargs
     project_id = args.project_id
     project_mfid = getattr(args, 'project_mfid', None)
@@ -799,7 +799,7 @@ def _execute_list(args):
 
     try:
         import fnmatch
-        client = CrucibleClient()
+        client = get_client()
         samples = client.samples.list(limit=args.limit, **project_filters,
                                          include_metadata=getattr(args, 'include_metadata', False) or _config.include_metadata,
                                          **filters)
@@ -1002,12 +1002,12 @@ def _show_sample(sample, client, verbose=False, graph=False, include_metadata=Fa
 def _execute_get(args):
     """Execute the 'sample get' subcommand."""
     import json
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     as_json = getattr(args, 'json', False)
     include_metadata = as_json or getattr(args, 'include_metadata', False) or _config.include_metadata
     try:
         graph  = getattr(args, 'graph', False)
-        client = CrucibleClient()
+        client = get_client()
         sample = client.samples.get(args.sample_id, include_links=graph or _config.include_links,
                                     include_metadata=include_metadata, include_owner=True,
                                     include_datasets=as_json)
@@ -1032,7 +1032,7 @@ def _execute_get(args):
 
 def _execute_create(args):
     """Execute the 'sample create' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
 
     from ..utils import parse_timestamp
     from ..utils.identifiers import IdentifierNotFoundError, validate_slug
@@ -1063,7 +1063,7 @@ def _execute_create(args):
         print("")
 
     try:
-        client = CrucibleClient()
+        client = get_client()
     except Exception as e:
         fail("connecting", e)
 
@@ -1146,9 +1146,9 @@ def _execute_create(args):
 
 def _execute_link(args):
     """Execute the 'sample link' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
         client.samples.link(args.parent, args.child, args.relationship_type)
 
         suffix = f" ({args.relationship_type})" if args.relationship_type else ""
@@ -1162,9 +1162,9 @@ def _execute_link(args):
 
 def _execute_list_parents(args):
     """Execute the 'sample list-parents' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
         parents = sorted(client.samples.list_parents(
             args.sample_id, limit=args.limit,
             relationship_type=args.relationship_type),
@@ -1184,9 +1184,9 @@ def _execute_list_parents(args):
 
 def _execute_list_children(args):
     """Execute the 'sample list-children' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
         children = sorted(client.samples.list_children(
             args.sample_id, limit=args.limit,
             relationship_type=args.relationship_type),
@@ -1206,9 +1206,9 @@ def _execute_list_children(args):
 
 def _execute_list_datasets(args):
     """Execute the 'sample list-datasets' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
         datasets = sorted(client.datasets.list(sample_mfid=args.sample_id, limit=args.limit),
                           key=lambda ds: (ds.get('dataset_name') or '').lower())
         term.header(f"Datasets · {args.sample_id} ({len(datasets)})")
@@ -1226,9 +1226,9 @@ def _execute_list_datasets(args):
 
 def _execute_link_dataset(args):
     """Execute the 'sample add-dataset' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
         sample_id = args.sample_id
         client.samples.link_dataset(sample_id, args.dataset)
 
@@ -1258,9 +1258,9 @@ Examples:
 
 def _execute_remove_child(args):
     """Execute the 'sample remove-child' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
         client.samples.unlink(args.parent_id, args.child)
         term.success(f"Unlinked child sample {args.child} from parent sample {args.parent_id}", args)
     except Exception as e:
@@ -1287,9 +1287,9 @@ Examples:
 
 def _execute_remove_dataset(args):
     """Execute the 'sample remove-dataset' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
         client.samples.unlink_dataset(args.sample_id, args.dataset)
         term.success(f"Unlinked sample {args.sample_id} from dataset {args.dataset}", args)
     except Exception as e:
@@ -1340,10 +1340,10 @@ def _execute_search(args):
     if len(args.query) < 3:
         from .helpers import fail
         fail("searching samples", ValueError("Search term must be at least 3 characters."), args)
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
         from .helpers import resolve_project_context
-        client     = CrucibleClient()
+        client     = get_client()
         project_id, _ = resolve_project_context(args, args.project_id)
         results    = client.samples.search(args.query, project_id=project_id,
                                            limit=args.limit)
@@ -1388,9 +1388,9 @@ def _register_search_metadata(subparsers):
 
 
 def _execute_search_metadata(args):
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client  = CrucibleClient()
+        client  = get_client()
         results = client.samples.search_metadata(args.query, limit=args.limit)
         if getattr(args, 'json', False):
             print(json.dumps(results, indent=2, default=str))

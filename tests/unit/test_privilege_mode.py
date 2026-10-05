@@ -156,18 +156,6 @@ def test_explicit_flag_is_not_announced(monkeypatch, capsys):
     config._data.pop('privilege_mode', None)
 
 
-def test_shell_toggle_sets_and_clears_the_config_mode():
-    from crucible.cli.shell import _set_elevated
-    from crucible.config import config
-
-    _set_elevated(True)
-    assert config.privilege_mode == 'elevated'
-
-    _set_elevated(False)
-    assert config.privilege_mode == 'normal'
-    config._data.pop('privilege_mode', None)
-
-
 def test_shell_toolbar_shows_the_elevated_badge():
     from crucible.cli import shell
 
@@ -180,22 +168,34 @@ def test_shell_toolbar_shows_the_elevated_badge():
     assert 'ELEVATED' in markup
 
 
-def test_shell_toggle_updates_its_long_lived_client():
+def test_shell_toggle_updates_the_shared_client():
     from crucible.cli import shell
-    from crucible.config import config
 
-    config._data.pop('privilege_mode', None)
     instance = shell.CrucibleShell.__new__(shell.CrucibleShell)
     instance.state = {'elevated': False}
     instance.client = MagicMock(privilege_mode=None)
 
     instance._apply_elevated(True)
     assert instance.client.privilege_mode == 'elevated'
-    assert config.privilege_mode == 'elevated'
+    assert instance.state['elevated'] is True
 
     instance._apply_elevated(False)
     assert instance.client.privilege_mode == 'normal'
-    assert config.privilege_mode == 'normal'
+    assert instance.state['elevated'] is False
+
+
+def test_cli_commands_share_one_client(monkeypatch):
+    from crucible.config import config, get_client
+
+    monkeypatch.setitem(config._data, 'api_url', 'https://example.test/api/v3')
+    monkeypatch.setitem(config._data, 'api_key', 'test-key')
+    monkeypatch.setattr(config, '_client', None)
+
+    assert get_client() is get_client()
+
+    first = get_client()
+    config._client = None
+    assert get_client() is not first
 
 
 def test_shell_toggle_tolerates_a_client_that_is_not_built_yet():
@@ -300,3 +300,26 @@ def test_require_capability_defers_to_the_api_when_unknown():
     from crucible.cli.helpers import require_capability
 
     require_capability(MagicMock(capabilities={}), 'can_create_project', 'x')
+
+
+@pytest.mark.parametrize('session_mode', [None, 'normal', 'elevated'])
+def test_inline_elevated_restores_the_exact_session_mode(session_mode):
+    from crucible.cli import shell
+
+    instance = shell.CrucibleShell.__new__(shell.CrucibleShell)
+    instance.state = {'elevated': session_mode == 'elevated', 'debug': False}
+    instance.is_admin = False
+    instance.client = MagicMock(privilege_mode=session_mode)
+    seen = {}
+
+    def boom(args):
+        seen['mode'] = instance.client.privilege_mode
+        raise RuntimeError('command failed')
+
+    args = MagicMock(elevated=True, func=boom)
+    instance.parser = MagicMock(parse_args=MagicMock(return_value=args))
+
+    instance._dispatch('--elevated dataset list')
+
+    assert seen['mode'] == 'elevated'
+    assert instance.client.privilege_mode == session_mode

@@ -40,17 +40,6 @@ _BANNER_PIXEL_COLORS = {
 }
 
 
-def _set_elevated(on):
-    """Set or clear elevation for every client built during this process.
-
-    Turning it off pins "normal" rather than clearing the key, because sending
-    no header at all leaves a platform administrator elevated.
-    """
-    from ..config import config
-
-    config._data['privilege_mode'] = 'elevated' if on else 'normal'
-
-
 def _get_subparser_map(parser):
     """Return {name: subparser} for a parser's subcommands, or {} if none."""
     for action in parser._actions:
@@ -1044,7 +1033,7 @@ except ImportError:
 class CrucibleShell:
     """Interactive Crucible shell.
 
-    Owns one CrucibleClient instance (self.client), shared mutable state
+    Holds the process-wide shared client (self.client), shared mutable state
     (self.state), and the prompt_toolkit completer (self.completer).
     """
 
@@ -1068,7 +1057,7 @@ class CrucibleShell:
 
     def _verify_connection(self):
         """Spinner + whoami. Sets self.client. Exits on failure."""
-        from crucible.client import CrucibleClient
+        from crucible.config import get_client
 
         _spin_state = {'msg': 'Connecting to Crucible'}
         _stop       = threading.Event()
@@ -1106,7 +1095,7 @@ class CrucibleShell:
             print('  Connecting to Crucible...')
 
         try:
-            self.client = CrucibleClient()
+            self.client = get_client()
             info = self.client.whoami()
         except Exception as e:
             _stop.set()
@@ -1159,12 +1148,11 @@ class CrucibleShell:
                     or self.client.capabilities.get('can_manage_service_accounts'))
 
     def _apply_elevated(self, on):
-        """Set elevation for the session, its state, and the shared client.
+        """Set elevation on the shared client and the toolbar state.
 
-        Subcommands build a fresh client that reads the config, but the shell's
-        own long-lived client read it once at startup, so it needs updating too.
+        Turning it off pins "normal" rather than clearing the mode, because
+        sending no header at all leaves a platform administrator elevated.
         """
-        _set_elevated(on)
         self.state['elevated'] = on
         if self.client is not None:
             self.client.privilege_mode = 'elevated' if on else 'normal'
@@ -1185,6 +1173,7 @@ class CrucibleShell:
             new_join_requests    = jr_f.result()
             new_service_accounts = sa_f.result()
         self.is_admin = self.client.can_elevate or new_deletions is not None
+        self.state['elevated']         = self.client.is_elevated
         self.state['projects']         = new_projects
         self.state['user_label']       = fetch_user_label(self.client)
         project_id, project_source = fetch_project_context()
@@ -1550,6 +1539,7 @@ class CrucibleShell:
             # An inline --elevated applies to this command only; the session
             # toggle is what persists.
             inline_elevated = getattr(args, 'elevated', False)
+            session_mode = self.client.privilege_mode if self.client else None
             session_elevated = self.state.get('elevated', False)
             if inline_elevated:
                 self._apply_elevated(True)
@@ -1559,7 +1549,9 @@ class CrucibleShell:
                     args.func(args)
                 finally:
                     if inline_elevated:
-                        self._apply_elevated(session_elevated)
+                        self.state['elevated'] = session_elevated
+                        if self.client is not None:
+                            self.client.privilege_mode = session_mode
                 from .helpers import fetch_project_context
                 project_id, project_source = fetch_project_context()
                 self.state['project'] = project_id
@@ -1602,10 +1594,10 @@ class CrucibleShell:
 
         if len(words) >= 2 and words[0] == 'config' and words[1] in ('set', 'unset', 'edit'):
             from crucible.config import config as _cfg
-            from crucible.client import CrucibleClient
+            from crucible.config import get_client
             try:
                 _cfg.reload()
-                self.client = CrucibleClient()
+                self.client = get_client()
                 if self.completer is not None:
                     self.completer._client       = self.client
                     self.completer._unlink_cache = {}

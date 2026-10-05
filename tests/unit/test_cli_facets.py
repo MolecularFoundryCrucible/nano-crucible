@@ -29,7 +29,7 @@ def client():
     fake = MagicMock()
     fake.datasets.facets.return_value = RESPONSE
     fake.samples.facets.return_value = RESPONSE
-    with patch('crucible.client.CrucibleClient', return_value=fake):
+    with patch('crucible.config.get_client', return_value=fake):
         yield fake
 
 

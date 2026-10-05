@@ -91,9 +91,9 @@ Examples:
 
 
 def _execute_request(args):
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
         record = client.access_groups.request_join(args.group_name, reason=args.reason)
         term.success("Join request submitted", args)
         print()
@@ -129,9 +129,9 @@ Examples:
 
 
 def _execute_list(args):
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
         status = None if args.status == 'all' else args.status
         records = client.access_groups.list_join_requests(
             group_name=args.group_name, status=status,
@@ -171,9 +171,9 @@ Examples:
 
 
 def _execute_mine(args):
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
         status = None if args.status == 'all' else args.status
         records = client.account.join_requests(status=status, limit=args.limit)
         term.header(f"My Join Requests — {args.status} ({len(records)})")
@@ -205,9 +205,9 @@ Examples:
 
 
 def _execute_get(args):
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
         record = client.access_groups.get(args.request_id)
         if record is None:
             logger.error(f"Join request not found: {args.request_id}")
@@ -239,9 +239,9 @@ Examples:
 
 
 def _execute_approve(args):
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
     except Exception as e:
         from .helpers import fail
         fail("connecting", e)
@@ -283,9 +283,9 @@ Examples:
 
 
 def _execute_reject(args):
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
     except Exception as e:
         from .helpers import fail
         fail("connecting", e)

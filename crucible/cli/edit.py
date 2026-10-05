@@ -39,10 +39,10 @@ Examples:
 
 def execute(args):
     """Execute the top-level edit command."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
 
     try:
-        client = CrucibleClient()
+        client = get_client()
         resource_type = client.get_resource_type(args.resource_id)
 
         if resource_type == 'dataset':

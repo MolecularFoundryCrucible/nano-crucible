@@ -90,7 +90,7 @@ def test_add_user_dispatches_named_role_and_username(monkeypatch):
         first_name='Alice',
         last_name='User',
     )])
-    monkeypatch.setattr('crucible.client.CrucibleClient', lambda: client)
+    monkeypatch.setattr('crucible.config.get_client', lambda: client)
 
     _execute_add_user(SimpleNamespace(
         project_id='example-project',
@@ -120,7 +120,7 @@ def test_add_user_duplicate_conflict_uses_shared_error_formatter(monkeypatch, ca
     client = SimpleNamespace(projects=SimpleNamespace())
     client.projects.add_user = MagicMock(side_effect=requests.HTTPError(
         '409 Conflict', response=response))
-    monkeypatch.setattr('crucible.client.CrucibleClient', lambda: client)
+    monkeypatch.setattr('crucible.config.get_client', lambda: client)
 
     with pytest.raises(SystemExit) as raised:
         _execute_add_user(SimpleNamespace(

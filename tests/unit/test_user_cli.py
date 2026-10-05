@@ -88,7 +88,7 @@ def test_interactive_create_uses_validated_username(monkeypatch):
         'first_name': 'Alice',
         'last_name': 'User',
     })
-    monkeypatch.setattr('crucible.client.CrucibleClient', lambda: client)
+    monkeypatch.setattr('crucible.config.get_client', lambda: client)
     monkeypatch.setattr('crucible.cli.helpers.prompt_username', lambda prompt='Username: ': 'alice_user')
     monkeypatch.setattr('crucible.cli.helpers._interactive_stdin', lambda: True)
     monkeypatch.setattr('builtins.input', lambda prompt: '')
@@ -134,7 +134,7 @@ def test_edit_updates_mfid_backed_human(monkeypatch):
         'last_name': 'User One',
         'email': None,
     })
-    monkeypatch.setattr('crucible.client.CrucibleClient', lambda: client)
+    monkeypatch.setattr('crucible.config.get_client', lambda: client)
     monkeypatch.setattr(term, 'open_editor_json', lambda original: {
         **original,
         'first_name': 'Updated',

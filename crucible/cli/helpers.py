@@ -283,10 +283,10 @@ def execute_facets_command(args, resource: str):
     """Execute a '<resource> facets FIELD' subcommand."""
     import json
     from . import term
-    from ..client import CrucibleClient
+    from ..config import get_client
 
     try:
-        client = CrucibleClient()
+        client = get_client()
         filters = {}
         if args.project_id:
             filters['project_id'] = args.project_id

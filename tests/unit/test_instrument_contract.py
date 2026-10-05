@@ -344,7 +344,7 @@ def test_cli_list_requests_owners_and_formats_public_owner(monkeypatch, capsys):
         },
         'status': 'active',
     }])
-    monkeypatch.setattr('crucible.client.CrucibleClient', lambda: client)
+    monkeypatch.setattr('crucible.config.get_client', lambda: client)
     args = SimpleNamespace(
         limit=10,
         include_metadata=False,
@@ -375,7 +375,7 @@ def test_cli_set_status_dispatches_and_displays_result(monkeypatch, capsys):
         'status': 'maintenance',
     }))
     monkeypatch.setattr(
-        'crucible.client.CrucibleClient',
+        'crucible.config.get_client',
         lambda: SimpleNamespace(instruments=operations),
     )
 
@@ -403,7 +403,7 @@ def test_cli_lists_instrument_service_accounts(monkeypatch, capsys):
     operations = SimpleNamespace(
         list_service_accounts=MagicMock(return_value=[member]))
     monkeypatch.setattr(
-        'crucible.client.CrucibleClient',
+        'crucible.config.get_client',
         lambda: SimpleNamespace(instruments=operations),
     )
 

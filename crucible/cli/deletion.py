@@ -266,9 +266,9 @@ Examples:
 
 def _execute_list_deleted(args):
     """Execute 'crucible deletion list-deleted'."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
         records = client.deletions.list_deleted(
             resource_id=args.resource_id,
             requester_id=args.requester_id,
@@ -312,9 +312,9 @@ def _execute_list_deleted(args):
 
 def _execute_get_deleted(args):
     """Execute 'crucible deletion get-deleted'."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
         record = client.deletions.get_deleted(args.audit_id)
         _p = term.field_printer(16)
         from .helpers import explorer_url, project_explorer_url
@@ -339,9 +339,9 @@ def _execute_get_deleted(args):
 
 def _execute_request(args):
     """Execute the 'deletion request' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
         record = client.deletions.request(args.resource_id, reason=args.reason)
         term.success(f"Deletion request submitted (ID: {record.get('id')})", args)
         print()
@@ -353,9 +353,9 @@ def _execute_request(args):
 
 def _execute_list(args):
     """Execute the 'deletion list' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
 
         status = None if args.status == 'all' else args.status
         # A reviewer's queue is the point of this command, and "accessible" no
@@ -415,9 +415,9 @@ def _execute_list(args):
 
 def _execute_get(args):
     """Execute the 'deletion get' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
         record = client.deletions.get(args.request_id)
         _show_deletion_request(record, client=client)
     except Exception as e:
@@ -427,9 +427,9 @@ def _execute_get(args):
 
 def _execute_approve(args):
     """Execute the 'deletion approve' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
     except Exception as e:
         from .helpers import fail
         fail("connecting", e)
@@ -455,9 +455,9 @@ def _execute_approve(args):
 def _execute_delete(args):
     """Execute the 'deletion delete' subcommand."""
     import requests as _req
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
         result = client.deletions.delete(args.resource_id, force=args.force)
         term.success(result.get('detail', f"Resource {args.resource_id} permanently deleted"), args)
     except _req.exceptions.HTTPError as e:
@@ -479,9 +479,9 @@ def _execute_delete(args):
 
 def _execute_reject(args):
     """Execute the 'deletion reject' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
     except Exception as e:
         from .helpers import fail
         fail("connecting", e)

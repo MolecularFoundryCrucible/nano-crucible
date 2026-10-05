@@ -34,7 +34,7 @@ def test_dataset_list_parser_accepts_instrument_mfid():
 def test_dataset_list_instrument_filter_ignores_configured_project(monkeypatch, capsys):
     datasets = SimpleNamespace(list=MagicMock(return_value=[]))
     monkeypatch.setattr(
-        'crucible.client.CrucibleClient',
+        'crucible.config.get_client',
         lambda: SimpleNamespace(datasets=datasets),
     )
     monkeypatch.setattr(
@@ -70,7 +70,7 @@ def test_dataset_list_instrument_filter_ignores_configured_project(monkeypatch, 
 def test_dataset_list_uses_shell_project_before_config(monkeypatch, capsys):
     datasets = SimpleNamespace(list=MagicMock(return_value=[]))
     monkeypatch.setattr(
-        'crucible.client.CrucibleClient',
+        'crucible.config.get_client',
         lambda: SimpleNamespace(datasets=datasets),
     )
     monkeypatch.setattr(

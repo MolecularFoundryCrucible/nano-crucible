@@ -51,7 +51,7 @@ def test_interactive_create_uses_validated_username(monkeypatch):
         'username': 'smoke-test',
         'api_key': 'test-key',
     })
-    monkeypatch.setattr('crucible.client.CrucibleClient', lambda: client)
+    monkeypatch.setattr('crucible.config.get_client', lambda: client)
     monkeypatch.setattr('crucible.cli.helpers.prompt_username', lambda prompt='Username: ': 'smoke-test')
     monkeypatch.setattr('crucible.cli.helpers._interactive_stdin', lambda: True)
     monkeypatch.setattr('builtins.input', lambda prompt: '')

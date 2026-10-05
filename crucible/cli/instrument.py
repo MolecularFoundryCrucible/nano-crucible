@@ -211,12 +211,12 @@ Examples:
 
 def _execute_create(args):
     """Execute the 'instrument create' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     from .helpers import (prompt_optional, prompt_required, require_capability,
                           validate_user_reference)
     from ..utils.identifiers import validate_slug
 
-    require_capability(CrucibleClient(), 'can_register_instrument',
+    require_capability(get_client(), 'can_register_instrument',
                        'register instruments')
 
     instrument_name = args.instrument_name
@@ -270,7 +270,7 @@ def _execute_create(args):
         from crucible.models import Instrument
         if owner is not None:
             owner = validate_user_reference(owner)
-        client = CrucibleClient()
+        client = get_client()
 
         instrument = Instrument(
             instrument_name=instrument_name,
@@ -295,9 +295,9 @@ def _execute_create(args):
 
 def _execute_list(args):
     """Execute the 'instrument list' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
         instruments = client.instruments.list(
             limit=args.limit,
             include_metadata=getattr(args, 'include_metadata', False) or _config.include_metadata,
@@ -379,10 +379,10 @@ def _show_instrument(instrument, include_metadata=False):
 
 def _execute_get(args):
     """Execute the 'instrument get' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     include_metadata = getattr(args, 'include_metadata', False) or _config.include_metadata
     try:
-        client = CrucibleClient()
+        client = get_client()
 
         if args.by_id:
             import warnings
@@ -452,7 +452,7 @@ Examples:
 
 def _execute_update(args):
     """Execute the 'instrument update' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
 
     fields = {k: v for k, v in {
         'instrument_name': args.instrument_name,
@@ -479,7 +479,7 @@ def _execute_update(args):
             sys.exit(1)
 
     try:
-        client = CrucibleClient()
+        client = get_client()
 
         if fields:
             result = client.instruments.update(args.unique_id, **fields)
@@ -524,11 +524,11 @@ Examples:
 
 def _execute_transfer_ownership(args):
     """Execute the 'instrument transfer-ownership' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     from .helpers import fail, show_transfer_ownership
 
     try:
-        client = CrucibleClient()
+        client = get_client()
         result = client.instruments.transfer_ownership(
             args.instrument_mfid, args.new_owner, confirm=args.confirm,
         )
@@ -558,11 +558,11 @@ Examples:
 
 
 def _execute_set_status(args):
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     from .helpers import fail
 
     try:
-        instrument = CrucibleClient().instruments.set_status(
+        instrument = get_client().instruments.set_status(
             args.instrument_mfid, args.status)
         term.success(
             f"Instrument {args.instrument_mfid} status changed to {args.status}", args)
@@ -599,12 +599,12 @@ def _service_account_rows(members):
 
 
 def _execute_list_service_accounts(args):
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     from .helpers import fail, sort_members
 
     try:
         members = sort_members(
-            CrucibleClient().instruments.list_service_accounts(args.instrument_mfid))
+            get_client().instruments.list_service_accounts(args.instrument_mfid))
         term.header(f"Instrument Service Accounts ({len(members)})")
         if not members:
             print(f"  {term.dim('No service accounts found.')}")
@@ -643,11 +643,11 @@ Examples:
 
 def _execute_bind_sa(args):
     """Execute the 'instrument bind-sa' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     from .helpers import fail, sort_members
 
     try:
-        client = CrucibleClient()
+        client = get_client()
         members = sort_members(client.instruments.bind_service_account(args.instrument_mfid, args.sa_id))
         term.success(f"Service account {args.sa_id} bound to instrument {args.instrument_mfid}", args)
         rows = _service_account_rows(members)
@@ -679,11 +679,11 @@ Examples:
 
 def _execute_unbind_sa(args):
     """Execute the 'instrument unbind-sa' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     from .helpers import fail, sort_members
 
     try:
-        client = CrucibleClient()
+        client = get_client()
         members = sort_members(client.instruments.unbind_service_account(args.instrument_mfid, args.sa_id))
         term.success(f"Service account {args.sa_id} unbound from instrument {args.instrument_mfid}", args)
         rows = _service_account_rows(members)
@@ -772,9 +772,9 @@ def _edit_instrument(uid, client, debug=False):
 
 def _execute_edit(args):
     """Execute the 'instrument edit' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
     except Exception as e:
         from .helpers import fail
         fail("connecting", e)
@@ -811,9 +811,9 @@ def _execute_search(args):
     if len(args.query) < 3:
         from .helpers import fail
         fail("searching instruments", ValueError("Search term must be at least 3 characters."), args)
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client  = CrucibleClient()
+        client  = get_client()
         results = client.instruments.search(
             args.query, limit=args.limit, status=getattr(args, 'status', None))
         if getattr(args, 'json', False):
@@ -860,9 +860,9 @@ def _register_search_metadata(subparsers):
 
 
 def _execute_search_metadata(args):
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client  = CrucibleClient()
+        client  = get_client()
         results = client.instruments.search_metadata(args.query, limit=args.limit)
         if getattr(args, 'json', False):
             print(json.dumps(results, indent=2, default=str))

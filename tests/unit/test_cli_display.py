@@ -61,7 +61,7 @@ def test_empty_listings_name_their_subject(execute, args, expected, monkeypatch,
         can_elevate=False,
         _admin_mode=lambda: None,
     )
-    monkeypatch.setattr('crucible.client.CrucibleClient', lambda: client)
+    monkeypatch.setattr('crucible.config.get_client', lambda: client)
 
     execute(args)
 
@@ -694,7 +694,7 @@ def test_scoped_resource_lists_show_relation_and_unassigned_project(
         module, namespace, resource_attr, record, type_label, monkeypatch, capsys):
     operation = SimpleNamespace(list=MagicMock(return_value=[record]))
     client = SimpleNamespace(**{resource_attr: operation})
-    monkeypatch.setattr('crucible.client.CrucibleClient', lambda: client)
+    monkeypatch.setattr('crucible.config.get_client', lambda: client)
     args = SimpleNamespace(
         project_id=None,
         project_mfid=MFID,
@@ -816,7 +816,7 @@ def test_generic_get_dispatches_project_detail(monkeypatch):
     }
     client = SimpleNamespace(get=MagicMock(return_value=project))
     show_project = MagicMock()
-    monkeypatch.setattr('crucible.client.CrucibleClient', lambda: client)
+    monkeypatch.setattr('crucible.config.get_client', lambda: client)
     monkeypatch.setattr(project_cli, '_show_project', show_project)
 
     get_cli.execute(SimpleNamespace(
@@ -916,7 +916,7 @@ def test_instrument_search_displays_slug_instead_of_manufacturer(monkeypatch, ca
     }]
     operations = SimpleNamespace(search=MagicMock(return_value=results))
     monkeypatch.setattr(
-        'crucible.client.CrucibleClient',
+        'crucible.config.get_client',
         lambda: SimpleNamespace(instruments=operations),
     )
 

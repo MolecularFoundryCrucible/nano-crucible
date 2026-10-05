@@ -118,13 +118,13 @@ Examples:
 
 
 def _execute_create(args):
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     from .helpers import prompt_optional, prompt_username, require_capability
     from ..utils.identifiers import validate_mfid, validate_username
 
     # These calls always request elevation, so an administrator is permitted
     # even without the standing capability.
-    gate = CrucibleClient()
+    gate = get_client()
     if not gate.can_elevate:
         require_capability(gate, 'can_manage_service_accounts',
                            'manage service accounts')
@@ -144,7 +144,7 @@ def _execute_create(args):
         username = validate_username(username)
         if unique_id is not None:
             unique_id = validate_mfid(unique_id)
-        client = CrucibleClient()
+        client = get_client()
         result = client.service_accounts.create(username=username, unique_id=unique_id)
         _show_sa(result, key=result.get('api_key'))
     except Exception as e:
@@ -173,10 +173,10 @@ Examples:
 
 
 def _execute_rotate_key(args):
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
         unique_id, username, ambiguous = _resolve_sa_ref(args)
-        client = CrucibleClient()
+        client = get_client()
         sa = _resolve_sa(client, unique_id=unique_id, username=username, ambiguous=ambiguous)
         result = client.service_accounts.rotate_key(sa.get('unique_id'))
         _show_sa(result, key=result.get('api_key'))
@@ -210,10 +210,10 @@ Examples:
 
 
 def _execute_get(args):
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
         unique_id, username, ambiguous = _resolve_sa_ref(args)
-        client = CrucibleClient()
+        client = get_client()
         sa = _resolve_sa(client, unique_id=unique_id, username=username, ambiguous=ambiguous)
         if getattr(args, 'json', False):
             print(json.dumps(sa, indent=2, default=str))
@@ -239,9 +239,9 @@ def _register_list(subparsers):
 
 
 def _execute_list(args):
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
         accounts = client.service_accounts.list(limit=args.limit)
         if getattr(args, 'json', False):
             print(json.dumps(accounts, indent=2, default=str))
@@ -280,9 +280,9 @@ Examples:
 
 
 def _execute_show(args):
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
         sa = client.service_accounts.get_admin(args.sa)
         if getattr(args, 'json', False):
             print(json.dumps(sa, indent=2, default=str))
@@ -326,9 +326,9 @@ Examples:
 
 
 def _execute_set_role(args):
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
         sa = client.service_accounts.set_platform_role(
             args.sa, args.platform_role)
         if getattr(args, 'json', False):
@@ -363,10 +363,10 @@ Examples:
 
 
 def _execute_edit(args):
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
         unique_id, username, ambiguous = _resolve_sa_ref(args)
-        client = CrucibleClient()
+        client = get_client()
         sa = _resolve_sa(client, unique_id=unique_id, username=username, ambiguous=ambiguous)
         uid = sa.get('unique_id')
         original = {k: sa.get(k) for k in _EDITABLE}
@@ -421,10 +421,10 @@ Examples:
 
 
 def _execute_update(args):
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
         unique_id, username, ambiguous = _resolve_sa_ref(args)
-        client = CrucibleClient()
+        client = get_client()
         sa = _resolve_sa(client, unique_id=unique_id, username=username, ambiguous=ambiguous)
         uid = sa.get('unique_id')
 
@@ -469,10 +469,10 @@ Examples:
 
 
 def _execute_list_access_groups(args):
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
         unique_id, username, ambiguous = _resolve_sa_ref(args)
-        client = CrucibleClient()
+        client = get_client()
         sa = _resolve_sa(client, unique_id=unique_id, username=username, ambiguous=ambiguous)
 
         groups = client.service_accounts.list_access_groups(sa.get('unique_id'))
@@ -506,10 +506,10 @@ Examples:
 
 
 def _execute_add_access_group(args):
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     from .helpers import resolve_sa_id
     try:
-        client = CrucibleClient()
+        client = get_client()
         unique_id = resolve_sa_id(client, args.sa)
         client.service_accounts.add_to_access_group(unique_id, args.group_name)
         term.success(f"Added {args.sa} to access group '{args.group_name}'", args)
@@ -537,10 +537,10 @@ Examples:
 
 
 def _execute_remove_access_group(args):
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     from .helpers import resolve_sa_id
     try:
-        client = CrucibleClient()
+        client = get_client()
         unique_id = resolve_sa_id(client, args.sa)
         client.service_accounts.remove_from_access_group(unique_id, args.group_name)
         term.success(f"Removed {args.sa} from access group '{args.group_name}'", args)

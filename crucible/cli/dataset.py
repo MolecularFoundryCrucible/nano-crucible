@@ -793,7 +793,7 @@ Use `dataset set-public` or `dataset set-private` to change public visibility.
 
 def _execute_update(args):
     """Execute the 'dataset update' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     from .helpers import cast_value
 
     has_set = bool(getattr(args, 'set_fields', None))
@@ -844,7 +844,7 @@ def _execute_update(args):
             sys.exit(1)
 
     try:
-        client = CrucibleClient()
+        client = get_client()
 
         if updates:
             client.datasets.update(args.dataset_id, **updates)
@@ -892,11 +892,11 @@ Examples:
 
 def _execute_reassign_project(args):
     """Execute the 'dataset reassign-project' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     from .helpers import fail, show_reassign_project
 
     try:
-        client = CrucibleClient()
+        client = get_client()
         result = client.datasets.reassign_project(args.dataset_id, args.project_id, confirm=args.confirm)
         show_reassign_project(result, args.confirm)
     except Exception as e:
@@ -924,11 +924,11 @@ Examples:
 
 def _execute_transfer_ownership(args):
     """Execute the 'dataset transfer-ownership' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     from .helpers import fail, show_transfer_ownership
 
     try:
-        client = CrucibleClient()
+        client = get_client()
         result = client.datasets.transfer_ownership(args.dataset_id, args.new_owner, confirm=args.confirm)
         show_transfer_ownership(result, args.confirm)
     except Exception as e:
@@ -955,7 +955,7 @@ Examples:
 
 def _execute_delete(args):
     """Execute the 'dataset delete' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     from .helpers import prompt_confirm
     confirmed = args.yes or prompt_confirm(
         f"Delete dataset {args.dataset_id}? This cannot be undone.",
@@ -965,7 +965,7 @@ def _execute_delete(args):
         print("Aborted.")
         return
     try:
-        client = CrucibleClient()
+        client = get_client()
         client.datasets.delete(args.dataset_id)
         term.success(f"Deleted dataset {args.dataset_id}", args)
     except Exception as e:
@@ -1051,9 +1051,9 @@ def _edit_dataset(dsid, client, debug=False):
 
 def _execute_edit(args):
     """Execute the 'dataset edit' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
     except Exception as e:
         from .helpers import fail
         fail("connecting", e)
@@ -1114,9 +1114,9 @@ Examples:
 
 def _execute_add_sample(args):
     """Execute the 'dataset add-sample' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
         client.datasets.link_sample(args.dataset_id, args.sample)
 
         term.success(f"Linked sample {args.sample} to dataset {args.dataset_id}", args)
@@ -1145,9 +1145,9 @@ Examples:
 
 def _execute_remove_sample(args):
     """Execute the 'dataset remove-sample' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
         client.datasets.unlink_sample(args.dataset_id, args.sample)
         term.success(f"Unlinked sample {args.sample} from dataset {args.dataset_id}", args)
     except Exception as e:
@@ -1174,9 +1174,9 @@ Examples:
 
 def _execute_remove_child(args):
     """Execute the 'dataset remove-child' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
         client.datasets.unlink(args.parent_id, args.child)
         term.success(f"Unlinked child dataset {args.child} from parent dataset {args.parent_id}", args)
     except Exception as e:
@@ -1331,11 +1331,11 @@ Examples:
 
 def _execute_download(args):
     """Execute the 'dataset download' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     output_dir = args.output_dir or f"crucible-downloads/{args.dataset_id}"
 
     try:
-        client = CrucibleClient()
+        client = get_client()
         logger.info(f"Downloading dataset {args.dataset_id} to {output_dir}/")
 
         downloaded = client.datasets.download(
@@ -1414,7 +1414,7 @@ Examples:
 def _execute_add_file(args):
     """Execute the 'dataset add-file' subcommand."""
     import glob as _glob
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
 
     dsid = args.dataset_id
 
@@ -1437,7 +1437,7 @@ def _execute_add_file(args):
         files.append(p)
 
     try:
-        client = CrucibleClient()
+        client = get_client()
 
         ingestor = getattr(args, 'ingestor', None)
         wait     = getattr(args, 'wait', False)
@@ -1497,14 +1497,14 @@ Examples:
 
 def _execute_add_thumbnail(args):
     """Execute the 'dataset add-thumbnail' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
 
     try:
         image_path = Path(args.image).expanduser()
         if not image_path.is_file():
             raise FileNotFoundError(f"Thumbnail image not found: {image_path}")
 
-        client = CrucibleClient()
+        client = get_client()
         client.datasets.add_thumbnail(
             args.dataset_mfid,
             str(image_path),
@@ -1534,9 +1534,9 @@ def _register_list_files(subparsers):
 
 def _execute_list_files(args):
     """Execute the 'dataset list-files' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
         dsid = args.dataset_id
 
         # Fetch metadata (size, hash) and signed download URLs in parallel
@@ -1586,9 +1586,9 @@ Examples:
 
 def _execute_ingestion(args):
     """Execute 'crucible dataset ingestion'."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
         reqs = client.ingestions.list(dsid=args.dataset_id)
 
         term.header(f"Ingestion Requests · {args.dataset_id} ({len(reqs)})")
@@ -1657,10 +1657,10 @@ def _execute_search(args):
     if len(args.query) < 3:
         from .helpers import fail
         fail("searching datasets", ValueError("Search term must be at least 3 characters."), args)
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
         from .helpers import resolve_project_context
-        client     = CrucibleClient()
+        client     = get_client()
         project_id, _ = resolve_project_context(args, args.project_id)
         results    = client.datasets.search(args.query, project_id=project_id,
                                             limit=args.limit)
@@ -1710,9 +1710,9 @@ Examples:
 
 
 def _execute_search_metadata(args):
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client  = CrucibleClient()
+        client  = get_client()
         results = client.datasets.search_metadata(args.query, limit=args.limit)
         if getattr(args, 'json', False):
             print(json.dumps(results, indent=2, default=str))
@@ -1758,9 +1758,9 @@ Examples:
 
 def _execute_add_keyword(args):
     """Execute the 'dataset add-keyword' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
         client.datasets.add_keyword(args.dataset_id, args.keyword)
 
         term.success(f"Keyword '{args.keyword}' added to {args.dataset_id}", args)
@@ -1787,9 +1787,9 @@ def _register_list_keywords(subparsers):
 
 def _execute_list_keywords(args):
     """Execute the 'dataset get-keywords' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
         keywords = client.datasets.get_keywords(args.dataset_id)
 
         term.header(f"Keywords · {args.dataset_id} ({len(keywords)})")
@@ -1848,9 +1848,9 @@ Examples:
 
 def _execute_list_access_groups(args):
     """Execute 'crucible dataset list-access-groups'."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
         groups = client.datasets.get_access_groups(args.dataset_id)
         term.header(f"Access Groups · {args.dataset_id} ({len(groups)})")
         if not groups:
@@ -1884,9 +1884,9 @@ Examples:
 
 def _execute_add_access_group(args):
     """Execute 'crucible dataset add-access-group'."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
         client.datasets.add_access_group(args.dataset_id, args.group_name,
                                          read=True, write=args.write)
         perms = 'read+write' if args.write else 'read'
@@ -1916,7 +1916,7 @@ Examples:
 def _execute_list(args):
     """Execute the 'dataset list' subcommand."""
     from crucible.config import config
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     from .helpers import resolve_project_context, listing_filter_kwargs
     project_id = args.project_id
     project_mfid = getattr(args, 'project_mfid', None)
@@ -1964,7 +1964,7 @@ def _execute_list(args):
 
     try:
         import fnmatch
-        client = CrucibleClient()
+        client = get_client()
         datasets = client.datasets.list(limit=args.limit, **project_filters, **filters)
 
         # Client-side glob filtering on name
@@ -2063,11 +2063,11 @@ def _execute_list(args):
 
 def _execute_get(args):
     """Execute the 'dataset get' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     as_json = getattr(args, 'json', False)
     include_metadata = as_json or getattr(args, 'include_metadata', False) or _config.include_metadata
     try:
-        client = CrucibleClient()
+        client = get_client()
         graph   = getattr(args, 'graph', False)
         dataset = client.datasets.get(args.dataset_id, include_metadata=include_metadata,
                                       include_links=graph or _config.include_links,
@@ -2318,7 +2318,7 @@ def _execute_create(args):
         print("")
         try:
             if args.no_upload:
-                from crucible.client import CrucibleClient
+                from crucible.config import get_client
                 from crucible.models import AssociatedFile
                 remote_files = [
                     AssociatedFile(
@@ -2329,7 +2329,7 @@ def _execute_create(args):
                     )
                     for f in parser.files_to_upload
                 ]
-                result = CrucibleClient().datasets.create(
+                result = get_client().datasets.create(
                     parser.to_dataset(),
                     scientific_metadata=parser.scientific_metadata,
                     keywords=parser.keywords,
@@ -2337,8 +2337,8 @@ def _execute_create(args):
                 )
             else:
                 if parser is None:
-                    from crucible.client import CrucibleClient
-                    result = CrucibleClient().datasets.create(
+                    from crucible.config import get_client
+                    result = get_client().datasets.create(
                         dataset_record,
                         scientific_metadata=record_metadata,
                         keywords=record_keywords,
@@ -2354,8 +2354,8 @@ def _execute_create(args):
             term.success("Dataset created" if parser is None else "Upload completed", args)
             created = result.get('created_record', {}) if result else {}
             if created:
-                from crucible.client import CrucibleClient
-                _show_dataset(created, CrucibleClient())
+                from crucible.config import get_client
+                _show_dataset(created, get_client())
 
             if result and getattr(args, 'debug', False):
                 logger.debug("Upload result details:")
@@ -2369,9 +2369,9 @@ def _execute_create(args):
 
 def _execute_link(args):
     """Execute the 'dataset link' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
         client.datasets.link(
             args.parent, args.child, args.relationship_type)
 
@@ -2387,9 +2387,9 @@ def _execute_link(args):
 
 def _execute_list_parents(args):
     """Execute the 'dataset list-parents' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
         parents = sorted(client.datasets.list_parents(
             args.dataset_id, limit=args.limit,
             relationship_type=args.relationship_type),
@@ -2411,9 +2411,9 @@ def _execute_list_parents(args):
 
 def _execute_list_children(args):
     """Execute the 'dataset list-children' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
         children = sorted(client.datasets.list_children(
             args.dataset_id, limit=args.limit,
             relationship_type=args.relationship_type),
@@ -2435,9 +2435,9 @@ def _execute_list_children(args):
 
 def _execute_list_samples(args):
     """Execute the 'dataset list-samples' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
         samples = sorted(client.samples.list(dataset_mfid=args.dataset_id, limit=args.limit),
                          key=lambda s: (s.get('sample_name') or '').lower())
 

@@ -107,9 +107,9 @@ def _execute_search(args):
     if len(args.query) < 3:
         from .helpers import fail
         fail("searching users", ValueError("Search term must be at least 3 characters."), args)
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        users = CrucibleClient().users.search(args.query)
+        users = get_client().users.search(args.query)
 
         if getattr(args, 'json', False):
             print(json.dumps(users, indent=2, default=str))
@@ -226,7 +226,7 @@ def _show_user(user):
 
 def _execute_get(args):
     """Execute the 'user get' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     from .helpers import parse_user_ref
     import warnings
 
@@ -251,7 +251,7 @@ def _execute_get(args):
         sys.exit(1)
 
     try:
-        client = CrucibleClient()
+        client = get_client()
         user = client.users.get(**ref_kwargs)
 
         if user is None:
@@ -271,7 +271,7 @@ def _execute_get(args):
 
 def _execute_create(args):
     """Execute the 'user create' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     from .helpers import (
         prompt_optional,
         prompt_required,
@@ -329,7 +329,7 @@ def _execute_create(args):
             email = validate_email(email)
         if projects is not None:
             projects = validate_project_ids(projects)
-        client = CrucibleClient()
+        client = get_client()
 
         user = User(
             unique_id=orcid,
@@ -374,7 +374,7 @@ Examples:
 
 def _execute_update(args):
     """Execute the 'user update' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     from .helpers import resolve_user_id
 
     fields = {k: v for k, v in {
@@ -392,7 +392,7 @@ def _execute_update(args):
         sys.exit(1)
 
     try:
-        client = CrucibleClient()
+        client = get_client()
         user_id = resolve_user_id(client, args.user)
         result = client.users.update(user_id, **fields)
         term.success("User updated", args)
@@ -432,7 +432,7 @@ Examples:
 
 def _execute_edit(args):
     """Execute the 'user edit' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     from .helpers import parse_user_ref
     import warnings
 
@@ -455,7 +455,7 @@ def _execute_edit(args):
         sys.exit(1)
 
     try:
-        client = CrucibleClient()
+        client = get_client()
         user = client.users.get(**ref_kwargs)
         if user is None:
             logger.error("User not found")
@@ -516,10 +516,10 @@ Examples:
 
 def _execute_add_access_group(args):
     """Execute the 'user add-access-group' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     from .helpers import resolve_user_id
     try:
-        client = CrucibleClient()
+        client = get_client()
         user_id = resolve_user_id(client, args.user)
         client.users.add_to_access_group(user_id, args.group_name)
         term.success(f"Added {args.user} to access group '{args.group_name}'", args)
@@ -554,10 +554,10 @@ Examples:
 
 def _execute_remove_access_group(args):
     """Execute the 'user remove-access-group' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     from .helpers import resolve_user_id
     try:
-        client = CrucibleClient()
+        client = get_client()
         user_id = resolve_user_id(client, args.user)
         client.users.remove_from_access_group(user_id, args.group_name)
         term.success(f"Removed {args.user} from access group '{args.group_name}'", args)
@@ -571,9 +571,9 @@ def _execute_remove_access_group(args):
 
 def _execute_list(args):
     """Execute the 'user list' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
         username_filter = getattr(args, 'username', None)
         kwargs = {'username': username_filter} if username_filter else {}
         users = client.users.list(limit=args.limit, **kwargs)
@@ -687,9 +687,9 @@ Examples:
 
 def _execute_list_datasets(args):
     """Execute the 'user list-datasets' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
         datasets = client.datasets.list(
             accessible_to_user=args.user,
             limit=args.limit,
@@ -713,9 +713,9 @@ def _execute_list_datasets(args):
 
 def _execute_check_access(args):
     """Execute the 'user check-access' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
         access = client.users.check_dataset_access(args.user, args.dataset_id)
 
         _p = term.field_printer(14)
@@ -734,10 +734,10 @@ def _execute_check_access(args):
 
 def _execute_list_access_groups(args):
     """Execute the 'user list-access-groups' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     from .helpers import resolve_user_id
     try:
-        client = CrucibleClient()
+        client = get_client()
         user_id = resolve_user_id(client, args.user)
         groups = client.users.list_access_groups(user_id)
 
@@ -758,10 +758,10 @@ def _execute_list_access_groups(args):
 
 def _execute_list_projects(args):
     """Execute the 'user list-projects' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     from .helpers import resolve_user_id
     try:
-        client = CrucibleClient()
+        client = get_client()
         user_id = resolve_user_id(client, args.user)
         projects = client.users.get_projects(user_id)
 

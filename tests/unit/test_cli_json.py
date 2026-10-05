@@ -53,7 +53,7 @@ def test_project_list_json_returns_raw_array(monkeypatch, capsys):
         'scientific_metadata': {'temperature': 300},
     }]
     client = SimpleNamespace(projects=SimpleNamespace(list=MagicMock(return_value=projects)))
-    monkeypatch.setattr('crucible.client.CrucibleClient', lambda: client)
+    monkeypatch.setattr('crucible.config.get_client', lambda: client)
 
     project_cli._execute_list(SimpleNamespace(
         limit=10,
@@ -72,7 +72,7 @@ def test_sample_get_optimizes_human_output_and_preserves_json(
     sample = {'unique_id': MFID, 'resource_type': 'sample', 'datasets': []}
     operations = SimpleNamespace(get=MagicMock(return_value=sample))
     client = SimpleNamespace(samples=operations)
-    monkeypatch.setattr('crucible.client.CrucibleClient', lambda: client)
+    monkeypatch.setattr('crucible.config.get_client', lambda: client)
     monkeypatch.setattr(sample_cli, '_show_sample', MagicMock())
 
     sample_cli._execute_get(SimpleNamespace(
@@ -106,7 +106,7 @@ def test_resource_search_json_returns_raw_array(monkeypatch, capsys, module, res
     results = [{'unique_id': MFID, 'resource': resource_name}]
     operations = SimpleNamespace(search=MagicMock(return_value=results))
     client = SimpleNamespace(**{resource_name: operations})
-    monkeypatch.setattr('crucible.client.CrucibleClient', lambda: client)
+    monkeypatch.setattr('crucible.config.get_client', lambda: client)
     args = SimpleNamespace(query='query', limit=7, json=True, debug=False)
     if resource_name in ('datasets', 'samples'):
         args.project_id = 'project-one'
@@ -130,7 +130,7 @@ def test_metadata_search_json_returns_nested_raw_values(
     }]
     operations = SimpleNamespace(search_metadata=MagicMock(return_value=results))
     client = SimpleNamespace(**{resource_name: operations})
-    monkeypatch.setattr('crucible.client.CrucibleClient', lambda: client)
+    monkeypatch.setattr('crucible.config.get_client', lambda: client)
 
     module._execute_search_metadata(SimpleNamespace(
         query='query',
@@ -149,7 +149,7 @@ def test_user_search_and_list_json_return_raw_arrays(monkeypatch, capsys):
         list=MagicMock(return_value=users),
     )
     monkeypatch.setattr(
-        'crucible.client.CrucibleClient',
+        'crucible.config.get_client',
         lambda: SimpleNamespace(users=operations),
     )
 
@@ -170,7 +170,7 @@ def test_service_account_get_and_list_json_use_object_and_array_shapes(
     account = {'unique_id': MFID, 'username': 'service-user'}
     operations = SimpleNamespace(list=MagicMock(return_value=[account]))
     monkeypatch.setattr(
-        'crucible.client.CrucibleClient',
+        'crucible.config.get_client',
         lambda: SimpleNamespace(service_accounts=operations),
     )
     monkeypatch.setattr(
