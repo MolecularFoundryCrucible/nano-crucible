@@ -1060,3 +1060,61 @@ def test_service_account_list_shows_platform_role(monkeypatch, capsys):
     assert 'PLATFORM ROLE' in output
     assert 'contributor' in output and 'none' in output
     list_admin.assert_called_once_with(q='bot', limit=10)
+
+
+def test_sa_get_uses_the_admin_record_and_names_groups(monkeypatch, capsys):
+    from crucible.models import AccountCapabilities
+
+    basic = {'unique_id': MFID, 'username': 'scope-bot'}
+    admin = {**basic, 'platform_role': 'contributor',
+             'api_key_status': {'valid': True, 'created_at': '2026-09-10',
+                                'expires_at': '2027-09-10'}}
+    instrument_group = '0tmz428dmnrf3000128mhfcmdg'
+    client = SimpleNamespace(
+        can_elevate=False,
+        capabilities=AccountCapabilities(can_manage_service_accounts=True),
+        service_accounts=SimpleNamespace(
+            get=MagicMock(return_value=basic),
+            get_admin=MagicMock(return_value=admin),
+            list_access_groups=MagicMock(return_value=[instrument_group, MFID])),
+        get=MagicMock(return_value={'resource_type': 'instrument',
+                                    'instrument_id': 'scope-1'}),
+    )
+    monkeypatch.setattr('crucible.config.get_client', lambda: client)
+
+    service_account_cli._execute_get(SimpleNamespace(
+        sa='scope-bot', unique_id=None, username=None, groups=True, json=False))
+
+    out = capsys.readouterr().out
+    assert 'contributor' in out and 'valid' in out
+    assert 'scope-1' in out and 'instrument' in out
+    assert '(own group)' in out
+
+
+def test_sa_get_without_admin_rights_skips_the_admin_record(monkeypatch, capsys):
+    from crucible.models import AccountCapabilities
+
+    get_admin = MagicMock()
+    client = SimpleNamespace(
+        can_elevate=False,
+        capabilities=AccountCapabilities(can_manage_service_accounts=False),
+        service_accounts=SimpleNamespace(
+            get=MagicMock(return_value={'unique_id': MFID, 'username': 'scope-bot'}),
+            get_admin=get_admin),
+    )
+    monkeypatch.setattr('crucible.config.get_client', lambda: client)
+
+    service_account_cli._execute_get(SimpleNamespace(
+        sa='scope-bot', unique_id=None, username=None, groups=False, json=False))
+
+    get_admin.assert_not_called()
+    assert 'Platform role' not in capsys.readouterr().out
+
+
+def test_relative_time_reads_naturally_in_the_future():
+    from datetime import timedelta
+    from crucible.cli.term import _rel
+
+    assert _rel(-timedelta(days=340)) == 'in 11mo'
+    assert _rel(-timedelta(days=3)) == 'in 3d'
+    assert _rel(timedelta(days=3)) == '3d ago'

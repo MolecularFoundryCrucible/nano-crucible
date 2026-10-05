@@ -231,11 +231,11 @@ Service-account creation uses the same username rules and interactive validation
 |---|---|
 | `sa create` | Create a service account |
 | `sa rotate-key USER` | Generate a new key and invalidate the previous key |
-| `sa get USER` | Show a service account |
+| `sa get USER [--groups]` | Show a service account; administrators also see its platform role and API key status, and `--groups` lists the projects and instruments it belongs to |
 | `sa list [-q TEXT]` | List service accounts with their platform roles; `-q` filters by username or name |
 | `sa update USER` | Update a service account |
 | `sa edit USER` | Edit a service account interactively |
-| `sa show USER` | Show a service account with its platform role and API key status |
+| `sa show USER` | Alias for `sa get` |
 | `sa set-role USER ROLE` | Set a service account's platform role |
 | `sa list-access-groups USER` | List access groups for a service account |
 | `sa add-access-group USER GROUP` | Deprecated; use `project add-user` or `instrument bind-sa` |

@@ -464,8 +464,8 @@ class CrucibleCompleter(Completer):
         if len(words) < 2:
             return False
         # Complete the SA positional (MFID or username) for subcommands that take one.
-        _SA_SUBS = {'get', 'rotate-key', 'edit', 'update', 'list-access-groups',
-                    'add-access-group', 'remove-access-group'}
+        _SA_SUBS = {'get', 'show', 'set-role', 'rotate-key', 'edit', 'update',
+                    'list-access-groups', 'add-access-group', 'remove-access-group'}
         if words[1] not in _SA_SUBS:
             return False
         if trailing_space and len(words) == 2:

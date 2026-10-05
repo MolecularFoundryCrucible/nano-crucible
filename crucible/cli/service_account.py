@@ -40,19 +40,75 @@ def register_subcommand(subparsers):
         _register_remove_access_group(sa_subparsers)
 
 
-def _show_sa(sa, key=None):
-    """Display a service account record."""
+def _show_sa(sa, key=None, groups=None):
+    """Display a service account record.
+
+    Shows the platform role and API key status when the record carries them
+    (the administrator view), and the groups it belongs to when given.
+    """
     _p = term.field_printer(14)
     term.header("Service Account")
-    _p("MFID",     sa.get('unique_id'))
-    _p("Username", sa.get('username'))
-    name = term.fmt_name(sa, fallback_username=False)
-    if name:
+    _p("Username", term.bold(sa.get('username')) if sa.get('username') else None)
+    _p("MFID",     term.cyan(sa.get('unique_id')) if sa.get('unique_id') else None)
+    name = ' '.join(p for p in (sa.get('first_name'), sa.get('last_name')) if p)
+    if name and name != sa.get('username'):
         _p("Name", name)
+    if sa.get('email'):
+        _p("Email", sa.get('email'))
+
+    if 'platform_role' in sa or 'api_key_status' in sa:
+        term.subheader("Authorization")
+        _p("Platform role", term.platform_role_label(sa.get('platform_role')))
+        status = sa.get('api_key_status') or {}
+        if status:
+            valid = status.get('valid')
+            _p("API key", term.green('valid') if valid else term.red('invalid'))
+            _p("Issued", term.fmt_ts(status.get('created_at')))
+            _p("Expires", term.fmt_ts(status.get('expires_at')))
+        else:
+            _p("API key", term.dim('none issued'))
+
+    if groups is not None:
+        term.subheader(f"Member of ({len(groups)})")
+        _group_table(groups)
+
     if key:
         print()
         print(f"  {term.yellow('API Key')}  {term.bold(key)}")
-        print(f"  {term.dim('Store this now — it will not be shown again.')}")
+        print(f"  {term.dim('Store this now; it will not be shown again.')}")
+
+
+def _describe_groups(client, group_ids, own_id=None):
+    """Name a service account's access groups by the project or instrument behind them.
+
+    Access groups are named by the MFID of what they grant: a project group
+    by the project, an instrument operator group by the instrument. The
+    account's personal group is named by its own MFID.
+    """
+    described = []
+    for group_id in group_ids:
+        if group_id == own_id:
+            described.append({'group': group_id, 'kind': 'personal', 'label': '(own group)'})
+            continue
+        kind, label = 'group', None
+        try:
+            resource = client.get(group_id, include_owner=False, include_datasets=False)
+        except Exception:
+            resource = None
+        if resource:
+            kind = resource.get('resource_type') or 'group'
+            label = (resource.get('project_id') or resource.get('instrument_id')
+                     or resource.get('title') or resource.get('instrument_name'))
+        described.append({'group': group_id, 'kind': kind, 'label': label})
+    return described
+
+
+def _group_table(groups):
+    if not groups:
+        print(f"  {term.dim('No access groups.')}")
+        return
+    rows = [(g['label'] or term.dim('-'), g['kind'], term.cyan(g['group'])) for g in groups]
+    term.table(rows, ['Name', 'Kind', 'Group'], max_widths=[30, 12, 26])
 
 
 def _resolve_sa(client, unique_id=None, username=None, ambiguous=False):
@@ -204,6 +260,8 @@ Examples:
     group = parser.add_mutually_exclusive_group()
     group.add_argument('--unique-id', '-o', metavar='MFID',    help='(deprecated, use positional SA)')
     group.add_argument('--username',  '-u', metavar='USERNAME', help='(deprecated, use positional SA)')
+    parser.add_argument('--groups', '-g', action='store_true', default=False,
+                        help='Also list the projects and instruments it belongs to')
     parser.add_argument('--json', action='store_true', default=False,
                         help='Output as JSON object')
     parser.set_defaults(func=_execute_get)
@@ -215,10 +273,24 @@ def _execute_get(args):
         unique_id, username, ambiguous = _resolve_sa_ref(args)
         client = get_client()
         sa = _resolve_sa(client, unique_id=unique_id, username=username, ambiguous=ambiguous)
+        capabilities = getattr(client, 'capabilities', None)
+        if (getattr(client, 'can_elevate', False)
+                or getattr(capabilities, 'can_manage_service_accounts', False)):
+            try:
+                sa = client.service_accounts.get_admin(sa['unique_id'])
+            except Exception as e:
+                logger.debug(f"Administrator record unavailable: {e}")
+        groups = None
+        if getattr(args, 'groups', False):
+            group_ids = client.service_accounts.list_access_groups(sa['unique_id'])
+            groups = _describe_groups(client, group_ids, sa['unique_id'])
         if getattr(args, 'json', False):
-            print(json.dumps(sa, indent=2, default=str))
+            payload = dict(sa)
+            if groups is not None:
+                payload['access_groups'] = groups
+            print(json.dumps(payload, indent=2, default=str))
         else:
-            _show_sa(sa)
+            _show_sa(sa, groups=groups)
     except SystemExit:
         raise
     except Exception as e:
@@ -277,44 +349,16 @@ def _execute_list(args):
 def _register_show(subparsers):
     parser = subparsers.add_parser(
         'show',
-        help='Show a service account with its role and key status (admin only)',
-        description='Show the administrative record for a service account, '
-                    'including its platform role and API key status.',
-        formatter_class=term.ColorHelpFormatter,
-        epilog="""
-Examples:
-    crucible service-account show SA_MFID
-    crucible service-account show SA_MFID --json
-"""
+        help='Alias for get',
+        description='Alias for "get": show a service account with its platform role, '
+                    'API key status (administrators), and optionally its groups.',
     )
-    parser.add_argument('sa', metavar='SA_MFID', help='Service account MFID')
+    parser.add_argument('sa', metavar='SA', help='MFID or username of the service account')
+    parser.add_argument('--groups', '-g', action='store_true', default=False,
+                        help='Also list the projects and instruments it belongs to')
     parser.add_argument('--json', action='store_true', default=False,
                         help='Output as JSON object')
-    parser.set_defaults(func=_execute_show)
-
-
-def _execute_show(args):
-    from crucible.config import get_client
-    try:
-        client = get_client()
-        sa = client.service_accounts.get_admin(args.sa)
-        if getattr(args, 'json', False):
-            print(json.dumps(sa, indent=2, default=str))
-            return
-        _show_sa(sa)
-        _p = term.field_printer(14)
-        _p("Platform role", term.platform_role_label(sa.get('platform_role')))
-        status = sa.get('api_key_status') or {}
-        if status:
-            valid = status.get('valid')
-            _p("Key", term.green('valid') if valid else term.red('invalid'))
-            _p("Issued", term.fmt_ts(status.get('created_at')))
-            _p("Expires", term.fmt_ts(status.get('expires_at')))
-        else:
-            _p("Key", term.dim('none issued'))
-    except Exception as e:
-        from .helpers import fail
-        fail("", e, args)
+    parser.set_defaults(func=_execute_get)
 
 
 def _register_set_role(subparsers):
@@ -479,6 +523,8 @@ Examples:
     group = parser.add_mutually_exclusive_group()
     group.add_argument('--unique-id', '-o', metavar='MFID',    help='(deprecated, use positional SA)')
     group.add_argument('--username',  '-u', metavar='USERNAME', help='(deprecated, use positional SA)')
+    parser.add_argument('--json', action='store_true', default=False,
+                        help='Output as JSON array')
     parser.set_defaults(func=_execute_list_access_groups)
 
 
@@ -489,13 +535,13 @@ def _execute_list_access_groups(args):
         client = get_client()
         sa = _resolve_sa(client, unique_id=unique_id, username=username, ambiguous=ambiguous)
 
-        groups = client.service_accounts.list_access_groups(sa.get('unique_id'))
-        term.header(f"Access Groups · {sa.get('username') or sa.get('unique_id')} ({len(groups)})")
-        if not groups:
-            print(f"  {term.dim('No access groups found.')}")
+        group_ids = client.service_accounts.list_access_groups(sa.get('unique_id'))
+        groups = _describe_groups(client, group_ids, sa.get('unique_id'))
+        if getattr(args, 'json', False):
+            print(json.dumps(groups, indent=2, default=str))
             return
-        for g in groups:
-            print(f"  {g}")
+        term.header(f"Access Groups · {sa.get('username') or sa.get('unique_id')} ({len(groups)})")
+        _group_table(groups)
 
     except SystemExit:
         raise

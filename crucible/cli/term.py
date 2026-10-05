@@ -311,7 +311,18 @@ def _rel(delta) -> str:
     """Human-readable relative label for a timedelta."""
     days = delta.days
     if days < 0:
-        return 'in the future'
+        ahead = -delta
+        days = ahead.days
+        if days == 0:
+            h = ahead.seconds // 3600
+            return f"in {h}h" if h else "in under an hour"
+        if days == 1:
+            return 'tomorrow'
+        if days < 30:
+            return f"in {days}d"
+        if days < 365:
+            return f"in {days // 30}mo"
+        return f"in {days // 365}y"
     if days == 0:
         h = delta.seconds // 3600
         m = (delta.seconds % 3600) // 60
