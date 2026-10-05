@@ -110,8 +110,7 @@ def _unuse(shell, line):
 
 def _refresh(shell, line):
     try:
-        from crucible.config import config as _cfg
-        _cfg.reload()
+        shell.rebind_client()
     except Exception:
         pass
     shell.refresh()

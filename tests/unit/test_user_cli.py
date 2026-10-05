@@ -149,3 +149,31 @@ def test_edit_updates_mfid_backed_human(monkeypatch):
     ))
 
     client.users.update.assert_called_once_with(user_mfid, first_name='Updated')
+
+
+def test_whoami_shows_authorization(monkeypatch, capsys):
+    from types import SimpleNamespace
+    from unittest.mock import MagicMock
+
+    from crucible.cli import whoami
+    from crucible.config import config
+    from crucible.models import AccountAuthorization, AccountCapabilities
+
+    client = MagicMock(
+        privilege_mode=None,
+        is_elevated=True,
+        authorization=AccountAuthorization(platform_role='admin', can_elevate=True),
+        capabilities=AccountCapabilities(can_create_project=True,
+                                         can_create_for_others=False),
+    )
+    client.whoami.return_value = {'user_info': {'unique_id': '0000-0001-6402-3752',
+                                                'first_name': 'A', 'last_name': 'B'}}
+    monkeypatch.setattr(config, '_client', client)
+
+    whoami.execute(SimpleNamespace(verbose=False, debug=False))
+
+    out = capsys.readouterr().out
+    assert 'admin' in out
+    assert 'elevated' in out and '(default)' in out
+    assert 'create projects' in out
+    assert 'create for other users' not in out

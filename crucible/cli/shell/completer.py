@@ -27,6 +27,7 @@ class CrucibleCompleter(Completer):
         self._project_search_cache = {}
         self._instrument_search_cache = {}
         self._state             = state or {}
+        self.hidden             = set()
 
     def _lazy_projects(self):
         if not self._projects and self._client is not None:
@@ -291,6 +292,8 @@ class CrucibleCompleter(Completer):
             prefix = words[0] if words else ''
             candidates = list(self._top) + ['use', 'unuse', 'refresh', 'reload', 'debug', 'elevated', 'cd', 'ls', 'pwd']
             for name in candidates:
+                if name in self.hidden:
+                    continue
                 if name.startswith(prefix):
                     yield Completion(name + ' ', start_position=-len(prefix))
             return

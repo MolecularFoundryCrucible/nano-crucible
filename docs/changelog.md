@@ -10,11 +10,14 @@
 - Deletion request and audit lists accept scope, project, sort, and direction filters, and deletion request details show whether the caller can review them.
 - A `privilege_mode` client keyword, `privilege_mode` config key, and global `--elevated` CLI flag select normal or elevated access. The default is unchanged (administrators run elevated) and will become `normal` in a future release.
 - The interactive shell toggles elevation with `elevated on|off` and shows an `ELEVATED` toolbar badge, and one-shot commands print a notice when elevation comes from configuration rather than the flag.
-- `client.authorization`, `client.capabilities`, and `client.can_elevate` expose the caller's platform role and account capabilities, read once from `/account/profile`.
+- `client.authorization`, `client.capabilities`, and `client.can_elevate` expose the caller's platform role and account capabilities as typed models, read once from `/account/profile` and re-read with `client.refresh_profile()`.
+- `crucible whoami` shows the caller's platform role, privilege mode, and account capabilities.
+- The interactive shell lists pending deletion reviews and join requests at startup and on `refresh`.
 - Project, instrument, and service-account creation refuse up front when the caller's account capabilities do not allow it.
 
 ### Changed
 
+- The interactive shell hides service-account commands from completion for callers who cannot manage them, and `refresh` now re-reads permissions.
 - Administrator-only operations request elevation per call, so service-account administration and deletion review keep working without enabling elevation globally.
 - `crucible deletion list` defaults to the `reviewable` scope for callers who can review, keeping the queue visible when ordinary reads are ACL-scoped.
 - Unrecognized dataset and sample list filters now raise a local `ValueError` naming the closest valid parameter instead of a server-side 422.

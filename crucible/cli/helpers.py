@@ -554,7 +554,7 @@ def require_capability(client, capability: str, action: str) -> None:
     from . import term
 
     capabilities = getattr(client, 'capabilities', None)
-    if capabilities and not capabilities.get(capability):
+    if getattr(capabilities, capability, None) is False:
         print(term.red('Not permitted', stream=sys.stderr), file=sys.stderr)
         print(f"Your account is not permitted to {action}.", file=sys.stderr)
         sys.exit(1)

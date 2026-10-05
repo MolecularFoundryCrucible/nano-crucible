@@ -18,6 +18,7 @@ from collections import deque
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
 
+from .. import term
 from ._common import PROMPT, shell_color_depth, shell_html, shell_style_rules, vlen
 from .banner import print_shell_banner
 from .builtins import find_builtin
@@ -44,7 +45,6 @@ class CrucibleShell:
         self.client    = None
         self.state     = {}
         self.completer = None
-        self.is_admin  = False
         self._session  = None         # prompt_toolkit PromptSession
         self._clock_stop = threading.Event()
 
@@ -122,7 +122,6 @@ class CrucibleShell:
         )
         deletions     = fetch_deletions(self.client)
         join_requests = fetch_join_requests(self.client)
-        self.is_admin = self.client.can_elevate or deletions is not None
         service_accounts = (fetch_service_accounts(self.client)
                             if self._can_manage_service_accounts() else None)
 
@@ -142,10 +141,61 @@ class CrucibleShell:
             'recent_mfids':      deque(maxlen=15),
         }
 
+    def _pending_counts(self):
+        """Pending deletion reviews and join requests awaiting this caller."""
+        deletions = [
+            d for d in self.state.get('deletions') or []
+            if ((d.get('capabilities') or {}).get('can_review') is not False)
+        ]
+        return len(deletions), len(self.state.get('join_requests') or [])
+
+    def _print_pending(self):
+        """Mention pending reviews once, so they do not need a toolbar slot."""
+        deletions, joins = self._pending_counts()
+        parts = []
+        if deletions:
+            parts.append(f"{deletions} deletion request{'s' if deletions != 1 else ''} "
+                         f"to review ({term.cyan('deletion list')})")
+        if joins:
+            parts.append(f"{joins} join request{'s' if joins != 1 else ''} "
+                         f"to review ({term.cyan('ag list')})")
+        if parts:
+            print(f"Pending: {'; '.join(parts)}.")
+
+    def _hidden_commands(self):
+        """Top-level commands this caller cannot use, kept out of completion."""
+        hidden = set()
+        if not self._can_manage_service_accounts():
+            hidden.update({'sa', 'service-account'})
+        return hidden
+
     def _can_manage_service_accounts(self):
         """Whether service-account administration is reachable for this caller."""
         return bool(self.client.can_elevate
-                    or self.client.capabilities.get('can_manage_service_accounts'))
+                    or self.client.capabilities.can_manage_service_accounts)
+
+    def rebind_client(self, keep_privilege_mode=True):
+        """Reload config and adopt the fresh shared client.
+
+        config.reload() discards the shared client, so the shell must pick up
+        the new one or its toolbar and completion would drift from the client
+        commands use. A session elevation toggle survives unless the caller
+        is applying a config change that should replace it.
+        """
+        from crucible.config import config as _cfg, get_client
+
+        previous = self.client.privilege_mode if self.client else None
+        _cfg.reload()
+        self.client = get_client()
+        if keep_privilege_mode and previous is not None:
+            self.client.privilege_mode = previous
+        if self.completer is not None:
+            self.completer._client       = self.client
+            self.completer._unlink_cache = {}
+            self.completer._user_search_cache.clear()
+            self.completer._entity_search_cache.clear()
+            self.completer._project_search_cache.clear()
+            self.completer._instrument_search_cache.clear()
 
     def _apply_elevated(self, on):
         """Set elevation on the shared client and the toolbar state.
@@ -156,6 +206,9 @@ class CrucibleShell:
         self.state['elevated'] = on
         if self.client is not None:
             self.client.privilege_mode = 'elevated' if on else 'normal'
+            self.client.refresh_profile()
+            if getattr(self, 'completer', None) is not None:
+                self.completer.hidden = self._hidden_commands()
 
     def refresh(self):
         """Re-fetch projects, user info, deletions, join requests, and service accounts. Updates state + completer."""
@@ -163,16 +216,17 @@ class CrucibleShell:
             fetch_projects, fetch_deletions, fetch_join_requests, fetch_service_accounts,
             fetch_user_label, fetch_project_context, fetch_api_label, fetch_api_attention,
         )
+        self.client.refresh_profile()
         with ThreadPoolExecutor(max_workers=4) as pool:
             proj_f = pool.submit(fetch_projects,      self.client)
             del_f  = pool.submit(fetch_deletions,     self.client)
             jr_f   = pool.submit(fetch_join_requests, self.client)
-            sa_f   = pool.submit(fetch_service_accounts, self.client)
+            sa_f   = (pool.submit(fetch_service_accounts, self.client)
+                      if self._can_manage_service_accounts() else None)
             new_projects         = proj_f.result()
             new_deletions        = del_f.result()
             new_join_requests    = jr_f.result()
-            new_service_accounts = sa_f.result()
-        self.is_admin = self.client.can_elevate or new_deletions is not None
+            new_service_accounts = sa_f.result() if sa_f else None
         self.state['elevated']         = self.client.is_elevated
         self.state['projects']         = new_projects
         self.state['user_label']       = fetch_user_label(self.client)
@@ -193,7 +247,9 @@ class CrucibleShell:
             self.completer._entity_search_cache.clear()
             self.completer._project_search_cache.clear()
             self.completer._instrument_search_cache.clear()
+            self.completer.hidden = self._hidden_commands()
         print(f"Refreshed: {len(new_projects)} projects, user info reloaded.")
+        self._print_pending()
 
     def _toolbar(self):
         from prompt_toolkit.application import get_app
@@ -340,8 +396,8 @@ class CrucibleShell:
             inline_elevated = getattr(args, 'elevated', False)
             session_mode = self.client.privilege_mode if self.client else None
             session_elevated = self.state.get('elevated', False)
-            if inline_elevated:
-                self._apply_elevated(True)
+            if inline_elevated and self.client is not None:
+                self.client.privilege_mode = 'elevated'
             if hasattr(args, 'func'):
                 args._shell_state = self.state
                 try:
@@ -365,7 +421,7 @@ class CrucibleShell:
             logger.error(f"Error: {e}")
 
         # Re-fetch pending deletions after any deletion command (admin only)
-        if (self.is_admin and len(words) >= 2
+        if (len(words) >= 2
                 and words[0] == 'deletion' and words[1] in ('approve', 'reject', 'request')):
             from ..helpers import fetch_deletions
             new_deletions = fetch_deletions(self.client)
@@ -383,7 +439,8 @@ class CrucibleShell:
                 self.completer._join_requests = new_join_requests
 
         # Re-fetch service accounts after any sa/service-account command that changes the list
-        if (self.is_admin and len(words) >= 2 and words[0] in ('sa', 'service-account')
+        if (self._can_manage_service_accounts() and len(words) >= 2
+                and words[0] in ('sa', 'service-account')
                 and words[1] in ('create', 'update', 'rotate-key')):
             from ..helpers import fetch_service_accounts
             new_service_accounts = fetch_service_accounts(self.client)
@@ -392,18 +449,8 @@ class CrucibleShell:
                 self.completer._service_accounts = new_service_accounts or []
 
         if len(words) >= 2 and words[0] == 'config' and words[1] in ('set', 'unset', 'edit'):
-            from crucible.config import config as _cfg
-            from crucible.config import get_client
             try:
-                _cfg.reload()
-                self.client = get_client()
-                if self.completer is not None:
-                    self.completer._client       = self.client
-                    self.completer._unlink_cache = {}
-                    self.completer._user_search_cache.clear()
-                    self.completer._entity_search_cache.clear()
-                    self.completer._project_search_cache.clear()
-                    self.completer._instrument_search_cache.clear()
+                self.rebind_client(keep_privilege_mode=False)
             except Exception:
                 pass
             self.refresh()
@@ -442,6 +489,8 @@ class CrucibleShell:
                 "Use 'use PROJECT_ID' to save a selection after unsetting the environment variable."
             )
 
+        self._print_pending()
+
         self.completer = CrucibleCompleter(
             self.parser,
             client=self.client,
@@ -451,6 +500,7 @@ class CrucibleShell:
             service_accounts=self.state['service_accounts'],
             state=self.state,
         )
+        self.completer.hidden = self._hidden_commands()
 
         kb = KeyBindings()
         from .keybindings import register as _register_keybindings

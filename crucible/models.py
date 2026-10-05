@@ -47,6 +47,33 @@ class ResourceCapabilities(BaseModel):
     model_config = ConfigDict(from_attributes=True, extra='allow')
 
 
+class AccountCapabilities(BaseModel):
+    """Account-level actions the caller may take, from /account/profile.
+
+    A flag is None when the server did not report it, in which case callers
+    should let the API decide rather than refuse.
+    """
+
+    can_manage_service_accounts: Optional[bool] = None
+    can_create_project: Optional[bool] = None
+    can_register_instrument: Optional[bool] = None
+    can_create_sample: Optional[bool] = None
+    can_create_dataset: Optional[bool] = None
+    can_create_for_others: Optional[bool] = None
+
+    model_config = ConfigDict(from_attributes=True, extra='allow')
+
+
+class AccountAuthorization(BaseModel):
+    """The caller's platform role and privilege mode, from /account/profile."""
+
+    platform_role: Optional[str] = None
+    effective_privilege_mode: Optional[Literal['normal', 'elevated']] = None
+    can_elevate: bool = False
+
+    model_config = ConfigDict(from_attributes=True, extra='allow')
+
+
 class InstrumentReference(BaseModel):
     """Lightweight instrument identity embedded in dataset responses."""
 

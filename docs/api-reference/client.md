@@ -41,14 +41,14 @@ Administrator-only operations, such as service-account administration and deleti
 
 ## Authorization and capabilities
 
-`client.authorization` and `client.capabilities` expose the caller's platform role and account-level permissions, read once from `/account/profile` in normal mode and cached. Use them to decide whether an action is worth attempting.
+`client.authorization` (an `AccountAuthorization`) and `client.capabilities` (an `AccountCapabilities`) expose the caller's platform role and account-level permissions. They are read once from `/account/profile` and cached; call `client.refresh_profile()` to re-read them, for example after changing `privilege_mode` or after an administrator changes your role.
 
 ```python
-if client.capabilities.get("can_create_project"):
+if client.capabilities.can_create_project:
     client.projects.create(...)
 ```
 
-Both return an empty dict if the profile cannot be read, so callers degrade to attempting the operation and letting the API decide.
+A flag the profile did not report is `None`, so check for an explicit `False` before refusing; otherwise attempt the operation and let the API decide.
 
 ## Reference
 

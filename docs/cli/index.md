@@ -36,7 +36,7 @@ Shell-specific commands:
 |---|---|
 | `use PROJECT_ID` | Validate and save the current project (tab-completes project IDs) |
 | `unuse` | Clear the saved current project |
-| `refresh` | Re-fetch project list and user info |
+| `refresh` | Re-read config, permissions, projects, and pending reviews |
 | `reload` | Re-exec the process (picks up code changes) |
 | `debug on` / `debug off` | Toggle debug logging |
 | `elevated on` / `elevated off` | Toggle platform-administrator elevation; an `ELEVATED` badge appears in the toolbar while it is on. It starts on for platform administrators unless `privilege_mode` is set to `normal` |

@@ -12,10 +12,13 @@ import logging
 from requests.adapters import HTTPAdapter
 from urllib.parse import urlparse
 from urllib3.util.retry import Retry
-from typing import Optional, List, Dict, Any
+from typing import TYPE_CHECKING, Optional, List, Dict, Any
 from .constants import DEFAULT_PRIVILEGE_MODE, PRIVILEGE_MODES
 from .utils.deprecation import _deprecated, _deprecated_parameter
 from .utils.identifiers import is_mfid, require_canonical_identifier
+
+if TYPE_CHECKING:
+    from .models import AccountAuthorization, AccountCapabilities
 
 logger = logging.getLogger(__name__)
 
@@ -115,38 +118,49 @@ class CrucibleClient:
 
     def _load_profile(self, refresh: bool = False) -> None:
         """Populate the cached authorization and capability blocks."""
+        from .models import AccountAuthorization, AccountCapabilities
+
         if self._authorization is not None and not refresh:
             return
         try:
-            profile = self.account.profile(privilege_mode='normal')
+            profile = self.account.profile()
         except Exception:
-            self._authorization = {}
-            self._capabilities = {}
-            return
-        self._authorization = profile.get('authorization') or {}
-        self._capabilities = profile.get('capabilities') or {}
+            profile = {}
+        self._authorization = AccountAuthorization.model_validate(
+            profile.get('authorization') or {})
+        self._capabilities = AccountCapabilities.model_validate(
+            profile.get('capabilities') or {})
+
+    def refresh_profile(self) -> None:
+        """Re-read authorization and capabilities from /account/profile."""
+        self._load_profile(refresh=True)
 
     @property
-    def authorization(self) -> Dict:
-        """The caller's platform_role, effective_privilege_mode, and can_elevate.
+    def authorization(self) -> 'AccountAuthorization':
+        """The caller's platform_role and whether they can elevate.
 
-        Fetched once from /account/profile and cached. Returns an empty dict if
-        the profile cannot be read, so callers degrade to "no extra authority"
-        rather than failing.
+        Fetched once from /account/profile and cached; call refresh_profile()
+        to re-read it. An unreadable profile yields empty values, so callers
+        degrade to "no extra authority" rather than failing.
         """
         self._load_profile()
         return self._authorization
 
     @property
-    def capabilities(self) -> Dict:
-        """The caller's account-level capability flags, cached like authorization."""
+    def capabilities(self) -> 'AccountCapabilities':
+        """The caller's account-level capability flags, cached like authorization.
+
+        They describe the authority of the privilege mode the client was in
+        when the profile was read; call refresh_profile() after changing
+        privilege_mode.
+        """
         self._load_profile()
         return self._capabilities
 
     @property
     def can_elevate(self) -> bool:
         """Whether this caller may request elevated privilege mode at all."""
-        return bool(self.authorization.get('can_elevate'))
+        return self.authorization.can_elevate
 
     @property
     def is_elevated(self) -> bool:
