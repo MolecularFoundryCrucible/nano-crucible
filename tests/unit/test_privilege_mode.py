@@ -414,3 +414,26 @@ def test_rebind_keeps_the_session_privilege_mode(monkeypatch):
     monkeypatch.setattr('crucible.config.get_client', lambda: other)
     instance.rebind_client(keep_privilege_mode=False)
     assert other.privilege_mode is None
+
+
+def test_reload_keeps_the_client_unless_its_settings_change(monkeypatch):
+    from crucible.config import config
+
+    sentinel = object()
+    monkeypatch.setattr(config, '_client', sentinel)
+    data = {'api_url': 'https://example.test/api/v3', 'api_key': 'k',
+            'current_project': 'a'}
+
+    def load():
+        config._data.update(data)
+
+    monkeypatch.setattr(config, '_load', load)
+    config._data.update(data)
+
+    data['current_project'] = 'b'
+    config.reload()
+    assert config._client is sentinel
+
+    data['api_key'] = 'other'
+    config.reload()
+    assert config._client is None

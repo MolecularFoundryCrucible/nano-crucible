@@ -310,12 +310,22 @@ class Config:
             self._client = CrucibleClient(self.api_url, self.api_key)
         return self._client
 
+    # Settings a CrucibleClient is built from; changing one invalidates it.
+    _CLIENT_KEYS = ('api_url', 'api_key', 'privilege_mode')
+
     def reload(self):
-        """Reload configuration from all sources."""
+        """Reload configuration from all sources.
+
+        The shared client survives unless a setting it was built from
+        changed, so saving e.g. the current project keeps its HTTP session,
+        cached profile, and any session privilege toggle.
+        """
+        before = {key: self._data.get(key) for key in self._CLIENT_KEYS}
         self._data.clear()
         self._sources.clear()
-        self._client = None
         self._load()
+        if any(self._data.get(key) != value for key, value in before.items()):
+            self._client = None
 
     def source(self, key):
         """Return the source of an effective configuration value."""
