@@ -741,6 +741,12 @@ def parse_sa_ref(value: str) -> dict:
     return {'username': value}
 
 
+def add_user_reference_argument(parser) -> None:
+    """Add the --user/-u option shared by member-management commands."""
+    parser.add_argument('--user', '-u', metavar='USER', required=True,
+                        help='ORCID, MFID, username, or email of the user')
+
+
 def resolve_user_id(client, value: str) -> str:
     """Resolve a user reference to its canonical ORCID or MFID.
 

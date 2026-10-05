@@ -12,6 +12,8 @@
 - The interactive shell toggles elevation with `elevated on|off` and shows an `ELEVATED` toolbar badge, and one-shot commands print a notice when elevation comes from configuration rather than the flag.
 - `client.authorization`, `client.capabilities`, and `client.can_elevate` expose the caller's platform role and account capabilities as typed models, read once from `/account/profile` and re-read with `client.refresh_profile()`.
 - `instrument update --instrument-id` renames an instrument.
+- Instrument maintainers: `client.instruments.get_users()`, `add_user()`, `remove_user()`, and `update_user_role()`, `get(..., include_members=True)` with a typed `members` field, and the `instrument list-users`, `add-user`, `remove-user`, and `update-user-role` commands.
+- `client.instruments.list()` and `search()` accept `affiliation` (`owner`, `maintainer`), `list()` accepts the exact-match instrument filters, and `instrument list` gains `--mine` and filter options.
 - `crucible whoami` shows the caller's platform role, privilege mode, and account capabilities.
 - `dataset list` and `sample list` accept `--name`, `--missing FIELD`, `--sample-mfid`/`--dataset-mfid`, and `--description` (samples), and `dataset facets`/`sample facets` accept the same filters as the list commands.
 - The interactive shell completes measurement, session, data format, and sample type values from facet counts in the current or typed project.
@@ -20,6 +22,7 @@
 
 ### Changed
 
+- Instrument operations accept an instrument slug as well as an MFID, resolving it through the case-insensitive slug lookup.
 - `dataset list` and `sample list` print oldest to newest so the newest record is next to the prompt, follow `--sort`/`--direction` instead of re-sorting by name, and show a flat table unless `--group-by` is given.
 - `dataset list` and `sample list` without a project and no current project now list every accessible project instead of failing; `--all-projects` ignores the current project.
 - The interactive shell hides service-account commands from completion for callers who cannot manage them, and `refresh` now re-reads permissions.

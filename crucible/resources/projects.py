@@ -98,48 +98,11 @@ class ProjectOperations(OwnershipMixin, AccessControlMixin, BaseResource):
             include_members=include_members,
         )
 
-    def _project_mfid(self, project_ref: str) -> str:
-        """Return the MFID for a project MFID or slug.
-
-        The generic /resources/{mfid}/... routes (ACL, ownership, metadata)
-        accept only MFIDs, while project commands are usually given a slug.
-        """
+    def _resource_mfid(self, project_ref: str) -> str:
+        """Return the MFID for a project MFID or slug (slugs ignore case)."""
         if is_mfid(project_ref):
             return project_ref
-        project = self._get_by_project_id(project_ref)
-        if not project:
-            raise ValueError(f"Project not found: {project_ref}")
-        return project['unique_id']
-
-    def list_access(self, project_ref: str):
-        return super().list_access(self._project_mfid(project_ref))
-
-    def set_access(self, project_ref: str, kind: str, principal: str, permission: str):
-        return super().set_access(self._project_mfid(project_ref), kind, principal, permission)
-
-    def revoke_access(self, project_ref: str, kind: str, principal: str):
-        return super().revoke_access(self._project_mfid(project_ref), kind, principal)
-
-    def set_public(self, project_ref: str):
-        return super().set_public(self._project_mfid(project_ref))
-
-    def set_private(self, project_ref: str):
-        return super().set_private(self._project_mfid(project_ref))
-
-    def transfer_ownership(self, project_ref: str, new_owner: str, confirm: bool = False):
-        return super().transfer_ownership(self._project_mfid(project_ref), new_owner,
-                                          confirm=confirm)
-
-    def get_scientific_metadata(self, project_ref: str) -> dict:
-        return super().get_scientific_metadata(self._project_mfid(project_ref))
-
-    def replace_scientific_metadata(self, project_ref: str, metadata: dict) -> dict:
-        return super().replace_scientific_metadata(self._project_mfid(project_ref), metadata)
-
-    def update_scientific_metadata(self, project_ref: str, metadata: dict,
-                                   overwrite: bool = False) -> dict:
-        return super().update_scientific_metadata(self._project_mfid(project_ref),
-                                                  metadata, overwrite=overwrite)
+        return self._get_by_project_id(project_ref)['unique_id']
 
     def _get_by_mfid(self, project_mfid: str, include_metadata: bool = False,
                      include_members: bool = False) -> Dict:

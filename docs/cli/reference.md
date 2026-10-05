@@ -153,8 +153,8 @@ The `access grant` commands accept `viewer`, `contributor`, `editor`, or `admin`
 
 | Command | Description |
 |---|---|
-| `instrument list` | List instruments |
-| `instrument get INSTRUMENT` | Show an instrument by MFID or instrument slug |
+| `instrument list` | List instruments; `--mine` lists those you own or maintain, and `--manufacturer`, `--model`, `--location`, `--type`, `--owner` filter exactly |
+| `instrument get INSTRUMENT` | Show an instrument by MFID or instrument slug (any casing); `--include-members` adds the owner and maintainers |
 | `instrument create` | Register an instrument |
 | `instrument update MFID` | Update an instrument record or scientific metadata |
 | `instrument set-status MFID STATUS` | Change an instrument lifecycle status |
@@ -162,6 +162,10 @@ The `access grant` commands accept `viewer`, `contributor`, `editor`, or `admin`
 | `instrument list-service-accounts MFID` | List service accounts bound as instrument operators |
 | `instrument bind-sa MFID SA_MFID` | Bind a service account as an instrument operator |
 | `instrument unbind-sa MFID SA_MFID` | Remove an instrument operator binding |
+| `instrument list-users INSTRUMENT` | List the owner and maintainers (visible to callers with a role) |
+| `instrument add-user INSTRUMENT --user USER [--role editor\|admin]` | Add or change a maintainer |
+| `instrument remove-user INSTRUMENT --user USER` | Remove a maintainer |
+| `instrument update-user-role INSTRUMENT USER ROLE` | Change a maintainer's role |
 | `instrument edit MFID` | Edit instrument fields interactively |
 | `instrument search QUERY [--status STATUS]` | Search names, types, and manufacturers with optional lifecycle filtering |
 | `instrument search-metadata QUERY` | Search scientific metadata; `search-md` is an alias |
@@ -170,6 +174,8 @@ The `access grant` commands accept `viewer`, `contributor`, `editor`, or `admin`
 | `instrument set-private MFID` | Remove public access from an instrument |
 
 The deprecated `publish` and `unpublish` command names remain temporarily available as aliases for `set-public` and `set-private`.
+
+Instrument commands accept an MFID or the instrument slug, which ignores case. An instrument has two separate kinds of access. Its owner and maintainers manage the instrument record: `editor` edits details, `admin` also changes status, binds service accounts, and grants access. Maintainer roles never grant access to datasets recorded with the instrument; only bound service accounts reach those, at `contributor`. Member commands check the instrument's `can_manage_access` capability before sending a change.
 
 ## User commands
 

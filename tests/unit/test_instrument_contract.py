@@ -416,3 +416,58 @@ def test_cli_lists_instrument_service_accounts(monkeypatch, capsys):
     output = capsys.readouterr().out
     assert 'instrument-operator' in output
     assert 'editor' in output
+
+
+def _instrument_cli(argv, client, monkeypatch):
+    import argparse
+    from crucible.cli import instrument as instrument_cli
+
+    monkeypatch.setattr('crucible.config.get_client', lambda: client)
+    parser = argparse.ArgumentParser()
+    instrument_cli.register_subcommand(parser.add_subparsers(dest='resource'))
+    args = parser.parse_args(['instrument'] + argv)
+    args.func(args)
+
+
+def test_add_user_refuses_without_manage_access(monkeypatch, capsys):
+    from unittest.mock import MagicMock
+
+    client = MagicMock()
+    client.instruments.get.return_value = {
+        'unique_id': '0tkn2knjast3h0008nyq9zps2c',
+        'capabilities': {'can_manage_access': False}}
+
+    with pytest.raises(SystemExit):
+        _instrument_cli(['add-user', 'titan', '--user', 'jdoe'], client, monkeypatch)
+
+    client.instruments.add_user.assert_not_called()
+    assert 'need admin' in capsys.readouterr().err
+
+
+def test_add_user_grants_the_requested_role(monkeypatch):
+    from unittest.mock import MagicMock
+    from crucible.models import AccessGrant
+
+    client = MagicMock()
+    client.instruments.get.return_value = {
+        'unique_id': '0tkn2knjast3h0008nyq9zps2c',
+        'capabilities': {'can_manage_access': True}}
+    client.instruments.add_user.return_value = AccessGrant(
+        principal_id='u', principal_type='user', permission='admin')
+
+    _instrument_cli(['add-user', 'titan', '--user', 'jdoe', '--role', 'admin'],
+                    client, monkeypatch)
+
+    client.instruments.add_user.assert_called_once_with(
+        '0tkn2knjast3h0008nyq9zps2c', 'jdoe', 'admin')
+
+
+def test_list_mine_asks_for_owned_and_maintained(monkeypatch):
+    from unittest.mock import MagicMock
+
+    client = MagicMock()
+    client.instruments.list.return_value = []
+
+    _instrument_cli(['list', '--mine'], client, monkeypatch)
+
+    assert client.instruments.list.call_args.kwargs['affiliation'] == ['owner', 'maintainer']

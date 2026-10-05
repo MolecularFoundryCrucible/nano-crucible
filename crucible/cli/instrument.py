@@ -55,8 +55,125 @@ def register_subcommand(subparsers):
     _register_list_service_accounts(instrument_subparsers)
     _register_bind_sa(instrument_subparsers)
     _register_unbind_sa(instrument_subparsers)
+    _register_member_commands(instrument_subparsers)
     from ._access import register_access_commands
     register_access_commands(instrument_subparsers, 'instruments', id_metavar='INSTRUMENT_MFID')
+
+
+def _register_member_commands(subparsers):
+    """Register list-users, add-user, remove-user, and update-user-role.
+
+    Named like the project commands. Instrument members (maintainers) manage
+    the instrument record only; they never gain access to its datasets.
+    """
+    from .helpers import add_user_reference_argument
+
+    roles = ('editor', 'admin')
+    note = ("Maintainers manage the instrument record only; datasets recorded with the "
+            "instrument are reachable only by bound service accounts.")
+
+    parser = subparsers.add_parser(
+        'list-users', help='List the instrument owner and maintainers',
+        description=f'List the instrument owner and maintainers. {note}')
+    parser.add_argument('instrument', metavar='INSTRUMENT', help='Instrument MFID or instrument_id')
+    parser.set_defaults(func=_execute_list_users)
+
+    parser = subparsers.add_parser(
+        'add-user', help='Add a maintainer to an instrument',
+        description=f'Add or change a maintainer (requires admin on the instrument; '
+                    f'you cannot grant above your own role). {note}',
+        formatter_class=term.ColorHelpFormatter,
+        epilog="""
+Examples:
+    crucible instrument add-user titan --user jdoe
+    crucible instrument add-user titan --user jdoe --role admin
+""")
+    parser.add_argument('instrument', metavar='INSTRUMENT', help='Instrument MFID or instrument_id')
+    add_user_reference_argument(parser)
+    parser.add_argument('--role', choices=roles, default='editor',
+                        help='editor edits details; admin also changes status, binds '
+                             'service accounts, and grants access (default: editor)')
+    parser.set_defaults(func=_execute_add_user)
+
+    parser = subparsers.add_parser(
+        'remove-user', help='Remove a maintainer from an instrument',
+        description='Remove a maintainer (requires admin on the instrument)')
+    parser.add_argument('instrument', metavar='INSTRUMENT', help='Instrument MFID or instrument_id')
+    add_user_reference_argument(parser)
+    parser.set_defaults(func=_execute_remove_user)
+
+    parser = subparsers.add_parser(
+        'update-user-role', help="Change a maintainer's role",
+        description="Change a maintainer's role (requires admin on the instrument)")
+    parser.add_argument('instrument', metavar='INSTRUMENT', help='Instrument MFID or instrument_id')
+    parser.add_argument('user', metavar='USER', help='ORCID, MFID, username, or email')
+    parser.add_argument('role', choices=roles, help='New role')
+    parser.set_defaults(func=_execute_update_user_role)
+
+
+def _require_manage_access(client, instrument_ref):
+    """Exit before a doomed request when the caller cannot manage access."""
+    instrument = client.instruments.get(instrument_ref, include_owner=False)
+    capabilities = instrument.get('capabilities') or {}
+    if capabilities.get('can_manage_access') is False:
+        print(term.red('Not permitted', stream=sys.stderr), file=sys.stderr)
+        print("You need admin on this instrument to manage its maintainers.",
+              file=sys.stderr)
+        sys.exit(1)
+    return instrument['unique_id']
+
+
+def _execute_list_users(args):
+    from crucible.config import get_client
+    from .helpers import fail
+    try:
+        members = get_client().instruments.get_users(args.instrument)
+        if members is None:
+            logger.error("Members are visible only to the instrument owner, its "
+                         "maintainers, and platform administrators.")
+            sys.exit(1)
+        term.header(f"Members · {args.instrument} ({len(members)})")
+        _member_table(members)
+    except Exception as e:
+        fail("listing instrument members", e, args)
+
+
+def _execute_add_user(args):
+    from crucible.config import get_client
+    from .helpers import fail
+    try:
+        client = get_client()
+        mfid = _require_manage_access(client, args.instrument)
+        grant = client.instruments.add_user(mfid, args.user, args.role)
+        term.success(f"{grant.display_name or args.user} is now {grant.permission} "
+                     f"on {args.instrument}", args)
+    except Exception as e:
+        fail("adding instrument member", e, args)
+
+
+def _execute_remove_user(args):
+    from crucible.config import get_client
+    from .helpers import fail
+    try:
+        client = get_client()
+        mfid = _require_manage_access(client, args.instrument)
+        client.instruments.remove_user(mfid, args.user)
+        term.success(f"Removed {args.user} from {args.instrument}", args)
+    except Exception as e:
+        fail("removing instrument member", e, args)
+
+
+def _execute_update_user_role(args):
+    from crucible.config import get_client
+    from .helpers import fail
+    try:
+        client = get_client()
+        mfid = _require_manage_access(client, args.instrument)
+        grant = client.instruments.update_user_role(mfid, args.user, args.role)
+        term.success(f"{grant.display_name or args.user} is now {grant.permission} "
+                     f"on {args.instrument}", args)
+    except Exception as e:
+        fail("updating instrument member role", e, args)
 
 
 def _register_list(subparsers):
@@ -87,6 +204,18 @@ def _register_list(subparsers):
         choices=['active', 'maintenance', 'decommissioned'],
         help='Filter by lifecycle status (default: active)'
     )
+    parser.add_argument(
+        '--mine', action='store_true', default=False,
+        help='Only instruments you own or maintain'
+    )
+    for flag, dest, text in (
+        ('--manufacturer', 'manufacturer', 'Filter by manufacturer (exact match)'),
+        ('--model', 'model', 'Filter by model (exact match)'),
+        ('--location', 'location', 'Filter by location (exact match)'),
+        ('--type', 'instrument_type', 'Filter by instrument type (exact match)'),
+        ('--owner', 'owner_id', 'Filter by owner (username, ORCID, or MFID)'),
+    ):
+        parser.add_argument(flag, dest=dest, default=None, metavar='VALUE', help=text)
 
     parser.add_argument(
         '--json',
@@ -126,6 +255,12 @@ def _register_get(subparsers):
         action='store_true',
         dest='include_metadata',
         help='Include scientific metadata in output'
+    )
+    parser.add_argument(
+        '--include-members',
+        action='store_true',
+        dest='include_members',
+        help='Include the owner and maintainers (shown only to callers with a role)'
     )
 
     parser.add_argument(
@@ -297,19 +432,29 @@ def _execute_list(args):
     """Execute the 'instrument list' subcommand."""
     from crucible.config import get_client
     try:
+        from .helpers import resolve_user_id
         client = get_client()
+        filters = {name: getattr(args, name, None)
+                   for name in ('manufacturer', 'model', 'location', 'instrument_type')}
+        filters = {k: v for k, v in filters.items() if v is not None}
+        if getattr(args, 'owner_id', None):
+            filters['owner_id'] = resolve_user_id(client, args.owner_id)
+        if getattr(args, 'mine', False):
+            filters['affiliation'] = ['owner', 'maintainer']
         instruments = client.instruments.list(
             limit=args.limit,
             include_metadata=getattr(args, 'include_metadata', False) or _config.include_metadata,
             include_owner=True,
             status=getattr(args, 'status', None),
+            **filters,
         )
 
         if getattr(args, 'json', False):
             print(json.dumps(instruments, indent=2, default=str))
             return
 
-        term.header(f"Instruments ({len(instruments)})")
+        scope = ' · mine' if getattr(args, 'mine', False) else ''
+        term.header(f"Instruments{scope} ({len(instruments)})")
         if not instruments:
             print(f"  {term.dim('No instruments found.')}")
         else:
@@ -337,7 +482,7 @@ def _execute_list(args):
         fail("listing instruments", e, args)
 
 
-def _show_instrument(instrument, include_metadata=False):
+def _show_instrument(instrument, include_metadata=False, include_members=False):
     """Display instrument fields."""
     _p = term.field_printer(14)
 
@@ -362,6 +507,14 @@ def _show_instrument(instrument, include_metadata=False):
     _p("Owner",  term.fmt_owner(instrument))
     _p("Status", term.status_label(instrument.get('status')))
 
+    if include_members:
+        members = instrument.get('members')
+        if members is None:
+            _p("Members", term.dim('(visible only to the owner and maintainers)'))
+        else:
+            term.subheader(f"Members ({len(members)})")
+            _member_table(members)
+
     timing = (
         ("Created", instrument.get('creation_time')),
         ("Modified", instrument.get('modification_time')),
@@ -375,6 +528,25 @@ def _show_instrument(instrument, include_metadata=False):
     if include_metadata:
         from .helpers import show_scientific_metadata
         show_scientific_metadata(instrument.get('scientific_metadata'))
+
+
+def _member_table(members):
+    """Print instrument owner and maintainers as a table."""
+    from crucible.models import AccessGrant
+    from .helpers import user_explorer_url
+
+    if not members:
+        print(f"  {term.dim('No members with a role on this instrument.')}")
+        return
+    rows = []
+    for member in members:
+        grant = member if isinstance(member, AccessGrant) else AccessGrant.model_validate(member)
+        label = grant.slug or grant.principal_id
+        if grant.principal_type == 'user':
+            label = term.navigation_link(label, user_explorer_url(grant.principal_id))
+        rows.append((label, grant.display_name or '-', grant.principal_type,
+                     term.permission_label(grant.permission)))
+    term.table(rows, ['Member', 'Name', 'Kind', 'Role'], max_widths=[25, 25, 16, 12])
 
 
 def _execute_get(args):
@@ -399,6 +571,7 @@ def _execute_get(args):
             instrument = client.instruments.get(
                 args.instrument,
                 include_metadata=include_metadata,
+                include_members=getattr(args, 'include_members', False),
             )
 
         if instrument is None:
@@ -409,7 +582,8 @@ def _execute_get(args):
             import json
             print(json.dumps(instrument, indent=2, default=str))
         else:
-            _show_instrument(instrument, include_metadata=include_metadata)
+            _show_instrument(instrument, include_metadata=include_metadata,
+                             include_members=getattr(args, 'include_members', False))
 
     except Exception as e:
         from .helpers import fail

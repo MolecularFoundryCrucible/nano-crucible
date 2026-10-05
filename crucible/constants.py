@@ -15,6 +15,8 @@ RESOURCE_SORTS = ('created', 'updated', 'name')
 SORT_DIRECTIONS = ('asc', 'desc')
 VISIBILITIES = ('all', 'public', 'private')
 AFFILIATIONS = ('owner',)
+INSTRUMENT_AFFILIATIONS = ('owner', 'maintainer')
+INSTRUMENT_STATUSES = ('active', 'maintenance', 'decommissioned')
 
 # Facet grouping fields and bucket ordering.
 DATASET_FACET_FIELDS = ('session', 'measurement', 'data_format', 'owner',

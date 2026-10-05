@@ -621,6 +621,7 @@ class CrucibleCompleter(Completer):
         mfid_subcommands = {
             'update', 'edit', 'transfer-ownership', 'set-status',
             'list-service-accounts', 'bind-sa', 'unbind-sa',
+            'list-users', 'add-user', 'remove-user', 'update-user-role',
         }
         if subcommand == 'get':
             span = self._multiword_arg(text, 2)
@@ -637,9 +638,20 @@ class CrucibleCompleter(Completer):
         if not trailing_space and len(words) == 3 and not words[2].startswith('-'):
             yield from self._yield_instrument_completions(words[2], use_mfid=True)
             return True
-        if subcommand == 'transfer-ownership' and not trailing_space and len(words) == 4:
-            yield from self._yield_user_completions(words[3])
-            return True
+        if subcommand in {'transfer-ownership', 'update-user-role'} and len(words) in (3, 4):
+            if trailing_space and len(words) == 3:
+                yield from self._yield_user_completions('')
+                return True
+            if not trailing_space and len(words) == 4:
+                yield from self._yield_user_completions(words[3])
+                return True
+        if subcommand == 'update-user-role' and len(words) >= 4:
+            prefix = '' if trailing_space else words[-1]
+            if (trailing_space and len(words) == 4) or (not trailing_space and len(words) == 5):
+                for role in ('editor', 'admin'):
+                    if role.startswith(prefix):
+                        yield Completion(role + ' ', start_position=-len(prefix))
+                return True
         if subcommand in {'bind-sa', 'unbind-sa'}:
             if trailing_space and len(words) == 3:
                 yield from self._yield_service_account_completions('')

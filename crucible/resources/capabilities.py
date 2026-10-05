@@ -14,12 +14,17 @@ if TYPE_CHECKING:
 
 
 class AccessControlMixin:
-    """Access-control operations for resources that support generic ACLs."""
+    """Access-control operations for resources that support generic ACLs.
+
+    The /resources/{mfid}/... routes accept only MFIDs. Every method passes
+    its reference through ``_resource_mfid()`` (see BaseResource), which
+    resources with human-readable slugs override to resolve them.
+    """
 
     @_deprecated("list_access()")
     def get_access_groups(self, mfid: str) -> List[str]:
         """Return the names of access groups granted access to a resource."""
-        groups = self._request('get', f'/resources/{mfid}/access_groups')
+        groups = self._request('get', f'/resources/{self._resource_mfid(mfid)}/access_groups')
         return [group['group_name'] for group in groups]
 
     @_deprecated("set_access()")
@@ -27,13 +32,13 @@ class AccessControlMixin:
                          read: bool = True, write: bool = False) -> Dict:
         """Grant an access group read and optionally write access."""
         params = {'group_name': group_name, 'read': read, 'write': write}
-        return self._request('post', f'/resources/{mfid}/access_groups', params=params)
+        return self._request('post', f'/resources/{self._resource_mfid(mfid)}/access_groups', params=params)
 
     def list_access(self, mfid: str) -> List['AccessGrant']:
         """List every principal with access to a resource."""
         from ..models import AccessGrant
 
-        raw = self._request('get', f'/resources/{mfid}/access')
+        raw = self._request('get', f'/resources/{self._resource_mfid(mfid)}/access')
         return [AccessGrant.model_validate(grant) for grant in raw]
 
     def set_access(self, mfid: str, kind: str, principal: str,
@@ -48,25 +53,25 @@ class AccessControlMixin:
             raise ValueError(f"permission must be one of: {', '.join(sorted(allowed))}")
         raw = self._request(
             'put',
-            f'/resources/{mfid}/access/{kind}/{principal}',
+            f'/resources/{self._resource_mfid(mfid)}/access/{kind}/{principal}',
             json={'permission': permission},
         )
         return AccessGrant.model_validate(raw)
 
     def revoke_access(self, mfid: str, kind: str, principal: str) -> Dict:
         """Revoke a principal's access to a resource."""
-        return self._request('delete', f'/resources/{mfid}/access/{kind}/{principal}')
+        return self._request('delete', f'/resources/{self._resource_mfid(mfid)}/access/{kind}/{principal}')
 
     def set_public(self, mfid: str) -> 'AccessGrant':
         """Grant public viewer access to a resource."""
         from ..models import AccessGrant
 
-        raw = self._request('put', f'/resources/{mfid}/access/public')
+        raw = self._request('put', f'/resources/{self._resource_mfid(mfid)}/access/public')
         return AccessGrant.model_validate(raw)
 
     def set_private(self, mfid: str) -> Dict:
         """Revoke public access to a resource."""
-        return self._request('delete', f'/resources/{mfid}/access/public')
+        return self._request('delete', f'/resources/{self._resource_mfid(mfid)}/access/public')
 
     @_deprecated("set_public()")
     def publish(self, mfid: str) -> 'AccessGrant':
@@ -94,7 +99,7 @@ class OwnershipMixin:
 
         raw = self._request(
             'post',
-            f'/resources/{mfid}/transfer_ownership',
+            f'/resources/{self._resource_mfid(mfid)}/transfer_ownership',
             params={'confirm': confirm},
             json={'new_owner': new_owner},
         )
@@ -111,7 +116,7 @@ class ProjectAssignmentMixin:
 
         raw = self._request(
             'post',
-            f'/resources/{mfid}/project',
+            f'/resources/{self._resource_mfid(mfid)}/project',
             params={'confirm': confirm},
             json={'project_id': project_id},
         )

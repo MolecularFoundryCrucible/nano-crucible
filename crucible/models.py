@@ -148,6 +148,7 @@ class Instrument(CrucibleResource):
     other_id_source: Optional[str] = None
     status: Optional[str] = None
     capabilities: Optional[ResourceCapabilities] = None
+    members: Optional[List['AccessGrant']] = None
 
 
 class Project(BaseModel):
@@ -415,3 +416,6 @@ class DeletionAuditLog(BaseModel):
     deleted_at: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True, populate_by_name=True, extra='allow')
+
+
+Instrument.model_rebuild()

@@ -327,26 +327,29 @@ class TestInstrumentCreateRequiresInstrumentId:
         assert result['instrument_id'] == 'titan'
 
 
+INSTRUMENT_MFID = '0tkn2knjast3h0008nyq9zps2c'
+
+
 class TestBindServiceAccount:
     def test_bind(self, instrument_ops):
         instrument_ops._request = MagicMock(return_value=[
             {'unique_id': 'sa-1', 'username': 'sa', 'role': 'operator'},
         ])
 
-        result = instrument_ops.bind_service_account('mf-1', 'sa-1')
+        result = instrument_ops.bind_service_account(INSTRUMENT_MFID, 'sa-1')
 
         instrument_ops._request.assert_called_once_with(
-            'post', '/instruments/mf-1/service_accounts/sa-1')
+            'post', f'/instruments/{INSTRUMENT_MFID}/service_accounts/sa-1')
         assert isinstance(result[0], ProjectMember)
         assert result[0].role == 'operator'
 
     def test_unbind(self, instrument_ops):
         instrument_ops._request = MagicMock(return_value=[])
 
-        instrument_ops.unbind_service_account('mf-1', 'sa-1')
+        instrument_ops.unbind_service_account(INSTRUMENT_MFID, 'sa-1')
 
         instrument_ops._request.assert_called_once_with(
-            'delete', '/instruments/mf-1/service_accounts/sa-1')
+            'delete', f'/instruments/{INSTRUMENT_MFID}/service_accounts/sa-1')
 
 
 class TestProjectAddUserRole:
@@ -557,3 +560,53 @@ def test_project_mfids_skip_the_lookup(project_ops):
     project_ops.transfer_ownership(PROJECT_MFID, 'alice')
 
     assert request.call_count == 1
+
+
+def _instrument_lookup(instrument_ops, members=None):
+    def request(method, endpoint, **kwargs):
+        if endpoint == '/instruments':
+            return {'items': [{'unique_id': INSTRUMENT_MFID, 'instrument_id': 'xrd-1',
+                               'members': members}], 'total': 1}
+        return {'principal_id': 'u', 'principal_type': 'user', 'permission': 'editor'}
+    instrument_ops._request = MagicMock(side_effect=request)
+    return instrument_ops._request
+
+
+def test_instrument_slug_resolves_through_the_list_route(instrument_ops):
+    request = _instrument_lookup(instrument_ops)
+
+    instrument_ops.add_user('XRD-1', 'alice', 'editor')
+
+    lookup, grant = request.call_args_list
+    assert lookup.args[1] == '/instruments'
+    assert lookup.kwargs['params']['instrument_id'] == 'XRD-1'
+    assert grant.args[1] == f'/resources/{INSTRUMENT_MFID}/access/users/alice'
+    assert grant.kwargs['json'] == {'permission': 'editor'}
+
+
+def test_instrument_members_are_typed_or_none(instrument_ops):
+    _instrument_lookup(instrument_ops, members=[
+        {'principal_id': '0000-0002-1825-0097', 'principal_type': 'user',
+         'permission': 'owner', 'slug': 'jdoe', 'display_name': 'Jane Doe'}])
+    members = instrument_ops.get_users('xrd-1')
+    assert members[0].permission == 'owner'
+
+    _instrument_lookup(instrument_ops, members=None)
+    assert instrument_ops.get_users('xrd-1') is None
+
+
+def test_instrument_member_roles_exclude_owner(instrument_ops):
+    with pytest.raises(ValueError):
+        instrument_ops.add_user(INSTRUMENT_MFID, 'alice', 'owner')
+
+
+def test_instrument_list_accepts_affiliation_and_filters(instrument_ops):
+    instrument_ops._paginate = MagicMock(return_value=[])
+
+    instrument_ops.list(affiliation=['owner', 'maintainer'], manufacturer='FEI')
+
+    params = instrument_ops._paginate.call_args.args[1]
+    assert params['affiliation'] == ['owner', 'maintainer']
+    assert params['manufacturer'] == 'FEI'
+    with pytest.raises(ValueError):
+        instrument_ops.list(manufacturr='FEI')
