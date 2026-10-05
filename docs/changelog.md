@@ -22,6 +22,10 @@
 - The configuration file and its directory are now created with owner-only permissions, and existing files are restricted when a value is set or unset.
 - Installing the package no longer pulls in `ipywidgets` or `python-dotenv`.
 
+### Fixed
+
+- The interactive shell no longer records `config set api_key` or `API_KEY=` lines in its history file, and keeps that file readable only by its owner.
+
 ## 3.2.1
 
 ### Added
@@ -66,6 +70,7 @@
 
 ### Fixed
 
+- The interactive shell no longer records `config set api_key` or `API_KEY=` lines in its history file, and keeps that file readable only by its owner.
 - `crucible file delete` now requires interactive confirmation or an explicit `--yes` before permanently deleting a file.
 - Dataset file guidance now documents the API v3 record-first workflow, recursive uploads, additions, deletion-based replacement, and re-uploading.
 - Documentation navigation tabs now remain visible while scrolling using MkDocs Material's native sticky-tabs behavior.

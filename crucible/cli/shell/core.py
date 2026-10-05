@@ -412,12 +412,12 @@ class CrucibleShell:
 
     def _run_prompt_toolkit(self):
         from prompt_toolkit                import PromptSession
-        from prompt_toolkit.history        import FileHistory
         from prompt_toolkit.auto_suggest   import AutoSuggestFromHistory
         from prompt_toolkit.styles         import Style
         from prompt_toolkit.key_binding    import KeyBindings
         from prompt_toolkit.completion     import ThreadedCompleter
         from platformdirs import user_data_dir
+        from .history import PrivateFileHistory
 
         history_path = os.path.join(user_data_dir('crucible'), 'shell_history')
         os.makedirs(os.path.dirname(history_path), exist_ok=True)
@@ -457,7 +457,7 @@ class CrucibleShell:
         _register_keybindings(kb, self)
 
         self._session = PromptSession(
-            history=FileHistory(history_path),
+            history=PrivateFileHistory(history_path),
             auto_suggest=AutoSuggestFromHistory(),
             completer=ThreadedCompleter(self.completer),
             complete_while_typing=True,
