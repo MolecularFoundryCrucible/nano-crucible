@@ -484,11 +484,13 @@ class CrucibleCompleter(Completer):
             if not username.lower().startswith(prefix_lower):
                 continue
             name = term.fmt_name(sa, default='', fallback_username=False)
+            role = sa.get('platform_role')
+            meta = f'{name} | {role}' if role and role != 'none' else name
             yield Completion(
                 username + ' ',
                 start_position=-len(prefix),
                 display=shell_html(f'<b>{_html.escape(username)}</b>'),
-                display_meta=shell_html(f'<ansibrightblack>{_html.escape(name)}</ansibrightblack>'),
+                display_meta=shell_html(f'<ansibrightblack>{_html.escape(meta)}</ansibrightblack>'),
             )
 
     def _complete_unlink(self, ctx):

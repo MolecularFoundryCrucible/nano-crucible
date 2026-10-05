@@ -271,6 +271,14 @@ def role_label(role: str, stream=None) -> str:
     return _standing_label(role, owner_label='lead', stream=stream)
 
 
+def platform_role_label(role: str | None, stream=None) -> str:
+    """Color a platform role; 'none' and missing values are dimmed."""
+    if not role or role == 'none':
+        return dim(role or '-', stream=stream)
+    styles = {'admin': magenta, 'support': blue, 'contributor': lambda v, stream=None: v}
+    return styles.get(role, dim)(role, stream=stream)
+
+
 def permission_label(permission: str, stream=None) -> str:
     """Color an ACL permission while preserving its canonical name."""
     return _standing_label(permission, owner_label='owner', stream=stream)

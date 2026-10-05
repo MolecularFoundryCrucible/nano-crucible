@@ -168,7 +168,7 @@ def test_user_search_and_list_json_return_raw_arrays(monkeypatch, capsys):
 def test_service_account_get_and_list_json_use_object_and_array_shapes(
         monkeypatch, capsys):
     account = {'unique_id': MFID, 'username': 'service-user'}
-    operations = SimpleNamespace(list=MagicMock(return_value=[account]))
+    operations = SimpleNamespace(list_admin=MagicMock(return_value=[account]))
     monkeypatch.setattr(
         'crucible.config.get_client',
         lambda: SimpleNamespace(service_accounts=operations),

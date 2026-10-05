@@ -58,7 +58,7 @@ def test_empty_listings_name_their_subject(execute, args, expected, monkeypatch,
         projects=SimpleNamespace(list_join_requests=lambda *args, **kwargs: []),
         access_groups=SimpleNamespace(list_join_requests=lambda **kwargs: []),
         account=SimpleNamespace(join_requests=lambda **kwargs: []),
-        service_accounts=SimpleNamespace(list=lambda **kwargs: []),
+        service_accounts=SimpleNamespace(list_admin=lambda **kwargs: []),
         deletions=SimpleNamespace(list_deleted=lambda **kwargs: []),
         can_elevate=False,
         _admin_mode=lambda: None,
@@ -1042,3 +1042,21 @@ def test_interactive_table_width_uses_terminal_size(monkeypatch):
     )
 
     assert term._table_output_width() == 72
+
+
+def test_service_account_list_shows_platform_role(monkeypatch, capsys):
+    accounts = [
+        {'unique_id': MFID, 'username': 'ingest-bot', 'first_name': 'Ingest',
+         'last_name': 'Bot', 'platform_role': 'contributor'},
+        {'unique_id': MFID, 'username': 'idle-bot', 'platform_role': 'none'},
+    ]
+    list_admin = MagicMock(return_value=accounts)
+    client = SimpleNamespace(service_accounts=SimpleNamespace(list_admin=list_admin))
+    monkeypatch.setattr('crucible.config.get_client', lambda: client)
+
+    service_account_cli._execute_list(SimpleNamespace(limit=10, q='bot', json=False))
+
+    output = capsys.readouterr().out
+    assert 'PLATFORM ROLE' in output
+    assert 'contributor' in output and 'none' in output
+    list_admin.assert_called_once_with(q='bot', limit=10)

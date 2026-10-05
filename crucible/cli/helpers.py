@@ -806,9 +806,10 @@ def fetch_join_requests(client):
 
 
 def fetch_service_accounts(client):
-    """Return all service accounts, or None if the user lacks permission."""
+    """Return all service accounts with their platform roles, or None if the
+    user lacks permission."""
     try:
-        return client.service_accounts.list()
+        return client.service_accounts.list_admin()
     except Exception:
         return None
 

@@ -232,7 +232,7 @@ Service-account creation uses the same username rules and interactive validation
 | `sa create` | Create a service account |
 | `sa rotate-key USER` | Generate a new key and invalidate the previous key |
 | `sa get USER` | Show a service account |
-| `sa list` | List service accounts |
+| `sa list [-q TEXT]` | List service accounts with their platform roles; `-q` filters by username or name |
 | `sa update USER` | Update a service account |
 | `sa edit USER` | Edit a service account interactively |
 | `sa show USER` | Show a service account with its platform role and API key status |

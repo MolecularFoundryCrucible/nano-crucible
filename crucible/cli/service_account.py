@@ -233,6 +233,8 @@ def _register_list(subparsers):
         formatter_class=term.ColorHelpFormatter,
     )
     parser.add_argument('--limit', type=int, default=100, metavar='N')
+    parser.add_argument('--search', '-q', dest='q', default=None, metavar='TEXT',
+                        help='Filter by username or name (at least 3 characters)')
     parser.add_argument('--json', action='store_true', default=False,
                         help='Output as JSON array')
     parser.set_defaults(func=_execute_list)
@@ -242,7 +244,8 @@ def _execute_list(args):
     from crucible.config import get_client
     try:
         client = get_client()
-        accounts = client.service_accounts.list(limit=args.limit)
+        accounts = client.service_accounts.list_admin(q=getattr(args, 'q', None),
+                                                      limit=args.limit)
         if getattr(args, 'json', False):
             print(json.dumps(accounts, indent=2, default=str))
             return
@@ -250,11 +253,22 @@ def _execute_list(args):
         if not accounts:
             print(f"  {term.dim('No service accounts found.')}")
             return
+        def _name(sa):
+            full = ' '.join(p for p in (sa.get('first_name'), sa.get('last_name')) if p)
+            return full if full and full != sa.get('username') else None
+
+        show_names = any(_name(sa) for sa in accounts)
         rows = []
         for sa in accounts:
-            rows.append((sa.get('username') or '-',
-                         term.cyan(sa.get('unique_id')) if sa.get('unique_id') else '-'))
-        term.table(rows, ['Username', 'MFID'], max_widths=[30, 30])
+            row = (sa.get('username') or '-',)
+            if show_names:
+                row += (_name(sa) or '-',)
+            rows.append(row + (
+                term.cyan(sa.get('unique_id')) if sa.get('unique_id') else '-',
+                term.platform_role_label(sa.get('platform_role'))))
+        headers = ['Username'] + (['Name'] if show_names else []) + ['MFID', 'Platform role']
+        max_widths = [30] + ([25] if show_names else []) + [26, 13]
+        term.table(rows, headers, max_widths=max_widths)
     except Exception as e:
         from .helpers import fail
         fail("", e, args)
@@ -289,7 +303,7 @@ def _execute_show(args):
             return
         _show_sa(sa)
         _p = term.field_printer(14)
-        _p("Role", sa.get('platform_role'))
+        _p("Platform role", term.platform_role_label(sa.get('platform_role')))
         status = sa.get('api_key_status') or {}
         if status:
             valid = status.get('valid')
