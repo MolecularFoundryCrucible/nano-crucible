@@ -150,7 +150,7 @@ def test_rename_follows_the_saved_current_project(monkeypatch):
     monkeypatch.setattr('crucible.cli.config.set_config_value',
                         lambda key, value: saved.update({key: value}))
 
-    project_cli._follow_project_rename('old-id', 'new-id')
+    project_cli._follow_project_rename('OLD-ID', 'new-id')
     project_cli._follow_project_rename('other-id', 'x')
 
     assert saved == {'current_project': 'new-id'}

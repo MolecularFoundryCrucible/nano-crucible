@@ -824,7 +824,8 @@ def _follow_project_rename(old_id, new_id):
     from crucible.config import config
     from .config import set_config_value
 
-    if not old_id or config.current_project != old_id:
+    current = config.current_project
+    if not old_id or not current or current.lower() != old_id.lower():
         return
     if config.source('current_project') == 'environment':
         logger.warning(f"CRUCIBLE_CURRENT_PROJECT still names '{old_id}'; "

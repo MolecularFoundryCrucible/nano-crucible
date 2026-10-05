@@ -278,7 +278,9 @@ class InstrumentOperations(OwnershipMixin, AccessControlMixin, BaseResource):
     def bind_service_account(self, instrument_mfid: str, sa_unique_id: str) -> List['ProjectMember']:
         """Bind a service account as an operator of an instrument.
 
-        **Requires admin permissions.**
+        Requires admin on the instrument (its owner or an admin maintainer).
+        A bound service account gets contributor on every dataset assigned
+        to the instrument.
 
         Args:
             instrument_mfid (str): Instrument unique identifier (MFID)
@@ -294,7 +296,7 @@ class InstrumentOperations(OwnershipMixin, AccessControlMixin, BaseResource):
     def unbind_service_account(self, instrument_mfid: str, sa_unique_id: str) -> List['ProjectMember']:
         """Remove a service account as an operator of an instrument.
 
-        **Requires admin permissions.**
+        Requires admin on the instrument (its owner or an admin maintainer).
 
         Args:
             instrument_mfid (str): Instrument unique identifier (MFID)
