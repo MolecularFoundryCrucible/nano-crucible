@@ -194,6 +194,7 @@ class CrucibleShell:
             self.completer._unlink_cache = {}
             self.completer._user_search_cache.clear()
             self.completer._entity_search_cache.clear()
+            self.completer._facet_cache.clear()
             self.completer._project_search_cache.clear()
             self.completer._instrument_search_cache.clear()
 
@@ -245,6 +246,7 @@ class CrucibleShell:
             self.completer._service_accounts = new_service_accounts
             self.completer._user_search_cache.clear()
             self.completer._entity_search_cache.clear()
+            self.completer._facet_cache.clear()
             self.completer._project_search_cache.clear()
             self.completer._instrument_search_cache.clear()
             self.completer.hidden = self._hidden_commands()

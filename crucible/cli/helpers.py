@@ -159,74 +159,239 @@ def add_relationship_type_filter(parser) -> None:
     )
 
 
+def add_scope_filters(parser, resource: str) -> None:
+    """Add filters shared by '<resource> list' and '<resource> facets'.
+
+    These narrow which records are considered, so both commands accept the
+    same selection: project, visibility, ownership, time range, and the
+    resource's own exact-match and empty-field filters.
+    """
+    from ..constants import PROJECT_SCOPES, VISIBILITIES
+
+    project_group = parser.add_mutually_exclusive_group()
+    project_group.add_argument(
+        '--project-id', '-p', default=None, metavar='ID',
+        help='Crucible project ID (uses the current project if one is set; '
+             'otherwise every accessible project)'
+    )
+    project_group.add_argument(
+        '--project-mfid', default=None, metavar='MFID',
+        help='Canonical project MFID'
+    )
+    project_group.add_argument(
+        '--all-projects', action='store_true', default=False,
+        help='Ignore the current project and include every accessible project'
+    )
+    parser.add_argument(
+        '-pid', action=DeprecatedAliasAction, deprecated_options={'-pid'},
+        replacement='--project-id', dest='project_id', default=argparse.SUPPRESS,
+        metavar='ID', help=argparse.SUPPRESS,
+    )
+    parser.add_argument(
+        '--project-scope', choices=PROJECT_SCOPES, default=None, metavar='SCOPE',
+        help=f"Project relationship to include: {', '.join(PROJECT_SCOPES)} "
+             f"(default: assigned)"
+    )
+    parser.add_argument(
+        '--visibility', choices=VISIBILITIES, default=None, metavar='LEVEL',
+        help=f"Restrict results by visibility ({', '.join(VISIBILITIES)})"
+    )
+    parser.add_argument(
+        '--mine', action='store_true', default=False,
+        help=f'Only include {resource}s you own'
+    )
+    parser.add_argument(
+        '--owner', default=None, dest='owner_id', metavar='USER',
+        help='Only include records owned by this user (username, ORCID, or MFID)'
+    )
+    parser.add_argument(
+        '--created-after', dest='creation_time_gte', default=None, metavar='WHEN',
+        help='Created at or after this time (ISO 8601 or YYYY-MM-DD)'
+    )
+    parser.add_argument(
+        '--created-before', dest='creation_time_lte', default=None, metavar='WHEN',
+        help='Created at or before this time'
+    )
+    parser.add_argument(
+        '--modified-after', dest='modification_time_gte', default=None, metavar='WHEN',
+        help='Modified at or after this time'
+    )
+    parser.add_argument(
+        '--modified-before', dest='modification_time_lte', default=None, metavar='WHEN',
+        help='Modified at or before this time'
+    )
+    for flags, dest, metavar, text in _RESOURCE_FILTERS[resource]:
+        parser.add_argument(*flags, dest=dest, default=None, metavar=metavar,
+                            help=text)
+    empty_fields = _EMPTY_FIELDS[resource]
+    parser.add_argument(
+        '--missing', dest='missing', action='append', default=None,
+        choices=empty_fields, metavar='FIELD',
+        help=f"Only include records with no value for FIELD "
+             f"({', '.join(empty_fields)}); repeatable"
+    )
+
+
+# (flags, dest, metavar, help) for each resource's exact-match filters, shared
+# by list and facets. dest is the API query parameter.
+_RESOURCE_FILTERS = {
+    'dataset': [
+        (('-m', '--measurement'), 'measurement', 'TYPE',
+         'Filter by measurement (exact match)'),
+        (('--session',), 'session_name', 'NAME', 'Filter by session name (exact match)'),
+        (('--data-format',), 'data_format', 'FORMAT', 'Filter by data format (exact match)'),
+        (('--instrument-mfid',), 'instrument_mfid', 'MFID',
+         'Filter by canonical instrument MFID'),
+        (('--sample-mfid',), 'sample_mfid', 'MFID',
+         'Only include datasets linked to this sample'),
+    ],
+    'sample': [
+        (('--type',), 'sample_type', 'TYPE',
+         'Filter by sample type (exact match, or use * / ? wildcards in list)'),
+        (('--dataset-mfid',), 'dataset_mfid', 'MFID',
+         'Only include samples linked to this dataset'),
+    ],
+}
+
+# User-facing field name -> API *_is_null parameter.
+_EMPTY_FIELDS = {
+    'dataset': ('session', 'measurement', 'data_format', 'instrument',
+                'project', 'owner'),
+    'sample': ('sample_type', 'project', 'owner'),
+}
+_EMPTY_FIELD_PARAMS = {
+    'session': 'session_name_is_null',
+    'measurement': 'measurement_is_null',
+    'data_format': 'data_format_is_null',
+    'instrument': 'instrument_mfid_is_null',
+    'project': 'project_mfid_is_null',
+    'owner': 'owner_id_is_null',
+    'sample_type': 'sample_type_is_null',
+}
+
+
 def add_listing_filters(parser) -> None:
-    """Add the shared ordering, visibility, and time-range filters to a listing command."""
-    from ..constants import RESOURCE_SORTS, SORT_DIRECTIONS, VISIBILITIES
+    """Add the list-only ordering options."""
+    from ..constants import RESOURCE_SORTS, SORT_DIRECTIONS
 
     parser.add_argument(
         '--sort',
         choices=RESOURCE_SORTS,
         default=None,
         metavar='FIELD',
-        help=f"Order results by {', '.join(RESOURCE_SORTS)} (default: newest first)"
+        help=f"Order results by {', '.join(RESOURCE_SORTS)} (default: created, newest first)"
     )
     parser.add_argument(
         '--direction',
         choices=SORT_DIRECTIONS,
         default=None,
         metavar='DIR',
-        help=f"Sort direction ({', '.join(SORT_DIRECTIONS)}). Requires --sort."
-    )
-    parser.add_argument(
-        '--visibility',
-        choices=VISIBILITIES,
-        default=None,
-        metavar='LEVEL',
-        help=f"Restrict results by visibility ({', '.join(VISIBILITIES)})"
-    )
-    parser.add_argument(
-        '--mine',
-        action='store_true',
-        default=False,
-        help='Only show resources you own'
-    )
-    parser.add_argument(
-        '--owner',
-        default=None,
-        dest='owner_id',
-        metavar='USER',
-        help='Filter by owner user ID'
-    )
-    parser.add_argument(
-        '--created-after', dest='creation_time_gte', default=None, metavar='WHEN',
-        help='Only show resources created at or after this time (ISO 8601 or YYYY-MM-DD)'
-    )
-    parser.add_argument(
-        '--created-before', dest='creation_time_lte', default=None, metavar='WHEN',
-        help='Only show resources created at or before this time'
-    )
-    parser.add_argument(
-        '--modified-after', dest='modification_time_gte', default=None, metavar='WHEN',
-        help='Only show resources modified at or after this time'
-    )
-    parser.add_argument(
-        '--modified-before', dest='modification_time_lte', default=None, metavar='WHEN',
-        help='Only show resources modified at or before this time'
+        help=f"Sort direction ({', '.join(SORT_DIRECTIONS)}, default: desc). Requires --sort."
     )
 
 
-def listing_filter_kwargs(args) -> dict:
-    """Collect the shared listing filters from parsed args into list() keywords."""
+def resolve_list_project(args):
+    """Return (project_id, project_mfid) for a list or facets command.
+
+    An explicit --project-id or --project-mfid wins, --all-projects disables
+    the current project, and otherwise the current project applies if one is
+    set. An instrument filter also skips the current project, because
+    instruments are shared across projects. Returning (None, None) means
+    every accessible project.
+    """
+    project_id = getattr(args, 'project_id', None)
+    project_mfid = getattr(args, 'project_mfid', None)
+    if project_id or project_mfid or getattr(args, 'all_projects', False):
+        return project_id, project_mfid
+    if getattr(args, 'instrument_mfid', None) and not getattr(args, 'project_scope', None):
+        return None, None
+    project_id, _ = resolve_project_context(args)
+    return project_id, None
+
+
+def scope_filter_kwargs(args, client=None) -> dict:
+    """Collect the shared selection filters into list() or facets() keywords.
+
+    Includes the resolved project context. A --owner value that is not
+    already a canonical ORCID or MFID is resolved through the API, so the
+    request always carries the stable identifier.
+    """
     kwargs = {}
-    for name in ('sort', 'direction', 'visibility', 'owner_id',
-                 'creation_time_gte', 'creation_time_lte',
-                 'modification_time_gte', 'modification_time_lte'):
+    project_id, project_mfid = resolve_list_project(args)
+    if project_id is not None:
+        kwargs['project_id'] = project_id
+    if project_mfid is not None:
+        kwargs['project_mfid'] = project_mfid
+    project_scope = getattr(args, 'project_scope', None)
+    if project_scope is not None:
+        if project_id is None and project_mfid is None:
+            raise ValueError("--project-scope requires a project")
+        kwargs['project_scope'] = project_scope
+    names = ['visibility', 'creation_time_gte', 'creation_time_lte',
+             'modification_time_gte', 'modification_time_lte']
+    for filters in _RESOURCE_FILTERS.values():
+        names.extend(dest for _, dest, _, _ in filters)
+    for name in names:
         value = getattr(args, name, None)
         if value is not None:
             kwargs[name] = value
+    owner = getattr(args, 'owner_id', None)
+    if owner is not None:
+        if client is None:
+            from ..config import get_client
+            client = get_client()
+        kwargs['owner_id'] = resolve_user_id(client, owner)
     if getattr(args, 'mine', False):
         kwargs['affiliation'] = 'owner'
+    for field in getattr(args, 'missing', None) or []:
+        kwargs[_EMPTY_FIELD_PARAMS[field]] = True
     return kwargs
+
+
+def listing_filter_kwargs(args) -> dict:
+    """Collect the list-only ordering options into list() keywords.
+
+    Without --sort, request newest-created first explicitly: the server's
+    own default orders by MFID, which is not chronological for legacy
+    records whose MFIDs predate the time-ordered scheme.
+    """
+    sort = getattr(args, 'sort', None)
+    if sort is None:
+        return {'sort': 'created', 'direction': 'desc'}
+    kwargs = {'sort': sort}
+    direction = getattr(args, 'direction', None)
+    if direction is not None:
+        kwargs['direction'] = direction
+    return kwargs
+
+
+def display_order(records: list, sort: str | None = None,
+                  direction: str | None = None) -> list:
+    """Order fetched records for a terminal table.
+
+    The server returns the most relevant records first, newest by default,
+    so --limit keeps the newest N. Reversing puts the newest row last, next
+    to the prompt. An explicit ascending sort is already in reading order.
+    """
+    if sort is not None and direction == 'asc':
+        return list(records)
+    return list(reversed(records))
+
+
+def group_records(records: list, field: str) -> list:
+    """Split display-ordered records into (value, records) groups.
+
+    Groups keep the records' order and are themselves ordered by the
+    position of their last record, so the group holding the newest record
+    is printed last.
+    """
+    groups = {}
+    last_seen = {}
+    for index, record in enumerate(records):
+        key = record.get(field) or None
+        groups.setdefault(key, []).append(record)
+        last_seen[key] = index
+    return [(key, groups[key]) for key in sorted(groups, key=last_seen.get)]
 
 
 def register_facets_command(subparsers, resource: str, fields, examples: str):
@@ -260,18 +425,7 @@ def register_facets_command(subparsers, resource: str, fields, examples: str):
         '--limit', '-l', type=int, default=100, metavar='N',
         help='Maximum number of buckets to return (default: 100)'
     )
-    parser.add_argument(
-        '--project-id', '-p', default=None, metavar='ID',
-        help='Restrict counts to this project'
-    )
-    parser.add_argument(
-        '--project-mfid', default=None, metavar='MFID',
-        help='Restrict counts to this canonical project MFID'
-    )
-    parser.add_argument(
-        '--mine', action='store_true', default=False,
-        help=f'Only count {resource}s you own'
-    )
+    add_scope_filters(parser, resource)
     parser.add_argument(
         '--json', action='store_true', default=False,
         help='Output as JSON'
@@ -287,13 +441,7 @@ def execute_facets_command(args, resource: str):
 
     try:
         client = get_client()
-        filters = {}
-        if args.project_id:
-            filters['project_id'] = args.project_id
-        if args.project_mfid:
-            filters['project_mfid'] = args.project_mfid
-        if args.mine:
-            filters['affiliation'] = 'owner'
+        filters = scope_filter_kwargs(args, client)
 
         operations = getattr(client, f'{resource}s')
         response = operations.facets(
@@ -305,17 +453,28 @@ def execute_facets_command(args, resource: str):
             return
 
         buckets = response.get('items') or []
-        term.header(f"{args.field} · {len(buckets)} values")
+        scope = filters.get('project_id') or filters.get('project_mfid')
+        scope_label = f" · {scope}" if scope else ''
+        term.header(f"{args.field}{scope_label} · {len(buckets)} values")
         if not buckets:
             print(f"  {term.dim(f'No {resource}s matched.')}")
             return
 
-        rows = [
-            (bucket.get('label') or bucket.get('value') or term.dim('(none)'),
-             bucket.get('count'))
-            for bucket in buckets
-        ]
-        term.table(rows, ['VALUE', 'COUNT'])
+        rows = []
+        for bucket in buckets:
+            value, label = bucket.get('value'), bucket.get('label')
+            if value is None:
+                rows.append((term.dim('(none)'), '', bucket.get('count')))
+            elif not str(value).strip():
+                rows.append((term.dim('(empty)'), '', bucket.get('count')))
+            else:
+                rows.append((label or value,
+                             value if label and label != value else '',
+                             bucket.get('count')))
+        if any(row[1] for row in rows):
+            term.table(rows, ['VALUE', 'ID', 'COUNT'])
+        else:
+            term.table([(row[0], row[2]) for row in rows], ['VALUE', 'COUNT'])
         if response.get('next_cursor'):
             print(f"\n  {term.dim('More values available; raise --limit to see them.')}")
 

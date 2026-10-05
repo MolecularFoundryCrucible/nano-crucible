@@ -2,6 +2,7 @@
 
 import argparse
 import os
+import shlex
 import html as _html
 
 from prompt_toolkit.completion import Completer, Completion
@@ -26,6 +27,7 @@ class CrucibleCompleter(Completer):
         self._entity_search_cache = {}  # (entity_type, project_id, query) -> [(uid, name), ...]
         self._project_search_cache = {}
         self._instrument_search_cache = {}
+        self._facet_cache       = {}  # (resource, field, project_id) -> [(value, label, count), ...]
         self._state             = state or {}
         self.hidden             = set()
 
@@ -214,6 +216,71 @@ class CrucibleCompleter(Completer):
                 start_position=-len(arg_text),
                 display=shell_html(f'<b>{_html.escape(uid)}</b>'),
                 display_meta=shell_html(f'{icon} <ansibrightblack>{_html.escape(name)}</ansibrightblack>'),
+            )
+
+    # (resource, flag) -> facet field whose observed values complete that flag.
+    _FACET_FLAGS = {
+        ('dataset', '-m'): 'measurement',
+        ('dataset', '--measurement'): 'measurement',
+        ('dataset', '--session'): 'session',
+        ('dataset', '--data-format'): 'data_format',
+        ('sample', '--type'): 'sample_type',
+        ('sample', '-t'): 'sample_type',
+    }
+
+    def _facet_values(self, resource, field, project_id):
+        """Observed values of a facet field, cached per project for the session."""
+        key = (resource, field, project_id)
+        if key in self._facet_cache:
+            return self._facet_cache[key]
+        values = []
+        if self._client is not None:
+            try:
+                operations = getattr(self._client, f'{resource}s')
+                filters = {'project_id': project_id} if project_id else {}
+                response = operations.facets(field, limit=200, sort='count',
+                                             direction='desc', **filters)
+                for bucket in response.get('items') or []:
+                    value = bucket.get('value')
+                    if value is not None and str(value).strip():
+                        values.append((str(value), bucket.get('label') or str(value),
+                                       bucket.get('count')))
+            except Exception:
+                pass
+        self._facet_cache[key] = values
+        return values
+
+    @staticmethod
+    def _typed_project(words):
+        """The --project-id/-p value typed earlier on the line, if any."""
+        for flag in ('--project-id', '-p', '-pid'):
+            if flag in words:
+                index = words.index(flag)
+                if index + 1 < len(words):
+                    return words[index + 1]
+        return None
+
+    def _yield_facet_completions(self, resource, field, words, prefix):
+        """Complete a flag value from the values actually present in Crucible.
+
+        Scoped to the project typed on the line, else the current project, so
+        suggestions match what the command would list.
+        """
+        if '--all-projects' in words:
+            project_id = None
+        else:
+            project_id = self._typed_project(words) or self._state.get('project')
+        lowered = prefix.lower()
+        for value, label, count in self._facet_values(resource, field, project_id):
+            if not value.lower().startswith(lowered) and lowered not in value.lower():
+                continue
+            text = shlex.quote(value) if any(c.isspace() for c in value) else value
+            meta = f'{count}' if label == value else f'{label} | {count}'
+            yield Completion(
+                text + ' ',
+                start_position=-len(prefix),
+                display=shell_html(f'<b>{_html.escape(value)}</b>'),
+                display_meta=shell_html(f'<ansibrightblack>{_html.escape(meta)}</ansibrightblack>'),
             )
 
     @staticmethod
@@ -783,6 +850,13 @@ class CrucibleCompleter(Completer):
                 '-c': 'samples', '--child': 'samples',
             },
         }.get((resource, subcommand), {})
+
+        facet_field = self._FACET_FLAGS.get((resource, prev))
+        if facet_field and subcommand in ('list', 'facets') and (
+                not current_word or not current_word.startswith('-')):
+            yield from self._yield_facet_completions(resource, facet_field, words,
+                                                     current_word)
+            return
 
         if current_word and not current_word.startswith('-'):
             # Mid-typing a flag value.

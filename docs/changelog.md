@@ -12,11 +12,15 @@
 - The interactive shell toggles elevation with `elevated on|off` and shows an `ELEVATED` toolbar badge, and one-shot commands print a notice when elevation comes from configuration rather than the flag.
 - `client.authorization`, `client.capabilities`, and `client.can_elevate` expose the caller's platform role and account capabilities as typed models, read once from `/account/profile` and re-read with `client.refresh_profile()`.
 - `crucible whoami` shows the caller's platform role, privilege mode, and account capabilities.
+- `dataset list` and `sample list` accept `--name`, `--missing FIELD`, `--sample-mfid`/`--dataset-mfid`, and `--description` (samples), and `dataset facets`/`sample facets` accept the same filters as the list commands.
+- The interactive shell completes measurement, session, data format, and sample type values from facet counts in the current or typed project.
 - The interactive shell lists pending deletion reviews and join requests at startup and on `refresh`.
 - Project, instrument, and service-account creation refuse up front when the caller's account capabilities do not allow it.
 
 ### Changed
 
+- `dataset list` and `sample list` print oldest to newest so the newest record is next to the prompt, follow `--sort`/`--direction` instead of re-sorting by name, and show a flat table unless `--group-by` is given.
+- `dataset list` and `sample list` without a project and no current project now list every accessible project instead of failing; `--all-projects` ignores the current project.
 - The interactive shell hides service-account commands from completion for callers who cannot manage them, and `refresh` now re-reads permissions.
 - Administrator-only operations request elevation per call, so service-account administration and deletion review keep working without enabling elevation globally.
 - `crucible deletion list` defaults to the `reviewable` scope for callers who can review, keeping the queue visible when ordinary reads are ACL-scoped.

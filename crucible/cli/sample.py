@@ -22,7 +22,6 @@ except ImportError:
     ARGCOMPLETE_AVAILABLE = False
 
 from ..config import config as _config
-from ..constants import PROJECT_SCOPES
 
 
 def register_subcommand(subparsers):
@@ -72,116 +71,62 @@ def _register_list(subparsers):
     parser = subparsers.add_parser(
         'list',
         help='List samples',
-        description='List samples, with optional filters',
+        description='List samples, oldest to newest so the newest is closest '
+                    'to the prompt. Uses the current project if one is set, '
+                    'otherwise every accessible project.',
         formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
-    crucible sample list --project-id my-project
+    crucible sample list
+    crucible sample list --all-projects --mine
     crucible sample list --project-id my-project --project-scope shared
-    crucible sample list --project-mfid 0tkn2knjast3h0008nyq9zps2c --project-scope all
     crucible sample list --project-id my-project --type wafer
-    crucible sample list --project-id my-project --group-by type
-    crucible sample list --project-id my-project --include "Silicon*" "Wafer*"
-    crucible sample list --project-id my-project --exclude "*test*" "*dummy*"
+    crucible sample list --dataset-mfid 0tkn2knjast3h0008nyq9zps2c
+    crucible sample list --missing sample_type
+    crucible sample list --sort name --direction asc
+    crucible sample list --group-by type
+    crucible sample list --include "Silicon*" "Wafer*" --exclude "*test*"
 """
     )
 
-    from .helpers import DeprecatedAliasAction
-    project_group = parser.add_mutually_exclusive_group()
-    project_group.add_argument(
-        '--project-id', '-p',
-        required=False,
-        default=None,
-        metavar='ID',
-        help='Crucible project ID (uses the saved current project if omitted)'
-    )
-    project_group.add_argument(
-        '--project-mfid',
-        default=None,
-        metavar='MFID',
-        help='Canonical project MFID'
-    )
-    parser.add_argument(
-        '-pid',
-        action=DeprecatedAliasAction,
-        deprecated_options={'-pid'},
-        replacement='--project-id',
-        dest='project_id',
-        default=argparse.SUPPRESS,
-        metavar='ID',
-        help=argparse.SUPPRESS,
-    )
-    parser.add_argument(
-        '--project-scope',
-        choices=PROJECT_SCOPES,
-        default=None,
-        metavar='SCOPE',
-        help='Project relationship to include: assigned, shared, or all (default: assigned)'
-    )
-
-    parser.add_argument(
-        '-n', '--name',
-        default=None,
-        metavar='NAME',
-        help='Filter by sample name (exact match)'
-    )
-
-    parser.add_argument(
-        '--type',
-        default=None,
-        dest='sample_type',
-        metavar='TYPE',
-        help='Filter by sample type (exact match, or use * / ? wildcards)'
-    )
-
-    from .helpers import add_listing_filters
+    from .helpers import add_listing_filters, add_scope_filters
+    add_scope_filters(parser, 'sample')
     add_listing_filters(parser)
 
     parser.add_argument(
-        '--group-by',
-        dest='group_by',
-        default=None,
-        choices=['type', 'project'],
-        metavar='FIELD',
-        help='Group results by field: type, project (default from config, fallback: type)'
+        '-n', '--name', default=None, metavar='NAME',
+        help='Filter by sample name (exact match)'
     )
-
     parser.add_argument(
-        '--include',
-        nargs='+',
-        metavar='PATTERN',
+        '--description', default=None, metavar='TEXT',
+        help='Filter by description (exact match)'
+    )
+    parser.add_argument(
+        '--group-by', dest='group_by', default=None,
+        choices=['type', 'project', 'none'], metavar='FIELD',
+        help='Group results by field: type, project, or none '
+             '(default: sample_group_by from config, else none)'
+    )
+    parser.add_argument(
+        '--include', nargs='+', metavar='PATTERN',
         help='Only show samples whose name matches any glob pattern (e.g. "Silicon*", "wafer-??")'
     )
-
     parser.add_argument(
-        '--exclude',
-        nargs='+',
-        metavar='PATTERN',
+        '--exclude', nargs='+', metavar='PATTERN',
         help='Exclude samples whose name matches any glob pattern'
     )
-
     parser.add_argument(
-        '--limit',
-        type=int,
-        default=_config.default_limit,
-        metavar='N',
+        '--limit', type=int, default=_config.default_limit, metavar='N',
         help=f'Maximum number of results to return (default: {_config.default_limit})'
     )
-
     parser.add_argument(
-        '--include-metadata',
-        action='store_true',
-        dest='include_metadata',
+        '--include-metadata', action='store_true', dest='include_metadata',
         help='Include scientific metadata in results'
     )
-
     parser.add_argument(
-        '--json',
-        action='store_true',
-        default=False,
-        help='Output as JSON array'
+        '--json', action='store_true', default=False,
+        help='Output raw JSON in server order'
     )
-
     parser.set_defaults(func=_execute_list)
 
 
@@ -768,49 +713,36 @@ def _execute_list(args):
     """Execute the 'sample list' subcommand."""
     from crucible.config import config
     from crucible.config import get_client
-    from .helpers import resolve_project_context, listing_filter_kwargs
-    project_id = args.project_id
-    project_mfid = getattr(args, 'project_mfid', None)
-    project_scope = getattr(args, 'project_scope', None)
-    if project_id is not None and project_mfid is not None:
-        logger.error("Error: Specify either --project-id or --project-mfid, not both.")
-        sys.exit(1)
-    if project_id is None and project_mfid is None:
-        project_id, _ = resolve_project_context(args)
-    if project_id is None and project_mfid is None:
-        logger.error("Error: Project ID or project MFID required. Specify --project-id, --project-mfid, or set current_project in config.")
-        sys.exit(1)
-
-    filters = {}
-    if args.name:
-        filters['sample_name'] = args.name
-    type_pattern = args.sample_type or None
-    if type_pattern and not any(c in type_pattern for c in ('*', '?', '[')):
-        filters['sample_type'] = type_pattern
-        type_pattern = None  # exact match handled by API; no client-side filter needed
-    filters.update(listing_filter_kwargs(args))
-    project_filters = {}
-    if project_id is not None:
-        project_filters['project_id'] = project_id
-    if project_mfid is not None:
-        project_filters['project_mfid'] = project_mfid
-    if project_scope is not None:
-        project_filters['project_scope'] = project_scope
+    from .helpers import (display_order, group_records, listing_filter_kwargs,
+                          scope_filter_kwargs)
 
     try:
         import fnmatch
         client = get_client()
-        samples = client.samples.list(limit=args.limit, **project_filters,
-                                         include_metadata=getattr(args, 'include_metadata', False) or _config.include_metadata,
-                                         **filters)
+        try:
+            filters = scope_filter_kwargs(args, client)
+        except ValueError as e:
+            logger.error(f"Error: {e}")
+            sys.exit(1)
+        type_pattern = filters.get('sample_type')
+        if type_pattern and any(c in type_pattern for c in ('*', '?', '[')):
+            del filters['sample_type']
+        else:
+            type_pattern = None
+        if args.name:
+            filters['sample_name'] = args.name
+        if getattr(args, 'description', None):
+            filters['description'] = args.description
+        filters.update(listing_filter_kwargs(args))
+        samples = client.samples.list(
+            limit=args.limit,
+            include_metadata=getattr(args, 'include_metadata', False) or _config.include_metadata,
+            **filters)
 
-        # Client-side wildcard filtering on type
         if type_pattern:
             samples = [s for s in samples if fnmatch.fnmatch(
                 (s.get('sample_type') or '').lower(), type_pattern.lower()
             )]
-
-        # Client-side glob filtering on name
         if getattr(args, 'include', None):
             samples = [s for s in samples if any(
                 fnmatch.fnmatch((s.get('sample_name') or '').lower(), p.lower())
@@ -827,65 +759,63 @@ def _execute_list(args):
             print(json.dumps(samples, indent=2, default=str))
             return
 
-        project_label = project_id or project_mfid
+        project_id = filters.get('project_id')
+        project_scope = filters.get('project_scope')
+        project_label = project_id or filters.get('project_mfid')
         scope_label = f" · {project_scope}" if project_scope else ''
-        title = f"Samples · {project_label}{scope_label} ({len(samples)})" if project_label else f"Samples ({len(samples)})"
+        title = (f"Samples · {project_label}{scope_label} ({len(samples)})" if project_label
+                 else f"Samples · all projects ({len(samples)})")
         term.header(title)
         if filters:
             logger.info(f"Filters: {', '.join(f'{k}={v}' for k, v in filters.items())}")
 
         if not samples:
             print(f"  {term.dim('No samples found.')}")
-        else:
-            from .helpers import explorer_url, project_reference
+            return
 
-            _GROUP_FIELD = {'type': 'sample_type', 'project': 'project_id'}
-            group_by_key = args.group_by or config.sample_group_by or 'type'
-            group_by = _GROUP_FIELD.get(group_by_key)
+        from .helpers import explorer_url, project_reference
 
-            def _make_row(s):
-                uid = s.get('unique_id') or ''
-                _, referenced_project_id, _ = project_reference(s)
-                pid = referenced_project_id or project_id
-                row = (
-                    s.get('sample_name') or '(unnamed)',
-                    term.mfid_link(uid, explorer_url(uid, pid, 'sample')) if uid else '-',
-                )
-                if project_scope in ('shared', 'all'):
-                    row += (
-                        referenced_project_id or '-',
-                        s.get('project_relation') or '-',
-                    )
-                return row + (s.get('sample_type') or '-',)
+        _GROUP_FIELD = {'type': 'sample_type', 'project': 'project_id'}
+        group_by = _GROUP_FIELD.get(args.group_by or config.sample_group_by or 'none')
+        show_project = project_label is None or project_scope in ('shared', 'all')
 
-            contextual_headers = ['Name', 'MFID', 'Project', 'Relation', 'Type']
-            standard_headers = ['Name', 'MFID', 'Type']
-            headers = contextual_headers if project_scope in ('shared', 'all') else standard_headers
-            contextual_max = [30, 26, 25, 8, 20]
-            standard_max = [35, 26, 20]
-            max_widths = contextual_max if project_scope in ('shared', 'all') else standard_max
-            contextual_min = [4, 26, 7, 8, 4]
-            standard_min = [4, 26, 4]
-            min_widths = contextual_min if project_scope in ('shared', 'all') else standard_min
+        def _make_row(s):
+            uid = s.get('unique_id') or ''
+            _, referenced_project_id, _ = project_reference(s)
+            pid = referenced_project_id or project_id
+            row = (
+                s.get('sample_name') or '(unnamed)',
+                term.mfid_link(uid, explorer_url(uid, pid, 'sample')) if uid else '-',
+            )
+            if show_project:
+                row += (referenced_project_id or '-',)
+            if project_scope in ('shared', 'all'):
+                row += (s.get('project_relation') or '-',)
+            return row + (s.get('sample_type') or '-',
+                          term.fmt_date(s.get('creation_time')))
 
-            _by_name = lambda s: (s.get('sample_name') or '').lower()
+        headers, max_widths, min_widths = ['Name', 'MFID'], [35, 26], [4, 26]
+        if show_project:
+            headers.append('Project')
+            max_widths.append(25)
+            min_widths.append(7)
+        if project_scope in ('shared', 'all'):
+            headers.append('Relation')
+            max_widths.append(8)
+            min_widths.append(8)
+        headers += ['Type', 'Created']
+        max_widths += [20, 10]
+        min_widths += [4, 10]
 
-            if not group_by:
-                term.table([_make_row(s) for s in sorted(samples, key=_by_name)],
-                           headers, max_widths=max_widths,
-                           min_widths=min_widths)
-            else:
-                from collections import defaultdict
-                groups = defaultdict(list)
-                for s in samples:
-                    groups[s.get(group_by) or None].append(s)
-                keys = sorted(k for k in groups if k) + ([None] if None in groups else [])
-                for key in keys:
-                    label = key or '(none)'
-                    term.subheader(f"{label} ({len(groups[key])})")
-                    term.table([_make_row(s) for s in sorted(groups[key], key=_by_name)],
-                               headers, max_widths=max_widths,
-                               min_widths=min_widths)
+        ordered = display_order(samples, args.sort, args.direction)
+        if not group_by:
+            term.table([_make_row(s) for s in ordered], headers,
+                       max_widths=max_widths, min_widths=min_widths)
+            return
+        for key, group in group_records(ordered, group_by):
+            term.subheader(f"{key or '(none)'} ({len(group)})")
+            term.table([_make_row(s) for s in group], headers,
+                       max_widths=max_widths, min_widths=min_widths)
 
     except Exception as e:
         from .helpers import fail

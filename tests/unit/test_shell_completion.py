@@ -228,3 +228,65 @@ def test_builtin_lookup(line, expected):
 
     handler = find_builtin(line)
     assert (handler.__name__ if handler else None) == expected
+
+
+def _facet_completer(state=None):
+    from crucible.cli import dataset as dataset_cli, sample as sample_cli
+
+    parser = argparse.ArgumentParser()
+    subparsers = parser.add_subparsers(dest='resource')
+    dataset_cli.register_subcommand(subparsers)
+    sample_cli.register_subcommand(subparsers)
+    client = MagicMock()
+    client.datasets.facets.return_value = {'items': [
+        {'value': 'XRD', 'label': 'XRD', 'count': 9},
+        {'value': '4D-STEM', 'label': '4D-STEM', 'count': 4},
+        {'value': None, 'label': None, 'count': 2},
+    ]}
+    client.samples.facets.return_value = {'items': [
+        {'value': 'thin film', 'label': 'thin film', 'count': 3},
+    ]}
+    return _CrucibleCompleter(parser, client=client, state=state or {}), client
+
+
+def _texts(completer, line):
+    return [c.text for c in completer.get_completions(Document(line), None)]
+
+
+def test_measurement_values_come_from_facets_in_the_current_project():
+    completer, client = _facet_completer({'project': 'my-project'})
+
+    assert _texts(completer, 'dataset list -m X') == ['XRD ']
+    assert client.datasets.facets.call_args.kwargs['project_id'] == 'my-project'
+
+
+def test_typed_project_id_overrides_the_current_project():
+    completer, client = _facet_completer({'project': 'my-project'})
+
+    _texts(completer, 'dataset list --project-id other -m ')
+
+    assert client.datasets.facets.call_args.kwargs['project_id'] == 'other'
+
+
+def test_all_projects_drops_the_project_scope():
+    completer, client = _facet_completer({'project': 'my-project'})
+
+    _texts(completer, 'dataset list --all-projects --measurement ')
+
+    assert 'project_id' not in client.datasets.facets.call_args.kwargs
+
+
+def test_values_with_spaces_are_quoted_and_null_buckets_skipped():
+    completer, _ = _facet_completer()
+
+    assert _texts(completer, 'sample list --type ') == ["'thin film' "]
+    assert None not in _texts(completer, 'dataset list -m ')
+
+
+def test_facet_values_are_cached_per_project():
+    completer, client = _facet_completer({'project': 'p'})
+
+    _texts(completer, 'dataset list -m ')
+    _texts(completer, 'dataset list -m X')
+
+    assert client.datasets.facets.call_count == 1

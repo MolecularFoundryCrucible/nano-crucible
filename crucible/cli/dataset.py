@@ -239,7 +239,6 @@ except ImportError:
 
 #internal modules
 from ..config import config as _config
-from ..constants import PROJECT_SCOPES
 
 def register_subcommand(subparsers):
     """
@@ -300,149 +299,68 @@ def _register_list(subparsers):
     parser = subparsers.add_parser(
         'list',
         help='List datasets',
-        description='List datasets, with optional filters',
+        description='List datasets, oldest to newest so the newest is closest '
+                    'to the prompt. Uses the current project if one is set, '
+                    'otherwise every accessible project.',
         formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
-    crucible dataset list --project-id my-project
+    crucible dataset list
+    crucible dataset list --all-projects --mine
     crucible dataset list --project-id my-project --project-scope shared
-    crucible dataset list --project-mfid 0tkn2knjast3h0008nyq9zps2c --project-scope all
-    crucible dataset list --project-id my-project -m XRD
+    crucible dataset list --project-id my-project --measurement XRD
     crucible dataset list --project-id my-project -k silicon --limit 20
     crucible dataset list --instrument-mfid 0tkn2knjast3h0008nyq9zps2c
-    crucible dataset list --session 2024-01-15-run
-    crucible dataset list --project-id my-project --group-by measurement
-    crucible dataset list --project-id my-project --include "run-*" "*XRD*"
-    crucible dataset list --project-id my-project --exclude "*test*"
+    crucible dataset list --sample-mfid 0tkn2knjast3h0008nyq9zps2c
+    crucible dataset list --missing session --created-after 2026-01-01
+    crucible dataset list --sort name --direction asc
+    crucible dataset list --group-by measurement
+    crucible dataset list --include "run-*" "*XRD*" --exclude "*test*"
 """
     )
 
-    from .helpers import DeprecatedAliasAction
-    project_group = parser.add_mutually_exclusive_group()
-    project_group.add_argument(
-        '--project-id', '-p',
-        required=False,
-        default=None,
-        metavar='ID',
-        help='Crucible project ID (uses the saved current project if omitted)'
-    )
-    project_group.add_argument(
-        '--project-mfid',
-        default=None,
-        metavar='MFID',
-        help='Canonical project MFID'
-    )
-    parser.add_argument(
-        '-pid',
-        action=DeprecatedAliasAction,
-        deprecated_options={'-pid'},
-        replacement='--project-id',
-        dest='project_id',
-        default=argparse.SUPPRESS,
-        metavar='ID',
-        help=argparse.SUPPRESS,
-    )
-    parser.add_argument(
-        '--project-scope',
-        choices=PROJECT_SCOPES,
-        default=None,
-        metavar='SCOPE',
-        help='Project relationship to include: assigned, shared, or all (default: assigned)'
-    )
-
-    parser.add_argument(
-        '-m', '--measurement',
-        default=None,
-        metavar='TYPE',
-        help='Filter by measurement type (exact match)'
-    )
-
-    parser.add_argument(
-        '-k', '--keyword',
-        default=None,
-        metavar='WORD',
-        help='Filter by keyword (case-insensitive substring match)'
-    )
-
-    parser.add_argument(
-        '--session',
-        default=None,
-        metavar='NAME',
-        help='Filter by session name (exact match)'
-    )
-
-    parser.add_argument(
-        '--data-format',
-        default=None,
-        dest='data_format',
-        metavar='FORMAT',
-        help='Filter by data format (exact match)'
-    )
-
-    parser.add_argument(
-        '--data-type',
-        default=None,
-        dest='data_type',
-        metavar='TYPE',
-        help='Filter by data type (exact match)'
-    )
-
-    parser.add_argument(
-        '--instrument',
-        default=None,
-        dest='instrument_name',
-        metavar='NAME',
-        help='Filter by instrument name (exact match)'
-    )
-
-    parser.add_argument(
-        '--instrument-mfid',
-        default=None,
-        metavar='MFID',
-        help='Filter by canonical instrument MFID across accessible projects'
-    )
-
-    from .helpers import add_listing_filters
+    from .helpers import add_listing_filters, add_scope_filters
+    add_scope_filters(parser, 'dataset')
     add_listing_filters(parser)
 
     parser.add_argument(
-        '--group-by',
-        dest='group_by',
-        default=None,
-        choices=['measurement', 'session', 'format', 'instrument'],
-        metavar='FIELD',
-        help='Group results by field: measurement, session, format, instrument (default from config, fallback: measurement)'
+        '-n', '--name', dest='dataset_name', default=None, metavar='NAME',
+        help='Filter by dataset name (exact match)'
     )
-
     parser.add_argument(
-        '--include',
-        nargs='+',
-        metavar='PATTERN',
+        '-k', '--keyword', default=None, metavar='WORD',
+        help='Filter by keyword (case-insensitive substring match)'
+    )
+    parser.add_argument(
+        '--data-type', default=None, dest='data_type', metavar='TYPE',
+        help='Filter by data type (exact match)'
+    )
+    parser.add_argument(
+        '--instrument', default=None, dest='instrument_name', metavar='NAME',
+        help='Filter by instrument name (exact match)'
+    )
+    parser.add_argument(
+        '--group-by', dest='group_by', default=None,
+        choices=['measurement', 'session', 'format', 'instrument', 'none'], metavar='FIELD',
+        help='Group results by field: measurement, session, format, instrument, '
+             'or none (default: dataset_group_by from config, else none)'
+    )
+    parser.add_argument(
+        '--include', nargs='+', metavar='PATTERN',
         help='Only show datasets whose name matches any glob pattern (e.g. "run-*", "*XRD*")'
     )
-
     parser.add_argument(
-        '--exclude',
-        nargs='+',
-        metavar='PATTERN',
+        '--exclude', nargs='+', metavar='PATTERN',
         help='Exclude datasets whose name matches any glob pattern'
     )
-
     parser.add_argument(
-        '--limit', '-l',
-        type=int,
-        default=_config.default_limit,
-        metavar='N',
-        help='Maximum number of results to return (default: 100)'
+        '--limit', '-l', type=int, default=_config.default_limit, metavar='N',
+        help=f'Maximum number of results to return (default: {_config.default_limit})'
     )
-
     parser.add_argument(
-        '--json',
-        action='store_true',
-        default=False,
-        help='Output as JSON array'
+        '--json', action='store_true', default=False,
+        help='Output raw JSON in server order'
     )
-
     parser.set_defaults(func=_execute_list)
 
 
@@ -1917,55 +1835,23 @@ def _execute_list(args):
     """Execute the 'dataset list' subcommand."""
     from crucible.config import config
     from crucible.config import get_client
-    from .helpers import resolve_project_context, listing_filter_kwargs
-    project_id = args.project_id
-    project_mfid = getattr(args, 'project_mfid', None)
-    project_scope = getattr(args, 'project_scope', None)
-    instrument_mfid = getattr(args, 'instrument_mfid', None)
-    if project_id is not None and project_mfid is not None:
-        logger.error("Error: Specify either --project-id or --project-mfid, not both.")
-        sys.exit(1)
-    if (project_id is None and project_mfid is None and
-            (instrument_mfid is None or project_scope is not None)):
-        project_id, _ = resolve_project_context(args)
-    if project_scope is not None and project_id is None and project_mfid is None:
-        logger.error("Error: --project-scope requires --project-id, --project-mfid, or a saved current project.")
-        sys.exit(1)
-    if project_id is None and project_mfid is None and instrument_mfid is None:
-        logger.error(
-            "Error: Project ID, project MFID, or instrument MFID required. Specify "
-            "--project-id, --project-mfid, --instrument-mfid, or set current_project in config.")
-        sys.exit(1)
-
-    # Build optional filters
-    filters = {}
-    if args.measurement:
-        filters['measurement'] = args.measurement
-    if args.keyword:
-        filters['keyword'] = args.keyword
-    if args.session:
-        filters['session_name'] = args.session
-    if args.data_format:
-        filters['data_format'] = args.data_format
-    if args.data_type:
-        filters['data_type'] = args.data_type
-    if args.instrument_name:
-        filters['instrument_name'] = args.instrument_name
-    if instrument_mfid:
-        filters['instrument_mfid'] = instrument_mfid
-    filters.update(listing_filter_kwargs(args))
-    project_filters = {}
-    if project_id is not None:
-        project_filters['project_id'] = project_id
-    if project_mfid is not None:
-        project_filters['project_mfid'] = project_mfid
-    if project_scope is not None:
-        project_filters['project_scope'] = project_scope
+    from .helpers import (display_order, group_records, listing_filter_kwargs,
+                          scope_filter_kwargs)
 
     try:
         import fnmatch
         client = get_client()
-        datasets = client.datasets.list(limit=args.limit, **project_filters, **filters)
+        try:
+            filters = scope_filter_kwargs(args, client)
+        except ValueError as e:
+            logger.error(f"Error: {e}")
+            sys.exit(1)
+        for name in ('dataset_name', 'keyword', 'data_type', 'instrument_name'):
+            value = getattr(args, name, None)
+            if value:
+                filters[name] = value
+        filters.update(listing_filter_kwargs(args))
+        datasets = client.datasets.list(limit=args.limit, **filters)
 
         # Client-side glob filtering on name
         if getattr(args, 'include', None):
@@ -1983,78 +1869,76 @@ def _execute_list(args):
             print(json.dumps(datasets, indent=2, default=str))
             return
 
-        project_label = project_id or project_mfid
+        project_id = filters.get('project_id')
+        project_scope = filters.get('project_scope')
+        project_label = project_id or filters.get('project_mfid')
+        instrument_mfid = filters.get('instrument_mfid')
         if project_label:
             scope_label = f" · {project_scope}" if project_scope else ''
             title = f"Datasets · {project_label}{scope_label} ({len(datasets)})"
         elif instrument_mfid:
             title = f"Datasets · instrument {instrument_mfid} ({len(datasets)})"
         else:
-            title = f"Datasets ({len(datasets)})"
+            title = f"Datasets · all projects ({len(datasets)})"
         term.header(title)
         if filters:
             logger.info(f"Filters: {', '.join(f'{k}={v}' for k, v in filters.items())}")
 
         if not datasets:
             print(f"  {term.dim('No datasets found.')}")
-        else:
-            from .helpers import explorer_url, project_reference
+            return
 
-            _GROUP_FIELD = {
-                'measurement': 'measurement',
-                'session':     'session_name',
-                'format':      'data_format',
-                'instrument':  'instrument_name',
-            }
-            group_by_key = args.group_by or config.dataset_group_by or 'measurement'
-            group_by = _GROUP_FIELD.get(group_by_key)
+        from .helpers import explorer_url, project_reference
 
-            def _make_row(ds):
-                uid = ds.get('unique_id') or ''
-                _, referenced_project_id, _ = project_reference(ds)
-                pid = referenced_project_id or project_id
-                row = (
-                    ds.get('dataset_name') or '(unnamed)',
-                    term.mfid_link(uid, explorer_url(uid, pid, 'dataset')) if uid else '-',
-                )
-                if project_scope in ('shared', 'all'):
-                    row += (
-                        referenced_project_id or '-',
-                        ds.get('project_relation') or '-',
-                    )
-                return row + (
-                    ds.get('measurement') or '-',
-                    ds.get('session_name') or '-',
-                )
+        _GROUP_FIELD = {
+            'measurement': 'measurement',
+            'session':     'session_name',
+            'format':      'data_format',
+            'instrument':  'instrument_name',
+        }
+        group_by = _GROUP_FIELD.get(args.group_by or config.dataset_group_by or 'none')
+        show_project = project_label is None or project_scope in ('shared', 'all')
 
-            contextual_headers = ['Name', 'MFID', 'Project', 'Relation', 'Measurement', 'Session']
-            standard_headers = ['Name', 'MFID', 'Measurement', 'Session']
-            headers = contextual_headers if project_scope in ('shared', 'all') else standard_headers
-            contextual_max = [25, 26, 25, 8, 15, 18]
-            standard_max = [35, 26, 15, 20]
-            max_widths = contextual_max if project_scope in ('shared', 'all') else standard_max
-            contextual_min = [4, 26, 7, 8, 11, 7]
-            standard_min = [4, 26, 11, 7]
-            min_widths = contextual_min if project_scope in ('shared', 'all') else standard_min
+        def _make_row(ds):
+            uid = ds.get('unique_id') or ''
+            _, referenced_project_id, _ = project_reference(ds)
+            pid = referenced_project_id or project_id
+            row = (
+                ds.get('dataset_name') or '(unnamed)',
+                term.mfid_link(uid, explorer_url(uid, pid, 'dataset')) if uid else '-',
+            )
+            if show_project:
+                row += (referenced_project_id or '-',)
+            if project_scope in ('shared', 'all'):
+                row += (ds.get('project_relation') or '-',)
+            return row + (
+                ds.get('measurement') or '-',
+                ds.get('session_name') or '-',
+                term.fmt_date(ds.get('creation_time')),
+            )
 
-            _by_name = lambda ds: (ds.get('dataset_name') or '').lower()
+        headers, max_widths, min_widths = ['Name', 'MFID'], [35, 26], [4, 26]
+        if show_project:
+            headers.append('Project')
+            max_widths.append(25)
+            min_widths.append(7)
+        if project_scope in ('shared', 'all'):
+            headers.append('Relation')
+            max_widths.append(8)
+            min_widths.append(8)
+        headers += ['Measurement', 'Session', 'Created']
+        max_widths += [15, 18, 10]
+        min_widths += [11, 7, 10]
 
-            if not group_by:
-                term.table([_make_row(ds) for ds in sorted(datasets, key=_by_name)],
-                           headers, max_widths=max_widths,
-                           min_widths=min_widths)
-            else:
-                from collections import defaultdict
-                groups = defaultdict(list)
-                for ds in datasets:
-                    groups[ds.get(group_by) or None].append(ds)
-                keys = sorted(k for k in groups if k) + ([None] if None in groups else [])
-                for key in keys:
-                    label = key or '(none)'
-                    term.subheader(f"{label} ({len(groups[key])})")
-                    term.table([_make_row(ds) for ds in sorted(groups[key], key=_by_name)],
-                               headers, max_widths=max_widths,
-                               min_widths=min_widths)
+        ordered = display_order(datasets, args.sort, args.direction)
+        if not group_by:
+            term.table([_make_row(ds) for ds in ordered], headers,
+                       max_widths=max_widths, min_widths=min_widths)
+            return
+        for key, group in group_records(ordered, group_by):
+            term.subheader(f"{key or '(none)'} ({len(group)})")
+            term.table([_make_row(ds) for ds in group], headers,
+                       max_widths=max_widths, min_widths=min_widths)
 
     except Exception as e:
         from .helpers import fail

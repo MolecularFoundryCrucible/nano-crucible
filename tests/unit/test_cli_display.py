@@ -651,13 +651,9 @@ def test_missing_public_value_is_not_rendered_as_false(show, record, capsys):
         (
             dataset_cli,
             {
-                'measurement': None,
                 'keyword': None,
-                'session': None,
-                'data_format': None,
                 'data_type': None,
                 'instrument_name': None,
-                'instrument_mfid': None,
                 'include': None,
                 'exclude': None,
             },
@@ -675,7 +671,6 @@ def test_missing_public_value_is_not_rendered_as_false(show, record, capsys):
             sample_cli,
             {
                 'name': None,
-                'sample_type': None,
                 'include_metadata': False,
                 'include': None,
                 'exclude': None,
@@ -704,6 +699,8 @@ def test_scoped_resource_lists_show_relation_and_unassigned_project(
         limit=10,
         json=False,
         group_by='none',
+        sort=None,
+        direction=None,
         debug=False,
         **namespace,
     )
@@ -714,6 +711,8 @@ def test_scoped_resource_lists_show_relation_and_unassigned_project(
         limit=10,
         project_mfid=MFID,
         project_scope='all',
+        sort='created',
+        direction='desc',
         **({'include_metadata': False} if resource_attr == 'samples' else {}),
     )
     output = capsys.readouterr().out

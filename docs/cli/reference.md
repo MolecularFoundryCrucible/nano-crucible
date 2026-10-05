@@ -29,7 +29,7 @@ Running `crucible` without a command starts the interactive shell. See the [CLI 
 
 | Command | Description |
 |---|---|
-| `dataset list` | List assigned or shared datasets by project ID or canonical project MFID, with instrument, metadata, and name-pattern filters |
+| `dataset list` | List datasets oldest to newest, in the current project or across every accessible project, with project, instrument, linked-sample, metadata, empty-field, and name-pattern filters |
 | `dataset get MFID` | Show a dataset, its files, and linked resources |
 | `dataset create [--input FILE ...]` | Create a dataset, optionally uploading or cataloging files |
 | `dataset update MFID` | Update model fields or scientific metadata |
@@ -82,9 +82,11 @@ The `--type`, `--ingestor`, `--no-upload`, `--backend`, and `--access-note` opti
 
 Use `dataset list --project-id PROJECT --project-scope shared` to show resources shared with a project but assigned elsewhere or unassigned. Use `--project-scope all` to combine assigned and shared resources. `--project-mfid` accepts the canonical project MFID instead of a project ID. The interactive shell completes both identifiers through project search. Human-readable scoped results include the resource's actual project and its `assigned` or `shared` relation.
 
-`dataset list` and `sample list` also accept `--sort created|updated|name` with `--direction asc|desc`, `--visibility all|public|private`, `--mine` to restrict results to resources you own, `--owner USER`, and the time bounds `--created-after`, `--created-before`, `--modified-after`, and `--modified-before`. `--direction` requires `--sort`.
+`dataset list` and `sample list` use the current project when one is set and otherwise list every accessible project; `--all-projects` ignores the current project, and the table then shows each record's project. Results are fetched newest first, so `--limit N` keeps the N most recent, and printed oldest to newest so the newest row sits next to the prompt. `--sort created|updated|name` with `--direction asc|desc` changes the server ordering (`--direction` requires `--sort`); an ascending sort prints in that order. Tables are flat unless `--group-by` or the `dataset_group_by`/`sample_group_by` config key selects a field; groups keep chronological order and the group with the newest record comes last. `--json` returns records in server order.
 
-`dataset facets FIELD` and `sample facets FIELD` count how many records fall into each value of a grouping field without fetching the records. Dataset fields are `session`, `measurement`, `data_format`, `owner`, `instrument`, and `project`; sample fields are `sample_type`, `owner`, and `project`. Both accept `--sort value|label|count`, `--direction`, `--limit`, the project selectors, `--mine`, and `--json`.
+Both commands accept `--visibility all|public|private`, `--mine`, `--owner USER` (username, ORCID, or MFID, resolved to the stable identifier before the request), the time bounds `--created-after`, `--created-before`, `--modified-after`, and `--modified-before`, and `--missing FIELD` (repeatable) to select records with no value for a field. Dataset listing adds `--name`, `-m/--measurement`, `--session`, `--data-format`, `--data-type`, `--instrument`, `--instrument-mfid`, `--sample-mfid`, and `-k/--keyword`; sample listing adds `--name`, `--type`, `--description`, and `--dataset-mfid`.
+
+`dataset facets FIELD` and `sample facets FIELD` count how many records fall into each value of a grouping field without fetching the records. Dataset fields are `session`, `measurement`, `data_format`, `owner`, `instrument`, and `project`; sample fields are `sample_type`, `owner`, and `project`. Both accept `--sort value|label|count`, `--direction`, `--limit`, `--json`, and the same project, visibility, ownership, time, exact-match, and `--missing` filters as the matching list command. In the interactive shell, `-m/--measurement`, `--session`, `--data-format`, and `--type` complete from these counts, scoped to the `--project-id` typed on the line or else the current project.
 
 Fields normally updated through `dataset update --set` include `dataset_name`, `measurement`, `data_type`, `session_name`, `data_format`, and `timestamp`. Use `set-public` or `set-private` for public visibility, `reassign-project` for project changes, and `transfer-ownership` for owner changes. Instrument reassignment remains unavailable and is not exposed as ordinary metadata editing.
 
@@ -92,7 +94,7 @@ Fields normally updated through `dataset update --set` include `dataset_name`, `
 
 | Command | Description |
 |---|---|
-| `sample list` | List assigned or shared samples by project ID or canonical project MFID, with name, type, and name-pattern filters |
+| `sample list` | List samples oldest to newest, in the current project or across every accessible project, with project, type, linked-dataset, description, empty-field, and name-pattern filters |
 | `sample get MFID` | Show a sample and its linked resources |
 | `sample create` | Create a sample |
 | `sample update MFID` | Update sample fields or scientific metadata |
@@ -116,8 +118,6 @@ Fields normally updated through `dataset update --set` include `dataset_name`, `
 Fields normally updated through `sample update` include `sample_name`, `sample_type`, `description`, and `timestamp`. Use `set-public` or `set-private` for public visibility, `reassign-project` for project changes, and `transfer-ownership` for owner changes.
 
 Sample creation accepts `--project-id` or `--project-mfid`, including both when they resolve to the same project. Interactive creation continues to prompt for the human-readable project ID.
-
-`sample list` uses the same `--project-id` or `--project-mfid` selectors and `--project-scope assigned|shared|all` behavior as dataset listing. Human-readable shared and combined results include the actual project and project relation.
 
 ## Project commands
 

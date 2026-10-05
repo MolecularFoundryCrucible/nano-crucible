@@ -126,3 +126,45 @@ def test_null_bucket_is_labelled(client, capsys):
 def test_field_not_valid_for_the_resource_is_rejected(module, name, field):
     with pytest.raises(SystemExit):
         make_parser(module).parse_args([name, 'facets', field])
+
+
+def test_facets_accept_the_list_filters(client):
+    args = make_parser(dataset).parse_args([
+        'dataset', 'facets', 'session', '--all-projects',
+        '-m', 'XRD', '--instrument-mfid', 'I' * 26,
+        '--missing', 'measurement', '--visibility', 'public',
+        '--created-after', '2026-01-01',
+    ])
+
+    args.func(args)
+
+    kwargs = client.datasets.facets.call_args.kwargs
+    assert kwargs['measurement'] == 'XRD'
+    assert kwargs['instrument_mfid'] == 'I' * 26
+    assert kwargs['measurement_is_null'] is True
+    assert kwargs['visibility'] == 'public'
+    assert kwargs['creation_time_gte'] == '2026-01-01'
+
+
+def test_facets_use_the_current_project(client, monkeypatch):
+    monkeypatch.setattr('crucible.config.config._data',
+                        {'current_project': 'my-project'})
+    args = make_parser(sample).parse_args(['sample', 'facets', 'sample_type'])
+
+    args.func(args)
+
+    assert client.samples.facets.call_args.kwargs['project_id'] == 'my-project'
+
+
+def test_facet_ids_are_shown_when_labels_differ(client, capsys):
+    client.datasets.facets.return_value = {
+        'field': 'owner', 'next_cursor': None,
+        'items': [{'value': '0000-0002-1825-0097', 'label': 'Jane Doe', 'count': 2}],
+    }
+    args = make_parser(dataset).parse_args(['dataset', 'facets', 'owner',
+                                            '--all-projects'])
+
+    args.func(args)
+
+    out = capsys.readouterr().out
+    assert 'Jane Doe' in out and '0000-0002-1825-0097' in out
