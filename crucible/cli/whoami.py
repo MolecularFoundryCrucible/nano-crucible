@@ -91,7 +91,6 @@ def _show_authorization(client, _p, verbose=False):
         return
 
     term.subheader("Authorization")
-    _p = term.field_printer(24) if verbose else _p
     if auth.platform_role and auth.platform_role != 'none':
         _p("Platform role", auth.platform_role)
     mode = 'elevated' if client.is_elevated else 'normal'
@@ -99,12 +98,8 @@ def _show_authorization(client, _p, verbose=False):
         mode += term.dim(' (default)')
     _p("Privilege", mode)
     if verbose:
-        _p("Can elevate", "yes" if auth.can_elevate else "no")
-        for key, label in _CAPABILITY_LABELS.items():
-            value = getattr(caps, key)
-            if value is not None:
-                _p(label.capitalize(), "yes" if value else "no")
-    else:
-        allowed = [label for key, label in _CAPABILITY_LABELS.items()
-                   if getattr(caps, key)]
-        _p("Can", ', '.join(allowed) if allowed else term.dim('(none)'))
+        _p("Can elevate", term.fmt_bool(auth.can_elevate))
+
+    term.subheader("Capabilities")
+    term.grid([f"{term.check_marker(getattr(caps, key))} {label}"
+               for key, label in _CAPABILITY_LABELS.items()])

@@ -218,6 +218,39 @@ def status_marker(status: str, stream=None) -> str:
     return style(symbol if _interactive(stream) else label, stream=stream)
 
 
+def check_marker(value, stream=None) -> str:
+    """Mark a nullable permission as granted, withheld, or unknown.
+
+    Interactive output uses a symbol; redirected output uses yes, no, or -.
+    A withheld permission is dimmed rather than red because it is not an error.
+    """
+    if value is None:
+        return dim('-', stream=stream)
+    if _interactive(stream):
+        return green('✓', stream=stream) if value else dim('×', stream=stream)
+    return 'yes' if value else 'no'
+
+
+def grid(items: list, columns: int | None = None, indent: int = 2,
+         gap: int = 4) -> None:
+    """Print pre-styled strings in column-major order across the terminal.
+
+    *columns* defaults to as many as fit the output width.
+    """
+    if not items:
+        return
+    width = max(_dlen(item) for item in items) + gap
+    if columns is None:
+        columns = max(1, (_table_output_width() - indent) // width)
+    columns = min(columns, len(items))
+    rows = -(-len(items) // columns)
+    for r in range(rows):
+        cells = [items[c * rows + r] for c in range(columns)
+                 if c * rows + r < len(items)]
+        line = ''.join(cell + ' ' * (width - _dlen(cell)) for cell in cells[:-1])
+        print(' ' * indent + line + cells[-1])
+
+
 def _standing_label(standing: str, *, owner_label: str, stream=None) -> str:
     if not standing:
         return '-'

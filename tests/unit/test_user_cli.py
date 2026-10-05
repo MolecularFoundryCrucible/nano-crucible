@@ -175,5 +175,14 @@ def test_whoami_shows_authorization(monkeypatch, capsys):
     out = capsys.readouterr().out
     assert 'admin' in out
     assert 'elevated' in out and '(default)' in out
-    assert 'create projects' in out
-    assert 'create for other users' not in out
+    assert 'yes create projects' in out
+    assert 'no create for other users' in out
+    assert '- manage service accounts' in out
+
+
+def test_grid_fills_columns_top_to_bottom(capsys):
+    from crucible.cli import term
+
+    term.grid(['a', 'b', 'c', 'd', 'e'], columns=2, indent=0, gap=2)
+
+    assert capsys.readouterr().out.splitlines() == ['a  d', 'b  e', 'c']
