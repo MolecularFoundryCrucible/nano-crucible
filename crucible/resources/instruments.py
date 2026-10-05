@@ -54,7 +54,7 @@ class InstrumentOperations(OwnershipMixin, AccessControlMixin, BaseResource):
              offset: int = 0, include_owner: bool = False,
              status: Optional[str] = None,
              affiliation: Optional[Union[str, Sequence[str]]] = None,
-             **filters) -> List[Dict]:
+             **filters: Any) -> List[Dict]:
         """List instruments, defaulting to the active lifecycle state.
 
         Args:
