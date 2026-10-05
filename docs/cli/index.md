@@ -86,6 +86,22 @@ When stdin is not interactive, optional prompts are skipped and configured defau
 
 Destructive commands default confirmation to no and accept `yes`, `y`, `no`, or `n`. When stdin is not interactive, supply the command's explicit `--yes` option. Ownership transfers and project reassignments use a different safety model: they preview by default and execute only with `--confirm`.
 
+## Editing in your editor
+
+`edit` commands (`crucible edit MFID`, `dataset edit`, `instrument edit`, `config edit`, ...) open the record as JSON in a text editor and apply your changes when the editor closes. The editor comes from the `editor` config key, `CRUCIBLE_EDITOR`, `VISUAL`, or `EDITOR`; otherwise the first available of VS Code, Notepad++, and Notepad on Windows, VS Code, nano, and vim on macOS, or VS Code, nano, vim, vi, gedit, and kate on Linux.
+
+The editor must keep the command waiting until you close the file. Editors that open in an existing window get their wait flag added automatically, so `code` becomes `code --wait`:
+
+| Editor | Setting | Notes |
+|---|---|---|
+| Notepad | `notepad` | Windows default; waits on its own |
+| VS Code | `code` | `--wait` added automatically; close the tab to finish |
+| Notepad++ | `notepad++` | `-multiInst -nosession` added automatically |
+| Sublime Text | `subl` | `--wait` added automatically |
+| vim, nano | `vim`, `nano` | Terminal editors wait on their own |
+
+Quote paths that contain spaces, for example `crucible config set editor "\"C:\Program Files\Notepad++\notepad++.exe\""`.
+
 ## Tab completion
 
 Install shell tab-completion once:

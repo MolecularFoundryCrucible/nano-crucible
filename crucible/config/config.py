@@ -219,7 +219,8 @@ class Config:
         Get the preferred editor for interactive editing commands.
 
         Priority: CRUCIBLE_EDITOR env var > config file > None.
-        When None, open_editor_json falls back to $VISUAL, $EDITOR, then nano.
+        When None, editors fall back to $VISUAL, $EDITOR, then a platform default
+        (Notepad on Windows); see crucible.cli.editor.
 
         Returns:
             str or None: Editor command (e.g. "code --wait", "gvim -f") or None

@@ -38,6 +38,7 @@
 
 ### Fixed
 
+- `edit` commands work on Windows without configuration: they default to Notepad instead of nano, recognize `code.cmd` and `.exe` editors when adding wait flags, start batch-file editors such as VS Code's, and add the flags Notepad++ needs to wait.
 - Project ownership transfer, access commands, and scientific metadata updates accept a project ID; they previously failed with 404 unless given the project MFID.
 - Renaming a project with `project update` or `project edit` updates the saved current project when it named the old ID.
 - The interactive shell no longer records `config set api_key` or `API_KEY=` lines in its history file, and keeps that file readable only by its owner.
