@@ -57,7 +57,7 @@ def register_subcommand(subparsers):
     _register_unbind_sa(instrument_subparsers)
     _register_member_commands(instrument_subparsers)
     from ._access import register_access_commands
-    register_access_commands(instrument_subparsers, 'instruments', id_metavar='INSTRUMENT_MFID')
+    register_access_commands(instrument_subparsers, 'instruments', id_metavar='INSTRUMENT')
 
 
 def _register_member_commands(subparsers):
@@ -608,7 +608,7 @@ Examples:
 """
     )
     uid_arg = parser.add_argument(
-        'unique_id', metavar='MFID', help='Instrument unique ID (MFID)'
+        'unique_id', metavar='INSTRUMENT', help='Instrument MFID or instrument_id'
     )
     if ARGCOMPLETE_AVAILABLE:
         uid_arg.completer = argcomplete.completers.SuppressCompleter()
@@ -684,11 +684,11 @@ def _register_transfer_ownership(subparsers):
         formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
-    crucible instrument transfer-ownership INSTRUMENT_MFID newowner@example.com
-    crucible instrument transfer-ownership INSTRUMENT_MFID newowner@example.com --confirm
+    crucible instrument transfer-ownership titan newowner@example.com
+    crucible instrument transfer-ownership titan newowner@example.com --confirm
 """
     )
-    parser.add_argument('instrument_mfid', metavar='INSTRUMENT_MFID', help='Instrument MFID')
+    parser.add_argument('instrument_mfid', metavar='INSTRUMENT', help='Instrument MFID or instrument_id')
     parser.add_argument(
         'new_owner', metavar='NEW_OWNER',
         help='ORCID, MFID, username, or email of the new owner',
@@ -723,10 +723,10 @@ def _register_set_status(subparsers):
         formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
-    crucible instrument set-status INSTRUMENT_MFID maintenance
+    crucible instrument set-status titan maintenance
 """,
     )
-    parser.add_argument('instrument_mfid', metavar='INSTRUMENT_MFID', help='Instrument MFID')
+    parser.add_argument('instrument_mfid', metavar='INSTRUMENT', help='Instrument MFID or instrument_id')
     parser.add_argument(
         'status',
         choices=['active', 'maintenance', 'decommissioned'],
@@ -757,10 +757,10 @@ def _register_list_service_accounts(subparsers):
         formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
-    crucible instrument list-service-accounts INSTRUMENT_MFID
+    crucible instrument list-service-accounts titan
 """,
     )
-    parser.add_argument('instrument_mfid', metavar='INSTRUMENT_MFID', help='Instrument MFID')
+    parser.add_argument('instrument_mfid', metavar='INSTRUMENT', help='Instrument MFID or instrument_id')
     parser.set_defaults(func=_execute_list_service_accounts)
 
 
@@ -811,7 +811,7 @@ Examples:
 """
     )
     uid_arg = parser.add_argument(
-        'instrument_mfid', metavar='MFID', help='Instrument unique ID (MFID)'
+        'instrument_mfid', metavar='INSTRUMENT', help='Instrument MFID or instrument_id'
     )
     if ARGCOMPLETE_AVAILABLE:
         uid_arg.completer = argcomplete.completers.SuppressCompleter()
@@ -847,7 +847,7 @@ Examples:
 """
     )
     uid_arg = parser.add_argument(
-        'instrument_mfid', metavar='MFID', help='Instrument unique ID (MFID)'
+        'instrument_mfid', metavar='INSTRUMENT', help='Instrument MFID or instrument_id'
     )
     if ARGCOMPLETE_AVAILABLE:
         uid_arg.completer = argcomplete.completers.SuppressCompleter()
@@ -891,8 +891,8 @@ Examples:
     )
     uid_arg = parser.add_argument(
         'unique_id',
-        metavar='MFID',
-        help='Instrument unique ID (MFID)'
+        metavar='INSTRUMENT',
+        help='Instrument MFID or instrument_id'
     )
     if ARGCOMPLETE_AVAILABLE:
         uid_arg.completer = argcomplete.completers.SuppressCompleter()
@@ -901,7 +901,7 @@ Examples:
 
 def _edit_instrument(uid, client, debug=False):
     """Core edit logic for an instrument - shared with top-level 'crucible edit' command."""
-    instrument = client.instruments.get(instrument_mfid=uid, include_metadata=True)
+    instrument = client.instruments.get(uid, include_metadata=True)
     if instrument is None:
         logger.error(f"Instrument not found: {uid}")
         sys.exit(1)
@@ -933,6 +933,7 @@ def _edit_instrument(uid, client, debug=False):
         return
 
     try:
+        uid = instrument['unique_id']
         if field_changes:
             client.instruments.update(uid, **field_changes)
         if meta_changed:

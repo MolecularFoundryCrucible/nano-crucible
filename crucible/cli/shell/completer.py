@@ -633,10 +633,10 @@ class CrucibleCompleter(Completer):
         if subcommand not in mfid_subcommands:
             return False
         if trailing_space and len(words) == 2:
-            yield from self._yield_instrument_completions('', use_mfid=True)
+            yield from self._yield_instrument_completions('')
             return True
         if not trailing_space and len(words) == 3 and not words[2].startswith('-'):
-            yield from self._yield_instrument_completions(words[2], use_mfid=True)
+            yield from self._yield_instrument_completions(words[2])
             return True
         if subcommand in {'transfer-ownership', 'update-user-role'} and len(words) in (3, 4):
             if trailing_space and len(words) == 3:
@@ -681,7 +681,7 @@ class CrucibleCompleter(Completer):
         # every subcommand except the handful that don't take one.
         _NO_ID_SUBS = {
             'list', 'create', 'search', 'search-metadata', 'search-md',
-            'link', 'parsers', 'ingestors',
+            'link', 'parsers', 'ingestors', 'facets',
         }
         if words[1] in _NO_ID_SUBS:
             return False
@@ -862,6 +862,19 @@ class CrucibleCompleter(Completer):
                 '-c': 'samples', '--child': 'samples',
             },
         }.get((resource, subcommand), {})
+        if subcommand in ('list', 'facets'):
+            _ENTITY_FLAGS = {**_ENTITY_FLAGS,
+                             '--sample-mfid': 'samples', '--dataset-mfid': 'datasets'}
+
+        if subcommand == 'facets' and resource in ('dataset', 'sample'):
+            positionals = [w for w in words[2:] if not w.startswith('-')]
+            if (trailing_space and not positionals) or (
+                    not trailing_space and len(positionals) == 1 and words[-1] == positionals[0]):
+                action = next((a for a in sub_parser._actions if a.dest == 'field'), None)
+                for choice in (action.choices if action is not None else ()):
+                    if choice.startswith(current_word):
+                        yield Completion(choice + ' ', start_position=-len(current_word))
+                return
 
         facet_field = self._FACET_FLAGS.get((resource, prev))
         if facet_field and subcommand in ('list', 'facets') and (

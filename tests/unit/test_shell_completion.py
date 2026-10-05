@@ -290,3 +290,39 @@ def test_facet_values_are_cached_per_project():
     _texts(completer, 'dataset list -m X')
 
     assert client.datasets.facets.call_count == 1
+
+
+def _instrument_completer():
+    from crucible.cli import dataset as dataset_cli, instrument as instrument_cli
+    from crucible.cli import sample as sample_cli
+
+    parser = argparse.ArgumentParser()
+    subparsers = parser.add_subparsers(dest='resource')
+    for module in (dataset_cli, sample_cli, instrument_cli):
+        module.register_subcommand(subparsers)
+    client = MagicMock()
+    client.instruments.search.return_value = [{
+        'unique_id': '0tkadnh6g9zys00089c7g5ycmg', 'instrument_id': 'b30-fei-sem',
+        'instrument_name': 'b30 - fei sem'}]
+    client.users.search.return_value = [{
+        'username': 'jdoe', 'unique_id': '0000-0002-1825-0097',
+        'first_name': 'J', 'last_name': 'Doe'}]
+    client.samples.search.return_value = [{'unique_id': 'S' * 26, 'sample_name': 'wafer'}]
+    return _CrucibleCompleter(parser, client=client, state={})
+
+
+@pytest.mark.parametrize('line, expected', [
+    ('instrument add-user b30', 'b30-fei-sem '),
+    ('instrument list-users b30', 'b30-fei-sem '),
+    ('instrument add-user b30-fei-sem --user jdo', 'jdoe '),
+    ('instrument update-user-role b30-fei-sem jdo', 'jdoe '),
+    ('instrument update-user-role b30-fei-sem jdoe ', 'admin '),
+    ('instrument add-user b30-fei-sem --role ', 'editor '),
+    ('dataset list --instrument-id b30', 'b30-fei-sem '),
+    ('dataset list --sample-mfid waf', 'S' * 26 + ' '),
+    ('dataset facets se', 'session '),
+    ('sample facets s', 'sample_type '),
+    ('dataset list --missing ', 'session '),
+])
+def test_new_commands_and_flags_complete(line, expected):
+    assert expected in _texts(_instrument_completer(), line)

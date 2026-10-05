@@ -16,7 +16,7 @@
 - `client.instruments.list()` and `search()` accept `affiliation` (`owner`, `maintainer`), `list()` accepts the exact-match instrument filters, and `instrument list` gains `--mine` and filter options.
 - `crucible whoami` shows the caller's platform role, privilege mode, and account capabilities.
 - `dataset list` and `sample list` accept `--name`, `--missing FIELD`, `--sample-mfid`/`--dataset-mfid`, and `--description` (samples), and `dataset facets`/`sample facets` accept the same filters as the list commands.
-- The interactive shell completes measurement, session, data format, and sample type values from facet counts in the current or typed project.
+- The interactive shell completes measurement, session, data format, and sample type values from facet counts in the current or typed project, facet field names, `--instrument-id`, `--sample-mfid`/`--dataset-mfid`, and the instrument member commands.
 - The interactive shell lists pending deletion reviews and join requests at startup and on `refresh`.
 - Project, instrument, and service-account creation refuse up front when the caller's account capabilities do not allow it.
 

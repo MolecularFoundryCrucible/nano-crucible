@@ -28,6 +28,8 @@ crucible
 
 The shell opens with a compact 16×16 Crucible mark when the terminal is wide enough to display it. It combines two vertical pixels in one terminal cell to preserve the mark's proportions. The status bar uses a microscope for the effective project, a bear for the authenticated user, and a link for the configured API. Its dark-blue and light-blue blocks use orange separators, while staging, custom endpoints, and debug mode use orange as an attention color. The shell automatically uses exact 24-bit colors when the terminal advertises true-color support.
 
+Tab-completion searches the API as you type: resource names complete to MFIDs, projects and instruments to their slugs, users to usernames, and filter values such as measurement or sample type to the values that exist in the current or typed project. Commands and flags you cannot use, such as service-account administration, are not suggested.
+
 An explicit `--project-id` applies only to that command. Inside the interactive shell, `use PROJECT_ID` validates and saves the current project for future commands and shell sessions. `unuse` clears the saved project. The deprecated `CRUCIBLE_CURRENT_PROJECT` environment variable temporarily retains precedence, but the CLI displays a warning whenever it supplies project context.
 
 Shell-specific commands:
