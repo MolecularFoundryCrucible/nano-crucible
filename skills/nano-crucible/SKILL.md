@@ -9,4 +9,4 @@ The authoritative operational skill is [`crucible-ecosystem/skills/nano-crucible
 
 If the ecosystem skill is unavailable, use Nano's [published documentation](https://molecularfoundrycrucible.github.io/nano-crucible/) and the installed `crucible --help` hierarchy for exact behavior. Establish the API URL, project, and identity before any network operation. Never expose credentials or full configuration. Treat create, update, upload, link, permission, publication, ownership, ingestion, and deletion operations as live mutations requiring the user's requested outcome and a clear target. Do not run Nano integration tests as routine validation because they create persistent records.
 
-For changes to Nano source code, stop using this operational shim and follow [`AGENTS.md`](../../AGENTS.md) plus the appropriate repository-local development skill.
+For changes to Nano source code, stop using this operational shim and follow [`nano-crucible-development`](../nano-crucible-development/SKILL.md).

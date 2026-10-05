@@ -5,7 +5,7 @@ description: Implement or review nano-crucible Python API changes across client 
 
 # nano-crucible API development
 
-Follow the repository-wide rules in [`AGENTS.md`](../../AGENTS.md), then use this skill for the Python client API portion of a change.
+Follow [`nano-crucible-development`](../nano-crucible-development/SKILL.md), then use this skill for the Python client API portion of a change.
 
 ## Trace the complete contract
 

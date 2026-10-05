@@ -5,7 +5,7 @@ description: Implement or review nano-crucible cast recipe loading, building, va
 
 # nano-crucible cast development
 
-Follow [`AGENTS.md`](../../AGENTS.md). Cast is a stateful workflow, so preserve behavior across loading, validation, entity creation, file upload, linking, lock persistence, resumption, builder output, and CLI presentation.
+Follow [`nano-crucible-development`](../nano-crucible-development/SKILL.md). Cast is a stateful workflow, so preserve behavior across loading, validation, entity creation, file upload, linking, lock persistence, resumption, builder output, and CLI presentation.
 
 ## Preserve execution invariants
 

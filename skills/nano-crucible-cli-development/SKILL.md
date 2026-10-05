@@ -5,7 +5,7 @@ description: Implement or review nano-crucible CLI commands, help, terminal outp
 
 # nano-crucible CLI development
 
-Follow [`AGENTS.md`](../../AGENTS.md), then inspect the target command module and neighboring commands before editing. Load [`nano-crucible-api-development`](../nano-crucible-api-development/SKILL.md) when the task also changes Python resource behavior.
+Follow [`nano-crucible-development`](../nano-crucible-development/SKILL.md), then inspect the target command module and neighboring commands before editing. Load [`nano-crucible-api-development`](../nano-crucible-api-development/SKILL.md) when the task also changes Python resource behavior.
 
 ## Keep command wiring complete
 

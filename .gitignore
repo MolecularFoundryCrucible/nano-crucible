@@ -99,3 +99,7 @@ pycrucible/test-data/
 # MkDocs build output
 site/
 mnotes
+
+# Local agent overrides
+AGENTS.override.md
+.claude/settings.local.json
