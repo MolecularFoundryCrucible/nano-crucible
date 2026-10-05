@@ -117,9 +117,26 @@ def _refresh(shell, line):
     return True
 
 
+def reload_command():
+    """The argv that restarts this process exactly as it was started.
+
+    sys.orig_argv keeps the interpreter options and the ``-m crucible.cli``
+    form; sys.argv alone turns that into a path to __main__.py, which then
+    fails with a relative-import error.
+    """
+    return [sys.executable] + list(getattr(sys, 'orig_argv', [sys.executable] + sys.argv)[1:])
+
+
 def _reload(shell, line):
     print('\033[2J\033[H', end='', flush=True)
-    os.execv(sys.executable, [sys.executable] + sys.argv)
+    command = reload_command()
+    if os.name == 'nt':
+        # os.execv on Windows spawns a new process and exits this one, so the
+        # console regains control and fights the new shell for input. Run the
+        # restart as a child and pass its exit status through instead.
+        import subprocess
+        sys.exit(subprocess.call(command))
+    os.execv(sys.executable, command)
 
 
 def _bang(shell, line):

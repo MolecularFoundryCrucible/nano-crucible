@@ -339,3 +339,32 @@ def test_service_account_suggestions_show_only_the_platform_role():
 
     meta = ''.join(text for _, text in completion.display_meta)
     assert meta == 'contributor'
+
+
+@pytest.mark.parametrize('orig_argv, expected_tail', [
+    (['python', '-m', 'crucible.cli'], ['-m', 'crucible.cli']),
+    (['/env/bin/python3', '/env/bin/crucible'], ['/env/bin/crucible']),
+    (['python', '-X', 'dev', '-m', 'crucible.cli', '--debug'],
+     ['-X', 'dev', '-m', 'crucible.cli', '--debug']),
+])
+def test_reload_restarts_the_way_the_shell_was_started(monkeypatch, orig_argv, expected_tail):
+    from crucible.cli.shell import builtins
+
+    monkeypatch.setattr(builtins.sys, 'orig_argv', orig_argv, raising=False)
+
+    assert builtins.reload_command() == [builtins.sys.executable] + expected_tail
+
+
+def test_reload_waits_for_a_child_on_windows(monkeypatch):
+    from crucible.cli.shell import builtins
+
+    calls = {}
+    monkeypatch.setattr(builtins.os, 'name', 'nt')
+    monkeypatch.setattr(builtins.sys, 'orig_argv', ['python', '-m', 'crucible.cli'], raising=False)
+    monkeypatch.setattr('subprocess.call', lambda cmd: calls.setdefault('cmd', cmd) and 0)
+    monkeypatch.setattr(builtins.os, 'execv', lambda *a: pytest.fail('execv on Windows'))
+
+    with pytest.raises(SystemExit):
+        builtins._reload(None, 'reload')
+
+    assert calls['cmd'][1:] == ['-m', 'crucible.cli']
