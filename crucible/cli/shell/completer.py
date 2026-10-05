@@ -483,9 +483,7 @@ class CrucibleCompleter(Completer):
             username = sa.get('username') or ''
             if not username.lower().startswith(prefix_lower):
                 continue
-            name = term.fmt_name(sa, default='', fallback_username=False)
-            role = sa.get('platform_role')
-            meta = f'{name} | {role}' if role and role != 'none' else name
+            meta = sa.get('platform_role') or ''
             yield Completion(
                 username + ' ',
                 start_position=-len(prefix),

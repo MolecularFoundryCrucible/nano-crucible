@@ -326,3 +326,16 @@ def _instrument_completer():
 ])
 def test_new_commands_and_flags_complete(line, expected):
     assert expected in _texts(_instrument_completer(), line)
+
+
+def test_service_account_suggestions_show_only_the_platform_role():
+    parser = argparse.ArgumentParser()
+    completer = _CrucibleCompleter(parser, service_accounts=[
+        {'username': 'scope-bot', 'first_name': 'Scope', 'last_name': 'Bot',
+         'platform_role': 'contributor'},
+    ])
+
+    [completion] = completer._yield_service_account_completions('sco')
+
+    meta = ''.join(text for _, text in completion.display_meta)
+    assert meta == 'contributor'
