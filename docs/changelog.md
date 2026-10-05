@@ -11,6 +11,7 @@
 - A `privilege_mode` client keyword, `privilege_mode` config key, and global `--elevated` CLI flag select normal or elevated access. The default is unchanged (administrators run elevated) and will become `normal` in a future release.
 - The interactive shell toggles elevation with `elevated on|off` and shows an `ELEVATED` toolbar badge, and one-shot commands print a notice when elevation comes from configuration rather than the flag.
 - `client.authorization`, `client.capabilities`, and `client.can_elevate` expose the caller's platform role and account capabilities as typed models, read once from `/account/profile` and re-read with `client.refresh_profile()`.
+- `instrument update --instrument-id` renames an instrument.
 - `crucible whoami` shows the caller's platform role, privilege mode, and account capabilities.
 - `dataset list` and `sample list` accept `--name`, `--missing FIELD`, `--sample-mfid`/`--dataset-mfid`, and `--description` (samples), and `dataset facets`/`sample facets` accept the same filters as the list commands.
 - The interactive shell completes measurement, session, data format, and sample type values from facet counts in the current or typed project.
@@ -31,6 +32,8 @@
 
 ### Fixed
 
+- Project ownership transfer, access commands, and scientific metadata updates accept a project ID; they previously failed with 404 unless given the project MFID.
+- Renaming a project with `project update` or `project edit` updates the saved current project when it named the old ID.
 - The interactive shell no longer records `config set api_key` or `API_KEY=` lines in its history file, and keeps that file readable only by its owner.
 
 ## 3.2.1

@@ -427,6 +427,7 @@ def _register_update(subparsers):
 Examples:
     crucible instrument update MFID001 --location "Building 67, Room 101"
     crucible instrument update MFID001 --model "Titan 80-300"
+    crucible instrument update MFID001 --instrument-id new-instrument-id
     crucible instrument update MFID001 --metadata '{"voltage_kv": 300, "cs_mm": 1.2}'
     crucible instrument update MFID001 --metadata metadata.json
     crucible instrument update MFID001 --metadata metadata.json --overwrite
@@ -438,6 +439,8 @@ Examples:
     if ARGCOMPLETE_AVAILABLE:
         uid_arg.completer = argcomplete.completers.SuppressCompleter()
     parser.add_argument('--name',         dest='instrument_name',  metavar='NAME',  help='Instrument name')
+    parser.add_argument('--instrument-id', dest='instrument_id',   metavar='ID',
+                        help='Rename the instrument to a new instrument ID')
     parser.add_argument('--location',     dest='location',         metavar='LOC',   help='Instrument location')
     parser.add_argument('--manufacturer', dest='manufacturer',     metavar='MFR',   help='Manufacturer')
     parser.add_argument('--model',        dest='model',            metavar='MODEL', help='Model')
@@ -456,6 +459,7 @@ def _execute_update(args):
 
     fields = {k: v for k, v in {
         'instrument_name': args.instrument_name,
+        'instrument_id':   getattr(args, 'instrument_id', None),
         'location':        args.location,
         'manufacturer':    args.manufacturer,
         'model':           args.model,
@@ -466,7 +470,7 @@ def _execute_update(args):
     has_metadata = bool(getattr(args, 'metadata', None))
 
     if not fields and not has_metadata:
-        logger.error("No fields to update. Provide at least one of: --name, --location, --manufacturer, --model, --type, --description, --metadata")
+        logger.error("No fields to update. Provide at least one of: --name, --instrument-id, --location, --manufacturer, --model, --type, --description, --metadata")
         sys.exit(1)
 
     metadata_dict = None

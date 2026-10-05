@@ -691,7 +691,10 @@ def _execute_update(args):
             result = client.projects.update(current_project_id, **fields)
             term.success("Project updated", args)
             _show_project(result)
-            current_project_id = result.get('project_id', current_project_id)
+            new_id = result.get('project_id')
+            if new_id and new_id != current_project_id:
+                _follow_project_rename(current_project_id, new_id)
+            current_project_id = result.get('unique_id') or new_id or current_project_id
 
         if metadata_dict is not None:
             overwrite = getattr(args, 'overwrite', False)
@@ -814,6 +817,21 @@ def _execute_update_user_role(args):
         term.table(rows, ['Username', 'Name', 'Role'], max_widths=[25, 25, 12])
     except Exception as e:
         fail("updating user role", e, args)
+
+
+def _follow_project_rename(old_id, new_id):
+    """Point the saved current project at a project's new ID after a rename."""
+    from crucible.config import config
+    from .config import set_config_value
+
+    if not old_id or config.current_project != old_id:
+        return
+    if config.source('current_project') == 'environment':
+        logger.warning(f"CRUCIBLE_CURRENT_PROJECT still names '{old_id}'; "
+                       f"update it to '{new_id}'.")
+        return
+    set_config_value('current_project', new_id)
+    logger.info(f"Current project updated: {old_id} -> {new_id}")
 
 
 def _register_transfer_ownership(subparsers):
@@ -988,10 +1006,14 @@ def _edit_project(project_id, client, debug=False):
         return
 
     try:
+        project_ref = project.get('unique_id') or project_id
         if field_changes:
-            client.projects.update(project_id, **field_changes)
+            client.projects.update(project_ref, **field_changes)
         if meta_changed:
-            client.projects.update_scientific_metadata(project_id, edited_meta, overwrite=True)
+            client.projects.update_scientific_metadata(project_ref, edited_meta, overwrite=True)
+        new_id = field_changes.get('project_id')
+        if new_id and new_id != project.get('project_id'):
+            _follow_project_rename(project.get('project_id'), new_id)
 
         diff_updated = dict(field_changes)
         if meta_changed:

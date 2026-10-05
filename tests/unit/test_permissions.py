@@ -512,3 +512,48 @@ class TestProjectUpdateNoIdentifierCollision:
         project_ops._request.assert_called_once_with(
             'patch', '/projects/old-slug', json={'project_id': 'new-slug'})
         assert result['project_id'] == 'new-slug'
+
+
+PROJECT_MFID = '0tmp130wp9v5v000w88nks7jsg'
+
+
+def _project_lookup(project_ops):
+    def request(method, endpoint, **kwargs):
+        if endpoint == '/projects':
+            return {'items': [{'unique_id': PROJECT_MFID, 'project_id': 'my-project',
+                               'organization': 'x', 'status': 'active', 'title': 't'}],
+                    'total': 1}
+        return {'resource_id': PROJECT_MFID, 'previous_owner': None,
+                'new_owner': {'unique_id': '0000-0002-1825-0097',
+                              'first_name': 'A', 'last_name': 'B'},
+                'principal_type': 'user', 'principal_id': 'x', 'permission': 'viewer'}
+    project_ops._request = MagicMock(side_effect=request)
+    return project_ops._request
+
+
+@pytest.mark.parametrize('call, route', [
+    (lambda ops: ops.transfer_ownership('my-project', 'alice'),
+     f'/resources/{PROJECT_MFID}/transfer_ownership'),
+    (lambda ops: ops.list_access('my-project'),
+     f'/resources/{PROJECT_MFID}/access'),
+    (lambda ops: ops.set_public('my-project'),
+     f'/resources/{PROJECT_MFID}/access/public'),
+    (lambda ops: ops.update_scientific_metadata('my-project', {'a': 1}),
+     f'/resources/{PROJECT_MFID}/metadata'),
+])
+def test_project_slugs_are_resolved_for_generic_resource_routes(project_ops, call, route):
+    request = _project_lookup(project_ops)
+    try:
+        call(project_ops)
+    except Exception:
+        pass
+
+    assert request.call_args_list[-1].args[1] == route
+
+
+def test_project_mfids_skip_the_lookup(project_ops):
+    request = _project_lookup(project_ops)
+
+    project_ops.transfer_ownership(PROJECT_MFID, 'alice')
+
+    assert request.call_count == 1
