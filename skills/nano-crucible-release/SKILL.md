@@ -13,7 +13,8 @@ Each step after preparation is outward-facing. Confirm with the user before merg
 2. Set `__version__` in `crucible/__init__.py`; `pyproject.toml` reads it dynamically.
 3. In `docs/changelog.md`, rename `## Unreleased` to `## X.Y.Z` and add a fresh empty `## Unreleased` above it. Consolidate entries: merge duplicates and follow-ups to the same feature, keep one short line each, and drop entries for changes reverted within the cycle.
 4. Run `pytest tests/unit -q` and `mkdocs build`.
-5. Commit as `Prepare X.Y.Z release`.
+5. Check the operational skill in `crucible-ecosystem` (`skills/nano-crucible/SKILL.md`): if this release changes authentication, configuration, mutation boundaries, or supported workflows, or the skill's "checked against" version or compatibility notes are now wrong, tell the user so it can be updated there. Do not edit that repository unless asked.
+6. Commit as `Prepare X.Y.Z release`.
 
 ## Publish
 

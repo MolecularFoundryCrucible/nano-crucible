@@ -23,7 +23,7 @@ pytest tests/unit -q
 mkdocs build
 ```
 
-Iterate on the smallest relevant test set, then run all unit tests. Run `tests/integration/` only when the user authorizes live writes, and only against the `crucible-test` project. `crucible/parsers/` and `crucible/cast/` have little coverage: changes there need a mocked unit test, and a rename or removal needs a search of every call site.
+Iterate on the smallest relevant test set, then run all unit tests. `tests/integration/` hits a live API and leaves the records it creates behind, so it is never routine validation: run it only when the user authorizes live writes, and only against the `crucible-test` project. `crucible/parsers/` and `crucible/cast/` have little coverage: changes there need a mocked unit test, and a rename or removal needs a search of every call site.
 
 ## Invariants
 
