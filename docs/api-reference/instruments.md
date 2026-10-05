@@ -11,8 +11,17 @@ An instrument's owner and maintainers manage the instrument record (`get_users()
       members:
         - list
         - get
+        - search
         - create
         - update
+        - set_status
+        - get_users
+        - add_user
+        - remove_user
+        - update_user_role
+        - list_service_accounts
+        - bind_service_account
+        - unbind_service_account
         - list_access
         - set_access
         - revoke_access
