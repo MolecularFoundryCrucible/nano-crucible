@@ -4,10 +4,11 @@ import argparse
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
+import pytest
 from prompt_toolkit.document import Document
 
 from crucible.cli import dataset, instrument, project, sample, user
-from crucible.cli.shell import _CrucibleCompleter
+from crucible.cli.shell.completer import CrucibleCompleter as _CrucibleCompleter
 
 
 MFID = '0tkn2knjast3h0008nyq9zps2c'
@@ -206,3 +207,24 @@ def test_project_scope_choices_are_completed():
     )
 
     assert completions == ['shared']
+
+
+@pytest.mark.parametrize('line, expected', [
+    ('pwd', '_pwd'),
+    ('cd /tmp', '_cd'),
+    ('cd', '_cd'),
+    ('!echo hi', '_bang'),
+    ('debug on', '_debug'),
+    ('elevated', '_elevated'),
+    ('use my-project', '_use'),
+    ('v', '_toggle_verbose'),
+    ('v extra', None),
+    ('refresh now', None),
+    ('lsof', None),
+    ('dataset list', None),
+])
+def test_builtin_lookup(line, expected):
+    from crucible.cli.shell.builtins import find_builtin
+
+    handler = find_builtin(line)
+    assert (handler.__name__ if handler else None) == expected

@@ -16,6 +16,8 @@ from crucible.cli import project as project_cli
 from crucible.cli import sample as sample_cli
 from crucible.cli import service_account as service_account_cli
 from crucible.cli import shell as shell_cli
+from crucible.cli.shell import _common as shell_common
+from crucible.cli.shell import banner as shell_banner
 from crucible.cli import term
 from crucible.cli import user as user_cli
 
@@ -254,7 +256,7 @@ def test_shell_toolbar_restores_context_symbols(monkeypatch):
 def test_shell_toolbar_uses_brand_palette_without_completion_styles(monkeypatch):
     monkeypatch.setattr(term, '_COLOR_ENABLED', True)
 
-    rules = shell_cli._shell_style_rules()
+    rules = shell_common.shell_style_rules()
 
     assert rules['bottom-toolbar'] == 'noinherit bg:#031e2d fg:#a8c4cd'
     assert rules['tb-project'] == 'noinherit bg:#a8c4cd fg:#031e2d'
@@ -272,7 +274,7 @@ def test_shell_uses_true_color_when_terminal_advertises_it(monkeypatch):
     monkeypatch.delenv('PROMPT_TOOLKIT_COLOR_DEPTH', raising=False)
     monkeypatch.setenv('COLORTERM', 'truecolor')
 
-    assert shell_cli._shell_color_depth() == ColorDepth.DEPTH_24_BIT
+    assert shell_common.shell_color_depth() == ColorDepth.DEPTH_24_BIT
 
 
 def test_shell_respects_explicit_prompt_toolkit_color_depth(monkeypatch):
@@ -283,7 +285,7 @@ def test_shell_respects_explicit_prompt_toolkit_color_depth(monkeypatch):
     monkeypatch.setenv('PROMPT_TOOLKIT_COLOR_DEPTH', 'DEPTH_8_BIT')
     monkeypatch.setenv('COLORTERM', 'truecolor')
 
-    assert shell_cli._shell_color_depth() == ColorDepth.DEPTH_8_BIT
+    assert shell_common.shell_color_depth() == ColorDepth.DEPTH_8_BIT
 
 
 def test_shell_leaves_color_depth_automatic_without_true_color(monkeypatch):
@@ -292,12 +294,12 @@ def test_shell_leaves_color_depth_automatic_without_true_color(monkeypatch):
     monkeypatch.delenv('PROMPT_TOOLKIT_COLOR_DEPTH', raising=False)
     monkeypatch.delenv('COLORTERM', raising=False)
 
-    assert shell_cli._shell_color_depth() is None
+    assert shell_common.shell_color_depth() is None
 
 
 def test_shell_banner_is_packaged_and_uses_requested_colors():
-    banner = shell_cli._load_shell_banner()
-    fragments = shell_cli._shell_banner_fragments('_%=.\n.=_%')
+    banner = shell_banner.load_shell_banner()
+    fragments = shell_banner.shell_banner_fragments('_%=.\n.=_%')
     styles = {style for style, _text in fragments}
 
     assert len(banner.splitlines()) == 16
@@ -311,28 +313,28 @@ def test_shell_banner_is_packaged_and_uses_requested_colors():
 
 
 def test_shell_banner_contains_its_own_boundary():
-    banner = shell_cli._load_shell_banner()
-    rows = shell_cli._shell_banner_rows(banner)
-    panel = shell_cli._shell_banner_panel(banner)
+    banner = shell_banner.load_shell_banner()
+    rows = shell_banner.shell_banner_rows(banner)
+    panel = shell_banner.shell_banner_panel(banner)
 
     assert len(rows) == 16
     assert {len(row) for row in rows} == {16}
     assert len(panel.splitlines()) == 8
-    assert {shell_cli._vlen(line) for line in panel.splitlines()} == {16}
+    assert {shell_common.vlen(line) for line in panel.splitlines()} == {16}
     assert set(rows[0]) == {'_'}
     assert set(rows[-1]) == {'_'}
 
 
 def test_shell_banner_panel_has_consistent_width():
-    panel = shell_cli._shell_banner_panel('%%\n%')
+    panel = shell_banner.shell_banner_panel('%%\n%')
 
     lines = panel.splitlines()
     assert lines == ['█▀']
-    assert {shell_cli._vlen(line) for line in lines} == {2}
+    assert {shell_common.vlen(line) for line in lines} == {2}
 
 
 def test_shell_banner_panel_has_requested_edge_padding():
-    rows = shell_cli._shell_banner_rows(shell_cli._load_shell_banner())
+    rows = shell_banner.shell_banner_rows(shell_banner.load_shell_banner())
 
     assert set(rows[0]) == {'_'}
     assert set(rows[-1]) == {'_'}
@@ -341,21 +343,21 @@ def test_shell_banner_panel_has_requested_edge_padding():
 
 
 def test_shell_banner_is_centered_by_display_width():
-    panel = shell_cli._shell_banner_panel('%%')
+    panel = shell_banner.shell_banner_panel('%%')
 
-    assert shell_cli._shell_banner_left_margin(panel, 14) == 6
-    assert shell_cli._shell_banner_left_margin(panel, 7) == 2
+    assert shell_banner.shell_banner_left_margin(panel, 14) == 6
+    assert shell_banner.shell_banner_left_margin(panel, 7) == 2
 
 
 def test_shell_banner_centering_keeps_outer_margin_uncolored():
-    fragments = list(shell_cli._shell_banner_fragments('%%', left_margin=3))
+    fragments = list(shell_banner.shell_banner_fragments('%%', left_margin=3))
 
     assert fragments[0] == ('', '   ')
     assert '#a8c4cd' in fragments[1][0]
 
 
 def test_shell_banner_pixel_material_counts_match_source_pattern():
-    banner = shell_cli._load_shell_banner()
+    banner = shell_banner.load_shell_banner()
 
     assert banner.count('%') == 127
     assert banner.count('=') == 18
@@ -365,12 +367,12 @@ def test_shell_banner_pixel_material_counts_match_source_pattern():
 
 def test_shell_banner_is_skipped_on_narrow_terminals(monkeypatch):
     monkeypatch.setattr(
-        shell_cli,
-        '_load_shell_banner',
+        shell_banner,
+        'load_shell_banner',
         lambda: pytest.fail('Narrow terminals should not load the banner.'),
     )
 
-    assert shell_cli._print_shell_banner(15) is False
+    assert shell_banner.print_shell_banner(15) is False
 
 
 def test_shell_toolbar_marks_custom_api_and_debug(monkeypatch):
@@ -491,7 +493,7 @@ def test_shell_html_removes_styles_when_color_is_disabled(monkeypatch):
     monkeypatch.setattr(term, '_COLOR_ENABLED', False)
 
     fragments = to_formatted_text(
-        shell_cli._shell_html('<ansicyan><b>project-one</b></ansicyan>'))
+        shell_common.shell_html('<ansicyan><b>project-one</b></ansicyan>'))
 
     assert fragments == [('', 'project-one')]
 
@@ -499,7 +501,7 @@ def test_shell_html_removes_styles_when_color_is_disabled(monkeypatch):
 def test_shell_toolbar_style_is_monochrome_when_color_is_disabled(monkeypatch):
     monkeypatch.setattr(term, '_COLOR_ENABLED', False)
 
-    rules = shell_cli._shell_style_rules()
+    rules = shell_common.shell_style_rules()
 
     assert set(rules.values()) == {'noinherit'}
 
