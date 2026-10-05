@@ -199,13 +199,26 @@ Examples:
         help='Make dataset public (default: private)'
     )
 
-    # Instrument name
     parser.add_argument(
         '--instrument',
         dest='instrument_name',
         default=None,
         metavar='NAME',
-        help='Instrument name (optional, parser-specific)'
+        help='Deprecated: identifies the instrument by its display name; use --instrument-id'
+    )
+    parser.add_argument(
+        '--instrument-id',
+        dest='instrument_id',
+        default=None,
+        metavar='ID',
+        help='Registered instrument ID (slug, any casing)'
+    )
+    parser.add_argument(
+        '--instrument-mfid',
+        dest='instrument_mfid',
+        default=None,
+        metavar='MFID',
+        help='Canonical registered instrument MFID'
     )
 
     # Data format
@@ -316,6 +329,10 @@ def execute(args):
 
     # Parser will use its default measurement if not provided
     measurement_type = args.measurement
+    if args.instrument_name and not (args.instrument_id or args.instrument_mfid):
+        from .helpers import show_warning
+        show_warning("--instrument NAME is deprecated: instrument names may repeat. "
+                     "Use --instrument-id or --instrument-mfid.")
 
     # Initialize parser with all dataset properties
     # Specific parsers will augment metadata/keywords with extracted data
@@ -331,6 +348,8 @@ def execute(args):
             session_name=args.session_name,
             public=args.public,
             instrument_name=args.instrument_name,
+            instrument_id=args.instrument_id,
+            instrument_mfid=args.instrument_mfid,
             data_format=args.data_format
         )
     except Exception as e:

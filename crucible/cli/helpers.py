@@ -303,7 +303,8 @@ def resolve_list_project(args):
     project_mfid = getattr(args, 'project_mfid', None)
     if project_id or project_mfid or getattr(args, 'all_projects', False):
         return project_id, project_mfid
-    if getattr(args, 'instrument_mfid', None) and not getattr(args, 'project_scope', None):
+    if ((getattr(args, 'instrument_mfid', None) or getattr(args, 'instrument_id', None))
+            and not getattr(args, 'project_scope', None)):
         return None, None
     project_id, _ = resolve_project_context(args)
     return project_id, None

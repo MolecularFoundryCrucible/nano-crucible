@@ -310,7 +310,7 @@ Examples:
     crucible dataset list --project-id my-project --project-scope shared
     crucible dataset list --project-id my-project --measurement XRD
     crucible dataset list --project-id my-project -k silicon --limit 20
-    crucible dataset list --instrument-mfid 0tkn2knjast3h0008nyq9zps2c
+    crucible dataset list --instrument-id titan
     crucible dataset list --sample-mfid 0tkn2knjast3h0008nyq9zps2c
     crucible dataset list --missing session --created-after 2026-01-01
     crucible dataset list --sort name --direction asc
@@ -336,8 +336,12 @@ Examples:
         help='Filter by data type (exact match)'
     )
     parser.add_argument(
+        '--instrument-id', default=None, dest='instrument_id', metavar='ID',
+        help='Filter by instrument ID (slug, any casing)'
+    )
+    parser.add_argument(
         '--instrument', default=None, dest='instrument_name', metavar='NAME',
-        help='Filter by instrument name (exact match)'
+        help='Deprecated: filter by instrument display name; use --instrument-id'
     )
     parser.add_argument(
         '--group-by', dest='group_by', default=None,
@@ -568,19 +572,18 @@ Examples:
         help='Make dataset public (default: private)'
     )
 
-    # Instrument name
     parser.add_argument(
         '--instrument',
         dest='instrument_name',
         default=None,
         metavar='NAME',
-        help='Instrument name (optional)'
+        help='Deprecated: identifies the instrument by its display name; use --instrument-id'
     )
     parser.add_argument(
         '--instrument-id',
         default=None,
         metavar='ID',
-        help='Registered instrument ID (optional)'
+        help='Registered instrument ID (slug, any casing)'
     )
     parser.add_argument(
         '--instrument-mfid',
@@ -1846,10 +1849,20 @@ def _execute_list(args):
         except ValueError as e:
             logger.error(f"Error: {e}")
             sys.exit(1)
-        for name in ('dataset_name', 'keyword', 'data_type', 'instrument_name'):
+        for name in ('dataset_name', 'keyword', 'data_type'):
             value = getattr(args, name, None)
             if value:
                 filters[name] = value
+        if getattr(args, 'instrument_id', None):
+            if filters.get('instrument_mfid'):
+                logger.error("Error: Specify either --instrument-id or --instrument-mfid, not both.")
+                sys.exit(1)
+            filters['instrument_mfid'] = client.instruments.get(
+                instrument_id=args.instrument_id, include_owner=False)['unique_id']
+        if getattr(args, 'instrument_name', None):
+            from .helpers import show_warning
+            show_warning("--instrument NAME is deprecated; use --instrument-id.")
+            filters['instrument_name'] = args.instrument_name
         filters.update(listing_filter_kwargs(args))
         datasets = client.datasets.list(limit=args.limit, **filters)
 
@@ -1999,6 +2012,10 @@ def _execute_create(args):
     project_mfid = getattr(args, 'project_mfid', None)
     instrument_id = getattr(args, 'instrument_id', None)
     instrument_mfid = getattr(args, 'instrument_mfid', None)
+    if args.instrument_name and not (instrument_id or instrument_mfid):
+        from .helpers import show_warning
+        show_warning("--instrument NAME is deprecated: instrument names may repeat. "
+                     "Use --instrument-id or --instrument-mfid.")
     if project_id is None and project_mfid is None:
         project_id, project_source = resolve_project_context(args)
     else:
