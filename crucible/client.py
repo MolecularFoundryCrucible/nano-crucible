@@ -31,9 +31,11 @@ class CrucibleClient:
             privilege_mode: "normal" or "elevated". Sent as the
                 Crucible-Privilege-Mode header on every request. Elevated mode
                 is what lets a platform administrator see beyond their own
-                ACL-derived access. Loads from config if not provided, and
-                defaults to "normal". Admin-only operations request elevation
-                per call regardless of this setting.
+                ACL-derived access. Loads from config if not provided. When
+                unset, no header is sent and the server applies its legacy
+                behavior: elevated for a platform administrator, normal for
+                everyone else. Admin-only operations request elevation per
+                call regardless of this setting.
 
         Raises:
             ValueError: If api_key is not provided and not found in config
@@ -145,6 +147,13 @@ class CrucibleClient:
     def can_elevate(self) -> bool:
         """Whether this caller may request elevated privilege mode at all."""
         return bool(self.authorization.get('can_elevate'))
+
+    @property
+    def is_elevated(self) -> bool:
+        """Whether ordinary requests from this client run elevated."""
+        if self.privilege_mode is None:
+            return self.can_elevate
+        return self.privilege_mode == 'elevated'
 
     def _admin_mode(self) -> Optional[str]:
         """Privilege mode for calls that need elevation but are not admin-only.

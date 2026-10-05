@@ -34,10 +34,10 @@ PLATFORM_ROLES = ('none', 'contributor', 'support', 'admin')
 # Values for the Crucible-Privilege-Mode request header.
 PRIVILEGE_MODES = ('normal', 'elevated')
 
-# Sent when nothing else is configured. Omitting the header entirely makes the
-# server fall back to legacy behavior, which for a platform administrator means
-# elevated, so requests would silently reach beyond the caller's own access.
-DEFAULT_PRIVILEGE_MODE = 'normal'
+# None sends no header, so the server applies its legacy behavior: elevated for
+# a platform administrator, normal for everyone else. Sending 'elevated'
+# explicitly would instead be rejected with a 403 for ineligible callers.
+DEFAULT_PRIVILEGE_MODE = None
 
 # Kinds of parent/child link between two datasets, or between two samples.
 # Oriented child-relative-to-parent: 'is_part_of' reads "child is_part_of

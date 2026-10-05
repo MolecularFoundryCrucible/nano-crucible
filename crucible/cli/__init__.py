@@ -191,7 +191,7 @@ Examples:
         '--elevated',
         action='store_true',
         default=False,
-        help='Request platform-administrator elevation instead of normal ACL-derived access'
+        help='Request platform-administrator elevation for this command'
     )
 
     parser.add_argument(

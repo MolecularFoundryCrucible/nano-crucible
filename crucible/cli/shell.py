@@ -40,13 +40,6 @@ _BANNER_PIXEL_COLORS = {
 }
 
 
-def _elevated_now():
-    """True when the config singleton currently requests elevated privilege."""
-    from ..config import config
-
-    return config.privilege_mode == 'elevated'
-
-
 def _set_elevated(on):
     """Set or clear elevation for every client built during this process.
 
@@ -1153,7 +1146,7 @@ class CrucibleShell:
             'api_label':         fetch_api_label(),
             'api_attention':     fetch_api_attention(),
             'debug':             False,
-            'elevated':          _elevated_now(),
+            'elevated':          self.client.is_elevated,
             'deletions':         deletions or [],
             'join_requests':     join_requests or [],
             'service_accounts':  service_accounts or [],

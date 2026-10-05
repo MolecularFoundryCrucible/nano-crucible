@@ -10,12 +10,12 @@ Project options use `--project-id` with the conventional `-p` short alias. Sampl
 |---|---|
 | `--version` | Print the installed client version and exit |
 | `--debug` | Enable Crucible debug logging; place it before the command |
-| `--elevated` | Request platform-administrator elevation instead of normal ACL-derived access; place it before the command |
+| `--elevated` | Request platform-administrator elevation for one command; place it before the command |
 | `--no-color` | Disable ANSI colors while retaining interactive terminal hyperlinks; place it before the command |
 
-Commands run in normal, ACL-derived mode by default, so a platform administrator sees their own access rather than every record on the platform. `--elevated` widens that for one command. Administrator-only commands, such as `service-account show`, `service-account set-role`, and deletion review, elevate on their own and do not need the flag.
+By default no privilege mode is sent, so a platform administrator runs elevated and sees every record, while everyone else gets their normal, ACL-derived access. Set `crucible config set privilege_mode normal` to restrict an administrator account to its own access; `--elevated` then widens a single command. A future release will default to `normal`. Administrator-only commands, such as `service-account show`, `service-account set-role`, and deletion review, elevate on their own and do not need the flag.
 
-Elevation can also come from the `privilege_mode` config key or the `CRUCIBLE_PRIVILEGE_MODE` environment variable. Because neither is visible on the command line, the CLI prints a notice to stderr when a command runs elevated without `--elevated`. In the interactive shell, `elevated on|off` toggles it for the session and an `ELEVATED` badge appears in the toolbar.
+Explicit elevation can also come from the `privilege_mode` config key or the `CRUCIBLE_PRIVILEGE_MODE` environment variable. Because neither is visible on the command line, the CLI prints a notice to stderr when a command runs elevated without `--elevated`. In the interactive shell, `elevated on|off` toggles it for the session and an `ELEVATED` badge appears in the toolbar.
 
 `deletion list` shows the caller's review queue by default when they can review requests. Pass `--scope` to choose a different view.
 

@@ -30,13 +30,27 @@ def sent_headers(client):
     return client._session.request.call_args.kwargs.get('headers')
 
 
-def test_normal_is_sent_by_default(make_client):
+def test_no_header_is_sent_by_default(make_client):
     client = make_client()
 
     client._request('get', '/datasets')
 
-    assert client.privilege_mode == 'normal'
-    assert sent_headers(client)['Crucible-Privilege-Mode'] == 'normal'
+    assert client.privilege_mode is None
+    assert 'Crucible-Privilege-Mode' not in (sent_headers(client) or {})
+
+
+@pytest.mark.parametrize('mode, can_elevate, expected', [
+    (None, True, True),
+    (None, False, False),
+    ('normal', True, False),
+    ('elevated', True, True),
+])
+def test_is_elevated_reflects_the_server_default(make_client, mode, can_elevate,
+                                                 expected):
+    client = make_client(privilege_mode=mode)
+    client._authorization = {'can_elevate': can_elevate}
+
+    assert client.is_elevated is expected
 
 
 def test_client_level_mode_is_sent_on_every_request(make_client):
@@ -143,13 +157,15 @@ def test_explicit_flag_is_not_announced(monkeypatch, capsys):
 
 
 def test_shell_toggle_sets_and_clears_the_config_mode():
-    from crucible.cli.shell import _elevated_now, _set_elevated
+    from crucible.cli.shell import _set_elevated
+    from crucible.config import config
 
     _set_elevated(True)
-    assert _elevated_now() is True
+    assert config.privilege_mode == 'elevated'
 
     _set_elevated(False)
-    assert _elevated_now() is False
+    assert config.privilege_mode == 'normal'
+    config._data.pop('privilege_mode', None)
 
 
 def test_shell_toolbar_shows_the_elevated_badge():
