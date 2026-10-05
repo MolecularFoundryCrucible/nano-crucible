@@ -341,16 +341,23 @@ def test_service_account_suggestions_show_only_the_platform_role():
     assert meta == 'contributor'
 
 
-@pytest.mark.parametrize('orig_argv, expected_tail', [
-    (['python', '-m', 'crucible.cli'], ['-m', 'crucible.cli']),
-    (['/env/bin/python3', '/env/bin/crucible'], ['/env/bin/crucible']),
-    (['python', '-X', 'dev', '-m', 'crucible.cli', '--debug'],
+@pytest.mark.parametrize('orig_argv, existing, expected_tail', [
+    (['python', '-m', 'crucible.cli'], set(), ['-m', 'crucible.cli']),
+    (['/env/bin/python3', '/env/bin/crucible'], {'/env/bin/crucible'}, ['/env/bin/crucible']),
+    (['python', '-X', 'dev', '-m', 'crucible.cli', '--debug'], set(),
      ['-X', 'dev', '-m', 'crucible.cli', '--debug']),
+    # Windows console script reported without .exe (the reported crash)
+    (['python.exe', r'C:\env\Scripts\crucible', '--debug'],
+     {r'C:\env\Scripts\crucible.exe'}, [r'C:\env\Scripts\crucible.exe', '--debug']),
+    # Script path that no longer resolves at all
+    (['python.exe', r'C:\env\Scripts\crucible'], set(), ['-m', 'crucible.cli']),
 ])
-def test_reload_restarts_the_way_the_shell_was_started(monkeypatch, orig_argv, expected_tail):
+def test_reload_restarts_the_way_the_shell_was_started(monkeypatch, orig_argv, existing,
+                                                       expected_tail):
     from crucible.cli.shell import builtins
 
     monkeypatch.setattr(builtins.sys, 'orig_argv', orig_argv, raising=False)
+    monkeypatch.setattr(builtins.os.path, 'exists', lambda path: path in existing)
 
     assert builtins.reload_command() == [builtins.sys.executable] + expected_tail
 

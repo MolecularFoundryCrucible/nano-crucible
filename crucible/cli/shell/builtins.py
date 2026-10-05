@@ -118,13 +118,29 @@ def _refresh(shell, line):
 
 
 def reload_command():
-    """The argv that restarts this process exactly as it was started.
+    """The argv that restarts this process the way it was started.
 
-    sys.orig_argv keeps the interpreter options and the ``-m crucible.cli``
-    form; sys.argv alone turns that into a path to __main__.py, which then
-    fails with a relative-import error.
+    sys.orig_argv keeps interpreter options and the ``-m crucible.cli`` form;
+    sys.argv alone turns ``-m`` into a path to __main__.py, which fails with
+    a relative-import error. On Windows the ``crucible`` command is a
+    ``Scripts\\crucible.exe`` launcher whose script path may be reported
+    without ``.exe``; when the script path does not exist as given, try the
+    ``.exe`` and otherwise restart through ``-m crucible.cli``.
     """
-    return [sys.executable] + list(getattr(sys, 'orig_argv', [sys.executable] + sys.argv)[1:])
+    argv = list(getattr(sys, 'orig_argv', [sys.executable] + sys.argv)[1:])
+    options = []
+    while argv and argv[0].startswith('-') and argv[0] != '-m':
+        options.append(argv.pop(0))
+        if options[-1] in ('-X', '-W') and argv:
+            options.append(argv.pop(0))
+    if argv[:1] == ['-m'] or not argv:
+        return [sys.executable] + options + argv
+    script, rest = argv[0], argv[1:]
+    if not os.path.exists(script) and os.path.exists(script + '.exe'):
+        script += '.exe'
+    if os.path.exists(script):
+        return [sys.executable] + options + [script] + rest
+    return [sys.executable] + options + ['-m', 'crucible.cli'] + rest
 
 
 def _reload(shell, line):
