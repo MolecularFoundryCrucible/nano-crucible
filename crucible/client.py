@@ -93,7 +93,7 @@ class CrucibleClient:
         from .resources import FileOperations, DatasetOperations, SampleOperations, \
         ProjectOperations, UserOperations, InstrumentOperations, DeletionOperations, \
         GraphOperations, AccountOperations, IngestionOperations, ServiceAccountOperations, \
-        AccessGroupOperations
+        AccessGroupOperations, PrintOperations
 
         self.files = FileOperations(self)
         self.datasets = DatasetOperations(self)
@@ -107,6 +107,7 @@ class CrucibleClient:
         self.ingestions = IngestionOperations(self)
         self.service_accounts = ServiceAccountOperations(self)
         self.access_groups = AccessGroupOperations(self)
+        self.print = PrintOperations(self)
 
     def _request(self, method: str, endpoint: str,
                  privilege_mode: Optional[str] = None, **kwargs) -> Any:

@@ -90,6 +90,7 @@ nav:
     - Account: api-reference/account.md
     - Ingestion: api-reference/ingestion.md
     - Graphs: api-reference/graphs.md
+    - Print: api-reference/print.md
     - Models: api-reference/models.md
   - Development:
     - Permission Alignment: development/permission-alignment.md

@@ -9,6 +9,7 @@
 - Service-account administration: `get_admin()`, `list_admin()`, and `set_platform_role()` in Python, plus `service-account show` and `service-account set-role` in the CLI.
 - Deletion request and audit lists accept scope, project, sort, and direction filters, and deletion request details show whether the caller can review them.
 - A `privilege_mode` client keyword, `privilege_mode` config key, and global `--elevated` CLI flag request platform-administrator elevation.
+- `client.print.barcode()` and `crucible print barcode` publish label-printer jobs and confirm whether they printed, without local MQTT credentials.
 
 ### Changed
 

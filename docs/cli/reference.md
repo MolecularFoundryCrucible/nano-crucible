@@ -316,6 +316,7 @@ Configuration values can come from environment variables, the platform-specific 
 | `tree MFID` | Display connected ancestors and descendants |
 | `open [ID]` | Open the Graph Explorer or print its URL |
 | `qr ID` | Print a terminal QR code for an MFID |
+| `print barcode PRINTER_ID MFID NAME` | Publish a barcode print job and wait for confirmation it printed; exits non-zero unless the printer confirms success |
 | `completion [SHELL]` | Generate and install completion for bash, zsh, fish, or tcsh |
 | `upload ...` | Deprecated upload command; use `dataset create` |
 
