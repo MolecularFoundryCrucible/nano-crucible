@@ -187,13 +187,13 @@ def test_list_passes_explicit_filters_with_scalar_normalization():
     operations = make_listing_ops()
 
     operations.list(username='alice', platform_role='admin',
-                    q='ali', q_fields='username', is_service_account=False)
+                    q='ali', search_fields='username', is_service_account=False)
 
     operations._paginate.assert_called_once_with('/users', {
         'q': 'ali',
         'username': 'alice',
         'platform_role': ['admin'],
-        'q_fields': ['username'],
+        'search_fields': ['username'],
         'is_service_account': False,
     }, 100, 0)
 
@@ -207,11 +207,11 @@ def test_list_rejects_unknown_platform_role():
     operations._paginate.assert_not_called()
 
 
-def test_list_requires_q_with_q_fields():
+def test_list_requires_q_with_search_fields():
     operations = make_listing_ops()
 
-    with pytest.raises(ValueError, match='q_fields requires q'):
-        operations.list(q_fields='username')
+    with pytest.raises(ValueError, match='search_fields requires q'):
+        operations.list(search_fields='username')
 
     operations._paginate.assert_not_called()
 

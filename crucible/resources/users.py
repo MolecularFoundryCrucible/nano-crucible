@@ -229,7 +229,7 @@ class UserOperations(BaseResource):
 
     def list(self, limit: int = DEFAULT_LIMIT, offset: int = 0,
              q: Optional[str] = None,
-             q_fields: Optional[Union[str, List[str]]] = None,
+             search_fields: Optional[Union[str, List[str]]] = None,
              first_name: Optional[str] = None,
              last_name: Optional[str] = None,
              username: Optional[str] = None,
@@ -250,16 +250,17 @@ class UserOperations(BaseResource):
         email filters may include email when the caller is that user or a
         platform administrator.
 
-        ``platform_role`` filtering and ``sort``/``q_fields``/``q`` on email
-        are administrator only; other callers receive 403 from the API.
+        ``platform_role`` filtering and ``sort``/``search_fields``/``q`` on
+        email are administrator only; other callers receive 403 from the API.
 
         Args:
             limit (int): Maximum number of results to return (default: 100)
             offset (int): Starting position in the full result set (default: 0)
             q (str, optional): Case-insensitive substring search across the
-                fields named in q_fields, or name, username, and unique_id
-            q_fields (list or str, optional): Fields searched by q. One or more
-                of first_name, last_name, username, unique_id, email. Requires q
+                fields named in search_fields, or name, username, and unique_id
+            search_fields (list or str, optional): Fields searched by q. One or
+                more of first_name, last_name, username, unique_id, email.
+                Requires q
             first_name (str, optional): First-name filter, permissive substring
                 unless permissive=False
             last_name (str, optional): Last-name filter, permissive substring
@@ -287,8 +288,8 @@ class UserOperations(BaseResource):
             >>> for user in users:
             ...     print(f"{user['first_name']} {user['last_name']} ({user['unique_id']})")
         """
-        if q_fields is not None and not q:
-            raise ValueError("q_fields requires q.")
+        if search_fields is not None and not q:
+            raise ValueError("search_fields requires q.")
         if platform_role is not None:
             roles = platform_role if isinstance(platform_role, (list, tuple)) else [platform_role]
             invalid = [role for role in roles if role not in PLATFORM_ROLES]
@@ -297,7 +298,7 @@ class UserOperations(BaseResource):
                     f"platform_role must be one of: {', '.join(PLATFORM_ROLES)}.")
         params = {
             'q': q,
-            'q_fields': _as_query_list(q_fields),
+            'search_fields': _as_query_list(search_fields),
             'first_name': first_name,
             'last_name': last_name,
             'username': username,
