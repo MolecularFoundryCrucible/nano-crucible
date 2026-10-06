@@ -4,6 +4,8 @@
 
 ### Added
 
+- User administration: `client.users.set_platform_role()` and `revoke_api_keys()` in Python, plus `user set-role` and `user revoke-keys` in the CLI. `user get` shows the platform role and API key status to administrators.
+- `client.users.list()` accepts `q`, `q_fields`, name, role, account-type, sort, and direction filters, and `user list` gains the matching options with Email and Platform role columns for administrators. `user list-projects` shows each project role.
 - Dataset and sample lists accept sort, direction, visibility, affiliation, owner, and creation or modification time-range filters in the Python client and CLI.
 - `client.datasets.facets()`, `client.samples.facets()`, and the matching `dataset facets` and `sample facets` CLI commands group results by a field and return value counts.
 - Service-account administration: `get_admin()`, `list_admin()`, and `set_platform_role()` in Python, plus `service-account show` and `service-account set-role` in the CLI.
