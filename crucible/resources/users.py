@@ -9,7 +9,7 @@ Provides organized access to user-related API endpoints.
 import logging
 from typing import TYPE_CHECKING, Any, Optional, Dict, List, Sequence, Union
 from .base import BaseResource
-from ..constants import DEFAULT_LIMIT, PLATFORM_ROLES, USER_PLATFORM_ROLES
+from ..constants import DEFAULT_LIMIT, PLATFORM_ROLES
 from ..utils.deprecation import _deprecated, _deprecated_parameter
 from ..utils.identifiers import (
     classify_user_reference,
@@ -171,16 +171,15 @@ class UserOperations(BaseResource):
 
         Args:
             user_unique_id: Canonical user ORCID or MFID
-            platform_role: One of crucible.constants.USER_PLATFORM_ROLES
-                (none, contributor, admin). 'support' is not accepted for
-                human users.
+            platform_role: One of crucible.constants.PLATFORM_ROLES
+                (none, contributor, admin)
 
         Returns:
             Dict: Updated UserRead with platform_role and user_capabilities
         """
-        if platform_role not in USER_PLATFORM_ROLES:
+        if platform_role not in PLATFORM_ROLES:
             raise ValueError(
-                f"platform_role must be one of: {', '.join(USER_PLATFORM_ROLES)}.")
+                f"platform_role must be one of: {', '.join(PLATFORM_ROLES)}.")
         return self._request(
             'patch',
             f'/users/{user_unique_id}/platform_role',
@@ -271,7 +270,7 @@ class UserOperations(BaseResource):
             is_service_account (bool, optional): Restrict to service accounts
                 or human users
             platform_role (list or str, optional): Platform-role filter. One or
-                more of none, contributor, support, admin. Administrator only
+                more of none, contributor, admin. Administrator only
             permissive (bool, optional): Substring (True, default) or exact
                 matching for first_name and last_name
             sort (str, optional): One of name, username, unique_id, email.

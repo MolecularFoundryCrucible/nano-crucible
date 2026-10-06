@@ -8,7 +8,7 @@ import html as _html
 from prompt_toolkit.completion import Completer, Completion
 
 from .. import term
-from ...constants import USER_PLATFORM_ROLES
+from ...constants import PLATFORM_ROLES
 from ._common import ENTITY_ICONS, get_subparser_map, shell_html
 
 
@@ -575,11 +575,11 @@ class CrucibleCompleter(Completer):
             if words[1] != 'set-role':
                 return False
             if trailing_space and len(words) == 3:
-                for role in USER_PLATFORM_ROLES:
+                for role in PLATFORM_ROLES:
                     yield Completion(role + ' ', start_position=0)
                 return True
             if not trailing_space and len(words) == 4:
-                for role in USER_PLATFORM_ROLES:
+                for role in PLATFORM_ROLES:
                     if role.startswith(words[3]):
                         yield Completion(
                             role + ' ', start_position=-len(words[3]))

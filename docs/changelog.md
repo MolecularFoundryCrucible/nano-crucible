@@ -24,6 +24,7 @@
 
 ### Changed
 
+- The `support` platform role is no longer offered or accepted: `service-account set-role` and `user set-role` accept only `none`, `contributor`, and `admin`, matching the API routes.
 - `service-account list` shows each account's platform role and accepts `-q` to filter, using the administrator listing.
 - `service-account get` shows the platform role and API key status to administrators, `--groups` and `list-access-groups` name each group's project or instrument, and `show` is now an alias for `get`.
 - Identifying an instrument by display name is deprecated: `dataset create --instrument`, `crucible upload --instrument`, `dataset list --instrument`, and `instrument_name` alone in `datasets.create()` or `datasets.list()` warn. Use `--instrument-id`/`--instrument-mfid`, now also on `upload` and `dataset list`.

@@ -683,7 +683,7 @@ def _execute_list(args):
 
 
 def _register_set_role(subparsers):
-    from crucible.constants import USER_PLATFORM_ROLES
+    from crucible.constants import PLATFORM_ROLES
 
     parser = subparsers.add_parser(
         'set-role',
@@ -699,8 +699,8 @@ Examples:
 """
     )
     parser.add_argument('user', metavar='USER', help='ORCID, MFID, username, or email of the user')
-    parser.add_argument('platform_role', metavar='ROLE', choices=USER_PLATFORM_ROLES,
-                        help=f"Platform role: {', '.join(USER_PLATFORM_ROLES)}")
+    parser.add_argument('platform_role', metavar='ROLE', choices=PLATFORM_ROLES,
+                        help=f"Platform role: {', '.join(PLATFORM_ROLES)}")
     parser.add_argument('--json', action='store_true', default=False,
                         help='Output as JSON object')
     parser.set_defaults(func=_execute_set_role)
