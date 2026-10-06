@@ -268,8 +268,8 @@ def _show_user(user):
         if status:
             valid = status.get('valid')
             _p("API key", term.green('valid') if valid else term.red('invalid'))
-            _p("Issued", term.fmt_ts(status.get('created_at')))
-            _p("Expires", term.fmt_ts(status.get('expires_at')))
+            _p("Issued", term.fmt_date(status.get('created_at')))
+            _p("Expires", term.fmt_date(status.get('expires_at')))
 
 
 def _execute_get(args):

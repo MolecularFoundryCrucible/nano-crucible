@@ -83,6 +83,8 @@ def test_admin_view_shows_platform_role_and_key_status(capsys):
     assert 'Platform role' in output
     assert 'admin' in output
     assert 'API key' in output
+    assert '2026-01-01' in output
+    assert '2027-01-01' in output
 
 
 def test_null_platform_role_hides_authorization_block(capsys):
