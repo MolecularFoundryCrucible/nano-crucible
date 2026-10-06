@@ -55,6 +55,7 @@ class AccountCapabilities(BaseModel):
     """
 
     can_manage_service_accounts: Optional[bool] = None
+    can_manage_users: Optional[bool] = None
     can_create_project: Optional[bool] = None
     can_register_instrument: Optional[bool] = None
     can_create_sample: Optional[bool] = None

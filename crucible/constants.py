@@ -33,6 +33,10 @@ DELETION_AUDIT_SCOPES = ('all', 'submitted')
 # Platform-wide roles a service account may hold.
 PLATFORM_ROLES = ('none', 'contributor', 'support', 'admin')
 
+# Roles accepted when changing a human user's platform role. 'support' is not
+# accepted for human users.
+USER_PLATFORM_ROLES = ('none', 'contributor', 'admin')
+
 # Values for the Crucible-Privilege-Mode request header.
 PRIVILEGE_MODES = ('normal', 'elevated')
 
