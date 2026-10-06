@@ -259,17 +259,22 @@ def _show_user(user):
         _p("Email", email)
     if user.get('is_service_account'):
         _p("Type", "service account")
+    caps = user.get('user_capabilities') or {}
     role = user.get('platform_role')
     status = user.get('api_key_status')
-    if (role and role != 'none') or status:
+    can_view_private = caps.get('can_view_private') or (role and role != 'none') or bool(status)
+    can_manage_api_key = caps.get('can_manage_api_key') or bool(status)
+    if can_view_private or can_manage_api_key:
         term.subheader("Authorization")
-        if role and role != 'none':
+        if can_view_private:
             _p("Platform role", term.platform_role_label(role))
         if status:
             valid = status.get('valid')
             _p("API key", term.green('valid') if valid else term.red('invalid'))
             _p("Issued", term.fmt_date(status.get('created_at')))
             _p("Expires", term.fmt_date(status.get('expires_at')))
+        elif can_manage_api_key:
+            _p("API key", term.dim('none issued'))
 
 
 def _execute_get(args):

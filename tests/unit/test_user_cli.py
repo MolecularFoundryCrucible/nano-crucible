@@ -93,6 +93,40 @@ def test_null_platform_role_hides_authorization_block(capsys):
     assert 'Authorization' not in capsys.readouterr().out
 
 
+def test_no_role_reports_dim_dash_when_authorized(capsys):
+    _show_user({
+        **BASE_USER,
+        'platform_role': 'none',
+        'user_capabilities': {'can_view_private': True, 'can_manage_api_key': True},
+    })
+
+    output = capsys.readouterr().out
+    assert 'Platform role' in output
+
+
+def test_keyless_admin_view_reports_none_issued(capsys):
+    _show_user({
+        **BASE_USER,
+        'platform_role': None,
+        'user_capabilities': {'can_view_private': True, 'can_manage_api_key': True},
+        'api_key_status': None,
+    })
+
+    output = capsys.readouterr().out
+    assert 'none issued' in output
+
+
+def test_public_view_of_another_user_hides_key_status(capsys):
+    _show_user({
+        **BASE_USER,
+        'user_capabilities': {'can_view_private': False, 'can_manage_api_key': False},
+    })
+
+    output = capsys.readouterr().out
+    assert 'API key' not in output
+    assert 'Platform role' not in output
+
+
 def test_create_accepts_username_without_orcid():
     args = _parse(
         _register_create,
