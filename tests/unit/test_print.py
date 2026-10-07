@@ -7,9 +7,48 @@ from unittest.mock import MagicMock
 import pytest
 
 from crucible.cli import print as print_cli
+from crucible.client import CrucibleClient
 from crucible.resources.print import PrintOperations
 
 MFID = '0tkn2knjast3h0008nyq9zps2c'
+
+
+@pytest.fixture
+def real_client(monkeypatch):
+    """A CrucibleClient with both sessions mocked, for exercising _request's
+    retry= routing directly (not just that PrintOperations passes the kwarg)."""
+    from crucible.config import config
+
+    monkeypatch.setitem(config._data, 'api_url', 'https://example.test/api/v3')
+    monkeypatch.setitem(config._data, 'api_key', 'test-key')
+    config._data.pop('privilege_mode', None)
+
+    client = CrucibleClient()
+    client._session = MagicMock()
+    client._no_retry_session = MagicMock()
+    for session in (client._session, client._no_retry_session):
+        session.request.return_value = MagicMock(
+            ok=True, status_code=200, content=b'{}', text='{}')
+        session.request.return_value.json.return_value = {}
+    return client
+
+
+def test_request_retry_false_uses_the_no_retry_session(real_client):
+    """retry=False must bypass the shared retrying adapter entirely, not just
+    skip retries after the fact -- a 502/503/504 arriving after a
+    non-idempotent server-side effect (e.g. a print already published to
+    MQTT) must not be retried."""
+    real_client._request('post', '/print/barcode', retry=False, json={})
+
+    real_client._no_retry_session.request.assert_called_once()
+    real_client._session.request.assert_not_called()
+
+
+def test_request_retry_true_by_default(real_client):
+    real_client._request('get', '/datasets')
+
+    real_client._session.request.assert_called_once()
+    real_client._no_retry_session.request.assert_not_called()
 
 
 def make():
@@ -31,11 +70,26 @@ def test_barcode_sends_expected_payload():
     result = resource.barcode('lab3-zebra', MFID, 'Sample A')
 
     request.assert_called_once_with(
-        'post', '/print/barcode',
+        'post', '/print/barcode', retry=False,
         json={'printer_id': 'lab3-zebra', 'mfid': MFID, 'name': 'Sample A'},
     )
     assert result['status'] == 'ok'
     assert result['job_id'] == 'job-1'
+
+
+def test_barcode_disables_automatic_retry():
+    """A lost response after the job already published to MQTT must not
+    trigger a client-side retry, since that would risk a second physical
+    print. See crucible.client.CrucibleClient._request's retry= kwarg."""
+    resource, request = make()
+    request.return_value = {
+        'job_id': 'job-1', 'printer_id': 'lab3-zebra', 'mfid': MFID,
+        'name': 'Sample A', 'ts': 1700000000.0, 'status': 'ok', 'detail': None,
+    }
+
+    resource.barcode('lab3-zebra', MFID, 'Sample A')
+
+    assert request.call_args.kwargs['retry'] is False
 
 
 def test_barcode_rejects_invalid_mfid_without_a_request():

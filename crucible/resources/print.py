@@ -41,6 +41,12 @@ class PrintOperations(BaseResource):
         None does not mean the print is fine -- it means no extra
         diagnostic info was available.
 
+        Not automatically retried on a transient 429/502/503/504: the
+        server may have already published the job to MQTT (and the
+        printer may have already printed it) by the time such a response
+        arrives, so a client-side retry here could trigger a second,
+        genuinely new print job and double-print the label.
+
         Args:
             printer_id: Target printer identifier, e.g. 'lab3-zebra'. Not
                 validated against a known-printers list; a typo reaches
@@ -55,7 +61,7 @@ class PrintOperations(BaseResource):
             raise ValueError("mfid must be an exact 26-character MFID.")
 
         result = self._request(
-            'post', '/print/barcode',
+            'post', '/print/barcode', retry=False,
             json={'printer_id': printer_id, 'mfid': mfid, 'name': name},
         )
         if result.get('status') != 'ok':

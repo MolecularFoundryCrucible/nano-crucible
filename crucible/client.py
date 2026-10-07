@@ -89,6 +89,14 @@ class CrucibleClient:
         self._session.mount("https://", adapter)
         self._session.mount("http://", adapter)
 
+        # Session for calls that must not be retried on 429/502/503/504.
+        # The default HTTPAdapter retries nothing, which is correct here:
+        # a response lost or delayed after a non-idempotent server-side
+        # effect already happened (e.g. a physical print job published to
+        # MQTT) must not be retried, since that would repeat the effect.
+        self._no_retry_session = requests.Session()
+        self._no_retry_session.headers.update({"Authorization": f"Bearer {api_key}"})
+
         # Initialize resource operations
         from .resources import FileOperations, DatasetOperations, SampleOperations, \
         ProjectOperations, UserOperations, InstrumentOperations, DeletionOperations, \
@@ -110,13 +118,18 @@ class CrucibleClient:
         self.print = PrintOperations(self)
 
     def _request(self, method: str, endpoint: str,
-                 privilege_mode: Optional[str] = None, **kwargs) -> Any:
+                 privilege_mode: Optional[str] = None,
+                 retry: bool = True, **kwargs) -> Any:
         """Make an HTTP request to the API.
 
         Args:
             method: HTTP method (get, post, put, delete)
             endpoint: API endpoint path
             privilege_mode: Per-call override of the client's privilege mode.
+            retry: Whether transient 429/502/503/504 responses may be
+                retried. Set False for a non-idempotent endpoint where a
+                lost response after a server-side side effect must not
+                trigger a second attempt.
             **kwargs: Additional arguments to pass to requests
 
         Returns:
@@ -138,7 +151,8 @@ class CrucibleClient:
             headers = dict(kwargs.pop('headers', None) or {})
             headers.setdefault('Crucible-Privilege-Mode', mode)
             kwargs['headers'] = headers
-        response = self._session.request(method, url, timeout=timeout, **kwargs)
+        session = self._session if retry else self._no_retry_session
+        response = session.request(method, url, timeout=timeout, **kwargs)
         logger.debug(f"Status: {response.status_code}")
         logger.debug(f"Response: {response.text}")
         if not response.ok:
