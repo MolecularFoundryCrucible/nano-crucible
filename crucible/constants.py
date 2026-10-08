@@ -30,8 +30,8 @@ DELETION_REQUEST_SORTS = ('request_time', 'resource_name', 'project_id',
                           'requester_name', 'status')
 DELETION_AUDIT_SCOPES = ('all', 'submitted')
 
-# Platform-wide roles a service account may hold.
-PLATFORM_ROLES = ('none', 'contributor', 'support', 'admin')
+# Platform-wide roles a human user or service account may hold.
+PLATFORM_ROLES = ('none', 'contributor', 'admin')
 
 # Values for the Crucible-Privilege-Mode request header.
 PRIVILEGE_MODES = ('normal', 'elevated')

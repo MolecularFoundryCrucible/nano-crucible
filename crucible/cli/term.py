@@ -275,7 +275,7 @@ def platform_role_label(role: str | None, stream=None) -> str:
     """Color a platform role; 'none' and missing values are dimmed."""
     if not role or role == 'none':
         return dim(role or '-', stream=stream)
-    styles = {'admin': magenta, 'support': blue, 'contributor': lambda v, stream=None: v}
+    styles = {'admin': magenta, 'contributor': lambda v, stream=None: v}
     return styles.get(role, dim)(role, stream=stream)
 
 

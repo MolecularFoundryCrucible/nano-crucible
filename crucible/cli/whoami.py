@@ -80,6 +80,7 @@ _CAPABILITY_LABELS = {
     'can_register_instrument':     'register instruments',
     'can_create_for_others':       'create for other users',
     'can_manage_service_accounts': 'manage service accounts',
+    'can_manage_users':            'manage users',
 }
 
 

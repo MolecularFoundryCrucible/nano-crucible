@@ -185,16 +185,18 @@ Most user-management commands require administrator permissions.
 |---|---|
 | `user get USER` | Show a user by ORCID, MFID, username, or email |
 | `user search QUERY` | Search names and usernames |
-| `user list` | List users |
+| `user list [--q QUERY] [--first-name NAME] [--last-name NAME] [--username USERNAME] [--email EMAIL] [--platform-role ROLE] [--service-account\\|--human] [--sort FIELD] [--direction DIR] [--exact]` | List users; administrators see email and platform roles |
 | `user create` | Create a user |
 | `user update USER` | Update a user record |
 | `user edit USER` | Edit a user record interactively |
+| `user set-role USER ROLE` | Change a human user's platform role (`none`, `contributor`, `admin`); human platform admins only |
+| `user revoke-keys USER [--yes]` | Revoke every API key held by a user; admin only |
 | `user list-datasets USER [--limit N]` | List datasets accessible to a user |
 | `user check-access USER DATASET_MFID` | Show a user's effective dataset access role |
 | `user list-access-groups USER` | List a user's access groups |
 | `user add-access-group USER GROUP` | Deprecated; use the typed project or instrument membership command |
 | `user remove-access-group USER GROUP` | Deprecated; use the typed project or instrument membership command |
-| `user list-projects USER` | List a user's projects |
+| `user list-projects USER` | List a user's projects with their role in each |
 
 Human users require a username and may optionally supply an ORCID during creation.
 When the ORCID is omitted, the API assigns a canonical MFID.

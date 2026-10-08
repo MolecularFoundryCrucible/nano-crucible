@@ -9,7 +9,7 @@ Provides organized access to user-related API endpoints.
 import logging
 from typing import TYPE_CHECKING, Any, Optional, Dict, List, Sequence, Union
 from .base import BaseResource
-from ..constants import DEFAULT_LIMIT
+from ..constants import DEFAULT_LIMIT, PLATFORM_ROLES
 from ..utils.deprecation import _deprecated, _deprecated_parameter
 from ..utils.identifiers import (
     classify_user_reference,
@@ -24,6 +24,15 @@ if TYPE_CHECKING:
     from ..models import EffectiveResourceAccess, User
 
 logger = logging.getLogger(__name__)
+
+
+def _as_query_list(value):
+    """Normalize a scalar or sequence into a list for a repeatable query parameter."""
+    if value is None:
+        return None
+    if isinstance(value, (list, tuple)):
+        return list(value)
+    return [value]
 
 
 class UserOperations(BaseResource):
@@ -151,6 +160,48 @@ class UserOperations(BaseResource):
         return self._request('get', f'/users/{user_unique_id}/apikey/verify',
                              privilege_mode=self._client._admin_mode())
 
+    def set_platform_role(self, user_unique_id: str, platform_role: str) -> Dict:
+        """Change a human user's platform role.
+
+        **Requires human platform-administrator permissions.** Service-account
+        callers are rejected even when they hold platform_role=admin, callers
+        cannot change their own role, and service-account targets return 409
+        pointing at client.service_accounts.set_platform_role(). Demoting the
+        last human platform administrator returns 409.
+
+        Args:
+            user_unique_id: Canonical user ORCID or MFID
+            platform_role: One of crucible.constants.PLATFORM_ROLES
+                (none, contributor, admin)
+
+        Returns:
+            Dict: Updated UserRead with platform_role and user_capabilities
+        """
+        if platform_role not in PLATFORM_ROLES:
+            raise ValueError(
+                f"platform_role must be one of: {', '.join(PLATFORM_ROLES)}.")
+        return self._request(
+            'patch',
+            f'/users/{user_unique_id}/platform_role',
+            json={'platform_role': platform_role},
+            privilege_mode='elevated',
+        )
+
+    def revoke_api_keys(self, user_unique_id: str) -> None:
+        """Revoke every API key held by a user. Platform administrators only.
+
+        The user's keys stop authenticating within the API's principal-cache
+        TTL. Works for human users and service accounts.
+
+        Args:
+            user_unique_id: Canonical user ORCID or MFID
+        """
+        self._request(
+            'delete',
+            f'/users/{user_unique_id}/apikey',
+            privilege_mode='elevated',
+        )
+
     @_deprecated_parameter('orcids', 'user_unique_ids')
     def resolve(self, user_unique_ids: Optional[List[str]] = None,
                 usernames: Optional[List[str]] = None,
@@ -177,30 +228,92 @@ class UserOperations(BaseResource):
         return self._request('post', '/users/resolve', json=body)
 
     def list(self, limit: int = DEFAULT_LIMIT, offset: int = 0,
+             q: Optional[str] = None,
+             search_fields: Optional[Union[str, List[str]]] = None,
+             first_name: Optional[str] = None,
+             last_name: Optional[str] = None,
+             username: Optional[str] = None,
+             email: Optional[str] = None,
+             unique_id: Optional[str] = None,
+             is_service_account: Optional[bool] = None,
+             platform_role: Optional[Union[str, List[str]]] = None,
+             permissive: Optional[bool] = None,
+             sort: Optional[str] = None,
+             direction: Optional[str] = None,
+             include_total: Optional[bool] = None,
              **kwargs: Any) -> List[Dict]:
         """List users visible to the authenticated caller.
 
-        Platform administrators see the full directory. Other callers see
-        users who share an access group with them. Broad collection records
-        are public-safe. Exact unique-ID, username, or email filters may include
-        email when the caller is that user or a platform administrator.
+        Platform administrators see the full directory with email and platform
+        roles. Other callers see users who share an access group with them.
+        Broad collection records are public-safe. Exact unique-ID, username, or
+        email filters may include email when the caller is that user or a
+        platform administrator.
+
+        ``platform_role`` filtering and ``sort``/``search_fields``/``q`` on
+        email are administrator only; other callers receive 403 from the API.
 
         Args:
             limit (int): Maximum number of results to return (default: 100)
             offset (int): Starting position in the full result set (default: 0)
-            **kwargs: Additional query parameters for filtering
+            q (str, optional): Case-insensitive substring search across the
+                fields named in search_fields, or name, username, and unique_id
+            search_fields (list or str, optional): Fields searched by q. One or
+                more of first_name, last_name, username, unique_id, email.
+                Requires q
+            first_name (str, optional): First-name filter, permissive substring
+                unless permissive=False
+            last_name (str, optional): Last-name filter, permissive substring
+                unless permissive=False
+            username (str, optional): Exact username filter
+            email (str, optional): Exact email filter
+            unique_id (str, optional): Exact ORCID or service-account MFID filter
+            is_service_account (bool, optional): Restrict to service accounts
+                or human users
+            platform_role (list or str, optional): Platform-role filter. One or
+                more of none, contributor, admin. Administrator only
+            permissive (bool, optional): Substring (True, default) or exact
+                matching for first_name and last_name
+            sort (str, optional): One of name, username, unique_id, email.
+                Omitted keeps the API's last-name, first-name order
+            direction (str, optional): asc (default) or desc
+            include_total (bool, optional): True always computes the total,
+                False omits it, None preserves the API default
 
         Returns:
-            List[Dict]: Public-safe user records with canonical identity and name
+            List[Dict]: User records in the API's requested order
 
         Example:
             >>> users = client.users.list(limit=50)
             >>> for user in users:
-            ...     print(f"{user['first_name']} {user['last_name']} ({user['orcid']})")
+            ...     print(f"{user['first_name']} {user['last_name']} ({user['unique_id']})")
         """
-        params = {k: v for k, v in kwargs.items() if v is not None}
-        users = self._paginate('/users', params, limit, offset)
-        return sorted(users, key=lambda u: u.get('id') or 0)
+        if search_fields is not None and not q:
+            raise ValueError("search_fields requires q.")
+        if platform_role is not None:
+            roles = platform_role if isinstance(platform_role, (list, tuple)) else [platform_role]
+            invalid = [role for role in roles if role not in PLATFORM_ROLES]
+            if invalid:
+                raise ValueError(
+                    f"platform_role must be one of: {', '.join(PLATFORM_ROLES)}.")
+        params = {
+            'q': q,
+            'search_fields': _as_query_list(search_fields),
+            'first_name': first_name,
+            'last_name': last_name,
+            'username': username,
+            'email': email,
+            'unique_id': unique_id,
+            'is_service_account': is_service_account,
+            'platform_role': _as_query_list(platform_role),
+            'permissive': permissive,
+            'sort': sort,
+            'direction': direction,
+            'include_total': include_total,
+        }
+        params = {k: v for k, v in params.items() if v is not None}
+        params.update({k: v for k, v in kwargs.items() if v is not None})
+        return self._paginate('/users', params, limit, offset)
 
     def create(self, user: Union['User', Dict],
                project_ids: Optional[Sequence[str]] = None) -> Dict:

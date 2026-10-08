@@ -8,6 +8,7 @@ import html as _html
 from prompt_toolkit.completion import Completer, Completion
 
 from .. import term
+from ...constants import PLATFORM_ROLES
 from ._common import ENTITY_ICONS, get_subparser_map, shell_html
 
 
@@ -563,7 +564,7 @@ class CrucibleCompleter(Completer):
         # matches while typing is useful preview, not just identifier lookup.
         _USER_SUBS = {'get', 'update', 'edit', 'add-access-group', 'remove-access-group',
                       'list-datasets', 'check-access', 'list-access-groups', 'list-projects',
-                      'search'}
+                      'set-role', 'revoke-keys', 'search'}
         if words[1] not in _USER_SUBS:
             return False
         if trailing_space and len(words) == 2:
@@ -571,6 +572,18 @@ class CrucibleCompleter(Completer):
         elif not trailing_space and len(words) == 3 and not words[2].startswith('-'):
             prefix = words[2]
         else:
+            if words[1] != 'set-role':
+                return False
+            if trailing_space and len(words) == 3:
+                for role in PLATFORM_ROLES:
+                    yield Completion(role + ' ', start_position=0)
+                return True
+            if not trailing_space and len(words) == 4:
+                for role in PLATFORM_ROLES:
+                    if role.startswith(words[3]):
+                        yield Completion(
+                            role + ' ', start_position=-len(words[3]))
+                return True
             return False
         yield from self._yield_user_completions(prefix)
         return True
