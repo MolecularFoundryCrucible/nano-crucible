@@ -2,7 +2,7 @@
 
 Access via `client.print`. Publishes label-printer jobs and waits for a print result.
 
-::: crucible.resources.print.PrintOperations
+::: crucible.resources.printer.PrintOperations
     options:
       members:
         - barcode

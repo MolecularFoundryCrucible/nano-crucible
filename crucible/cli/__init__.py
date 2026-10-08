@@ -212,7 +212,7 @@ Examples:
     from . import (
         dataset, sample, project, instrument, user, file as file_cmd, ingestion,  # Resource commands
         service_account, access_group,
-        upload, completion, config as config_cmd, open as open_cmd, link, unlink, whoami, account, cache, download, get, edit, status, deletion, tree, cast, qr, print as print_cmd  # Utility commands
+        upload, completion, config as config_cmd, open as open_cmd, link, unlink, whoami, account, cache, download, get, edit, status, deletion, tree, cast, qr, printer  # Utility commands
     )
 
     # Register resource commands (new structure)
@@ -244,7 +244,7 @@ Examples:
     tree.register_subcommand(subparsers)
     cast.register_subcommand(subparsers)
     qr.register_subcommand(subparsers)
-    print_cmd.register_subcommand(subparsers)
+    printer.register_subcommand(subparsers)
 
     # Enable shell completion if argcomplete is available
     if ARGCOMPLETE_AVAILABLE:

@@ -6,9 +6,9 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from crucible.cli import print as print_cli
+from crucible.cli import printer as print_cli
 from crucible.client import CrucibleClient
-from crucible.resources.print import PrintOperations
+from crucible.resources.printer import PrintOperations
 
 MFID = '0tkn2knjast3h0008nyq9zps2c'
 

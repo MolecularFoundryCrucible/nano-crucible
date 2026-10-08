@@ -19,7 +19,7 @@ from .graphs import GraphOperations
 from .account import AccountOperations
 from .service_accounts import ServiceAccountOperations
 from .access_groups import AccessGroupOperations
-from .print import PrintOperations
+from .printer import PrintOperations
 
 __all__ = ['FileOperations', 'DatasetOperations', 'IngestionOperations',
            'SampleOperations', 'ProjectOperations',
