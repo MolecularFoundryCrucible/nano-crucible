@@ -2,43 +2,43 @@
 
 ## Unreleased
 
+## 3.3.0
+
 ### Added
 
-- User administration: `client.users.set_platform_role()` and `revoke_api_keys()` in Python, plus `user set-role` and `user revoke-keys` in the CLI. `user get` shows the platform role and API key status to administrators.
-- `client.users.list()` accepts `q`, `search_fields`, name, role, account-type, sort, and direction filters, and `user list` gains the matching options with Email and Platform role columns for administrators. `user list-projects` shows each project role.
-- `client.projects.list()` accepts `sort`/`direction` and repeatable `member_ref` with `member_role`, and `client.instruments.list()` accepts `sort`/`direction`; `project list` gains `--sort`, `--direction`, `--member`, and `--member-role`, `instrument list` gains `--sort`/`--direction`, and project and instrument lists and details show the caller's role in each. `user list-projects` is backed by the project membership filter, so its output is sorted and hides projects pending deletion.
-- Dataset and sample lists accept sort, direction, visibility, affiliation, owner, and creation or modification time-range filters in the Python client and CLI.
-- `client.datasets.facets()`, `client.samples.facets()`, and the matching `dataset facets` and `sample facets` CLI commands group results by a field and return value counts.
+- User administration: `client.users.set_platform_role()` and `revoke_api_keys()` in Python, plus `user set-role` and `user revoke-keys` in the CLI, gated on the `can_manage_users` capability. `user get` shows the platform role and API key status to administrators.
+- `client.users.list()` accepts `q`, `search_fields`, name, role, account-type, sort, and direction filters, and `user list` gains the matching options with Email and Platform role columns for administrators.
+- `client.projects.list()` accepts `sort`/`direction` and repeatable `member_ref` with `member_role`; `client.instruments.list()` accepts `sort`/`direction`.
+- `project list` gains `--sort`, `--direction`, `--member`, and `--member-role`; `instrument list` gains `--sort`/`--direction`.
+- Project and instrument lists and details show the caller's role, colored like the member tables (`owner` on instruments rather than the project-`lead` alias).
+- `user list-projects` output is sorted and hides projects pending deletion.
+- Dataset and sample lists accept sort, direction, visibility, affiliation, owner, and creation or modification time-range filters in the Python client and CLI, plus `--name`, `--missing FIELD`, `--sample-mfid`/`--dataset-mfid`, and `--description` (samples).
+- `client.datasets.facets()`, `client.samples.facets()`, and the matching `dataset facets` and `sample facets` CLI commands group results by a field and return value counts, and accept the same filters as the list commands.
 - Service-account administration: `get_admin()`, `list_admin()`, and `set_platform_role()` in Python, plus `service-account show` and `service-account set-role` in the CLI.
-- Deletion request and audit lists accept scope, project, sort, and direction filters, and deletion request details show whether the caller can review them.
-- `client.print.barcode()` and `crucible print barcode` publish label-printer jobs and confirm whether they printed, without local MQTT credentials.
-- A `privilege_mode` client keyword, `privilege_mode` config key, and global `--elevated` CLI flag select normal or elevated access. The default is unchanged (administrators run elevated) and will become `normal` in a future release.
+- Deletion request and audit lists accept scope, project, sort, and direction filters, deletion request details show whether the caller can review them, and `crucible deletion list` defaults to the `reviewable` scope for reviewers.
+- A `privilege_mode` client keyword, `privilege_mode` config key, and global `--elevated` CLI flag select normal or elevated access; admin-only operations request elevation per call regardless. The default is unchanged (administrators run elevated) and will become `normal` in a future release.
 - The interactive shell toggles elevation with `elevated on|off` and shows an `ELEVATED` toolbar badge, and one-shot commands print a notice when elevation comes from configuration rather than the flag.
 - `client.authorization`, `client.capabilities`, and `client.can_elevate` expose the caller's platform role and account capabilities as typed models, read once from `/account/profile` and re-read with `client.refresh_profile()`.
 - `instrument update --instrument-id` renames an instrument.
 - Instrument maintainers: `client.instruments.get_users()`, `add_user()`, `remove_user()`, and `update_user_role()`, `get(..., include_members=True)` with a typed `members` field, and the `instrument list-users`, `add-user`, `remove-user`, and `update-user-role` commands.
 - `client.instruments.list()` and `search()` accept `affiliation` (`owner`, `maintainer`), `list()` accepts the exact-match instrument filters, and `instrument list` gains `--mine` and filter options.
 - `crucible whoami` shows the caller's platform role, privilege mode, and account capabilities.
-- `dataset list` and `sample list` accept `--name`, `--missing FIELD`, `--sample-mfid`/`--dataset-mfid`, and `--description` (samples), and `dataset facets`/`sample facets` accept the same filters as the list commands.
 - The interactive shell completes measurement, session, data format, and sample type values from facet counts in the current or typed project, facet field names, `--instrument-id`, `--sample-mfid`/`--dataset-mfid`, and the instrument member commands.
 - The interactive shell lists pending deletion reviews and join requests at startup and on `refresh`.
 - Project, instrument, and service-account creation refuse up front when the caller's account capabilities do not allow it.
+- `client.print.barcode()` and `crucible print barcode` publish label-printer jobs and confirm whether they printed, without local MQTT credentials.
 
 ### Changed
 
-- The `support` platform role is no longer offered or accepted: `service-account set-role` and `user set-role` accept only `none`, `contributor`, and `admin`, matching the API routes.
+- The `support` platform role is no longer offered or accepted: `service-account set-role` and `user set-role` accept only `none`, `contributor`, and `admin`.
 - `service-account list` shows each account's platform role and accepts `-q` to filter, using the administrator listing.
 - `service-account get` shows the platform role and API key status to administrators, `--groups` and `list-access-groups` name each group's project or instrument, and `show` is now an alias for `get`.
 - Identifying an instrument by display name is deprecated: `dataset create --instrument`, `crucible upload --instrument`, `dataset list --instrument`, and `instrument_name` alone in `datasets.create()` or `datasets.list()` warn. Use `--instrument-id`/`--instrument-mfid`, now also on `upload` and `dataset list`.
-- Instrument operations accept an instrument slug as well as an MFID, resolving it through the case-insensitive slug lookup.
+- Instrument operations accept an instrument slug as well as an MFID.
 - Project membership mutations send the username or ORCID straight into the `{user_ref}` path segment instead of looking it up first; email inputs still resolve to the canonical unique_id before the request.
 - `datasets.reassign_project()` and `samples.reassign_project()` accept `project_mfid` (preferred over `project_id`), and the result carries `resource_mfid`, `previous_project_mfid`, and `new_project_mfid`. `dataset reassign-project` and `sample reassign-project` send the MFID body when the target is an MFID.
-- Project and instrument roles are colored consistently across lists, details, member tables, and service-account tables; instrument roles show `owner` rather than the project-`lead` alias.
-- `dataset list` and `sample list` print oldest to newest so the newest record is next to the prompt, follow `--sort`/`--direction` instead of re-sorting by name, and show a flat table unless `--group-by` is given.
-- `dataset list` and `sample list` without a project and no current project now list every accessible project instead of failing; `--all-projects` ignores the current project.
+- `dataset list` and `sample list` print oldest to newest, follow `--sort`/`--direction` instead of re-sorting by name, and show a flat table unless `--group-by` is given; without a project and no current project they list every accessible project instead of failing, and `--all-projects` ignores the current project.
 - The interactive shell hides service-account commands from completion for callers who cannot manage them, and `refresh` now re-reads permissions.
-- Administrator-only operations request elevation per call, so service-account administration and deletion review keep working without enabling elevation globally.
-- `crucible deletion list` defaults to the `reviewable` scope for callers who can review, keeping the queue visible when ordinary reads are ACL-scoped.
 - Unrecognized dataset and sample list filters now raise a local `ValueError` naming the closest valid parameter instead of a server-side 422.
 - The minimum supported Python version is now 3.10.
 - The configuration file and its directory are now created with owner-only permissions, and existing files are restricted when a value is set or unset.
