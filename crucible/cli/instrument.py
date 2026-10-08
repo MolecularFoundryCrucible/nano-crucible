@@ -474,22 +474,22 @@ def _execute_list(args):
             from .helpers import instrument_explorer_url
             def _instrument_row(instrument):
                 uid = instrument.get('unique_id')
-                instrument_id = instrument.get('instrument_id')
+                instrument_id = instrument.get('instrument_id') or '-'
                 url = instrument_explorer_url(uid)
+                first = term.navigation_link(instrument.get('instrument_name'), url)
+                if first is None and instrument_id != '-':
+                    first = term.navigation_link(instrument_id, url)
                 return (
-                    term.navigation_link(instrument.get('instrument_name'), url) or '-',
-                    instrument_id or '-',
-                    term.mfid_link(
-                        uid, url if not instrument.get('instrument_name') else None,
-                    ) or '-',
+                    first or '-',
+                    instrument_id,
                     term.fmt_owner(instrument) or '-',
                     term.status_label(instrument.get('status')),
                     term.role_label(instrument.get('role'), owner_label='owner'),
                 )
             rows = [_instrument_row(instrument) for instrument in instruments]
-            term.table(rows, ['Name', 'Instrument ID', 'MFID', 'Owner', 'Status', 'My role'],
-                       max_widths=[24, 25, 26, 25, 12, 13],
-                       min_widths=[4, 25, 26, 5, 6, 4])
+            term.table(rows, ['Name', 'Instrument ID', 'Owner', 'Status', 'My role'],
+                       max_widths=[24, 25, 25, 12, 13],
+                       min_widths=[4, 25, 5, 6, 4])
 
     except Exception as e:
         from .helpers import fail
