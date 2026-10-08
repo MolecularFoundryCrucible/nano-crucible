@@ -95,11 +95,34 @@ class CrucibleClient:
         self._session.mount("https://", adapter)
         self._session.mount("http://", adapter)
 
+        # Session for calls that must not be retried on 429/502/503/504.
+        # The default HTTPAdapter retries nothing, which is correct here:
+        # a response lost or delayed after a non-idempotent server-side
+        # effect already happened (e.g. a physical print job published to
+        # MQTT) must not be retried, since that would repeat the effect.
+        #
+        # Connection: close disables keep-alive so no connection from this
+        # session is ever reused across calls. Without it, an infrequently
+        # used pooled connection can go idle long enough for the server (or
+        # an intermediary) to close it; the next call then reuses the dead
+        # connection and fails with a connection-reset error on send, before
+        # any request bytes reached the server. That failure is safe to
+        # retry (nothing was sent), but urllib3 cannot distinguish it from a
+        # connection that died mid-request after the server received and
+        # possibly acted on it -- both surface the same way. Rather than
+        # retry either case, avoid connection reuse here so the safe case
+        # cannot occur in the first place.
+        self._no_retry_session = requests.Session()
+        self._no_retry_session.headers.update({
+            "Authorization": f"Bearer {api_key}",
+            "Connection": "close",
+        })
+
         # Initialize resource operations
         from .resources import FileOperations, DatasetOperations, SampleOperations, \
         ProjectOperations, UserOperations, InstrumentOperations, DeletionOperations, \
         GraphOperations, AccountOperations, IngestionOperations, ServiceAccountOperations, \
-        AccessGroupOperations
+        AccessGroupOperations, PrintOperations
 
         self.files = FileOperations(self)
         self.datasets = DatasetOperations(self)
@@ -113,6 +136,7 @@ class CrucibleClient:
         self.ingestions = IngestionOperations(self)
         self.service_accounts = ServiceAccountOperations(self)
         self.access_groups = AccessGroupOperations(self)
+        self.print = PrintOperations(self)
         self._authorization = None
         self._capabilities = None
 
@@ -178,13 +202,18 @@ class CrucibleClient:
         return 'elevated' if self.can_elevate else None
 
     def _request(self, method: str, endpoint: str,
-                 privilege_mode: Optional[str] = None, **kwargs) -> Any:
+                 privilege_mode: Optional[str] = None,
+                 retry: bool = True, **kwargs) -> Any:
         """Make an HTTP request to the API.
 
         Args:
             method: HTTP method (get, post, put, delete)
             endpoint: API endpoint path
             privilege_mode: Per-call override of the client's privilege mode.
+            retry: Whether transient 429/502/503/504 responses may be
+                retried. Set False for a non-idempotent endpoint where a
+                lost response after a server-side side effect must not
+                trigger a second attempt.
             **kwargs: Additional arguments to pass to requests
 
         Returns:
@@ -206,7 +235,8 @@ class CrucibleClient:
             headers = dict(kwargs.pop('headers', None) or {})
             headers.setdefault('Crucible-Privilege-Mode', mode)
             kwargs['headers'] = headers
-        response = self._session.request(method, url, timeout=timeout, **kwargs)
+        session = self._session if retry else self._no_retry_session
+        response = session.request(method, url, timeout=timeout, **kwargs)
         logger.debug(f"Status: {response.status_code}")
         logger.debug(f"Response: {response.text}")
         if not response.ok:

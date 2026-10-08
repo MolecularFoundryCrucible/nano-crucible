@@ -11,6 +11,7 @@
 - `client.datasets.facets()`, `client.samples.facets()`, and the matching `dataset facets` and `sample facets` CLI commands group results by a field and return value counts.
 - Service-account administration: `get_admin()`, `list_admin()`, and `set_platform_role()` in Python, plus `service-account show` and `service-account set-role` in the CLI.
 - Deletion request and audit lists accept scope, project, sort, and direction filters, and deletion request details show whether the caller can review them.
+- `client.print.barcode()` and `crucible print barcode` publish label-printer jobs and confirm whether they printed, without local MQTT credentials.
 - A `privilege_mode` client keyword, `privilege_mode` config key, and global `--elevated` CLI flag select normal or elevated access. The default is unchanged (administrators run elevated) and will become `normal` in a future release.
 - The interactive shell toggles elevation with `elevated on|off` and shows an `ELEVATED` toolbar badge, and one-shot commands print a notice when elevation comes from configuration rather than the flag.
 - `client.authorization`, `client.capabilities`, and `client.can_elevate` expose the caller's platform role and account capabilities as typed models, read once from `/account/profile` and re-read with `client.refresh_profile()`.
