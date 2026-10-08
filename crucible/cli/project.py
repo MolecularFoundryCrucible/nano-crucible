@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 from . import term
 from ..config import config as _config
-from ..constants import PROJECT_MEMBER_ROLES
+from ..constants import PROJECT_ACCESS_ROLES, PROJECT_MEMBER_ROLES, PROJECT_SORTS, SORT_DIRECTIONS
 
 try:
     import argcomplete
@@ -100,6 +100,32 @@ def _register_list(subparsers):
         action='store_true',
         dest='include_metadata',
         help='Include scientific metadata in results'
+    )
+
+    parser.add_argument(
+        '--sort',
+        choices=PROJECT_SORTS,
+        help='Sort by project_id, title, created, or updated'
+    )
+
+    parser.add_argument(
+        '--direction',
+        choices=SORT_DIRECTIONS,
+        help='Sort direction (dates default desc, everything else asc); requires --sort'
+    )
+
+    parser.add_argument(
+        '--member',
+        action='append',
+        metavar='USER',
+        dest='member',
+        help='Only projects where USER is a member (ORCID, username, or email; repeatable)'
+    )
+
+    parser.add_argument(
+        '--member-role',
+        choices=PROJECT_ACCESS_ROLES,
+        help='Restrict --member to this project role; requires --member'
     )
 
     parser.add_argument(
@@ -368,7 +394,11 @@ def _execute_list(args):
     try:
         client = get_client()
         projects = client.projects.list(limit=args.limit,
-                                        include_metadata=getattr(args, 'include_metadata', False))
+                                        include_metadata=getattr(args, 'include_metadata', False),
+                                        sort=getattr(args, 'sort', None),
+                                        direction=getattr(args, 'direction', None),
+                                        member_ref=getattr(args, 'member', None),
+                                        member_role=getattr(args, 'member_role', None))
 
         if getattr(args, 'json', False):
             print(json.dumps(projects, indent=2, default=str))
@@ -388,11 +418,12 @@ def _execute_list(args):
                     term.navigation_link(title, url) if title else '-',
                     project.get('organization') or '-',
                     _lead_name(project) or '-',
+                    term.role_label(project.get('role')),
                 )
             rows = [_project_row(project) for project in projects]
-            term.table(rows, ['Project ID', 'Title', 'Organization', 'Lead'],
-                       max_widths=[25, 30, 20, 25],
-                       min_widths=[25, 5, 12, 4])
+            term.table(rows, ['Project ID', 'Title', 'Organization', 'Lead', 'Role'],
+                       max_widths=[25, 30, 20, 25, 13],
+                       min_widths=[25, 5, 12, 4, 4])
 
     except Exception as e:
         from .helpers import fail
@@ -431,6 +462,7 @@ def _show_project(project, include_metadata=False, include_members=False):
     _p("MFID",         term.mfid_link(uid, project_url))
     _p("Organization", project.get('organization'))
     _p("Status",       term.status_label(project.get('status')))
+    _p("My role",      term.role_label(project.get('role')))
 
     lead = _lead_name(project)
     if lead:

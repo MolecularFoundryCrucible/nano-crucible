@@ -34,7 +34,7 @@ Running `crucible` without a command starts the interactive shell. See the [CLI 
 | `dataset create [--input FILE ...]` | Create a dataset, optionally uploading or cataloging files |
 | `dataset update MFID` | Update model fields or scientific metadata |
 | `dataset edit MFID` | Edit dataset fields interactively |
-| `dataset reassign-project MFID PROJECT` | Move a dataset to another project |
+| `dataset reassign-project MFID PROJECT` | Move a dataset to another project; PROJECT accepts the project ID or MFID |
 | `dataset transfer-ownership MFID USER` | Transfer dataset ownership |
 | `dataset delete MFID` | Permanently delete a dataset after confirmation |
 | `dataset facets FIELD` | Group datasets into value buckets with counts |
@@ -99,7 +99,7 @@ Fields normally updated through `dataset update --set` include `dataset_name`, `
 | `sample create` | Create a sample |
 | `sample update MFID` | Update sample fields or scientific metadata |
 | `sample edit MFID` | Edit sample fields interactively |
-| `sample reassign-project MFID PROJECT` | Move a sample to another project |
+| `sample reassign-project MFID PROJECT` | Move a sample to another project; PROJECT accepts the project ID or MFID |
 | `sample transfer-ownership MFID USER` | Transfer sample ownership |
 | `sample facets FIELD` | Group samples into value buckets with counts |
 | `sample search QUERY` | Search sample names |
@@ -123,8 +123,8 @@ Sample creation accepts `--project-id` or `--project-mfid`, including both when 
 
 | Command | Description |
 |---|---|
-| `project list` | List accessible projects |
-| `project get PROJECT [--include-members]` | Show a project by MFID or project slug, optionally with its members |
+| `project list` | List accessible projects; `--sort`/`--direction` order them, `--member` (repeatable) and `--member-role` narrow to memberships, and a Role column shows your role in each |
+| `project get PROJECT [--include-members]` | Show a project by MFID or project slug, optionally with its members; also shows your role |
 | `project create` | Create a project |
 | `project update ID` | Update a project record or scientific metadata |
 | `project edit ID` | Edit project fields interactively |
@@ -153,7 +153,7 @@ The `access grant` commands accept `viewer`, `contributor`, `editor`, or `admin`
 
 | Command | Description |
 |---|---|
-| `instrument list` | List instruments; `--mine` lists those you own or maintain, and `--manufacturer`, `--model`, `--location`, `--type`, `--owner` filter exactly |
+| `instrument list` | List instruments; `--mine` lists those you own or maintain, `--sort`/`--direction` order them, `--manufacturer`, `--model`, `--location`, `--type`, `--owner` filter exactly, and a My role column shows your effective role |
 | `instrument get INSTRUMENT` | Show an instrument by MFID or instrument slug (any casing); `--include-members` adds the owner and maintainers |
 | `instrument create` | Register an instrument |
 | `instrument update MFID` | Update an instrument record or scientific metadata |
@@ -196,7 +196,7 @@ Most user-management commands require administrator permissions.
 | `user list-access-groups USER` | List a user's access groups |
 | `user add-access-group USER GROUP` | Deprecated; use the typed project or instrument membership command |
 | `user remove-access-group USER GROUP` | Deprecated; use the typed project or instrument membership command |
-| `user list-projects USER` | List a user's projects with their role in each |
+| `user list-projects USER` | List the projects USER is a member of, with their role in each; backed by the sorted, cursor-paginated project listing, so projects pending deletion are hidden |
 
 Human users require a username and may optionally supply an ORCID during creation.
 When the ORCID is omitted, the API assigns a canonical MFID.

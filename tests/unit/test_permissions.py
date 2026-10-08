@@ -303,6 +303,26 @@ class TestReassignProject:
         assert isinstance(result, ProjectReassignment)
         assert result.new_project_id == 'new-proj'
 
+    def test_project_mfid_is_the_preferred_body(self, dataset_ops):
+        dataset_ops._request = MagicMock(return_value={
+            'resource_id': 'ds-1', 'new_project_id': 'new-proj',
+            'resource_mfid': 'ds-1',
+            'previous_project_mfid': 'old-mfid', 'new_project_mfid': 'new-mfid',
+        })
+
+        result = dataset_ops.reassign_project('ds-1', project_mfid='new-mfid')
+
+        dataset_ops._request.assert_called_once_with(
+            'post', '/resources/ds-1/project',
+            params={'confirm': False}, json={'project_mfid': 'new-mfid'})
+        assert result.new_project_mfid == 'new-mfid'
+
+    def test_rejects_missing_and_ambiguous_targets(self, dataset_ops):
+        with pytest.raises(ValueError, match='exactly one'):
+            dataset_ops.reassign_project('ds-1')
+        with pytest.raises(ValueError, match='exactly one'):
+            dataset_ops.reassign_project('ds-1', 'new-proj', project_mfid='new-mfid')
+
 
 class TestInstrumentCreateRequiresInstrumentId:
     def test_raises_when_missing(self, instrument_ops):
@@ -374,18 +394,14 @@ class TestProjectAddUserRole:
         project_ops._request.assert_called_once_with(
             'post', '/projects/proj-1/users/0000-0001', params={})
 
-    def test_username_resolves_before_canonical_membership_request(self, project_ops):
-        project_ops._client.users.get.return_value = {
-            'unique_id': '0000-0001',
-            'username': 'alice',
-        }
+    def test_username_passes_straight_into_the_path_segment(self, project_ops):
         project_ops._request = MagicMock(return_value=[])
 
         project_ops.add_user(username='alice', project_id='proj-1')
 
-        project_ops._client.users.get.assert_called_once_with(username='alice')
+        project_ops._client.users.get.assert_not_called()
         project_ops._request.assert_called_once_with(
-            'post', '/projects/proj-1/users/0000-0001', params={})
+            'post', '/projects/proj-1/users/alice', params={})
 
     def test_email_resolves_before_canonical_membership_request(self, project_ops):
         project_ops._client.users.get.return_value = {

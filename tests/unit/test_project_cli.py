@@ -9,8 +9,10 @@ import requests
 
 from crucible.cli.project import (
     _execute_add_user,
+    _execute_list,
     _register_add_user,
     _register_get,
+    _register_list,
     _register_remove_user,
     _register_update_user_role,
 )
@@ -166,3 +168,51 @@ def test_instrument_update_accepts_a_new_instrument_id():
                               '--instrument-id', 'new-id'])
 
     assert args.instrument_id == 'new-id'
+
+
+def test_project_list_parses_sort_and_member_filters():
+    args = parse_project_command(
+        _register_list, 'list',
+        '--sort', 'title', '--direction', 'desc',
+        '--member', 'alice', '--member', 'bob',
+        '--member-role', 'owner',
+    )
+
+    assert args.sort == 'title'
+    assert args.direction == 'desc'
+    assert args.member == ['alice', 'bob']
+    assert args.member_role == 'owner'
+
+
+def test_project_list_dispatches_filters_and_shows_role(monkeypatch, capsys):
+    client = SimpleNamespace(projects=SimpleNamespace())
+    client.projects.list = MagicMock(return_value=[{
+        'project_id': 'project-one',
+        'title': 'Project One',
+        'organization': 'LBL',
+        'role': 'admin',
+    }])
+    monkeypatch.setattr('crucible.config.get_client', lambda: client)
+
+    _execute_list(SimpleNamespace(
+        limit=10,
+        include_metadata=False,
+        sort=None,
+        direction=None,
+        member=None,
+        member_role=None,
+        json=False,
+        debug=False,
+    ))
+
+    client.projects.list.assert_called_once_with(
+        limit=10,
+        include_metadata=False,
+        sort=None,
+        direction=None,
+        member_ref=None,
+        member_role=None,
+    )
+    output = capsys.readouterr().out
+    assert 'ROLE' in output
+    assert 'admin' in output

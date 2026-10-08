@@ -6,6 +6,7 @@
 
 - User administration: `client.users.set_platform_role()` and `revoke_api_keys()` in Python, plus `user set-role` and `user revoke-keys` in the CLI. `user get` shows the platform role and API key status to administrators.
 - `client.users.list()` accepts `q`, `search_fields`, name, role, account-type, sort, and direction filters, and `user list` gains the matching options with Email and Platform role columns for administrators. `user list-projects` shows each project role.
+- `client.projects.list()` accepts `sort`/`direction` and repeatable `member_ref` with `member_role`, and `client.instruments.list()` accepts `sort`/`direction`; `project list` gains `--sort`, `--direction`, `--member`, and `--member-role`, `instrument list` gains `--sort`/`--direction`, and project and instrument lists and details show the caller's role in each. `user list-projects` is backed by the project membership filter, so its output is sorted and hides projects pending deletion.
 - Dataset and sample lists accept sort, direction, visibility, affiliation, owner, and creation or modification time-range filters in the Python client and CLI.
 - `client.datasets.facets()`, `client.samples.facets()`, and the matching `dataset facets` and `sample facets` CLI commands group results by a field and return value counts.
 - Service-account administration: `get_admin()`, `list_admin()`, and `set_platform_role()` in Python, plus `service-account show` and `service-account set-role` in the CLI.
@@ -29,6 +30,9 @@
 - `service-account get` shows the platform role and API key status to administrators, `--groups` and `list-access-groups` name each group's project or instrument, and `show` is now an alias for `get`.
 - Identifying an instrument by display name is deprecated: `dataset create --instrument`, `crucible upload --instrument`, `dataset list --instrument`, and `instrument_name` alone in `datasets.create()` or `datasets.list()` warn. Use `--instrument-id`/`--instrument-mfid`, now also on `upload` and `dataset list`.
 - Instrument operations accept an instrument slug as well as an MFID, resolving it through the case-insensitive slug lookup.
+- Project membership mutations send the username or ORCID straight into the `{user_ref}` path segment instead of looking it up first; email inputs still resolve to the canonical unique_id before the request.
+- `datasets.reassign_project()` and `samples.reassign_project()` accept `project_mfid` (preferred over `project_id`), and the result carries `resource_mfid`, `previous_project_mfid`, and `new_project_mfid`. `dataset reassign-project` and `sample reassign-project` send the MFID body when the target is an MFID.
+- Project and instrument roles are colored consistently across lists, details, member tables, and service-account tables; instrument roles show `owner` rather than the project-`lead` alias.
 - `dataset list` and `sample list` print oldest to newest so the newest record is next to the prompt, follow `--sort`/`--direction` instead of re-sorting by name, and show a flat table unless `--group-by` is given.
 - `dataset list` and `sample list` without a project and no current project now list every accessible project instead of failing; `--all-projects` ignores the current project.
 - The interactive shell hides service-account commands from completion for callers who cannot manage them, and `refresh` now re-reads permissions.

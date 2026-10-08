@@ -246,6 +246,9 @@ class ProjectReassignment(BaseModel):
     resource_id: str
     previous_project_id: Optional[str] = None
     new_project_id: str
+    resource_mfid: Optional[str] = None
+    previous_project_mfid: Optional[str] = None
+    new_project_mfid: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 

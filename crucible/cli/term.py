@@ -266,9 +266,9 @@ def _standing_label(standing: str, *, owner_label: str, stream=None) -> str:
     return styles.get(normalized, dim)(display, stream=stream)
 
 
-def role_label(role: str, stream=None) -> str:
-    """Color a project role while preserving plain redirected output."""
-    return _standing_label(role, owner_label='lead', stream=stream)
+def role_label(role: str, stream=None, owner_label: str = 'lead') -> str:
+    """Color a project or instrument role while preserving plain redirected output."""
+    return _standing_label(role, owner_label=owner_label, stream=stream)
 
 
 def platform_role_label(role: str | None, stream=None) -> str:

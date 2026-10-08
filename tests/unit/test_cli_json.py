@@ -63,7 +63,9 @@ def test_project_list_json_returns_raw_array(monkeypatch, capsys):
     ))
 
     assert json.loads(capsys.readouterr().out) == projects
-    client.projects.list.assert_called_once_with(limit=10, include_metadata=True)
+    client.projects.list.assert_called_once_with(
+        limit=10, include_metadata=True, sort=None, direction=None,
+        member_ref=None, member_role=None)
 
 
 @pytest.mark.parametrize(('json_output', 'include_datasets'), [(False, False), (True, True)])

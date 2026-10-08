@@ -806,7 +806,7 @@ Examples:
 """
     )
     parser.add_argument('dataset_id', metavar='DATASET_MFID', help='Dataset MFID')
-    parser.add_argument('project_id', metavar='PROJECT_ID', help='Target project ID')
+    parser.add_argument('project_id', metavar='PROJECT', help='Target project ID or MFID')
     parser.add_argument('--confirm', action='store_true', help='Execute the move (default: preview only)')
     parser.set_defaults(func=_execute_reassign_project)
 
@@ -814,11 +814,17 @@ Examples:
 def _execute_reassign_project(args):
     """Execute the 'dataset reassign-project' subcommand."""
     from crucible.config import get_client
+    from ..utils.identifiers import is_mfid
     from .helpers import fail, show_reassign_project
 
     try:
         client = get_client()
-        result = client.datasets.reassign_project(args.dataset_id, args.project_id, confirm=args.confirm)
+        if is_mfid(args.project_id):
+            result = client.datasets.reassign_project(
+                args.dataset_id, confirm=args.confirm, project_mfid=args.project_id)
+        else:
+            result = client.datasets.reassign_project(
+                args.dataset_id, args.project_id, confirm=args.confirm)
         show_reassign_project(result, args.confirm)
     except Exception as e:
         fail("reassigning dataset project", e, args)

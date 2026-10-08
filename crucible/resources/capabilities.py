@@ -109,16 +109,30 @@ class OwnershipMixin:
 class ProjectAssignmentMixin:
     """Project-reassignment operations for project-scoped resources."""
 
-    def reassign_project(self, mfid: str, project_id: str,
-                         confirm: bool = False) -> 'ProjectReassignment':
-        """Preview or apply reassignment to another project."""
+    def reassign_project(self, mfid: str, project_id: Optional[str] = None,
+                         confirm: bool = False, *,
+                         project_mfid: Optional[str] = None) -> 'ProjectReassignment':
+        """Preview or apply reassignment to another project.
+
+        Args:
+            mfid: Resource MFID.
+            project_id: Target project slug.
+            confirm: False previews the reassignment, True applies it.
+            project_mfid: Target project MFID; preferred over project_id.
+        """
         from ..models import ProjectReassignment
 
+        provided = [value for value in (project_id, project_mfid)
+                    if value is not None]
+        if len(provided) != 1:
+            raise ValueError("Provide exactly one target project identifier.")
+        body = ({'project_mfid': project_mfid} if project_mfid is not None
+                else {'project_id': project_id})
         raw = self._request(
             'post',
             f'/resources/{self._resource_mfid(mfid)}/project',
             params={'confirm': confirm},
-            json={'project_id': project_id},
+            json=body,
         )
         return ProjectReassignment.model_validate(raw)
 

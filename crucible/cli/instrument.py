@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 
 from . import term
 from ..config import config as _config
+from ..constants import INSTRUMENT_SORTS, SORT_DIRECTIONS
 
 try:
     import argcomplete
@@ -207,6 +208,16 @@ def _register_list(subparsers):
     parser.add_argument(
         '--mine', action='store_true', default=False,
         help='Only instruments you own or maintain'
+    )
+    parser.add_argument(
+        '--sort',
+        choices=INSTRUMENT_SORTS,
+        help='Sort by instrument_id, name, created, or updated'
+    )
+    parser.add_argument(
+        '--direction',
+        choices=SORT_DIRECTIONS,
+        help='Sort direction (dates default desc, everything else asc); requires --sort'
     )
     for flag, dest, text in (
         ('--manufacturer', 'manufacturer', 'Filter by manufacturer (exact match)'),
@@ -446,6 +457,8 @@ def _execute_list(args):
             include_metadata=getattr(args, 'include_metadata', False) or _config.include_metadata,
             include_owner=True,
             status=getattr(args, 'status', None),
+            sort=getattr(args, 'sort', None),
+            direction=getattr(args, 'direction', None),
             **filters,
         )
 
@@ -461,21 +474,22 @@ def _execute_list(args):
             from .helpers import instrument_explorer_url
             def _instrument_row(instrument):
                 uid = instrument.get('unique_id')
-                instrument_id = instrument.get('instrument_id')
+                instrument_id = instrument.get('instrument_id') or '-'
                 url = instrument_explorer_url(uid)
+                first = term.navigation_link(instrument.get('instrument_name'), url)
+                if first is None and instrument_id != '-':
+                    first = term.navigation_link(instrument_id, url)
                 return (
-                    term.navigation_link(instrument.get('instrument_name'), url) or '-',
-                    instrument_id or '-',
-                    term.mfid_link(
-                        uid, url if not instrument.get('instrument_name') else None,
-                    ) or '-',
+                    first or '-',
+                    instrument_id,
                     term.fmt_owner(instrument) or '-',
                     term.status_label(instrument.get('status')),
+                    term.role_label(instrument.get('role'), owner_label='owner'),
                 )
             rows = [_instrument_row(instrument) for instrument in instruments]
-            term.table(rows, ['Name', 'Instrument ID', 'MFID', 'Owner', 'Status'],
-                       max_widths=[24, 25, 26, 25, 12],
-                       min_widths=[4, 25, 26, 5, 6])
+            term.table(rows, ['Name', 'Instrument ID', 'Owner', 'Status', 'My role'],
+                       max_widths=[24, 25, 25, 12, 13],
+                       min_widths=[4, 25, 5, 6, 4])
 
     except Exception as e:
         from .helpers import fail
@@ -506,6 +520,7 @@ def _show_instrument(instrument, include_metadata=False, include_members=False):
     term.subheader("Access")
     _p("Owner",  term.fmt_owner(instrument))
     _p("Status", term.status_label(instrument.get('status')))
+    _p("My role", term.role_label(instrument.get('role'), owner_label='owner'))
 
     if include_members:
         members = instrument.get('members')
@@ -770,7 +785,7 @@ def _service_account_rows(members):
             member.username or '-',
             term.fmt_name(member.model_dump(), default='-', fallback_username=False),
             term.cyan(member.unique_id) if member.unique_id else '-',
-            member.role or '-',
+            term.role_label(member.role, owner_label='owner'),
         )
         for member in members
     ]
