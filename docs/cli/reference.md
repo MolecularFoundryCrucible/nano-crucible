@@ -34,7 +34,7 @@ Running `crucible` without a command starts the interactive shell. See the [CLI 
 | `dataset create [--input FILE ...]` | Create a dataset, optionally uploading or cataloging files |
 | `dataset update MFID` | Update model fields or scientific metadata |
 | `dataset edit MFID` | Edit dataset fields interactively |
-| `dataset reassign-project MFID PROJECT` | Move a dataset to another project |
+| `dataset reassign-project MFID PROJECT` | Move a dataset to another project; PROJECT accepts the project ID or MFID |
 | `dataset transfer-ownership MFID USER` | Transfer dataset ownership |
 | `dataset delete MFID` | Permanently delete a dataset after confirmation |
 | `dataset facets FIELD` | Group datasets into value buckets with counts |
@@ -99,7 +99,7 @@ Fields normally updated through `dataset update --set` include `dataset_name`, `
 | `sample create` | Create a sample |
 | `sample update MFID` | Update sample fields or scientific metadata |
 | `sample edit MFID` | Edit sample fields interactively |
-| `sample reassign-project MFID PROJECT` | Move a sample to another project |
+| `sample reassign-project MFID PROJECT` | Move a sample to another project; PROJECT accepts the project ID or MFID |
 | `sample transfer-ownership MFID USER` | Transfer sample ownership |
 | `sample facets FIELD` | Group samples into value buckets with counts |
 | `sample search QUERY` | Search sample names |

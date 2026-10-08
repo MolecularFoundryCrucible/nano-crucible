@@ -315,17 +315,19 @@ class ProjectOperations(OwnershipMixin, AccessControlMixin, BaseResource):
     def _resolve_member_unique_id(self, user_unique_id: Optional[str] = None,
                                   email: Optional[str] = None,
                                   username: Optional[str] = None) -> str:
-        """Resolve a project membership target to its canonical user identifier."""
+        """Return a project membership target for the {user_ref} path segment.
+
+        ORCID, service-account MFID, and username pass straight through. Email
+        is deprecated in path segments, so it is resolved to the canonical
+        unique_id with a user lookup first.
+        """
         provided = [value for value in (user_unique_id, email, username) if value is not None]
         if len(provided) != 1:
             raise ValueError("Provide exactly one user identifier")
-        if user_unique_id is not None:
-            return user_unique_id
+        if email is None:
+            return user_unique_id if user_unique_id is not None else username
 
-        user = (
-            self._client.users.get(email=email)
-            if email else self._client.users.get(username=username)
-        )
+        user = self._client.users.get(email=email)
         resolved = user.get('unique_id') if isinstance(user, dict) else None
         if not resolved:
             raise ValueError("Resolved user is missing a canonical unique_id")

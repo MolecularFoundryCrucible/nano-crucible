@@ -440,7 +440,7 @@ Examples:
 """
     )
     parser.add_argument('sample_id', metavar='SAMPLE_MFID', help='Sample MFID')
-    parser.add_argument('project_id', metavar='PROJECT_ID', help='Target project ID')
+    parser.add_argument('project_id', metavar='PROJECT', help='Target project ID or MFID')
     parser.add_argument('--confirm', action='store_true', help='Execute the move (default: preview only)')
     parser.set_defaults(func=_execute_reassign_project)
 
@@ -448,11 +448,17 @@ Examples:
 def _execute_reassign_project(args):
     """Execute the 'sample reassign-project' subcommand."""
     from crucible.config import get_client
+    from ..utils.identifiers import is_mfid
     from .helpers import fail, show_reassign_project
 
     try:
         client = get_client()
-        result = client.samples.reassign_project(args.sample_id, args.project_id, confirm=args.confirm)
+        if is_mfid(args.project_id):
+            result = client.samples.reassign_project(
+                args.sample_id, confirm=args.confirm, project_mfid=args.project_id)
+        else:
+            result = client.samples.reassign_project(
+                args.sample_id, args.project_id, confirm=args.confirm)
         show_reassign_project(result, args.confirm)
     except Exception as e:
         fail("reassigning sample project", e, args)

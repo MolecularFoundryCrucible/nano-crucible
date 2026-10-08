@@ -30,6 +30,8 @@
 - `service-account get` shows the platform role and API key status to administrators, `--groups` and `list-access-groups` name each group's project or instrument, and `show` is now an alias for `get`.
 - Identifying an instrument by display name is deprecated: `dataset create --instrument`, `crucible upload --instrument`, `dataset list --instrument`, and `instrument_name` alone in `datasets.create()` or `datasets.list()` warn. Use `--instrument-id`/`--instrument-mfid`, now also on `upload` and `dataset list`.
 - Instrument operations accept an instrument slug as well as an MFID, resolving it through the case-insensitive slug lookup.
+- Project membership mutations send the username or ORCID straight into the `{user_ref}` path segment instead of looking it up first; email inputs still resolve to the canonical unique_id before the request.
+- `datasets.reassign_project()` and `samples.reassign_project()` accept `project_mfid` (preferred over `project_id`), and the result carries `resource_mfid`, `previous_project_mfid`, and `new_project_mfid`. `dataset reassign-project` and `sample reassign-project` send the MFID body when the target is an MFID.
 - `dataset list` and `sample list` print oldest to newest so the newest record is next to the prompt, follow `--sort`/`--direction` instead of re-sorting by name, and show a flat table unless `--group-by` is given.
 - `dataset list` and `sample list` without a project and no current project now list every accessible project instead of failing; `--all-projects` ignores the current project.
 - The interactive shell hides service-account commands from completion for callers who cannot manage them, and `refresh` now re-reads permissions.

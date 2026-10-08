@@ -103,3 +103,38 @@ def test_dataset_list_uses_shell_project_before_config(monkeypatch, capsys):
     datasets.list.assert_called_once_with(project_id='shell-project', limit=10,
                                           sort='created', direction='desc')
     assert 'Datasets · shell-project' in capsys.readouterr().out
+
+
+def test_reassign_project_sends_the_mfid_body_for_an_mfid_target(monkeypatch):
+    client = SimpleNamespace(datasets=SimpleNamespace())
+    result = SimpleNamespace(
+        resource_id='ds-1', previous_project_id='old', new_project_id='new',
+        resource_mfid='ds-1', previous_project_mfid='old-mfid',
+        new_project_mfid='new-mfid',
+    )
+    client.datasets.reassign_project = MagicMock(return_value=result)
+    monkeypatch.setattr('crucible.config.get_client', lambda: client)
+
+    mfid = '0tkn2knjast3h0008nyq9zps2c'
+    dataset_cli._execute_reassign_project(SimpleNamespace(
+        dataset_id=mfid, project_id=mfid, confirm=False, debug=False,
+    ))
+
+    client.datasets.reassign_project.assert_called_once_with(
+        mfid, confirm=False, project_mfid=mfid)
+
+
+def test_reassign_project_sends_the_slug_body_for_a_slug_target(monkeypatch):
+    client = SimpleNamespace(datasets=SimpleNamespace())
+    client.datasets.reassign_project = MagicMock(return_value=SimpleNamespace(
+        resource_id='ds-1', previous_project_id='old', new_project_id='new',
+    ))
+    monkeypatch.setattr('crucible.config.get_client', lambda: client)
+
+    dataset_cli._execute_reassign_project(SimpleNamespace(
+        dataset_id='0tkn2knjast3h0008nyq9zps2c', project_id='new-project',
+        confirm=True, debug=False,
+    ))
+
+    client.datasets.reassign_project.assert_called_once_with(
+        '0tkn2knjast3h0008nyq9zps2c', 'new-project', confirm=True)
