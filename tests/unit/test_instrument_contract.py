@@ -343,7 +343,7 @@ def test_cli_list_requests_owners_and_formats_public_owner(monkeypatch, capsys):
             'last_name': 'User One',
         },
         'status': 'active',
-        'role': 'maintainer',
+        'role': 'editor',
     }])
     monkeypatch.setattr('crucible.config.get_client', lambda: client)
     args = SimpleNamespace(
@@ -368,7 +368,7 @@ def test_cli_list_requests_owners_and_formats_public_owner(monkeypatch, capsys):
     assert 'T. User One' in output
     assert "{'unique_id'" not in output
     assert 'MY ROLE' in output
-    assert 'maintainer' in output
+    assert 'editor' in output
 
 
 def test_cli_set_status_dispatches_and_displays_result(monkeypatch, capsys):

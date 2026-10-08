@@ -484,7 +484,7 @@ def _execute_list(args):
                     ) or '-',
                     term.fmt_owner(instrument) or '-',
                     term.status_label(instrument.get('status')),
-                    instrument.get('role') or '-',
+                    term.role_label(instrument.get('role'), owner_label='owner'),
                 )
             rows = [_instrument_row(instrument) for instrument in instruments]
             term.table(rows, ['Name', 'Instrument ID', 'MFID', 'Owner', 'Status', 'My role'],
@@ -520,7 +520,7 @@ def _show_instrument(instrument, include_metadata=False, include_members=False):
     term.subheader("Access")
     _p("Owner",  term.fmt_owner(instrument))
     _p("Status", term.status_label(instrument.get('status')))
-    _p("My role", instrument.get('role'))
+    _p("My role", term.role_label(instrument.get('role'), owner_label='owner'))
 
     if include_members:
         members = instrument.get('members')
@@ -785,7 +785,7 @@ def _service_account_rows(members):
             member.username or '-',
             term.fmt_name(member.model_dump(), default='-', fallback_username=False),
             term.cyan(member.unique_id) if member.unique_id else '-',
-            member.role or '-',
+            term.role_label(member.role, owner_label='owner'),
         )
         for member in members
     ]

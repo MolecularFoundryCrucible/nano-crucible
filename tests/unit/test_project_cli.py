@@ -190,7 +190,7 @@ def test_project_list_dispatches_filters_and_shows_role(monkeypatch, capsys):
         'project_id': 'project-one',
         'title': 'Project One',
         'organization': 'LBL',
-        'role': 'owner',
+        'role': 'admin',
     }])
     monkeypatch.setattr('crucible.config.get_client', lambda: client)
 
@@ -215,4 +215,4 @@ def test_project_list_dispatches_filters_and_shows_role(monkeypatch, capsys):
     )
     output = capsys.readouterr().out
     assert 'ROLE' in output
-    assert 'owner' in output
+    assert 'admin' in output

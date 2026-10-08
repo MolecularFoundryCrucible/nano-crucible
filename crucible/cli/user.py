@@ -945,7 +945,7 @@ def _execute_list_projects(args):
                 project_id if title else term.project_link(project_id, url),
                 term.navigation_link(title, url) if title else '-',
                 project.get('organization') or '-',
-                project.get('role') or '-',
+                term.role_label(project.get('role')),
             )
         rows = [_project_row(project) for project in projects]
         term.table(

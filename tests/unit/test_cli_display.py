@@ -606,12 +606,12 @@ def test_instrument_detail_shows_the_callers_role(capsys):
         'instrument_id': 'instrument-slug',
         'instrument_name': 'Instrument',
         'status': 'active',
-        'role': 'maintainer',
+        'role': 'editor',
     })
 
     output = capsys.readouterr().out
     assert 'My role' in output
-    assert 'maintainer' in output
+    assert 'editor' in output
 
 
 def test_instrument_detail_links_only_canonical_mfid(monkeypatch, capsys):

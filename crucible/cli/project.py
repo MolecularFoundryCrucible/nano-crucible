@@ -418,7 +418,7 @@ def _execute_list(args):
                     term.navigation_link(title, url) if title else '-',
                     project.get('organization') or '-',
                     _lead_name(project) or '-',
-                    project.get('role') or '-',
+                    term.role_label(project.get('role')),
                 )
             rows = [_project_row(project) for project in projects]
             term.table(rows, ['Project ID', 'Title', 'Organization', 'Lead', 'Role'],
@@ -462,7 +462,7 @@ def _show_project(project, include_metadata=False, include_members=False):
     _p("MFID",         term.mfid_link(uid, project_url))
     _p("Organization", project.get('organization'))
     _p("Status",       term.status_label(project.get('status')))
-    _p("My role",      project.get('role'))
+    _p("My role",      term.role_label(project.get('role')))
 
     lead = _lead_name(project)
     if lead:
