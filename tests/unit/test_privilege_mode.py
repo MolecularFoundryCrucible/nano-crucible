@@ -36,7 +36,23 @@ def test_no_header_is_sent_by_default(make_client):
     client._request('get', '/datasets')
 
     assert client.privilege_mode is None
-    assert sent_headers(client) is None
+    assert 'Crucible-Privilege-Mode' not in (sent_headers(client) or {})
+
+
+@pytest.mark.parametrize('mode, can_elevate, expected', [
+    (None, True, True),
+    (None, False, False),
+    ('normal', True, False),
+    ('elevated', True, True),
+])
+def test_is_elevated_reflects_the_server_default(make_client, mode, can_elevate,
+                                                 expected):
+    from crucible.models import AccountAuthorization
+
+    client = make_client(privilege_mode=mode)
+    client._authorization = AccountAuthorization(can_elevate=can_elevate)
+
+    assert client.is_elevated is expected
 
 
 def test_client_level_mode_is_sent_on_every_request(make_client):
@@ -112,3 +128,312 @@ def test_without_the_flag_no_mode_is_set(monkeypatch):
         main()
 
     assert seen['mode'] is None
+
+
+def test_config_sourced_elevation_is_announced(monkeypatch, capsys):
+    from crucible.cli import main
+    from crucible.config import config
+
+    monkeypatch.setitem(config._data, 'privilege_mode', 'elevated')
+    monkeypatch.setitem(config._sources, 'privilege_mode', 'config file')
+
+    with patch('crucible.cli.dataset._execute_list'):
+        monkeypatch.setattr('sys.argv', ['crucible', 'dataset', 'list'])
+        main()
+
+    assert 'Elevated privilege is active from config file' in capsys.readouterr().err
+
+
+def test_explicit_flag_is_not_announced(monkeypatch, capsys):
+    from crucible.cli import main
+    from crucible.config import config
+
+    config._data.pop('privilege_mode', None)
+
+    with patch('crucible.cli.dataset._execute_list'):
+        monkeypatch.setattr('sys.argv', ['crucible', '--elevated', 'dataset', 'list'])
+        main()
+
+    assert 'Elevated privilege is active' not in capsys.readouterr().err
+    config._data.pop('privilege_mode', None)
+
+
+def test_shell_toolbar_shows_the_elevated_badge():
+    from crucible.cli import shell
+
+    instance = shell.CrucibleShell.__new__(shell.CrucibleShell)
+    instance.state = {'elevated': True, 'debug': False, 'project': None,
+                      'user_label': 'me', 'api_label': 'v3'}
+
+    markup = instance._toolbar().value
+
+    assert 'ELEVATED' in markup
+
+
+def test_shell_toggle_updates_the_shared_client():
+    from crucible.cli import shell
+
+    instance = shell.CrucibleShell.__new__(shell.CrucibleShell)
+    instance.state = {'elevated': False}
+    instance.client = MagicMock(privilege_mode=None)
+
+    instance._apply_elevated(True)
+    assert instance.client.privilege_mode == 'elevated'
+    assert instance.state['elevated'] is True
+
+    instance._apply_elevated(False)
+    assert instance.client.privilege_mode == 'normal'
+    assert instance.state['elevated'] is False
+
+
+def test_cli_commands_share_one_client(monkeypatch):
+    from crucible.config import config, get_client
+
+    monkeypatch.setitem(config._data, 'api_url', 'https://example.test/api/v3')
+    monkeypatch.setitem(config._data, 'api_key', 'test-key')
+    monkeypatch.setattr(config, '_client', None)
+
+    assert get_client() is get_client()
+
+    first = get_client()
+    config._client = None
+    assert get_client() is not first
+
+
+def test_shell_toggle_tolerates_a_client_that_is_not_built_yet():
+    from crucible.cli import shell
+    from crucible.config import config
+
+    config._data.pop('privilege_mode', None)
+    instance = shell.CrucibleShell.__new__(shell.CrucibleShell)
+    instance.state = {'elevated': False}
+    instance.client = None
+
+    instance._apply_elevated(True)
+    assert instance.state['elevated'] is True
+
+    instance._apply_elevated(False)
+
+
+def make_admin_client(make_client, resource, response, can_elevate=True):
+    """Build a client whose named resource records its _request calls.
+
+    Resources bind the client's _request at construction, so the stub has to
+    replace the resource's own reference rather than the client's.
+    """
+    from crucible.models import AccountAuthorization, AccountCapabilities
+
+    client = make_client()
+    client._authorization = AccountAuthorization(can_elevate=can_elevate)
+    client._capabilities = AccountCapabilities()
+    request = MagicMock(return_value=response)
+    getattr(client, resource)._request = request
+    return client, request
+
+
+def test_service_account_admin_always_elevates(make_client):
+    client, request = make_admin_client(
+        make_client, 'service_accounts', {'unique_id': 'x'}, can_elevate=False)
+
+    client.service_accounts.set_platform_role(
+        '0td7evvtg5wb90005k1j97ak94', 'contributor')
+
+    assert request.call_args.kwargs['privilege_mode'] == 'elevated'
+
+
+def test_deletion_review_elevates_only_for_eligible_callers(make_client):
+    for can_elevate, expected in ((True, 'elevated'), (False, None)):
+        client, request = make_admin_client(
+            make_client, 'deletions', {'id': 1}, can_elevate=can_elevate)
+
+        client.deletions.get(1)
+
+        assert request.call_args.kwargs.get('privilege_mode') == expected
+
+
+def test_reviewable_scope_elevates_but_accessible_does_not(make_client):
+    for scope, expected in (('reviewable', 'elevated'), ('accessible', None)):
+        client, request = make_admin_client(
+            make_client, 'deletions', {'total': 0, 'items': []})
+
+        client.deletions.list(scope=scope)
+
+        assert request.call_args.kwargs.get('privilege_mode') == expected
+
+
+def test_capabilities_are_fetched_in_the_client_mode_and_cached(make_client):
+    client = make_client()
+    profile = {'authorization': {'can_elevate': True},
+               'capabilities': {'can_create_project': True}}
+    with patch.object(client.account, 'profile',
+                      return_value=profile) as fetch:
+        assert client.can_elevate is True
+        assert client.capabilities.can_create_project is True
+        assert client.authorization.can_elevate is True
+
+    fetch.assert_called_once_with()
+
+
+def test_unreadable_profile_degrades_to_no_authority(make_client):
+    client = make_client()
+    with patch.object(client.account, 'profile', side_effect=RuntimeError):
+        assert client.can_elevate is False
+        assert client.capabilities.can_create_project is None
+
+
+def test_require_capability_blocks_a_disallowed_action(capsys):
+    from crucible.cli.helpers import require_capability
+
+    from crucible.models import AccountCapabilities
+
+    client = MagicMock(capabilities=AccountCapabilities(can_create_project=False))
+
+    with pytest.raises(SystemExit):
+        require_capability(client, 'can_create_project', 'create projects')
+
+    assert 'not permitted to create projects' in capsys.readouterr().err
+
+
+def test_require_capability_allows_a_permitted_action():
+    from crucible.cli.helpers import require_capability
+
+    from crucible.models import AccountCapabilities
+
+    client = MagicMock(capabilities=AccountCapabilities(can_create_project=True))
+
+    require_capability(client, 'can_create_project', 'create projects')
+
+
+def test_require_capability_defers_to_the_api_when_unknown():
+    from crucible.cli.helpers import require_capability
+
+    from crucible.models import AccountCapabilities
+
+    require_capability(MagicMock(capabilities=AccountCapabilities()),
+                       'can_create_project', 'x')
+
+
+@pytest.mark.parametrize('session_mode', [None, 'normal', 'elevated'])
+def test_inline_elevated_restores_the_exact_session_mode(session_mode):
+    from crucible.cli import shell
+
+    instance = shell.CrucibleShell.__new__(shell.CrucibleShell)
+    instance.state = {'elevated': session_mode == 'elevated', 'debug': False}
+    instance.is_admin = False
+    instance.client = MagicMock(privilege_mode=session_mode)
+    seen = {}
+
+    def boom(args):
+        seen['mode'] = instance.client.privilege_mode
+        raise RuntimeError('command failed')
+
+    args = MagicMock(elevated=True, func=boom)
+    instance.parser = MagicMock(parse_args=MagicMock(return_value=args))
+
+    instance._dispatch('--elevated dataset list')
+
+    assert seen['mode'] == 'elevated'
+    assert instance.client.privilege_mode == session_mode
+
+
+def test_refresh_profile_re_reads_capabilities(make_client):
+    client = make_client()
+    first = {'authorization': {'can_elevate': False},
+             'capabilities': {'can_create_project': False}}
+    second = {'authorization': {'can_elevate': True},
+              'capabilities': {'can_create_project': True}}
+    with patch.object(client.account, 'profile', side_effect=[first, second]):
+        assert client.capabilities.can_create_project is False
+        client.refresh_profile()
+        assert client.capabilities.can_create_project is True
+        assert client.can_elevate is True
+
+
+def _bare_shell(state=None, can_manage=False, can_elevate=False):
+    from crucible.cli import shell
+    from crucible.models import AccountCapabilities
+
+    instance = shell.CrucibleShell.__new__(shell.CrucibleShell)
+    instance.state = state or {}
+    instance.client = MagicMock(
+        can_elevate=can_elevate,
+        capabilities=AccountCapabilities(can_manage_service_accounts=can_manage))
+    return instance
+
+
+def test_pending_summary_counts_only_reviewable_items(capsys):
+    instance = _bare_shell({
+        'deletions': [
+            {'id': 1, 'capabilities': {'can_review': True}},
+            {'id': 2, 'capabilities': {'can_review': False}},
+            {'id': 3},
+        ],
+        'join_requests': [{'id': 7}],
+    })
+
+    instance._print_pending()
+
+    out = capsys.readouterr().out
+    assert '2 deletion requests to review' in out
+    assert '1 join request to review' in out
+
+
+def test_pending_summary_is_silent_when_nothing_waits(capsys):
+    _bare_shell({'deletions': [], 'join_requests': []})._print_pending()
+
+    assert capsys.readouterr().out == ''
+
+
+@pytest.mark.parametrize('can_manage, can_elevate, hidden', [
+    (False, False, {'sa', 'service-account'}),
+    (True, False, set()),
+    (False, True, set()),
+])
+def test_admin_only_commands_are_hidden_from_completion(can_manage, can_elevate,
+                                                        hidden):
+    instance = _bare_shell(can_manage=can_manage, can_elevate=can_elevate)
+
+    assert instance._hidden_commands() == hidden
+
+
+def test_rebind_keeps_the_session_privilege_mode(monkeypatch):
+    from crucible.config import config
+
+    instance = _bare_shell()
+    instance.client.privilege_mode = 'normal'
+    instance.completer = None
+    fresh = MagicMock(privilege_mode=None)
+    monkeypatch.setattr(config, 'reload', lambda: None)
+    monkeypatch.setattr('crucible.config.get_client', lambda: fresh)
+
+    instance.rebind_client()
+    assert instance.client is fresh
+    assert fresh.privilege_mode == 'normal'
+
+    other = MagicMock(privilege_mode=None)
+    monkeypatch.setattr('crucible.config.get_client', lambda: other)
+    instance.rebind_client(keep_privilege_mode=False)
+    assert other.privilege_mode is None
+
+
+def test_reload_keeps_the_client_unless_its_settings_change(monkeypatch):
+    from crucible.config import config
+
+    sentinel = object()
+    monkeypatch.setattr(config, '_client', sentinel)
+    data = {'api_url': 'https://example.test/api/v3', 'api_key': 'k',
+            'current_project': 'a'}
+
+    def load():
+        config._data.update(data)
+
+    monkeypatch.setattr(config, '_load', load)
+    config._data.update(data)
+
+    data['current_project'] = 'b'
+    config.reload()
+    assert config._client is sentinel
+
+    data['api_key'] = 'other'
+    config.reload()
+    assert config._client is None

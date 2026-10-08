@@ -191,7 +191,7 @@ Examples:
         '--elevated',
         action='store_true',
         default=False,
-        help='Request platform-administrator elevation instead of normal ACL-derived access'
+        help='Request platform-administrator elevation for this command'
     )
 
     parser.add_argument(
@@ -265,10 +265,18 @@ Examples:
 
     # Every client built during this invocation reads the mode from the config
     # singleton, so setting it once here covers all of them without writing the
-    # config file.
+    # config file. Admin-only operations request elevation per call, so this
+    # only governs ordinary reads and writes.
+    from ..config import config as _config
     if getattr(args, 'elevated', False):
-        from ..config import config as _config
         _config._data['privilege_mode'] = 'elevated'
+    elif args.command is not None and _config.privilege_mode == 'elevated':
+        # Elevation from the config file or the environment leaves no trace on
+        # the command line, so say so rather than silently widening access.
+        print(term.yellow(
+            "Elevated privilege is active from "
+            f"{_config.source('privilege_mode') or 'configuration'}."),
+            file=sys.stderr)
 
     # If no command specified, start interactive shell
     if args.command is None:

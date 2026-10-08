@@ -141,3 +141,84 @@ def test_account_update_rejects_service_account_conversion():
         operations.update_profile(is_service_account=True)
 
     operations._request.assert_not_called()
+
+
+def test_set_platform_role_sends_patch_with_elevated_privilege():
+    operations = make_ops({'unique_id': USER_MFID, 'platform_role': 'contributor'})
+
+    operations.set_platform_role(USER_MFID, 'contributor')
+
+    operations._request.assert_called_once_with(
+        'patch',
+        f'/users/{USER_MFID}/platform_role',
+        json={'platform_role': 'contributor'},
+        privilege_mode='elevated',
+    )
+
+
+def test_set_platform_role_rejects_support_role():
+    operations = make_ops()
+
+    with pytest.raises(ValueError, match='none, contributor, admin'):
+        operations.set_platform_role(USER_MFID, 'support')
+
+    operations._request.assert_not_called()
+
+
+def test_revoke_api_keys_sends_delete_with_elevated_privilege():
+    operations = make_ops()
+
+    assert operations.revoke_api_keys(USER_MFID) is None
+
+    operations._request.assert_called_once_with(
+        'delete',
+        f'/users/{USER_MFID}/apikey',
+        privilege_mode='elevated',
+    )
+
+
+def make_listing_ops():
+    operations = UserOperations(MagicMock())
+    operations._paginate = MagicMock(return_value=[])
+    return operations
+
+
+def test_list_passes_explicit_filters_with_scalar_normalization():
+    operations = make_listing_ops()
+
+    operations.list(username='alice', platform_role='admin',
+                    q='ali', search_fields='username', is_service_account=False)
+
+    operations._paginate.assert_called_once_with('/users', {
+        'q': 'ali',
+        'username': 'alice',
+        'platform_role': ['admin'],
+        'search_fields': ['username'],
+        'is_service_account': False,
+    }, 100, 0)
+
+
+def test_list_rejects_unknown_platform_role():
+    operations = make_listing_ops()
+
+    with pytest.raises(ValueError, match='platform_role'):
+        operations.list(platform_role='superadmin')
+
+    operations._paginate.assert_not_called()
+
+
+def test_list_requires_q_with_search_fields():
+    operations = make_listing_ops()
+
+    with pytest.raises(ValueError, match='search_fields requires q'):
+        operations.list(search_fields='username')
+
+    operations._paginate.assert_not_called()
+
+
+def test_list_omits_unset_filters():
+    operations = make_listing_ops()
+
+    operations.list()
+
+    operations._paginate.assert_called_once_with('/users', {}, 100, 0)

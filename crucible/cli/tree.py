@@ -147,11 +147,11 @@ def _print_node(node_id, nodes_by_id, adj, depth, max_depth, visited,
 # ── Entry point ────────────────────────────────────────────────────────────────
 
 def execute(args):
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     from crucible.config import config as _cfg
 
     try:
-        client     = CrucibleClient()
+        client     = get_client()
         graph_data = client.graphs.get(args.resource_id, recursive=True)
     except Exception as e:
         logger.error(f"Error fetching graph: {e}")

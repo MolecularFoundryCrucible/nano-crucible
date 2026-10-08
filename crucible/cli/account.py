@@ -103,9 +103,9 @@ def _register_verify(subparsers):
 
 def _execute_verify(args):
     import requests as _req
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        info = CrucibleClient().account.verify()
+        info = get_client().account.verify()
         _p = term.field_printer(10)
         term.header("API Key")
         valid = info.get('valid', False)
@@ -139,9 +139,9 @@ def _show_profile(user):
 
 
 def _execute_show(args):
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        user = CrucibleClient().account.profile()
+        user = get_client().account.profile()
         if user is None:
             logger.error("No user record found for the current API key - "
                          "the account may not be fully set up yet")
@@ -157,9 +157,9 @@ def _execute_show(args):
 
 
 def _execute_edit(args):
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
         user = client.account.profile()
         if user is None:
             logger.error("No user record found for the current API key")
@@ -201,7 +201,7 @@ def _execute_edit(args):
 
 
 def _execute_update(args):
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
 
     fields = {k: v for k, v in {
         'first_name': args.first_name,
@@ -216,7 +216,7 @@ def _execute_update(args):
         sys.exit(1)
 
     try:
-        result = CrucibleClient().account.update_profile(**fields)
+        result = get_client().account.update_profile(**fields)
         _show_profile(result)
     except Exception as e:
         from .helpers import fail
@@ -225,9 +225,9 @@ def _execute_update(args):
 
 def _execute_api_key(args):
     import requests as _req
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        key = CrucibleClient().account.api_key()
+        key = get_client().account.api_key()
         _p = term.field_printer(8)
         term.header("API Key")
         _p("Key", key)

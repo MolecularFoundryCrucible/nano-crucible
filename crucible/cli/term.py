@@ -218,6 +218,39 @@ def status_marker(status: str, stream=None) -> str:
     return style(symbol if _interactive(stream) else label, stream=stream)
 
 
+def check_marker(value, stream=None) -> str:
+    """Mark a nullable permission as granted, withheld, or unknown.
+
+    Interactive output uses a symbol; redirected output uses yes, no, or -.
+    A withheld permission is dimmed rather than red because it is not an error.
+    """
+    if value is None:
+        return dim('-', stream=stream)
+    if _interactive(stream):
+        return green('✓', stream=stream) if value else dim('×', stream=stream)
+    return 'yes' if value else 'no'
+
+
+def grid(items: list, columns: int | None = None, indent: int = 2,
+         gap: int = 4) -> None:
+    """Print pre-styled strings in column-major order across the terminal.
+
+    *columns* defaults to as many as fit the output width.
+    """
+    if not items:
+        return
+    width = max(_dlen(item) for item in items) + gap
+    if columns is None:
+        columns = max(1, (_table_output_width() - indent) // width)
+    columns = min(columns, len(items))
+    rows = -(-len(items) // columns)
+    for r in range(rows):
+        cells = [items[c * rows + r] for c in range(columns)
+                 if c * rows + r < len(items)]
+        line = ''.join(cell + ' ' * (width - _dlen(cell)) for cell in cells[:-1])
+        print(' ' * indent + line + cells[-1])
+
+
 def _standing_label(standing: str, *, owner_label: str, stream=None) -> str:
     if not standing:
         return '-'
@@ -236,6 +269,14 @@ def _standing_label(standing: str, *, owner_label: str, stream=None) -> str:
 def role_label(role: str, stream=None) -> str:
     """Color a project role while preserving plain redirected output."""
     return _standing_label(role, owner_label='lead', stream=stream)
+
+
+def platform_role_label(role: str | None, stream=None) -> str:
+    """Color a platform role; 'none' and missing values are dimmed."""
+    if not role or role == 'none':
+        return dim(role or '-', stream=stream)
+    styles = {'admin': magenta, 'contributor': lambda v, stream=None: v}
+    return styles.get(role, dim)(role, stream=stream)
 
 
 def permission_label(permission: str, stream=None) -> str:
@@ -270,7 +311,18 @@ def _rel(delta) -> str:
     """Human-readable relative label for a timedelta."""
     days = delta.days
     if days < 0:
-        return 'in the future'
+        ahead = -delta
+        days = ahead.days
+        if days == 0:
+            h = ahead.seconds // 3600
+            return f"in {h}h" if h else "in under an hour"
+        if days == 1:
+            return 'tomorrow'
+        if days < 30:
+            return f"in {days}d"
+        if days < 365:
+            return f"in {days // 30}mo"
+        return f"in {days // 365}y"
     if days == 0:
         h = delta.seconds // 3600
         m = (delta.seconds % 3600) // 60
@@ -427,66 +479,44 @@ def diff(original: dict, updated: dict) -> None:
 
 # ── Editor launcher ────────────────────────────────────────────────────────────
 
-# GUI editors that fork into the background by default.
-# Maps the binary name to the flag(s) that make them block until closed.
-_GUI_EDITOR_WAIT_FLAGS: dict[str, list[str]] = {
-    'gvim':          ['-f'],
-    'mvim':          ['-f'],
-    'nvim-qt':       ['--nofork'],
-    'gedit':         ['--wait'],
-    'kate':          ['--block'],
-    'subl':          ['--wait'],
-    'sublime_text':  ['--wait'],
-    'code':          ['--wait'],
-    'code-insiders': ['--wait'],
-}
-
-
 def open_editor_json(data: dict) -> dict | None:
     """
-    Serialize *data* to a temp JSON file, open it in ``$EDITOR`` (or
-    ``$VISUAL``), and return the parsed result after the editor closes.
+    Serialize *data* to a temp JSON file, open it in the user's editor, and
+    return the parsed result after the editor closes.
+
+    The editor comes from the ``editor`` config key, ``$VISUAL``, or
+    ``$EDITOR``, falling back to a platform default (Notepad on Windows).
+    See ``crucible.cli.editor``.
 
     Returns ``None`` if the content was not changed.
     Raises ``ValueError`` on invalid JSON and ``RuntimeError`` if the editor
-    exits with a non-zero status.
-
-    Known GUI editors (gvim, VS Code, Sublime Text, kate, gedit, …) are
-    automatically invoked with their foreground/wait flags so the function
-    blocks until the file is saved and the window is closed.  Users who have
-    already set ``EDITOR="gvim -f"`` or ``EDITOR="code --wait"`` are not
-    affected — duplicate flags are not added.
+    is missing or exits with a non-zero status.
     """
     import json
     import os
     import subprocess
     import tempfile
 
-    # Priority: crucible config > $VISUAL > $EDITOR > nano
-    try:
-        from crucible.config import config as _cfg
-        _editor_cfg = _cfg.editor
-    except Exception:
-        _editor_cfg = None
-
-    raw = _editor_cfg or os.environ.get('VISUAL') or os.environ.get('EDITOR') or 'nano'
-    parts = raw.split()
-    editor_bin = os.path.basename(parts[0])
-    extra = [f for f in _GUI_EDITOR_WAIT_FLAGS.get(editor_bin, []) if f not in parts]
-    cmd = parts + extra
+    from .editor import edit_file
 
     original_text = json.dumps(data, indent=2, default=str)
 
     with tempfile.NamedTemporaryFile(
-        mode='w', suffix='.json', prefix='crucible-', delete=False
+        mode='w', suffix='.json', prefix='crucible-', delete=False,
+        encoding='utf-8',
     ) as f:
         f.write(original_text)
         tmp_path = f.name
 
     try:
-        subprocess.run(cmd + [tmp_path], check=True)
-        with open(tmp_path) as f:
+        edit_file(tmp_path)
+        with open(tmp_path, encoding='utf-8-sig') as f:
             edited_text = f.read()
+    except FileNotFoundError as e:
+        raise RuntimeError(
+            f"Editor not found: {e.filename or e}. "
+            "Set one with: crucible config set editor notepad"
+        ) from e
     except subprocess.CalledProcessError as e:
         raise RuntimeError(f"Editor exited with an error: {e}") from e
     finally:

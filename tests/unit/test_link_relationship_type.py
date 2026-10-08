@@ -175,7 +175,7 @@ def test_cli_link_rejects_type_for_sample_to_dataset(caplog):
 ])
 def test_cli_link_passes_type_through(module, resource, monkeypatch):
     client = MagicMock()
-    monkeypatch.setattr('crucible.client.CrucibleClient', lambda *a, **k: client)
+    monkeypatch.setattr('crucible.config.get_client', lambda *a, **k: client)
     args = SimpleNamespace(parent=PARENT, child=CHILD,
                            relationship_type='is_derived_from', json=False)
     module._execute_link(args)
@@ -193,7 +193,7 @@ def test_cli_listings_forward_relationship_type(module, namespace, id_attr,
                                                 which, monkeypatch):
     client = MagicMock()
     getattr(getattr(client, namespace), which).return_value = []
-    monkeypatch.setattr('crucible.client.CrucibleClient', lambda *a, **k: client)
+    monkeypatch.setattr('crucible.config.get_client', lambda *a, **k: client)
 
     args = SimpleNamespace(**{id_attr: PARENT}, limit=100,
                            relationship_type='is_part_of', json=False)
@@ -207,7 +207,7 @@ def test_cli_listing_flag_is_optional(monkeypatch):
     """Omitting the flag passes None, which the client turns into no filter."""
     client = MagicMock()
     client.datasets.list_children.return_value = []
-    monkeypatch.setattr('crucible.client.CrucibleClient', lambda *a, **k: client)
+    monkeypatch.setattr('crucible.config.get_client', lambda *a, **k: client)
 
     dataset_cli._execute_list_children(
         SimpleNamespace(dataset_id=PARENT, limit=100,

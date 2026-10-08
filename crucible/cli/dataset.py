@@ -239,7 +239,6 @@ except ImportError:
 
 #internal modules
 from ..config import config as _config
-from ..constants import PROJECT_SCOPES
 
 def register_subcommand(subparsers):
     """
@@ -300,149 +299,72 @@ def _register_list(subparsers):
     parser = subparsers.add_parser(
         'list',
         help='List datasets',
-        description='List datasets, with optional filters',
+        description='List datasets, oldest to newest so the newest is closest '
+                    'to the prompt. Uses the current project if one is set, '
+                    'otherwise every accessible project.',
         formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
-    crucible dataset list --project-id my-project
+    crucible dataset list
+    crucible dataset list --all-projects --mine
     crucible dataset list --project-id my-project --project-scope shared
-    crucible dataset list --project-mfid 0tkn2knjast3h0008nyq9zps2c --project-scope all
-    crucible dataset list --project-id my-project -m XRD
+    crucible dataset list --project-id my-project --measurement XRD
     crucible dataset list --project-id my-project -k silicon --limit 20
-    crucible dataset list --instrument-mfid 0tkn2knjast3h0008nyq9zps2c
-    crucible dataset list --session 2024-01-15-run
-    crucible dataset list --project-id my-project --group-by measurement
-    crucible dataset list --project-id my-project --include "run-*" "*XRD*"
-    crucible dataset list --project-id my-project --exclude "*test*"
+    crucible dataset list --instrument-id titan
+    crucible dataset list --sample-mfid 0tkn2knjast3h0008nyq9zps2c
+    crucible dataset list --missing session --created-after 2026-01-01
+    crucible dataset list --sort name --direction asc
+    crucible dataset list --group-by measurement
+    crucible dataset list --include "run-*" "*XRD*" --exclude "*test*"
 """
     )
 
-    from .helpers import DeprecatedAliasAction
-    project_group = parser.add_mutually_exclusive_group()
-    project_group.add_argument(
-        '--project-id', '-p',
-        required=False,
-        default=None,
-        metavar='ID',
-        help='Crucible project ID (uses the saved current project if omitted)'
-    )
-    project_group.add_argument(
-        '--project-mfid',
-        default=None,
-        metavar='MFID',
-        help='Canonical project MFID'
-    )
-    parser.add_argument(
-        '-pid',
-        action=DeprecatedAliasAction,
-        deprecated_options={'-pid'},
-        replacement='--project-id',
-        dest='project_id',
-        default=argparse.SUPPRESS,
-        metavar='ID',
-        help=argparse.SUPPRESS,
-    )
-    parser.add_argument(
-        '--project-scope',
-        choices=PROJECT_SCOPES,
-        default=None,
-        metavar='SCOPE',
-        help='Project relationship to include: assigned, shared, or all (default: assigned)'
-    )
-
-    parser.add_argument(
-        '-m', '--measurement',
-        default=None,
-        metavar='TYPE',
-        help='Filter by measurement type (exact match)'
-    )
-
-    parser.add_argument(
-        '-k', '--keyword',
-        default=None,
-        metavar='WORD',
-        help='Filter by keyword (case-insensitive substring match)'
-    )
-
-    parser.add_argument(
-        '--session',
-        default=None,
-        metavar='NAME',
-        help='Filter by session name (exact match)'
-    )
-
-    parser.add_argument(
-        '--data-format',
-        default=None,
-        dest='data_format',
-        metavar='FORMAT',
-        help='Filter by data format (exact match)'
-    )
-
-    parser.add_argument(
-        '--data-type',
-        default=None,
-        dest='data_type',
-        metavar='TYPE',
-        help='Filter by data type (exact match)'
-    )
-
-    parser.add_argument(
-        '--instrument',
-        default=None,
-        dest='instrument_name',
-        metavar='NAME',
-        help='Filter by instrument name (exact match)'
-    )
-
-    parser.add_argument(
-        '--instrument-mfid',
-        default=None,
-        metavar='MFID',
-        help='Filter by canonical instrument MFID across accessible projects'
-    )
-
-    from .helpers import add_listing_filters
+    from .helpers import add_listing_filters, add_scope_filters
+    add_scope_filters(parser, 'dataset')
     add_listing_filters(parser)
 
     parser.add_argument(
-        '--group-by',
-        dest='group_by',
-        default=None,
-        choices=['measurement', 'session', 'format', 'instrument'],
-        metavar='FIELD',
-        help='Group results by field: measurement, session, format, instrument (default from config, fallback: measurement)'
+        '-n', '--name', dest='dataset_name', default=None, metavar='NAME',
+        help='Filter by dataset name (exact match)'
     )
-
     parser.add_argument(
-        '--include',
-        nargs='+',
-        metavar='PATTERN',
+        '-k', '--keyword', default=None, metavar='WORD',
+        help='Filter by keyword (case-insensitive substring match)'
+    )
+    parser.add_argument(
+        '--data-type', default=None, dest='data_type', metavar='TYPE',
+        help='Filter by data type (exact match)'
+    )
+    parser.add_argument(
+        '--instrument-id', default=None, dest='instrument_id', metavar='ID',
+        help='Filter by instrument ID (slug, any casing)'
+    )
+    parser.add_argument(
+        '--instrument', default=None, dest='instrument_name', metavar='NAME',
+        help='Deprecated: filter by instrument display name; use --instrument-id'
+    )
+    parser.add_argument(
+        '--group-by', dest='group_by', default=None,
+        choices=['measurement', 'session', 'format', 'instrument', 'none'], metavar='FIELD',
+        help='Group results by field: measurement, session, format, instrument, '
+             'or none (default: dataset_group_by from config, else none)'
+    )
+    parser.add_argument(
+        '--include', nargs='+', metavar='PATTERN',
         help='Only show datasets whose name matches any glob pattern (e.g. "run-*", "*XRD*")'
     )
-
     parser.add_argument(
-        '--exclude',
-        nargs='+',
-        metavar='PATTERN',
+        '--exclude', nargs='+', metavar='PATTERN',
         help='Exclude datasets whose name matches any glob pattern'
     )
-
     parser.add_argument(
-        '--limit', '-l',
-        type=int,
-        default=_config.default_limit,
-        metavar='N',
-        help='Maximum number of results to return (default: 100)'
+        '--limit', '-l', type=int, default=_config.default_limit, metavar='N',
+        help=f'Maximum number of results to return (default: {_config.default_limit})'
     )
-
     parser.add_argument(
-        '--json',
-        action='store_true',
-        default=False,
-        help='Output as JSON array'
+        '--json', action='store_true', default=False,
+        help='Output raw JSON in server order'
     )
-
     parser.set_defaults(func=_execute_list)
 
 
@@ -650,19 +572,18 @@ Examples:
         help='Make dataset public (default: private)'
     )
 
-    # Instrument name
     parser.add_argument(
         '--instrument',
         dest='instrument_name',
         default=None,
         metavar='NAME',
-        help='Instrument name (optional)'
+        help='Deprecated: identifies the instrument by its display name; use --instrument-id'
     )
     parser.add_argument(
         '--instrument-id',
         default=None,
         metavar='ID',
-        help='Registered instrument ID (optional)'
+        help='Registered instrument ID (slug, any casing)'
     )
     parser.add_argument(
         '--instrument-mfid',
@@ -793,7 +714,7 @@ Use `dataset set-public` or `dataset set-private` to change public visibility.
 
 def _execute_update(args):
     """Execute the 'dataset update' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     from .helpers import cast_value
 
     has_set = bool(getattr(args, 'set_fields', None))
@@ -844,7 +765,7 @@ def _execute_update(args):
             sys.exit(1)
 
     try:
-        client = CrucibleClient()
+        client = get_client()
 
         if updates:
             client.datasets.update(args.dataset_id, **updates)
@@ -892,11 +813,11 @@ Examples:
 
 def _execute_reassign_project(args):
     """Execute the 'dataset reassign-project' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     from .helpers import fail, show_reassign_project
 
     try:
-        client = CrucibleClient()
+        client = get_client()
         result = client.datasets.reassign_project(args.dataset_id, args.project_id, confirm=args.confirm)
         show_reassign_project(result, args.confirm)
     except Exception as e:
@@ -924,11 +845,11 @@ Examples:
 
 def _execute_transfer_ownership(args):
     """Execute the 'dataset transfer-ownership' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     from .helpers import fail, show_transfer_ownership
 
     try:
-        client = CrucibleClient()
+        client = get_client()
         result = client.datasets.transfer_ownership(args.dataset_id, args.new_owner, confirm=args.confirm)
         show_transfer_ownership(result, args.confirm)
     except Exception as e:
@@ -955,7 +876,7 @@ Examples:
 
 def _execute_delete(args):
     """Execute the 'dataset delete' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     from .helpers import prompt_confirm
     confirmed = args.yes or prompt_confirm(
         f"Delete dataset {args.dataset_id}? This cannot be undone.",
@@ -965,7 +886,7 @@ def _execute_delete(args):
         print("Aborted.")
         return
     try:
-        client = CrucibleClient()
+        client = get_client()
         client.datasets.delete(args.dataset_id)
         term.success(f"Deleted dataset {args.dataset_id}", args)
     except Exception as e:
@@ -1051,9 +972,9 @@ def _edit_dataset(dsid, client, debug=False):
 
 def _execute_edit(args):
     """Execute the 'dataset edit' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
     except Exception as e:
         from .helpers import fail
         fail("connecting", e)
@@ -1114,9 +1035,9 @@ Examples:
 
 def _execute_add_sample(args):
     """Execute the 'dataset add-sample' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
         client.datasets.link_sample(args.dataset_id, args.sample)
 
         term.success(f"Linked sample {args.sample} to dataset {args.dataset_id}", args)
@@ -1145,9 +1066,9 @@ Examples:
 
 def _execute_remove_sample(args):
     """Execute the 'dataset remove-sample' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
         client.datasets.unlink_sample(args.dataset_id, args.sample)
         term.success(f"Unlinked sample {args.sample} from dataset {args.dataset_id}", args)
     except Exception as e:
@@ -1174,9 +1095,9 @@ Examples:
 
 def _execute_remove_child(args):
     """Execute the 'dataset remove-child' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
         client.datasets.unlink(args.parent_id, args.child)
         term.success(f"Unlinked child dataset {args.child} from parent dataset {args.parent_id}", args)
     except Exception as e:
@@ -1331,11 +1252,11 @@ Examples:
 
 def _execute_download(args):
     """Execute the 'dataset download' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     output_dir = args.output_dir or f"crucible-downloads/{args.dataset_id}"
 
     try:
-        client = CrucibleClient()
+        client = get_client()
         logger.info(f"Downloading dataset {args.dataset_id} to {output_dir}/")
 
         downloaded = client.datasets.download(
@@ -1414,7 +1335,7 @@ Examples:
 def _execute_add_file(args):
     """Execute the 'dataset add-file' subcommand."""
     import glob as _glob
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
 
     dsid = args.dataset_id
 
@@ -1437,7 +1358,7 @@ def _execute_add_file(args):
         files.append(p)
 
     try:
-        client = CrucibleClient()
+        client = get_client()
 
         ingestor = getattr(args, 'ingestor', None)
         wait     = getattr(args, 'wait', False)
@@ -1497,14 +1418,14 @@ Examples:
 
 def _execute_add_thumbnail(args):
     """Execute the 'dataset add-thumbnail' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
 
     try:
         image_path = Path(args.image).expanduser()
         if not image_path.is_file():
             raise FileNotFoundError(f"Thumbnail image not found: {image_path}")
 
-        client = CrucibleClient()
+        client = get_client()
         client.datasets.add_thumbnail(
             args.dataset_mfid,
             str(image_path),
@@ -1534,9 +1455,9 @@ def _register_list_files(subparsers):
 
 def _execute_list_files(args):
     """Execute the 'dataset list-files' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
         dsid = args.dataset_id
 
         # Fetch metadata (size, hash) and signed download URLs in parallel
@@ -1586,9 +1507,9 @@ Examples:
 
 def _execute_ingestion(args):
     """Execute 'crucible dataset ingestion'."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
         reqs = client.ingestions.list(dsid=args.dataset_id)
 
         term.header(f"Ingestion Requests · {args.dataset_id} ({len(reqs)})")
@@ -1657,10 +1578,10 @@ def _execute_search(args):
     if len(args.query) < 3:
         from .helpers import fail
         fail("searching datasets", ValueError("Search term must be at least 3 characters."), args)
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
         from .helpers import resolve_project_context
-        client     = CrucibleClient()
+        client     = get_client()
         project_id, _ = resolve_project_context(args, args.project_id)
         results    = client.datasets.search(args.query, project_id=project_id,
                                             limit=args.limit)
@@ -1710,9 +1631,9 @@ Examples:
 
 
 def _execute_search_metadata(args):
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client  = CrucibleClient()
+        client  = get_client()
         results = client.datasets.search_metadata(args.query, limit=args.limit)
         if getattr(args, 'json', False):
             print(json.dumps(results, indent=2, default=str))
@@ -1758,9 +1679,9 @@ Examples:
 
 def _execute_add_keyword(args):
     """Execute the 'dataset add-keyword' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
         client.datasets.add_keyword(args.dataset_id, args.keyword)
 
         term.success(f"Keyword '{args.keyword}' added to {args.dataset_id}", args)
@@ -1787,9 +1708,9 @@ def _register_list_keywords(subparsers):
 
 def _execute_list_keywords(args):
     """Execute the 'dataset get-keywords' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
         keywords = client.datasets.get_keywords(args.dataset_id)
 
         term.header(f"Keywords · {args.dataset_id} ({len(keywords)})")
@@ -1848,9 +1769,9 @@ Examples:
 
 def _execute_list_access_groups(args):
     """Execute 'crucible dataset list-access-groups'."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
         groups = client.datasets.get_access_groups(args.dataset_id)
         term.header(f"Access Groups · {args.dataset_id} ({len(groups)})")
         if not groups:
@@ -1884,9 +1805,9 @@ Examples:
 
 def _execute_add_access_group(args):
     """Execute 'crucible dataset add-access-group'."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
         client.datasets.add_access_group(args.dataset_id, args.group_name,
                                          read=True, write=args.write)
         perms = 'read+write' if args.write else 'read'
@@ -1916,56 +1837,34 @@ Examples:
 def _execute_list(args):
     """Execute the 'dataset list' subcommand."""
     from crucible.config import config
-    from crucible.client import CrucibleClient
-    from .helpers import resolve_project_context, listing_filter_kwargs
-    project_id = args.project_id
-    project_mfid = getattr(args, 'project_mfid', None)
-    project_scope = getattr(args, 'project_scope', None)
-    instrument_mfid = getattr(args, 'instrument_mfid', None)
-    if project_id is not None and project_mfid is not None:
-        logger.error("Error: Specify either --project-id or --project-mfid, not both.")
-        sys.exit(1)
-    if (project_id is None and project_mfid is None and
-            (instrument_mfid is None or project_scope is not None)):
-        project_id, _ = resolve_project_context(args)
-    if project_scope is not None and project_id is None and project_mfid is None:
-        logger.error("Error: --project-scope requires --project-id, --project-mfid, or a saved current project.")
-        sys.exit(1)
-    if project_id is None and project_mfid is None and instrument_mfid is None:
-        logger.error(
-            "Error: Project ID, project MFID, or instrument MFID required. Specify "
-            "--project-id, --project-mfid, --instrument-mfid, or set current_project in config.")
-        sys.exit(1)
-
-    # Build optional filters
-    filters = {}
-    if args.measurement:
-        filters['measurement'] = args.measurement
-    if args.keyword:
-        filters['keyword'] = args.keyword
-    if args.session:
-        filters['session_name'] = args.session
-    if args.data_format:
-        filters['data_format'] = args.data_format
-    if args.data_type:
-        filters['data_type'] = args.data_type
-    if args.instrument_name:
-        filters['instrument_name'] = args.instrument_name
-    if instrument_mfid:
-        filters['instrument_mfid'] = instrument_mfid
-    filters.update(listing_filter_kwargs(args))
-    project_filters = {}
-    if project_id is not None:
-        project_filters['project_id'] = project_id
-    if project_mfid is not None:
-        project_filters['project_mfid'] = project_mfid
-    if project_scope is not None:
-        project_filters['project_scope'] = project_scope
+    from crucible.config import get_client
+    from .helpers import (display_order, group_records, listing_filter_kwargs,
+                          scope_filter_kwargs)
 
     try:
         import fnmatch
-        client = CrucibleClient()
-        datasets = client.datasets.list(limit=args.limit, **project_filters, **filters)
+        client = get_client()
+        try:
+            filters = scope_filter_kwargs(args, client)
+        except ValueError as e:
+            logger.error(f"Error: {e}")
+            sys.exit(1)
+        for name in ('dataset_name', 'keyword', 'data_type'):
+            value = getattr(args, name, None)
+            if value:
+                filters[name] = value
+        if getattr(args, 'instrument_id', None):
+            if filters.get('instrument_mfid'):
+                logger.error("Error: Specify either --instrument-id or --instrument-mfid, not both.")
+                sys.exit(1)
+            filters['instrument_mfid'] = client.instruments.get(
+                instrument_id=args.instrument_id, include_owner=False)['unique_id']
+        if getattr(args, 'instrument_name', None):
+            from .helpers import show_warning
+            show_warning("--instrument NAME is deprecated; use --instrument-id.")
+            filters['instrument_name'] = args.instrument_name
+        filters.update(listing_filter_kwargs(args))
+        datasets = client.datasets.list(limit=args.limit, **filters)
 
         # Client-side glob filtering on name
         if getattr(args, 'include', None):
@@ -1983,78 +1882,76 @@ def _execute_list(args):
             print(json.dumps(datasets, indent=2, default=str))
             return
 
-        project_label = project_id or project_mfid
+        project_id = filters.get('project_id')
+        project_scope = filters.get('project_scope')
+        project_label = project_id or filters.get('project_mfid')
+        instrument_mfid = filters.get('instrument_mfid')
         if project_label:
             scope_label = f" · {project_scope}" if project_scope else ''
             title = f"Datasets · {project_label}{scope_label} ({len(datasets)})"
         elif instrument_mfid:
             title = f"Datasets · instrument {instrument_mfid} ({len(datasets)})"
         else:
-            title = f"Datasets ({len(datasets)})"
+            title = f"Datasets · all projects ({len(datasets)})"
         term.header(title)
         if filters:
             logger.info(f"Filters: {', '.join(f'{k}={v}' for k, v in filters.items())}")
 
         if not datasets:
             print(f"  {term.dim('No datasets found.')}")
-        else:
-            from .helpers import explorer_url, project_reference
+            return
 
-            _GROUP_FIELD = {
-                'measurement': 'measurement',
-                'session':     'session_name',
-                'format':      'data_format',
-                'instrument':  'instrument_name',
-            }
-            group_by_key = args.group_by or config.dataset_group_by or 'measurement'
-            group_by = _GROUP_FIELD.get(group_by_key)
+        from .helpers import explorer_url, project_reference
 
-            def _make_row(ds):
-                uid = ds.get('unique_id') or ''
-                _, referenced_project_id, _ = project_reference(ds)
-                pid = referenced_project_id or project_id
-                row = (
-                    ds.get('dataset_name') or '(unnamed)',
-                    term.mfid_link(uid, explorer_url(uid, pid, 'dataset')) if uid else '-',
-                )
-                if project_scope in ('shared', 'all'):
-                    row += (
-                        referenced_project_id or '-',
-                        ds.get('project_relation') or '-',
-                    )
-                return row + (
-                    ds.get('measurement') or '-',
-                    ds.get('session_name') or '-',
-                )
+        _GROUP_FIELD = {
+            'measurement': 'measurement',
+            'session':     'session_name',
+            'format':      'data_format',
+            'instrument':  'instrument_name',
+        }
+        group_by = _GROUP_FIELD.get(args.group_by or config.dataset_group_by or 'none')
+        show_project = project_label is None or project_scope in ('shared', 'all')
 
-            contextual_headers = ['Name', 'MFID', 'Project', 'Relation', 'Measurement', 'Session']
-            standard_headers = ['Name', 'MFID', 'Measurement', 'Session']
-            headers = contextual_headers if project_scope in ('shared', 'all') else standard_headers
-            contextual_max = [25, 26, 25, 8, 15, 18]
-            standard_max = [35, 26, 15, 20]
-            max_widths = contextual_max if project_scope in ('shared', 'all') else standard_max
-            contextual_min = [4, 26, 7, 8, 11, 7]
-            standard_min = [4, 26, 11, 7]
-            min_widths = contextual_min if project_scope in ('shared', 'all') else standard_min
+        def _make_row(ds):
+            uid = ds.get('unique_id') or ''
+            _, referenced_project_id, _ = project_reference(ds)
+            pid = referenced_project_id or project_id
+            row = (
+                ds.get('dataset_name') or '(unnamed)',
+                term.mfid_link(uid, explorer_url(uid, pid, 'dataset')) if uid else '-',
+            )
+            if show_project:
+                row += (referenced_project_id or '-',)
+            if project_scope in ('shared', 'all'):
+                row += (ds.get('project_relation') or '-',)
+            return row + (
+                ds.get('measurement') or '-',
+                ds.get('session_name') or '-',
+                term.fmt_date(ds.get('creation_time')),
+            )
 
-            _by_name = lambda ds: (ds.get('dataset_name') or '').lower()
+        headers, max_widths, min_widths = ['Name', 'MFID'], [35, 26], [4, 26]
+        if show_project:
+            headers.append('Project')
+            max_widths.append(25)
+            min_widths.append(7)
+        if project_scope in ('shared', 'all'):
+            headers.append('Relation')
+            max_widths.append(8)
+            min_widths.append(8)
+        headers += ['Measurement', 'Session', 'Created']
+        max_widths += [15, 18, 10]
+        min_widths += [11, 7, 10]
 
-            if not group_by:
-                term.table([_make_row(ds) for ds in sorted(datasets, key=_by_name)],
-                           headers, max_widths=max_widths,
-                           min_widths=min_widths)
-            else:
-                from collections import defaultdict
-                groups = defaultdict(list)
-                for ds in datasets:
-                    groups[ds.get(group_by) or None].append(ds)
-                keys = sorted(k for k in groups if k) + ([None] if None in groups else [])
-                for key in keys:
-                    label = key or '(none)'
-                    term.subheader(f"{label} ({len(groups[key])})")
-                    term.table([_make_row(ds) for ds in sorted(groups[key], key=_by_name)],
-                               headers, max_widths=max_widths,
-                               min_widths=min_widths)
+        ordered = display_order(datasets, args.sort, args.direction)
+        if not group_by:
+            term.table([_make_row(ds) for ds in ordered], headers,
+                       max_widths=max_widths, min_widths=min_widths)
+            return
+        for key, group in group_records(ordered, group_by):
+            term.subheader(f"{key or '(none)'} ({len(group)})")
+            term.table([_make_row(ds) for ds in group], headers,
+                       max_widths=max_widths, min_widths=min_widths)
 
     except Exception as e:
         from .helpers import fail
@@ -2063,11 +1960,11 @@ def _execute_list(args):
 
 def _execute_get(args):
     """Execute the 'dataset get' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     as_json = getattr(args, 'json', False)
     include_metadata = as_json or getattr(args, 'include_metadata', False) or _config.include_metadata
     try:
-        client = CrucibleClient()
+        client = get_client()
         graph   = getattr(args, 'graph', False)
         dataset = client.datasets.get(args.dataset_id, include_metadata=include_metadata,
                                       include_links=graph or _config.include_links,
@@ -2115,6 +2012,10 @@ def _execute_create(args):
     project_mfid = getattr(args, 'project_mfid', None)
     instrument_id = getattr(args, 'instrument_id', None)
     instrument_mfid = getattr(args, 'instrument_mfid', None)
+    if args.instrument_name and not (instrument_id or instrument_mfid):
+        from .helpers import show_warning
+        show_warning("--instrument NAME is deprecated: instrument names may repeat. "
+                     "Use --instrument-id or --instrument-mfid.")
     if project_id is None and project_mfid is None:
         project_id, project_source = resolve_project_context(args)
     else:
@@ -2318,7 +2219,7 @@ def _execute_create(args):
         print("")
         try:
             if args.no_upload:
-                from crucible.client import CrucibleClient
+                from crucible.config import get_client
                 from crucible.models import AssociatedFile
                 remote_files = [
                     AssociatedFile(
@@ -2329,7 +2230,7 @@ def _execute_create(args):
                     )
                     for f in parser.files_to_upload
                 ]
-                result = CrucibleClient().datasets.create(
+                result = get_client().datasets.create(
                     parser.to_dataset(),
                     scientific_metadata=parser.scientific_metadata,
                     keywords=parser.keywords,
@@ -2337,8 +2238,8 @@ def _execute_create(args):
                 )
             else:
                 if parser is None:
-                    from crucible.client import CrucibleClient
-                    result = CrucibleClient().datasets.create(
+                    from crucible.config import get_client
+                    result = get_client().datasets.create(
                         dataset_record,
                         scientific_metadata=record_metadata,
                         keywords=record_keywords,
@@ -2354,8 +2255,8 @@ def _execute_create(args):
             term.success("Dataset created" if parser is None else "Upload completed", args)
             created = result.get('created_record', {}) if result else {}
             if created:
-                from crucible.client import CrucibleClient
-                _show_dataset(created, CrucibleClient())
+                from crucible.config import get_client
+                _show_dataset(created, get_client())
 
             if result and getattr(args, 'debug', False):
                 logger.debug("Upload result details:")
@@ -2369,9 +2270,9 @@ def _execute_create(args):
 
 def _execute_link(args):
     """Execute the 'dataset link' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
         client.datasets.link(
             args.parent, args.child, args.relationship_type)
 
@@ -2387,9 +2288,9 @@ def _execute_link(args):
 
 def _execute_list_parents(args):
     """Execute the 'dataset list-parents' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
         parents = sorted(client.datasets.list_parents(
             args.dataset_id, limit=args.limit,
             relationship_type=args.relationship_type),
@@ -2411,9 +2312,9 @@ def _execute_list_parents(args):
 
 def _execute_list_children(args):
     """Execute the 'dataset list-children' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
         children = sorted(client.datasets.list_children(
             args.dataset_id, limit=args.limit,
             relationship_type=args.relationship_type),
@@ -2435,9 +2336,9 @@ def _execute_list_children(args):
 
 def _execute_list_samples(args):
     """Execute the 'dataset list-samples' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
         samples = sorted(client.samples.list(dataset_mfid=args.dataset_id, limit=args.limit),
                          key=lambda s: (s.get('sample_name') or '').lower())
 

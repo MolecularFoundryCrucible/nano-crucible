@@ -12,7 +12,7 @@ cd nano-crucible
 python -m pip install -e ".[dev,docs]"
 ```
 
-The package supports Python 3.10 and newer. Avoid syntax that requires a newer version unless the supported-version policy changes in the same contribution.
+The package supports Python 3.10 and newer.
 
 ## Make and verify a change
 
@@ -28,13 +28,13 @@ Build the documentation when changing Markdown, docstrings, or public APIs:
 mkdocs build
 ```
 
-Integration tests are not ordinary local tests. They call a live Crucible API, require credentials, create records, and do not remove those records afterward. If live verification is necessary, configure a non-production account and run only the relevant module against the `crucible-test` project:
+Integration tests call a live Crucible API, require credentials, create records, and do not remove those records afterward. If live verification is necessary, configure a non-production account and run only the relevant module against the `crucible-test` project:
 
 ```bash
 pytest tests/integration/test_datasets.py -v
 ```
 
-Never put an API key in source code, test output, notebooks, or commits.
+Please never put an API key in source code, test output, notebooks, or commits.
 
 ## Keep public interfaces documented
 
@@ -51,16 +51,17 @@ crucible dataset --help
 
 ## Keep documentation authorities synchronized
 
-Nano's `README.md`, published documentation, public docstrings, and CLI help describe supported package behavior for users. `CONTRIBUTING.md` defines the human contribution workflow. `AGENTS.md` and repository-local development skills add agent-specific routing, implementation invariants, and safety rules without replacing the user documentation.
+Nano's `README.md`, published documentation, public docstrings, and CLI help describe supported package behavior for users. `CONTRIBUTING.md` defines the human contribution workflow. `AGENTS.md` and the skills under `skills/` add agent-specific routing, implementation invariants, and safety rules without replacing the user documentation.
 
 The generated OpenAPI document from `crucible-api` is authoritative for the HTTP contract. Ecosystem ownership, compatibility policy, lifecycle decisions, and cross-repository workstreams belong in [`crucible-ecosystem`](https://github.com/MolecularFoundryCrucible/crucible-ecosystem). Link to those authorities instead of copying complete endpoint, schema, command, or policy inventories into Nano.
 
 When a change spans repositories, identify the authoritative producer and link the coordinated issues, pull requests, or commits. Update Nano-owned behavior and documentation together, and record temporary compatibility behavior when producer and consumer changes cannot land simultaneously.
 
-## Add a parser
+## Coding agents
 
-Parser-specific architecture and registration instructions are in [`crucible/parsers/README.md`](crucible/parsers/README.md). Add focused unit tests for parsing logic and use mocked clients for upload behavior; parser development should not require writing records to the live service.
+[`AGENTS.md`](AGENTS.md) is a short entry point that most agent tools load automatically. It routes to skills under [`skills/`](skills/): [`nano-crucible`](skills/nano-crucible/SKILL.md) for using Crucible through the client, and [`nano-crucible-development`](skills/nano-crucible-development/SKILL.md) for changing this package.
 
-## Coding-agent guidance
+If you prefer your own agent context, opt out locally without editing the committed file (both paths are gitignored):
 
-Repository-aware coding agents should read [`AGENTS.md`](AGENTS.md), which routes API, CLI, parser, and cast changes to the relevant development skill under [`skills/`](skills/). The operational [`nano-crucible` ecosystem skill](https://github.com/MolecularFoundryCrucible/crucible-ecosystem/blob/main/skills/nano-crucible/SKILL.md) is authoritative; Nano retains a small [discovery and safety shim](skills/nano-crucible/SKILL.md) for agents that cannot load the shared skill directly.
+- Codex: create an `AGENTS.override.md` at the repository root; it replaces `AGENTS.md`.
+- Claude Code: add `"claudeMdExcludes": ["**/nano-crucible/AGENTS.md", "**/nano-crucible/CLAUDE.md"]` to `.claude/settings.local.json`.

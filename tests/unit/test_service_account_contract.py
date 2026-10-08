@@ -21,7 +21,8 @@ def test_create_normalizes_username_before_request():
     operations.create('  Smoke-Test  ')
 
     operations._request.assert_called_once_with(
-        'post', '/service_accounts', json={'username': 'smoke-test'})
+        'post', '/service_accounts', json={'username': 'smoke-test'},
+        privilege_mode='elevated')
 
 
 @pytest.mark.parametrize('username', ['ab', '1smoke-test', 'smoke__test', 'a' * 25])
@@ -44,13 +45,13 @@ def test_create_rejects_invalid_explicit_mfid():
 
 
 def test_interactive_create_uses_validated_username(monkeypatch):
-    client = SimpleNamespace(service_accounts=SimpleNamespace())
+    client = SimpleNamespace(service_accounts=SimpleNamespace(), can_elevate=True)
     client.service_accounts.create = MagicMock(return_value={
         'unique_id': '0tkvpezyz1zzf00076nahf85j4',
         'username': 'smoke-test',
         'api_key': 'test-key',
     })
-    monkeypatch.setattr('crucible.client.CrucibleClient', lambda: client)
+    monkeypatch.setattr('crucible.config.get_client', lambda: client)
     monkeypatch.setattr('crucible.cli.helpers.prompt_username', lambda prompt='Username: ': 'smoke-test')
     monkeypatch.setattr('crucible.cli.helpers._interactive_stdin', lambda: True)
     monkeypatch.setattr('builtins.input', lambda prompt: '')
@@ -79,7 +80,8 @@ def test_get_admin_reads_the_service_account_endpoint():
     result = operations.get_admin('0td7evvtg5wb90005k1j97ak94')
 
     operations._request.assert_called_once_with(
-        'get', '/service_accounts/0td7evvtg5wb90005k1j97ak94')
+        'get', '/service_accounts/0td7evvtg5wb90005k1j97ak94',
+        privilege_mode='elevated')
     assert result['platform_role'] == 'contributor'
     assert result['api_key_status']['valid'] is True
 
@@ -120,7 +122,7 @@ def test_set_platform_role_patches_the_service_account():
 
     operations._request.assert_called_once_with(
         'patch', '/service_accounts/0td7evvtg5wb90005k1j97ak94',
-        json={'platform_role': 'contributor'})
+        json={'platform_role': 'contributor'}, privilege_mode='elevated')
 
 
 def test_set_platform_role_rejects_an_unknown_role():

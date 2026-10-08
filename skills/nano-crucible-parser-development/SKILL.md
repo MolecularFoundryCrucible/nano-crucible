@@ -5,7 +5,7 @@ description: Create, modify, or review nano-crucible dataset parsers and parser 
 
 # nano-crucible parser development
 
-Follow [`AGENTS.md`](../../AGENTS.md) and consult [`crucible/parsers/README.md`](../../crucible/parsers/README.md) for the public parser interface. Verify that guide against `BaseParser` when behavior matters because parser documentation may lag implementation.
+Follow [`nano-crucible-development`](../nano-crucible-development/SKILL.md) and consult [`crucible/parsers/README.md`](../../crucible/parsers/README.md) for the public parser interface. Verify that guide against `BaseParser` when behavior matters because parser documentation may lag implementation.
 
 ## Respect the parser lifecycle
 

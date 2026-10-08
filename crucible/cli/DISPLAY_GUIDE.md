@@ -126,6 +126,8 @@ Symbols may supplement text only in compact health summaries, repeated checklist
 
 Use `-` for missing or null values in tables, not `None` or an empty string.
 
+Use `term.check_marker()` with `term.grid()` for a list of permission flags, such as account capabilities, so they read as a compact checklist.
+
 Use `term.fmt_bool()` for nullable boolean fields in human-readable output so true, false, and missing values render as `yes`, `no`, and `-`. Preserve native booleans and nulls in JSON output.
 
 Pass project membership roles through `term.role_label()`. Member tables are ordered from highest to lowest standing and use this palette:

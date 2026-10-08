@@ -50,9 +50,9 @@ Examples:
 
 
 def _execute_list(args):
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
         reqs   = client.ingestions.list(dsid=args.dataset_id,
                                         file_id=args.file_id,
                                         limit=args.limit)
@@ -95,9 +95,9 @@ Examples:
 
 
 def _execute_list_ingestors(args):
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
         ingestors = client.ingestions.list_ingestors()
 
         term.header(f"Ingestors ({len(ingestors)})")
@@ -129,9 +129,9 @@ Examples:
 
 
 def _execute_get(args):
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
         r = client.ingestions.get(args.request_id)
         _p = term.field_printer(16)
         term.header(f"Ingestion Request #{r.get('id')}")
@@ -167,9 +167,9 @@ Examples:
 
 
 def _execute_wait(args):
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
         logger.info(f"Waiting for ingestion request {args.request_id}...")
         r = client.ingestions.wait(args.request_id)
         status = r.get('status', '-')

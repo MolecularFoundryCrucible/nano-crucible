@@ -7,7 +7,7 @@ Provides organized access to instrument-related API endpoints.
 """
 
 import logging
-from typing import TYPE_CHECKING, Any, Optional, List, Dict, Union
+from typing import TYPE_CHECKING, Any, Optional, List, Dict, Sequence, Union
 from .base import BaseResource
 from .capabilities import AccessControlMixin, OwnershipMixin
 from ..constants import DEFAULT_LIMIT
@@ -21,9 +21,21 @@ from ..utils.identifiers import (
 )
 
 if TYPE_CHECKING:
-    from ..models import Instrument, ProjectMember
+    from ..models import AccessGrant, Instrument, ProjectMember
 
 logger = logging.getLogger(__name__)
+
+# Exact-match filters accepted by GET /instruments, besides the options that
+# list() takes as named parameters.
+INSTRUMENT_LIST_FILTERS = frozenset({
+    'instrument_id', 'instrument_name', 'manufacturer', 'model', 'location',
+    'description', 'instrument_type', 'owner_id', 'other_id', 'other_id_source',
+    'include_total',
+})
+
+# Roles that can be granted to an instrument maintainer; ownership moves only
+# through transfer_ownership().
+INSTRUMENT_MEMBER_ROLES = ('editor', 'admin')
 
 
 class InstrumentOperations(OwnershipMixin, AccessControlMixin, BaseResource):
@@ -40,7 +52,9 @@ class InstrumentOperations(OwnershipMixin, AccessControlMixin, BaseResource):
 
     def list(self, include_metadata: bool = False, limit: int = DEFAULT_LIMIT,
              offset: int = 0, include_owner: bool = False,
-             status: Optional[str] = None) -> List[Dict]:
+             status: Optional[str] = None,
+             affiliation: Optional[Union[str, Sequence[str]]] = None,
+             **filters: Any) -> List[Dict]:
         """List instruments, defaulting to the active lifecycle state.
 
         Args:
@@ -49,28 +63,50 @@ class InstrumentOperations(OwnershipMixin, AccessControlMixin, BaseResource):
             offset (int): Starting position in the full result set (default: 0)
             include_owner (bool): Resolve owner_orcid into a public-safe user object
             status (str, optional): Filter by active, maintenance, or decommissioned.
-                                    When omitted, the API defaults to active.
+                                    When omitted, the API defaults to active
+                                    (or every status for an instrument_id lookup).
+            affiliation: Caller relationship: 'owner', 'maintainer', or both
+                         (combined with OR) to list the caller's instruments.
+            **filters: Exact-match filters accepted by GET /instruments, such as
+                       instrument_id (case-insensitive slug), manufacturer,
+                       model, location, instrument_type, owner_id, other_id.
 
         Returns:
             List[Dict]: Instrument objects with specifications and metadata
         """
-        params = {}
+        from ..constants import INSTRUMENT_AFFILIATIONS
+
+        params = {k: v for k, v in filters.items() if v is not None}
+        self._validate_filter_params(params, INSTRUMENT_LIST_FILTERS, '/instruments')
         if include_metadata:
             params['include_metadata'] = True
         if include_owner:
             params['include_owner'] = True
         if status is not None:
-            allowed = {'active', 'maintenance', 'decommissioned'}
-            if status not in allowed:
-                raise ValueError(f"status must be one of: {', '.join(sorted(allowed))}")
-            params['status'] = status
+            params['status'] = self._instrument_status(status)
+        params.update(self._affiliation_params(affiliation, INSTRUMENT_AFFILIATIONS))
         return [self._parse(item) for item in self._paginate('/instruments', params, limit, offset)]
+
+    @staticmethod
+    def _instrument_status(status: str) -> str:
+        from ..constants import INSTRUMENT_STATUSES
+
+        if status not in INSTRUMENT_STATUSES:
+            raise ValueError(f"status must be one of: {', '.join(INSTRUMENT_STATUSES)}")
+        return status
+
+    def _resource_mfid(self, instrument_ref: str) -> str:
+        """Return the MFID for an instrument MFID or slug (slugs ignore case)."""
+        if is_mfid(instrument_ref):
+            return instrument_ref
+        return self._get_by_instrument_id(instrument_ref, include_owner=False)['unique_id']
 
     def get(self, instrument_ref: Optional[str] = None,
             instrument_id: Optional[str] = None,
             include_metadata: bool = False, include_owner: bool = True,
             *, instrument_mfid: Optional[str] = None,
-            instrument_name: Optional[str] = None) -> Dict:
+            instrument_name: Optional[str] = None,
+            include_members: bool = False) -> Dict:
         """Get an instrument by canonical MFID or human-readable slug.
 
         ``instrument_id`` explicitly selects the human-readable API identifier.
@@ -84,6 +120,9 @@ class InstrumentOperations(OwnershipMixin, AccessControlMixin, BaseResource):
             include_owner (bool): Resolve owner_orcid into a public-safe user object (default: True)
             instrument_mfid (str, optional): Explicit instrument MFID
             instrument_name (str, optional): Deprecated display-name lookup
+            include_members (bool): Include the owner and maintainers as
+                ``members``. The API returns ``members: None`` to callers
+                without a role on the instrument.
 
         Returns:
             Dict or None: Instrument information if found, None otherwise
@@ -109,6 +148,8 @@ class InstrumentOperations(OwnershipMixin, AccessControlMixin, BaseResource):
             )
             return self._get_by_name(instrument_name, include_metadata=include_metadata,
                                      include_owner=include_owner)
+        options = dict(include_metadata=include_metadata, include_owner=include_owner,
+                       include_members=include_members)
         if instrument_id is not None:
             if is_mfid(instrument_id):
                 import warnings
@@ -117,24 +158,20 @@ class InstrumentOperations(OwnershipMixin, AccessControlMixin, BaseResource):
                     DeprecationWarning,
                     stacklevel=2,
                 )
-                return self._get_by_mfid(instrument_id, include_metadata=include_metadata,
-                                         include_owner=include_owner)
-            return self._get_by_instrument_id(instrument_id, include_metadata=include_metadata,
-                                              include_owner=include_owner)
+                return self._get_by_mfid(instrument_id, **options)
+            return self._get_by_instrument_id(instrument_id, **options)
         if instrument_mfid is not None:
-            return self._get_by_mfid(instrument_mfid, include_metadata=include_metadata,
-                                     include_owner=include_owner)
+            return self._get_by_mfid(instrument_mfid, **options)
 
         reference_kind = classify_slug_reference(instrument_ref, 'instrument')
         if reference_kind == 'mfid':
-            return self._get_by_mfid(instrument_ref, include_metadata=include_metadata,
-                                     include_owner=include_owner)
-        return self._get_by_instrument_id(instrument_ref, include_metadata=include_metadata,
-                                          include_owner=include_owner)
+            return self._get_by_mfid(instrument_ref, **options)
+        return self._get_by_instrument_id(instrument_ref, **options)
 
     def _get_by_mfid(self, instrument_mfid: str,
                      include_metadata: bool = False,
-                     include_owner: bool = True) -> Dict:
+                     include_owner: bool = True,
+                     include_members: bool = False) -> Dict:
         """Get an instrument through its canonical single-resource route."""
         if not is_mfid(instrument_mfid):
             raise ValueError("instrument_mfid must be an exact 26-character MFID.")
@@ -143,6 +180,8 @@ class InstrumentOperations(OwnershipMixin, AccessControlMixin, BaseResource):
             params['include_metadata'] = True
         if include_owner:
             params['include_owner'] = True
+        if include_members:
+            params['include_members'] = True
         raw = self._request('get', f'/instruments/{instrument_mfid}', params=params or None)
         if raw is None:
             return None
@@ -150,8 +189,10 @@ class InstrumentOperations(OwnershipMixin, AccessControlMixin, BaseResource):
 
     def _get_by_instrument_id(self, instrument_id: str,
                               include_metadata: bool = False,
-                              include_owner: bool = True) -> Dict:
-        """Resolve an exact instrument slug through the collection route."""
+                              include_owner: bool = True,
+                              include_members: bool = False) -> Dict:
+        """Resolve an exact, case-insensitive instrument slug through the
+        collection route, which searches every lifecycle status."""
         if not isinstance(instrument_id, str) or not instrument_id:
             raise ValueError("instrument_id must be a non-empty string.")
         params = {'instrument_id': instrument_id, 'limit': 2}
@@ -159,6 +200,8 @@ class InstrumentOperations(OwnershipMixin, AccessControlMixin, BaseResource):
             params['include_metadata'] = True
         if include_owner:
             params['include_owner'] = True
+        if include_members:
+            params['include_members'] = True
         raw = self._request('get', '/instruments', params=params)
         return self._parse(collapse_exact_lookup(raw, 'instrument', instrument_id))
 
@@ -273,12 +316,14 @@ class InstrumentOperations(OwnershipMixin, AccessControlMixin, BaseResource):
             raise ValueError("Instrument capabilities are response-only.")
         if kwargs.get('instrument_id') is not None:
             validate_slug(kwargs['instrument_id'], 'instrument')
-        return self._parse(self._request('patch', f'/instruments/{unique_id}', json=kwargs))
+        return self._parse(self._request('patch', f'/instruments/{self._resource_mfid(unique_id)}', json=kwargs))
 
     def bind_service_account(self, instrument_mfid: str, sa_unique_id: str) -> List['ProjectMember']:
         """Bind a service account as an operator of an instrument.
 
-        **Requires admin permissions.**
+        Requires admin on the instrument (its owner or an admin maintainer).
+        A bound service account gets contributor on every dataset assigned
+        to the instrument.
 
         Args:
             instrument_mfid (str): Instrument unique identifier (MFID)
@@ -288,13 +333,13 @@ class InstrumentOperations(OwnershipMixin, AccessControlMixin, BaseResource):
             List[ProjectMember]: The instrument's operator group members
         """
         from ..models import ProjectMember
-        raw = self._request('post', f'/instruments/{instrument_mfid}/service_accounts/{sa_unique_id}')
+        raw = self._request('post', f'/instruments/{self._resource_mfid(instrument_mfid)}/service_accounts/{sa_unique_id}')
         return [ProjectMember.model_validate(m) for m in raw]
 
     def unbind_service_account(self, instrument_mfid: str, sa_unique_id: str) -> List['ProjectMember']:
         """Remove a service account as an operator of an instrument.
 
-        **Requires admin permissions.**
+        Requires admin on the instrument (its owner or an admin maintainer).
 
         Args:
             instrument_mfid (str): Instrument unique identifier (MFID)
@@ -304,7 +349,7 @@ class InstrumentOperations(OwnershipMixin, AccessControlMixin, BaseResource):
             List[ProjectMember]: The instrument's operator group members
         """
         from ..models import ProjectMember
-        raw = self._request('delete', f'/instruments/{instrument_mfid}/service_accounts/{sa_unique_id}')
+        raw = self._request('delete', f'/instruments/{self._resource_mfid(instrument_mfid)}/service_accounts/{sa_unique_id}')
         return [ProjectMember.model_validate(m) for m in raw]
 
     def list_service_accounts(self, instrument_mfid: str) -> List['ProjectMember']:
@@ -317,8 +362,47 @@ class InstrumentOperations(OwnershipMixin, AccessControlMixin, BaseResource):
             List[ProjectMember]: Bound service accounts and their operator roles
         """
         from ..models import ProjectMember
-        raw = self._request('get', f'/instruments/{instrument_mfid}/service_accounts')
+        raw = self._request('get', f'/instruments/{self._resource_mfid(instrument_mfid)}/service_accounts')
         return [ProjectMember.model_validate(member) for member in raw]
+
+    def get_users(self, instrument_ref: str) -> Optional[List['AccessGrant']]:
+        """List the instrument's owner and maintainers, owner first.
+
+        Maintainers manage the instrument record only; they never gain access
+        to datasets recorded with the instrument (bound service accounts do).
+
+        Returns:
+            List[AccessGrant] or None: None when the caller holds no role on
+            the instrument and is not a platform administrator.
+        """
+        from ..models import AccessGrant
+
+        instrument = self.get(instrument_ref, include_owner=False, include_members=True)
+        members = instrument.get('members')
+        if members is None:
+            return None
+        return [AccessGrant.model_validate(m) for m in members]
+
+    def add_user(self, instrument_ref: str, user: str,
+                 role: str = 'editor') -> 'AccessGrant':
+        """Add or change a maintainer: 'editor' edits details, 'admin' also
+        changes status, binds service accounts, and grants access.
+
+        Requires admin on the instrument; you cannot grant above your own role.
+        ``user`` accepts an ORCID, service-account MFID, username, or email.
+        """
+        if role not in INSTRUMENT_MEMBER_ROLES:
+            raise ValueError(
+                f"role must be one of: {', '.join(INSTRUMENT_MEMBER_ROLES)}")
+        return self.set_access(instrument_ref, 'users', user, role)
+
+    def remove_user(self, instrument_ref: str, user: str) -> Dict:
+        """Remove a maintainer. Requires admin on the instrument."""
+        return self.revoke_access(instrument_ref, 'users', user)
+
+    def update_user_role(self, instrument_ref: str, user: str, role: str) -> 'AccessGrant':
+        """Change a maintainer's role (same rules as add_user())."""
+        return self.add_user(instrument_ref, user, role)
 
     def set_status(self, instrument_mfid: str, status: str) -> Dict:
         """Change an instrument lifecycle status.
@@ -330,16 +414,15 @@ class InstrumentOperations(OwnershipMixin, AccessControlMixin, BaseResource):
         Returns:
             Dict: Updated instrument response
         """
-        allowed = {'active', 'maintenance', 'decommissioned'}
-        if status not in allowed:
-            raise ValueError(f"status must be one of: {', '.join(sorted(allowed))}")
         raw = self._request(
-            'post', f'/instruments/{instrument_mfid}/status', params={'status': status})
+            'post', f'/instruments/{self._resource_mfid(instrument_mfid)}/status',
+            params={'status': self._instrument_status(status)})
         return self._parse(raw)
 
     def search(self, q: str, limit: int = 20,
                include_owner: bool = False,
-               status: Optional[str] = None) -> List[Dict]:
+               status: Optional[str] = None,
+               affiliation: Optional[Union[str, Sequence[str]]] = None) -> List[Dict]:
         """Fuzzy search across instruments. Available to all authenticated users.
 
         Matches against instrument_name, instrument_type, and manufacturer
@@ -350,18 +433,20 @@ class InstrumentOperations(OwnershipMixin, AccessControlMixin, BaseResource):
             limit: Max results (default 20, max 50).
             include_owner: Resolve owner_orcid into a public-safe user object.
             status: Restrict results to active, maintenance, or decommissioned.
+            affiliation: 'owner', 'maintainer', or both, to search only the
+                         caller's instruments.
 
         Returns:
             List[Dict]: Matching instrument records, ranked by relevance.
         """
+        from ..constants import INSTRUMENT_AFFILIATIONS
+
         params = {'q': q, 'limit': limit}
         if include_owner:
             params['include_owner'] = True
         if status is not None:
-            allowed = {'active', 'maintenance', 'decommissioned'}
-            if status not in allowed:
-                raise ValueError(f"status must be one of: {', '.join(sorted(allowed))}")
-            params['status'] = status
+            params['status'] = self._instrument_status(status)
+        params.update(self._affiliation_params(affiliation, INSTRUMENT_AFFILIATIONS))
         result = self._request('get', '/instruments/search', params=params)
         items = result.get('items', result) if isinstance(result, dict) else result
         return [self._parse(item) for item in items]

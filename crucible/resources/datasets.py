@@ -179,15 +179,21 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
             modification_time_lte: Inclusive upper modification-time bound,
                 same types.
             **kwargs (Any): Query parameters for filtering. Supported fields include:
-                keyword, unique_id, public, dataset_name, owner_orcid, project_id,
-                instrument_name, timestamp, size, data_format, data_type, measurement,
-                session_name. Filters expect exact matches (case sensitive) except for
+                keyword, unique_id, public, dataset_name, owner_id, timestamp, size,
+                data_format, data_type, measurement, session_name, and the
+                deprecated instrument_name (use instrument_mfid). Filters expect exact matches (case sensitive) except for
                 keywords, which are case insensitive and match substrings.
 
         Returns:
             List[Dict]: Dataset objects matching filter criteria
         """
         params = {k: v for k, v in kwargs.items() if v is not None}
+        if 'instrument_name' in params:
+            warnings.warn(
+                "Filtering datasets by instrument_name is deprecated; pass "
+                "instrument_mfid instead.",
+                DeprecationWarning, stacklevel=2,
+            )
         selectors = self._access_selector_params(
             accessible_to_user, accessible_to_project)
         params.update(selectors)
@@ -215,7 +221,6 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
         if include_owner:
             params['include_owner'] = True
         if offset:
-            import warnings
             warnings.warn(
                 "'offset' is ignored by /datasets, which uses keyset "
                 "pagination; results start from the newest dataset.",
@@ -333,6 +338,16 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
             )
         if dataset_details.get('owner') is not None and not isinstance(dataset_details['owner'], str):
             raise ValueError("Dataset.owner must be a string identifier when creating a dataset.")
+
+        if (dataset_details.get('instrument_name') is not None
+                and dataset_details.get('instrument_id') is None
+                and dataset_details.get('instrument_mfid') is None):
+            warnings.warn(
+                "Identifying a dataset's instrument by instrument_name is deprecated: "
+                "names are free-text and may repeat. Set instrument_mfid or "
+                "instrument_id instead.",
+                DeprecationWarning, stacklevel=2,
+            )
 
         if not dataset_details.get('unique_id'):
             dataset_details['unique_id'] = mfid.mfid()[0]

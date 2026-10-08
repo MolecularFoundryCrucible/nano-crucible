@@ -98,6 +98,12 @@ class ProjectOperations(OwnershipMixin, AccessControlMixin, BaseResource):
             include_members=include_members,
         )
 
+    def _resource_mfid(self, project_ref: str) -> str:
+        """Return the MFID for a project MFID or slug (slugs ignore case)."""
+        if is_mfid(project_ref):
+            return project_ref
+        return self._get_by_project_id(project_ref)['unique_id']
+
     def _get_by_mfid(self, project_mfid: str, include_metadata: bool = False,
                      include_members: bool = False) -> Dict:
         """Get a project through its canonical single-resource route."""

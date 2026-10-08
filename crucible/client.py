@@ -12,10 +12,13 @@ import logging
 from requests.adapters import HTTPAdapter
 from urllib.parse import urlparse
 from urllib3.util.retry import Retry
-from typing import Optional, List, Dict, Any
-from .constants import PRIVILEGE_MODES
+from typing import TYPE_CHECKING, Optional, List, Dict, Any
+from .constants import DEFAULT_PRIVILEGE_MODE, PRIVILEGE_MODES
 from .utils.deprecation import _deprecated, _deprecated_parameter
 from .utils.identifiers import is_mfid, require_canonical_identifier
+
+if TYPE_CHECKING:
+    from .models import AccountAuthorization, AccountCapabilities
 
 logger = logging.getLogger(__name__)
 
@@ -31,8 +34,11 @@ class CrucibleClient:
             privilege_mode: "normal" or "elevated". Sent as the
                 Crucible-Privilege-Mode header on every request. Elevated mode
                 is what lets a platform administrator see beyond their own
-                ACL-derived access. Loads from config if not provided; when
-                neither is set no header is sent and the server default applies.
+                ACL-derived access. Loads from config if not provided. When
+                unset, no header is sent and the server applies its legacy
+                behavior: elevated for a platform administrator, normal for
+                everyone else. Admin-only operations request elevation per
+                call regardless of this setting.
 
         Raises:
             ValueError: If api_key is not provided and not found in config
@@ -45,7 +51,7 @@ class CrucibleClient:
         if api_key is None:
             api_key = _config.api_key
         if privilege_mode is None:
-            privilege_mode = _config.privilege_mode
+            privilege_mode = _config.privilege_mode or DEFAULT_PRIVILEGE_MODE
         elif privilege_mode not in PRIVILEGE_MODES:
             raise ValueError(
                 f"privilege_mode must be one of: {', '.join(PRIVILEGE_MODES)}.")
@@ -116,6 +122,69 @@ class CrucibleClient:
         self.service_accounts = ServiceAccountOperations(self)
         self.access_groups = AccessGroupOperations(self)
         self.print = PrintOperations(self)
+        self._authorization = None
+        self._capabilities = None
+
+    def _load_profile(self, refresh: bool = False) -> None:
+        """Populate the cached authorization and capability blocks."""
+        from .models import AccountAuthorization, AccountCapabilities
+
+        if self._authorization is not None and not refresh:
+            return
+        try:
+            profile = self.account.profile()
+        except Exception:
+            profile = {}
+        self._authorization = AccountAuthorization.model_validate(
+            profile.get('authorization') or {})
+        self._capabilities = AccountCapabilities.model_validate(
+            profile.get('capabilities') or {})
+
+    def refresh_profile(self) -> None:
+        """Re-read authorization and capabilities from /account/profile."""
+        self._load_profile(refresh=True)
+
+    @property
+    def authorization(self) -> 'AccountAuthorization':
+        """The caller's platform_role and whether they can elevate.
+
+        Fetched once from /account/profile and cached; call refresh_profile()
+        to re-read it. An unreadable profile yields empty values, so callers
+        degrade to "no extra authority" rather than failing.
+        """
+        self._load_profile()
+        return self._authorization
+
+    @property
+    def capabilities(self) -> 'AccountCapabilities':
+        """The caller's account-level capability flags, cached like authorization.
+
+        They describe the authority of the privilege mode the client was in
+        when the profile was read; call refresh_profile() after changing
+        privilege_mode.
+        """
+        self._load_profile()
+        return self._capabilities
+
+    @property
+    def can_elevate(self) -> bool:
+        """Whether this caller may request elevated privilege mode at all."""
+        return self.authorization.can_elevate
+
+    @property
+    def is_elevated(self) -> bool:
+        """Whether ordinary requests from this client run elevated."""
+        if self.privilege_mode is None:
+            return self.can_elevate
+        return self.privilege_mode == 'elevated'
+
+    def _admin_mode(self) -> Optional[str]:
+        """Privilege mode for calls that need elevation but are not admin-only.
+
+        The server rejects an elevation request from an ineligible caller with a
+        hard 403, so an ordinary user keeps their normal-mode access instead.
+        """
+        return 'elevated' if self.can_elevate else None
 
     def _request(self, method: str, endpoint: str,
                  privilege_mode: Optional[str] = None,

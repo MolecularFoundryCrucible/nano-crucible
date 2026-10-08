@@ -123,14 +123,14 @@ def _execute_show(args):
 
         # Look up each dataset in parallel to get project_id for the link URL.
         # Falls back to an unlinked MFID if the API call fails.
-        from crucible.client import CrucibleClient
+        from crucible.config import get_client
         from concurrent.futures import ThreadPoolExecutor
 
         from .helpers import explorer_url
 
         top_entries = dataset_entries[:n]
 
-        client = CrucibleClient()
+        client = get_client()
 
         def _lookup(dsid):
             try:

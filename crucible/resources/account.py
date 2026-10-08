@@ -35,13 +35,19 @@ class AccountOperations(BaseResource):
         """
         return self._request('get', '/account')
 
-    def profile(self) -> Dict:
+    def profile(self, privilege_mode: Optional[str] = None) -> Dict:
         """Return the authenticated caller's own user profile.
 
+        Args:
+            privilege_mode: Per-call privilege mode. The capability flags
+                describe the authority of the mode they were fetched under.
+
         Returns:
-            Dict: UserRead with unique_id, username, first_name, last_name, and email
+            Dict: UserRead with unique_id, username, first_name, last_name, and
+                  email, plus the authorization and capabilities blocks.
         """
-        return self._request('get', '/account/profile')
+        return self._request('get', '/account/profile',
+                             privilege_mode=privilege_mode)
 
     def update_profile(self, **kwargs) -> Dict:
         """Partially update the authenticated caller's own profile.

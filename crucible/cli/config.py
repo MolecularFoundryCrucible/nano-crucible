@@ -21,36 +21,10 @@ def _mask_secret(value: str) -> str:
     return f"{'*' * 8}\u2026{value[-4:]}"
 
 def get_default_editor():
-    """Get the best available editor for the current platform."""
-    import shutil
-    from crucible.config import config as _cfg
+    """Get the configured editor, or the best available platform default."""
+    from .editor import configured_editor, default_editor
+    return configured_editor() or default_editor()
 
-    # Priority: crucible config > $VISUAL > $EDITOR > platform defaults
-    editor = _cfg.editor or os.environ.get('VISUAL') or os.environ.get('EDITOR')
-    if editor:
-        return editor
-
-    if sys.platform == 'win32':
-        # Try common Windows editors in order of preference
-        candidates = ['code', 'notepad++', 'notepad']
-        for candidate in candidates:
-            if shutil.which(candidate):
-                return candidate
-        return 'notepad'  # notepad is always available on Windows
-
-    elif sys.platform == 'darwin':
-        candidates = ['code', 'nano', 'vim', 'vi']
-        for candidate in candidates:
-            if shutil.which(candidate):
-                return candidate
-        return 'nano'
-
-    else:  # Linux and other Unix-like
-        candidates = ['code', 'nano', 'vim', 'vi', 'gedit', 'kate']
-        for candidate in candidates:
-            if shutil.which(candidate):
-                return candidate
-        return 'vi'  # vi is POSIX-guaranteed
 
 def register_subcommand(subparsers):
     """Register the config subcommand."""
@@ -536,16 +510,14 @@ def cmd_edit(args):
         print("Create it first with: crucible config init")
         sys.exit(1)
 
-    editor = get_default_editor()
-    parts = editor.split()
-    editor_bin = os.path.basename(parts[0])
-    extra = [f for f in term._GUI_EDITOR_WAIT_FLAGS.get(editor_bin, []) if f not in parts]
-    cmd = parts + extra
+    from .editor import editor_command, edit_file
 
+    editor = get_default_editor()
+    cmd = editor_command(editor)
     print(f"Opening {config_file} with {' '.join(cmd)}...")
 
     try:
-        subprocess.run(cmd + [str(config_file)], check=True)
+        edit_file(config_file, editor)
         print()
         term.success("Config file updated", args)
         config.reload()
@@ -555,5 +527,6 @@ def cmd_edit(args):
         sys.exit(1)
     except FileNotFoundError:
         logger.error(f"Editor not found: {editor}")
-        logger.error("Set your editor with: crucible config set editor vim")
+        logger.error("Set your editor with: crucible config set editor notepad "
+                     "(or code --wait, vim, ...)")
         sys.exit(1)

@@ -15,6 +15,8 @@ RESOURCE_SORTS = ('created', 'updated', 'name')
 SORT_DIRECTIONS = ('asc', 'desc')
 VISIBILITIES = ('all', 'public', 'private')
 AFFILIATIONS = ('owner',)
+INSTRUMENT_AFFILIATIONS = ('owner', 'maintainer')
+INSTRUMENT_STATUSES = ('active', 'maintenance', 'decommissioned')
 
 # Facet grouping fields and bucket ordering.
 DATASET_FACET_FIELDS = ('session', 'measurement', 'data_format', 'owner',
@@ -28,11 +30,16 @@ DELETION_REQUEST_SORTS = ('request_time', 'resource_name', 'project_id',
                           'requester_name', 'status')
 DELETION_AUDIT_SCOPES = ('all', 'submitted')
 
-# Platform-wide roles a service account may hold.
-PLATFORM_ROLES = ('none', 'contributor', 'support', 'admin')
+# Platform-wide roles a human user or service account may hold.
+PLATFORM_ROLES = ('none', 'contributor', 'admin')
 
 # Values for the Crucible-Privilege-Mode request header.
 PRIVILEGE_MODES = ('normal', 'elevated')
+
+# None sends no header, so the server applies its legacy behavior: elevated for
+# a platform administrator, normal for everyone else. Sending 'elevated'
+# explicitly would instead be rejected with a 403 for ineligible callers.
+DEFAULT_PRIVILEGE_MODE = None
 
 # Kinds of parent/child link between two datasets, or between two samples.
 # Oriented child-relative-to-parent: 'is_part_of' reads "child is_part_of

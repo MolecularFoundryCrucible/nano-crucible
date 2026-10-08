@@ -77,9 +77,9 @@ Examples:
 
 def _execute_list(args):
     """Execute 'crucible file list'."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
         dsid = getattr(args, 'dataset', None)
         if dsid:
             files = client.datasets.list_files(dsid)
@@ -135,9 +135,9 @@ Examples:
 
 def _execute_get(args):
     """Execute 'crucible file get'."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
         f = client.files.get(args.file_id)
 
         _p = term.field_printer(12)
@@ -195,9 +195,9 @@ Examples:
 def _execute_download(args):
     """Execute 'crucible file download'."""
     import requests as _requests
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
         try:
             output_path = client.files.download(args.file_id, output_dir=args.output_dir)
         except RuntimeError as e:
@@ -244,7 +244,7 @@ Examples:
 
 def _execute_delete(args):
     """Execute 'crucible file delete'."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     from .helpers import prompt_confirm
     confirmed = args.yes or prompt_confirm(
         f"Delete file {args.file_id}? This cannot be undone.",
@@ -254,7 +254,7 @@ def _execute_delete(args):
         print("Aborted.")
         return
     try:
-        client = CrucibleClient()
+        client = get_client()
         client.files.delete(args.file_id)
         term.success(f"Deleted {args.file_id}", args)
     except Exception as e:
@@ -279,9 +279,9 @@ Examples:
 
 def _execute_ingestion(args):
     """Execute 'crucible file ingestion'."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
         reqs = client.ingestions.list(file_id=args.file_id)
 
         term.header(f"Ingestion Requests · {args.file_id} ({len(reqs)})")
@@ -335,9 +335,9 @@ Examples:
 
 def _execute_request_ingestion(args):
     """Execute 'crucible file request-ingestion'."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
         req = client.files.request_ingestion(
             args.file_id,
             ingestion_class=getattr(args, 'ingestor', None),

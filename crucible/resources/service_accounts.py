@@ -41,7 +41,8 @@ class ServiceAccountOperations(BaseResource):
         body = {'username': validate_username(username)}
         if unique_id:
             body['unique_id'] = validate_mfid(unique_id)
-        return self._request('post', '/service_accounts', json=body)
+        return self._request('post', '/service_accounts', json=body,
+                             privilege_mode='elevated')
 
     def rotate_key(self, unique_id: str) -> Dict:
         """Generate a new API key for a service account, invalidating the old one.
@@ -57,7 +58,8 @@ class ServiceAccountOperations(BaseResource):
         Raises:
             HTTPError 404: unique_id does not correspond to a service account.
         """
-        return self._request('post', f'/service_accounts/{unique_id}/rotate_key')
+        return self._request('post', f'/service_accounts/{unique_id}/rotate_key',
+                             privilege_mode='elevated')
 
     @staticmethod
     def _parse(raw: Dict) -> Dict:
@@ -80,7 +82,8 @@ class ServiceAccountOperations(BaseResource):
                   valid).
         """
         raw = self._request(
-            'get', f'/service_accounts/{validate_mfid(service_account_mfid)}')
+            'get', f'/service_accounts/{validate_mfid(service_account_mfid)}',
+            privilege_mode='elevated')
         return self._parse(raw)
 
     def list_admin(self, q: Optional[str] = None,
@@ -98,7 +101,8 @@ class ServiceAccountOperations(BaseResource):
         params = {}
         if q is not None:
             params['q'] = q
-        raw = self._paginate('/service_accounts', params, limit, offset)
+        raw = self._paginate('/service_accounts', params, limit, offset,
+                             privilege_mode='elevated')
         return [self._parse(record) for record in raw]
 
     def set_platform_role(self, service_account_mfid: str,
@@ -117,7 +121,8 @@ class ServiceAccountOperations(BaseResource):
                 f"platform_role must be one of: {', '.join(PLATFORM_ROLES)}.")
         raw = self._request(
             'patch', f'/service_accounts/{validate_mfid(service_account_mfid)}',
-            json={'platform_role': platform_role})
+            json={'platform_role': platform_role},
+            privilege_mode='elevated')
         return self._parse(raw)
 
     def get(self, service_account_mfid: Optional[str] = None,

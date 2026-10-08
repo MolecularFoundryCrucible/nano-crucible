@@ -148,10 +148,11 @@ class BaseResource:
         return params
 
     @staticmethod
-    def _affiliation_params(affiliation) -> dict:
+    def _affiliation_params(affiliation, allowed=None) -> dict:
         """Build the repeated affiliation query parameter."""
         from ..constants import AFFILIATIONS
 
+        allowed = allowed or AFFILIATIONS
         if affiliation is None:
             return {}
         values = [affiliation] if isinstance(affiliation, str) else list(affiliation)
@@ -160,9 +161,9 @@ class BaseResource:
         if len(values) > 5:
             raise ValueError("At most 5 affiliation values may be supplied")
         for value in values:
-            if value not in AFFILIATIONS:
+            if value not in allowed:
                 raise ValueError(
-                    f"affiliation values must be one of: {', '.join(AFFILIATIONS)}.")
+                    f"affiliation values must be one of: {', '.join(allowed)}.")
         return {'affiliation': values}
 
     def _facets(self, endpoint: str, field: str, fields, allowed,
@@ -190,6 +191,14 @@ class BaseResource:
 
         raw = self._request('get', endpoint, params=params)
         return FacetResponse.model_validate(raw).model_dump()
+
+    def _resource_mfid(self, reference: str) -> str:
+        """Return the MFID for a reference to this resource type.
+
+        Datasets and samples are addressed only by MFID. Projects and
+        instruments override this to also resolve their slugs.
+        """
+        return reference
 
     @staticmethod
     def _validate_filter_params(params: dict, allowed, endpoint: str) -> dict:
@@ -228,7 +237,8 @@ class BaseResource:
         )
 
     def _paginate(self, endpoint: str, params: dict,
-                  limit: int = DEFAULT_LIMIT, offset: int = 0) -> list:
+                  limit: int = DEFAULT_LIMIT, offset: int = 0,
+                  privilege_mode: Optional[str] = None) -> list:
         """Fetch all matching records from a paginated envelope endpoint.
 
         Supports both pagination styles transparently, detected from the first
@@ -246,6 +256,7 @@ class BaseResource:
             limit:    Maximum number of records to return. Pass None to fetch all.
             offset:   Starting position in the full result set. Ignored by keyset
                       endpoints, which no longer accept an offset.
+            privilege_mode: Per-call privilege mode applied to every page.
 
         Returns:
             list: Raw item dicts, up to limit items (or all items if limit is None)
@@ -261,11 +272,15 @@ class BaseResource:
         if limit == 0:
             return []
 
+        # Passed through only when set, so callers that never ask for a mode
+        # keep emitting the exact same request as before.
+        mode = {} if privilege_mode is None else {'privilege_mode': privilege_mode}
+
         page_size = API_PAGE_MAX if limit is None else min(API_PAGE_MAX, limit)
         first_params = {**params, 'limit': page_size}
         if offset:
             first_params['offset'] = offset
-        first = self._request('get', endpoint, params=first_params)
+        first = self._request('get', endpoint, params=first_params, **mode)
         items = list(first['items'])
 
         # Keyset (cursor) pagination — '/datasets' and '/samples'.
@@ -278,7 +293,7 @@ class BaseResource:
                 )
                 resp = self._request('get', endpoint,
                                      params={**params, 'limit': request_limit,
-                                             'cursor': cursor})
+                                             'cursor': cursor}, **mode)
                 page = list(resp['items'])
                 if not page:
                     break
@@ -297,7 +312,8 @@ class BaseResource:
         def _fetch(off):
             request_limit = min(API_PAGE_MAX, offset + need - off)
             r = self._request('get', endpoint,
-                              params={**params, 'limit': request_limit, 'offset': off})
+                              params={**params, 'limit': request_limit, 'offset': off},
+                              **mode)
             return r['items']
 
         with ThreadPoolExecutor(max_workers=min(len(remaining_offsets), 8)) as pool:
@@ -335,13 +351,13 @@ class BaseResource:
     @_deprecated_parameter('resource_id', 'resource_mfid')
     def get_scientific_metadata(self, resource_mfid: str) -> dict:
         """Get scientific metadata for a resource."""
-        return self._request('get', f'/resources/{resource_mfid}/metadata')
+        return self._request('get', f'/resources/{self._resource_mfid(resource_mfid)}/metadata')
 
     @_deprecated_parameter('resource_id', 'resource_mfid')
     def replace_scientific_metadata(self, resource_mfid: str, metadata: dict) -> dict:
         """Create new scientific metadata entry for a resource."""
         return self._request(
-            'post', f'/resources/{resource_mfid}/metadata',
+            'post', f'/resources/{self._resource_mfid(resource_mfid)}/metadata',
             json=metadata, params={'overwrite': True})
 
     @_deprecated_parameter('resource_id', 'resource_mfid')
@@ -354,7 +370,7 @@ class BaseResource:
         """
         if overwrite:
             return self._request(
-                'post', f'/resources/{resource_mfid}/metadata',
+                'post', f'/resources/{self._resource_mfid(resource_mfid)}/metadata',
                 json=metadata, params={'overwrite': overwrite})
         return self._request(
-            'patch', f'/resources/{resource_mfid}/metadata', json=metadata)
+            'patch', f'/resources/{self._resource_mfid(resource_mfid)}/metadata', json=metadata)

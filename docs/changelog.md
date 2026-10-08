@@ -4,19 +4,49 @@
 
 ### Added
 
+- User administration: `client.users.set_platform_role()` and `revoke_api_keys()` in Python, plus `user set-role` and `user revoke-keys` in the CLI. `user get` shows the platform role and API key status to administrators.
+- `client.users.list()` accepts `q`, `search_fields`, name, role, account-type, sort, and direction filters, and `user list` gains the matching options with Email and Platform role columns for administrators. `user list-projects` shows each project role.
 - Dataset and sample lists accept sort, direction, visibility, affiliation, owner, and creation or modification time-range filters in the Python client and CLI.
 - `client.datasets.facets()`, `client.samples.facets()`, and the matching `dataset facets` and `sample facets` CLI commands group results by a field and return value counts.
 - Service-account administration: `get_admin()`, `list_admin()`, and `set_platform_role()` in Python, plus `service-account show` and `service-account set-role` in the CLI.
 - Deletion request and audit lists accept scope, project, sort, and direction filters, and deletion request details show whether the caller can review them.
-- A `privilege_mode` client keyword, `privilege_mode` config key, and global `--elevated` CLI flag request platform-administrator elevation.
 - `client.print.barcode()` and `crucible print barcode` publish label-printer jobs and confirm whether they printed, without local MQTT credentials.
+- A `privilege_mode` client keyword, `privilege_mode` config key, and global `--elevated` CLI flag select normal or elevated access. The default is unchanged (administrators run elevated) and will become `normal` in a future release.
+- The interactive shell toggles elevation with `elevated on|off` and shows an `ELEVATED` toolbar badge, and one-shot commands print a notice when elevation comes from configuration rather than the flag.
+- `client.authorization`, `client.capabilities`, and `client.can_elevate` expose the caller's platform role and account capabilities as typed models, read once from `/account/profile` and re-read with `client.refresh_profile()`.
+- `instrument update --instrument-id` renames an instrument.
+- Instrument maintainers: `client.instruments.get_users()`, `add_user()`, `remove_user()`, and `update_user_role()`, `get(..., include_members=True)` with a typed `members` field, and the `instrument list-users`, `add-user`, `remove-user`, and `update-user-role` commands.
+- `client.instruments.list()` and `search()` accept `affiliation` (`owner`, `maintainer`), `list()` accepts the exact-match instrument filters, and `instrument list` gains `--mine` and filter options.
+- `crucible whoami` shows the caller's platform role, privilege mode, and account capabilities.
+- `dataset list` and `sample list` accept `--name`, `--missing FIELD`, `--sample-mfid`/`--dataset-mfid`, and `--description` (samples), and `dataset facets`/`sample facets` accept the same filters as the list commands.
+- The interactive shell completes measurement, session, data format, and sample type values from facet counts in the current or typed project, facet field names, `--instrument-id`, `--sample-mfid`/`--dataset-mfid`, and the instrument member commands.
+- The interactive shell lists pending deletion reviews and join requests at startup and on `refresh`.
+- Project, instrument, and service-account creation refuse up front when the caller's account capabilities do not allow it.
 
 ### Changed
 
+- The `support` platform role is no longer offered or accepted: `service-account set-role` and `user set-role` accept only `none`, `contributor`, and `admin`, matching the API routes.
+- `service-account list` shows each account's platform role and accepts `-q` to filter, using the administrator listing.
+- `service-account get` shows the platform role and API key status to administrators, `--groups` and `list-access-groups` name each group's project or instrument, and `show` is now an alias for `get`.
+- Identifying an instrument by display name is deprecated: `dataset create --instrument`, `crucible upload --instrument`, `dataset list --instrument`, and `instrument_name` alone in `datasets.create()` or `datasets.list()` warn. Use `--instrument-id`/`--instrument-mfid`, now also on `upload` and `dataset list`.
+- Instrument operations accept an instrument slug as well as an MFID, resolving it through the case-insensitive slug lookup.
+- `dataset list` and `sample list` print oldest to newest so the newest record is next to the prompt, follow `--sort`/`--direction` instead of re-sorting by name, and show a flat table unless `--group-by` is given.
+- `dataset list` and `sample list` without a project and no current project now list every accessible project instead of failing; `--all-projects` ignores the current project.
+- The interactive shell hides service-account commands from completion for callers who cannot manage them, and `refresh` now re-reads permissions.
+- Administrator-only operations request elevation per call, so service-account administration and deletion review keep working without enabling elevation globally.
+- `crucible deletion list` defaults to the `reviewable` scope for callers who can review, keeping the queue visible when ordinary reads are ACL-scoped.
 - Unrecognized dataset and sample list filters now raise a local `ValueError` naming the closest valid parameter instead of a server-side 422.
 - The minimum supported Python version is now 3.10.
 - The configuration file and its directory are now created with owner-only permissions, and existing files are restricted when a value is set or unset.
 - Installing the package no longer pulls in `ipywidgets` or `python-dotenv`.
+
+### Fixed
+
+- The interactive shell's `reload` no longer crashes when the shell was started with `python -m crucible.cli` or through the Windows `crucible.exe` launcher, and restarts cleanly on Windows.
+- `edit` commands work on Windows without configuration: they default to Notepad instead of nano, recognize `code.cmd` and `.exe` editors when adding wait flags, start batch-file editors such as VS Code's, and add the flags Notepad++ needs to wait.
+- Project ownership transfer, access commands, and scientific metadata updates accept a project ID; they previously failed with 404 unless given the project MFID.
+- Renaming a project with `project update` or `project edit` updates the saved current project when it named the old ID.
+- The interactive shell no longer records `config set api_key` or `API_KEY=` lines in its history file, and keeps that file readable only by its owner.
 
 ## 3.2.1
 
@@ -62,6 +92,7 @@
 
 ### Fixed
 
+- The interactive shell no longer records `config set api_key` or `API_KEY=` lines in its history file, and keeps that file readable only by its owner.
 - `crucible file delete` now requires interactive confirmation or an explicit `--yes` before permanently deleting a file.
 - Dataset file guidance now documents the API v3 record-first workflow, recursive uploads, additions, deletion-based replacement, and re-uploading.
 - Documentation navigation tabs now remain visible while scrolling using MkDocs Material's native sticky-tabs behavior.

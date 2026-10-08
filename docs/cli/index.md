@@ -28,6 +28,8 @@ crucible
 
 The shell opens with a compact 16×16 Crucible mark when the terminal is wide enough to display it. It combines two vertical pixels in one terminal cell to preserve the mark's proportions. The status bar uses a microscope for the effective project, a bear for the authenticated user, and a link for the configured API. Its dark-blue and light-blue blocks use orange separators, while staging, custom endpoints, and debug mode use orange as an attention color. The shell automatically uses exact 24-bit colors when the terminal advertises true-color support.
 
+Tab-completion searches the API as you type: resource names complete to MFIDs, projects and instruments to their slugs, users to usernames, and filter values such as measurement or sample type to the values that exist in the current or typed project. Commands and flags you cannot use, such as service-account administration, are not suggested.
+
 An explicit `--project-id` applies only to that command. Inside the interactive shell, `use PROJECT_ID` validates and saves the current project for future commands and shell sessions. `unuse` clears the saved project. The deprecated `CRUCIBLE_CURRENT_PROJECT` environment variable temporarily retains precedence, but the CLI displays a warning whenever it supplies project context.
 
 Shell-specific commands:
@@ -36,9 +38,10 @@ Shell-specific commands:
 |---|---|
 | `use PROJECT_ID` | Validate and save the current project (tab-completes project IDs) |
 | `unuse` | Clear the saved current project |
-| `refresh` | Re-fetch project list and user info |
+| `refresh` | Re-read config, permissions, projects, and pending reviews |
 | `reload` | Re-exec the process (picks up code changes) |
 | `debug on` / `debug off` | Toggle debug logging |
+| `elevated on` / `elevated off` | Toggle platform-administrator elevation; an `ELEVATED` badge appears in the toolbar while it is on. It starts on for platform administrators unless `privilege_mode` is set to `normal` |
 | `help` | List available commands |
 | `exit` / `quit` | Exit the shell |
 
@@ -82,6 +85,22 @@ When stdin is not interactive, optional prompts are skipped and configured defau
 `config init` hides API-key input. It also warns when an active environment variable will override a value saved by the wizard.
 
 Destructive commands default confirmation to no and accept `yes`, `y`, `no`, or `n`. When stdin is not interactive, supply the command's explicit `--yes` option. Ownership transfers and project reassignments use a different safety model: they preview by default and execute only with `--confirm`.
+
+## Editing in your editor
+
+`edit` commands (`crucible edit MFID`, `dataset edit`, `instrument edit`, `config edit`, ...) open the record as JSON in a text editor and apply your changes when the editor closes. The editor comes from the `editor` config key, `CRUCIBLE_EDITOR`, `VISUAL`, or `EDITOR`; otherwise the first available of VS Code, Notepad++, and Notepad on Windows, VS Code, nano, and vim on macOS, or VS Code, nano, vim, vi, gedit, and kate on Linux.
+
+The editor must keep the command waiting until you close the file. Editors that open in an existing window get their wait flag added automatically, so `code` becomes `code --wait`:
+
+| Editor | Setting | Notes |
+|---|---|---|
+| Notepad | `notepad` | Windows default; waits on its own |
+| VS Code | `code` | `--wait` added automatically; close the tab to finish |
+| Notepad++ | `notepad++` | `-multiInst -nosession` added automatically |
+| Sublime Text | `subl` | `--wait` added automatically |
+| vim, nano | `vim`, `nano` | Terminal editors wait on their own |
+
+Quote paths that contain spaces, for example `crucible config set editor "\"C:\Program Files\Notepad++\notepad++.exe\""`.
 
 ## Tab completion
 

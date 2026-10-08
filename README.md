@@ -7,7 +7,7 @@
 
 The official Python client library and command-line interface for [Crucible](https://crucible.lbl.gov), the Molecular Foundry's scientific data management platform for experimental and computational research.
 
-Using the hosted service requires a Crucible account and API key.
+Using the hosted service requires a Crucible account.
 
 ## Capabilities
 
@@ -21,12 +21,6 @@ Using the hosted service requires a Crucible account and API key.
 
 ```bash
 pip install nano-crucible
-```
-
-Install optional parser dependencies when working with supported scientific formats:
-
-```bash
-pip install "nano-crucible[parsers]"
 ```
 
 ## Get started
@@ -64,6 +58,6 @@ See the [contribution guide](https://github.com/MolecularFoundryCrucible/nano-cr
 
 ## Support and license
 
-Ask questions on [Discord](https://discord.gg/Wrepphsgbx) or [open a GitHub issue](https://github.com/MolecularFoundryCrucible/nano-crucible/issues). nano-crucible is distributed under the [BSD 3-Clause License](https://github.com/MolecularFoundryCrucible/nano-crucible/blob/main/LICENSE).
+Ask questions on [Discord](https://discord.gg/Wrepphsgbx) or [open a GitHub issue](https://github.com/MolecularFoundryCrucible/nano-crucible/issues). `nano-crucible` is distributed under the [BSD 3-Clause License](https://github.com/MolecularFoundryCrucible/nano-crucible/blob/main/LICENSE).
 
-nano-crucible is developed and maintained by the [Data Group](https://foundry.lbl.gov/expertise-instrumentation/#data-and-analytics-expertise) at the Molecular Foundry, Lawrence Berkeley National Laboratory.
+`nano-crucible` is developed and maintained by the [Data Group](https://foundry.lbl.gov/expertise-instrumentation/#data-and-analytics-expertise) at the Molecular Foundry, Lawrence Berkeley National Laboratory.

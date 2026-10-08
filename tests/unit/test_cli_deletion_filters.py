@@ -18,9 +18,10 @@ def make_parser():
 @pytest.fixture
 def client():
     fake = MagicMock()
+    fake.can_elevate = False
     fake.deletions.list.return_value = []
     fake.deletions.list_deleted.return_value = []
-    with patch('crucible.client.CrucibleClient', return_value=fake):
+    with patch('crucible.config.get_client', return_value=fake):
         yield fake
 
 
@@ -35,6 +36,24 @@ def test_request_list_defaults_pass_none(client):
     assert kwargs['direction'] is None
     assert kwargs['project_mfid'] is None
     assert kwargs['status'] == 'pending'
+
+
+def test_request_list_defaults_to_the_review_queue_for_a_reviewer(client):
+    client.can_elevate = True
+    args = make_parser().parse_args(['deletion', 'list'])
+
+    args.func(args)
+
+    assert client.deletions.list.call_args.kwargs['scope'] == 'reviewable'
+
+
+def test_an_explicit_scope_is_not_overridden(client):
+    client.can_elevate = True
+    args = make_parser().parse_args(['deletion', 'list', '--scope', 'submitted'])
+
+    args.func(args)
+
+    assert client.deletions.list.call_args.kwargs['scope'] == 'submitted'
 
 
 def test_request_list_forwards_the_new_flags(client):

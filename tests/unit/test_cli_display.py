@@ -16,6 +16,8 @@ from crucible.cli import project as project_cli
 from crucible.cli import sample as sample_cli
 from crucible.cli import service_account as service_account_cli
 from crucible.cli import shell as shell_cli
+from crucible.cli.shell import _common as shell_common
+from crucible.cli.shell import banner as shell_banner
 from crucible.cli import term
 from crucible.cli import user as user_cli
 
@@ -56,10 +58,12 @@ def test_empty_listings_name_their_subject(execute, args, expected, monkeypatch,
         projects=SimpleNamespace(list_join_requests=lambda *args, **kwargs: []),
         access_groups=SimpleNamespace(list_join_requests=lambda **kwargs: []),
         account=SimpleNamespace(join_requests=lambda **kwargs: []),
-        service_accounts=SimpleNamespace(list=lambda **kwargs: []),
+        service_accounts=SimpleNamespace(list_admin=lambda **kwargs: []),
         deletions=SimpleNamespace(list_deleted=lambda **kwargs: []),
+        can_elevate=False,
+        _admin_mode=lambda: None,
     )
-    monkeypatch.setattr('crucible.client.CrucibleClient', lambda: client)
+    monkeypatch.setattr('crucible.config.get_client', lambda: client)
 
     execute(args)
 
@@ -252,7 +256,7 @@ def test_shell_toolbar_restores_context_symbols(monkeypatch):
 def test_shell_toolbar_uses_brand_palette_without_completion_styles(monkeypatch):
     monkeypatch.setattr(term, '_COLOR_ENABLED', True)
 
-    rules = shell_cli._shell_style_rules()
+    rules = shell_common.shell_style_rules()
 
     assert rules['bottom-toolbar'] == 'noinherit bg:#031e2d fg:#a8c4cd'
     assert rules['tb-project'] == 'noinherit bg:#a8c4cd fg:#031e2d'
@@ -270,7 +274,7 @@ def test_shell_uses_true_color_when_terminal_advertises_it(monkeypatch):
     monkeypatch.delenv('PROMPT_TOOLKIT_COLOR_DEPTH', raising=False)
     monkeypatch.setenv('COLORTERM', 'truecolor')
 
-    assert shell_cli._shell_color_depth() == ColorDepth.DEPTH_24_BIT
+    assert shell_common.shell_color_depth() == ColorDepth.DEPTH_24_BIT
 
 
 def test_shell_respects_explicit_prompt_toolkit_color_depth(monkeypatch):
@@ -281,7 +285,7 @@ def test_shell_respects_explicit_prompt_toolkit_color_depth(monkeypatch):
     monkeypatch.setenv('PROMPT_TOOLKIT_COLOR_DEPTH', 'DEPTH_8_BIT')
     monkeypatch.setenv('COLORTERM', 'truecolor')
 
-    assert shell_cli._shell_color_depth() == ColorDepth.DEPTH_8_BIT
+    assert shell_common.shell_color_depth() == ColorDepth.DEPTH_8_BIT
 
 
 def test_shell_leaves_color_depth_automatic_without_true_color(monkeypatch):
@@ -290,12 +294,12 @@ def test_shell_leaves_color_depth_automatic_without_true_color(monkeypatch):
     monkeypatch.delenv('PROMPT_TOOLKIT_COLOR_DEPTH', raising=False)
     monkeypatch.delenv('COLORTERM', raising=False)
 
-    assert shell_cli._shell_color_depth() is None
+    assert shell_common.shell_color_depth() is None
 
 
 def test_shell_banner_is_packaged_and_uses_requested_colors():
-    banner = shell_cli._load_shell_banner()
-    fragments = shell_cli._shell_banner_fragments('_%=.\n.=_%')
+    banner = shell_banner.load_shell_banner()
+    fragments = shell_banner.shell_banner_fragments('_%=.\n.=_%')
     styles = {style for style, _text in fragments}
 
     assert len(banner.splitlines()) == 16
@@ -309,28 +313,28 @@ def test_shell_banner_is_packaged_and_uses_requested_colors():
 
 
 def test_shell_banner_contains_its_own_boundary():
-    banner = shell_cli._load_shell_banner()
-    rows = shell_cli._shell_banner_rows(banner)
-    panel = shell_cli._shell_banner_panel(banner)
+    banner = shell_banner.load_shell_banner()
+    rows = shell_banner.shell_banner_rows(banner)
+    panel = shell_banner.shell_banner_panel(banner)
 
     assert len(rows) == 16
     assert {len(row) for row in rows} == {16}
     assert len(panel.splitlines()) == 8
-    assert {shell_cli._vlen(line) for line in panel.splitlines()} == {16}
+    assert {shell_common.vlen(line) for line in panel.splitlines()} == {16}
     assert set(rows[0]) == {'_'}
     assert set(rows[-1]) == {'_'}
 
 
 def test_shell_banner_panel_has_consistent_width():
-    panel = shell_cli._shell_banner_panel('%%\n%')
+    panel = shell_banner.shell_banner_panel('%%\n%')
 
     lines = panel.splitlines()
     assert lines == ['█▀']
-    assert {shell_cli._vlen(line) for line in lines} == {2}
+    assert {shell_common.vlen(line) for line in lines} == {2}
 
 
 def test_shell_banner_panel_has_requested_edge_padding():
-    rows = shell_cli._shell_banner_rows(shell_cli._load_shell_banner())
+    rows = shell_banner.shell_banner_rows(shell_banner.load_shell_banner())
 
     assert set(rows[0]) == {'_'}
     assert set(rows[-1]) == {'_'}
@@ -339,21 +343,21 @@ def test_shell_banner_panel_has_requested_edge_padding():
 
 
 def test_shell_banner_is_centered_by_display_width():
-    panel = shell_cli._shell_banner_panel('%%')
+    panel = shell_banner.shell_banner_panel('%%')
 
-    assert shell_cli._shell_banner_left_margin(panel, 14) == 6
-    assert shell_cli._shell_banner_left_margin(panel, 7) == 2
+    assert shell_banner.shell_banner_left_margin(panel, 14) == 6
+    assert shell_banner.shell_banner_left_margin(panel, 7) == 2
 
 
 def test_shell_banner_centering_keeps_outer_margin_uncolored():
-    fragments = list(shell_cli._shell_banner_fragments('%%', left_margin=3))
+    fragments = list(shell_banner.shell_banner_fragments('%%', left_margin=3))
 
     assert fragments[0] == ('', '   ')
     assert '#a8c4cd' in fragments[1][0]
 
 
 def test_shell_banner_pixel_material_counts_match_source_pattern():
-    banner = shell_cli._load_shell_banner()
+    banner = shell_banner.load_shell_banner()
 
     assert banner.count('%') == 127
     assert banner.count('=') == 18
@@ -363,12 +367,12 @@ def test_shell_banner_pixel_material_counts_match_source_pattern():
 
 def test_shell_banner_is_skipped_on_narrow_terminals(monkeypatch):
     monkeypatch.setattr(
-        shell_cli,
-        '_load_shell_banner',
+        shell_banner,
+        'load_shell_banner',
         lambda: pytest.fail('Narrow terminals should not load the banner.'),
     )
 
-    assert shell_cli._print_shell_banner(15) is False
+    assert shell_banner.print_shell_banner(15) is False
 
 
 def test_shell_toolbar_marks_custom_api_and_debug(monkeypatch):
@@ -489,7 +493,7 @@ def test_shell_html_removes_styles_when_color_is_disabled(monkeypatch):
     monkeypatch.setattr(term, '_COLOR_ENABLED', False)
 
     fragments = to_formatted_text(
-        shell_cli._shell_html('<ansicyan><b>project-one</b></ansicyan>'))
+        shell_common.shell_html('<ansicyan><b>project-one</b></ansicyan>'))
 
     assert fragments == [('', 'project-one')]
 
@@ -497,7 +501,7 @@ def test_shell_html_removes_styles_when_color_is_disabled(monkeypatch):
 def test_shell_toolbar_style_is_monochrome_when_color_is_disabled(monkeypatch):
     monkeypatch.setattr(term, '_COLOR_ENABLED', False)
 
-    rules = shell_cli._shell_style_rules()
+    rules = shell_common.shell_style_rules()
 
     assert set(rules.values()) == {'noinherit'}
 
@@ -647,13 +651,9 @@ def test_missing_public_value_is_not_rendered_as_false(show, record, capsys):
         (
             dataset_cli,
             {
-                'measurement': None,
                 'keyword': None,
-                'session': None,
-                'data_format': None,
                 'data_type': None,
                 'instrument_name': None,
-                'instrument_mfid': None,
                 'include': None,
                 'exclude': None,
             },
@@ -671,7 +671,6 @@ def test_missing_public_value_is_not_rendered_as_false(show, record, capsys):
             sample_cli,
             {
                 'name': None,
-                'sample_type': None,
                 'include_metadata': False,
                 'include': None,
                 'exclude': None,
@@ -692,7 +691,7 @@ def test_scoped_resource_lists_show_relation_and_unassigned_project(
         module, namespace, resource_attr, record, type_label, monkeypatch, capsys):
     operation = SimpleNamespace(list=MagicMock(return_value=[record]))
     client = SimpleNamespace(**{resource_attr: operation})
-    monkeypatch.setattr('crucible.client.CrucibleClient', lambda: client)
+    monkeypatch.setattr('crucible.config.get_client', lambda: client)
     args = SimpleNamespace(
         project_id=None,
         project_mfid=MFID,
@@ -700,6 +699,8 @@ def test_scoped_resource_lists_show_relation_and_unassigned_project(
         limit=10,
         json=False,
         group_by='none',
+        sort=None,
+        direction=None,
         debug=False,
         **namespace,
     )
@@ -710,6 +711,8 @@ def test_scoped_resource_lists_show_relation_and_unassigned_project(
         limit=10,
         project_mfid=MFID,
         project_scope='all',
+        sort='created',
+        direction='desc',
         **({'include_metadata': False} if resource_attr == 'samples' else {}),
     )
     output = capsys.readouterr().out
@@ -814,7 +817,7 @@ def test_generic_get_dispatches_project_detail(monkeypatch):
     }
     client = SimpleNamespace(get=MagicMock(return_value=project))
     show_project = MagicMock()
-    monkeypatch.setattr('crucible.client.CrucibleClient', lambda: client)
+    monkeypatch.setattr('crucible.config.get_client', lambda: client)
     monkeypatch.setattr(project_cli, '_show_project', show_project)
 
     get_cli.execute(SimpleNamespace(
@@ -914,7 +917,7 @@ def test_instrument_search_displays_slug_instead_of_manufacturer(monkeypatch, ca
     }]
     operations = SimpleNamespace(search=MagicMock(return_value=results))
     monkeypatch.setattr(
-        'crucible.client.CrucibleClient',
+        'crucible.config.get_client',
         lambda: SimpleNamespace(instruments=operations),
     )
 
@@ -1039,3 +1042,79 @@ def test_interactive_table_width_uses_terminal_size(monkeypatch):
     )
 
     assert term._table_output_width() == 72
+
+
+def test_service_account_list_shows_platform_role(monkeypatch, capsys):
+    accounts = [
+        {'unique_id': MFID, 'username': 'ingest-bot', 'first_name': 'Ingest',
+         'last_name': 'Bot', 'platform_role': 'contributor'},
+        {'unique_id': MFID, 'username': 'idle-bot', 'platform_role': 'none'},
+    ]
+    list_admin = MagicMock(return_value=accounts)
+    client = SimpleNamespace(service_accounts=SimpleNamespace(list_admin=list_admin))
+    monkeypatch.setattr('crucible.config.get_client', lambda: client)
+
+    service_account_cli._execute_list(SimpleNamespace(limit=10, q='bot', json=False))
+
+    output = capsys.readouterr().out
+    assert 'PLATFORM ROLE' in output
+    assert 'contributor' in output and 'none' in output
+    list_admin.assert_called_once_with(q='bot', limit=10)
+
+
+def test_sa_get_uses_the_admin_record_and_names_groups(monkeypatch, capsys):
+    from crucible.models import AccountCapabilities
+
+    basic = {'unique_id': MFID, 'username': 'scope-bot'}
+    admin = {**basic, 'platform_role': 'contributor',
+             'api_key_status': {'valid': True, 'created_at': '2026-09-10',
+                                'expires_at': '2027-09-10'}}
+    instrument_group = '0tmz428dmnrf3000128mhfcmdg'
+    client = SimpleNamespace(
+        can_elevate=False,
+        capabilities=AccountCapabilities(can_manage_service_accounts=True),
+        service_accounts=SimpleNamespace(
+            get=MagicMock(return_value=basic),
+            get_admin=MagicMock(return_value=admin),
+            list_access_groups=MagicMock(return_value=[instrument_group, MFID])),
+        get=MagicMock(return_value={'resource_type': 'instrument',
+                                    'instrument_id': 'scope-1'}),
+    )
+    monkeypatch.setattr('crucible.config.get_client', lambda: client)
+
+    service_account_cli._execute_get(SimpleNamespace(
+        sa='scope-bot', unique_id=None, username=None, groups=True, json=False))
+
+    out = capsys.readouterr().out
+    assert 'contributor' in out and 'valid' in out
+    assert 'scope-1' in out and 'instrument' in out
+    assert '(own group)' in out
+
+
+def test_sa_get_without_admin_rights_skips_the_admin_record(monkeypatch, capsys):
+    from crucible.models import AccountCapabilities
+
+    get_admin = MagicMock()
+    client = SimpleNamespace(
+        can_elevate=False,
+        capabilities=AccountCapabilities(can_manage_service_accounts=False),
+        service_accounts=SimpleNamespace(
+            get=MagicMock(return_value={'unique_id': MFID, 'username': 'scope-bot'}),
+            get_admin=get_admin),
+    )
+    monkeypatch.setattr('crucible.config.get_client', lambda: client)
+
+    service_account_cli._execute_get(SimpleNamespace(
+        sa='scope-bot', unique_id=None, username=None, groups=False, json=False))
+
+    get_admin.assert_not_called()
+    assert 'Platform role' not in capsys.readouterr().out
+
+
+def test_relative_time_reads_naturally_in_the_future():
+    from datetime import timedelta
+    from crucible.cli.term import _rel
+
+    assert _rel(-timedelta(days=340)) == 'in 11mo'
+    assert _rel(-timedelta(days=3)) == 'in 3d'
+    assert _rel(timedelta(days=3)) == '3d ago'

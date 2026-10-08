@@ -81,7 +81,7 @@ Examples:
 
 def execute(args):
     """Execute the link command."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
 
     # Determine parent and child IDs
     if args.dataset and args.sample:
@@ -108,7 +108,7 @@ def execute(args):
 
     # Use the unified link method
     try:
-        CrucibleClient().link(parent_id, child_id, args.relationship_type)
+        get_client().link(parent_id, child_id, args.relationship_type)
         term.success("Linked resources", args)
     except Exception as e:
         logger.error(f"Failed to link resources: {e}")
