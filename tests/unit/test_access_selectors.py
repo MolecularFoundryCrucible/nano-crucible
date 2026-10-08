@@ -6,6 +6,7 @@ import pytest
 
 from crucible.models import Dataset, Sample
 from crucible.resources.datasets import DatasetOperations
+from crucible.resources.instruments import InstrumentOperations
 from crucible.resources.projects import ProjectOperations
 from crucible.resources.samples import SampleOperations
 
@@ -101,6 +102,91 @@ def test_rejects_more_than_ten_selectors():
 
     with pytest.raises(ValueError, match='At most 10'):
         operations.list(accessible_to_user=[str(i) for i in range(11)])
+
+
+def test_project_list_sends_sort_and_member_filters():
+    client = MagicMock()
+    operations = ProjectOperations(client)
+    operations._request = MagicMock(return_value={
+        'total': 0,
+        'limit': 5,
+        'offset': 0,
+        'items': [],
+    })
+
+    operations.list(sort='title', direction='desc',
+                    member_ref=['alice', 'bob'], member_role='owner',
+                    limit=5)
+
+    operations._request.assert_called_once_with(
+        'get',
+        '/projects',
+        params={
+            'sort': 'title',
+            'direction': 'desc',
+            'member_ref': ['alice', 'bob'],
+            'member_role': ['owner'],
+            'limit': 5,
+        },
+    )
+
+
+def test_project_member_role_requires_member_ref():
+    operations = ProjectOperations(MagicMock())
+
+    with pytest.raises(ValueError, match='member_role requires member_ref'):
+        operations.list(member_role='owner')
+
+
+def test_project_member_role_rejects_invalid_roles():
+    operations = ProjectOperations(MagicMock())
+
+    with pytest.raises(ValueError, match='member_role must be one of'):
+        operations.list(member_ref='alice', member_role='lead')
+
+
+def test_project_sort_rejects_direction_without_sort():
+    operations = ProjectOperations(MagicMock())
+
+    with pytest.raises(ValueError, match='direction requires sort'):
+        operations.list(direction='desc')
+
+
+def test_project_sort_rejects_unknown_field():
+    operations = ProjectOperations(MagicMock())
+
+    with pytest.raises(ValueError, match='sort must be one of'):
+        operations.list(sort='name')
+
+
+def test_project_member_filters_require_the_projects_endpoint():
+    operations = ProjectOperations(MagicMock())
+
+    with pytest.raises(ValueError, match='/projects only'):
+        operations.list(orcid='0000-0001-6402-3752', member_ref='alice')
+
+
+def test_instrument_list_sends_sort_and_direction():
+    client = MagicMock()
+    operations = InstrumentOperations(client)
+    operations._request = MagicMock(return_value={
+        'total': 0,
+        'limit': 5,
+        'offset': 0,
+        'items': [],
+    })
+
+    operations.list(sort='name', direction='asc', limit=5)
+
+    operations._request.assert_called_once_with(
+        'get',
+        '/instruments',
+        params={
+            'sort': 'name',
+            'direction': 'asc',
+            'limit': 5,
+        },
+    )
 
 
 def test_sample_relationship_filter_accepts_access_selectors():

@@ -927,11 +927,9 @@ def _execute_list_access_groups(args):
 def _execute_list_projects(args):
     """Execute the 'user list-projects' subcommand."""
     from crucible.config import get_client
-    from .helpers import resolve_user_id
     try:
         client = get_client()
-        user_id = resolve_user_id(client, args.user)
-        projects = client.users.get_projects(user_id)
+        projects = client.projects.list(member_ref=args.user)
 
         term.header(f"Projects · {args.user} ({len(projects)})")
         if not projects:

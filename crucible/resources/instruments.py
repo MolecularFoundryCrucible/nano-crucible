@@ -54,6 +54,7 @@ class InstrumentOperations(OwnershipMixin, AccessControlMixin, BaseResource):
              offset: int = 0, include_owner: bool = False,
              status: Optional[str] = None,
              affiliation: Optional[Union[str, Sequence[str]]] = None,
+             sort: Optional[str] = None, direction: Optional[str] = None,
              **filters: Any) -> List[Dict]:
         """List instruments, defaulting to the active lifecycle state.
 
@@ -67,14 +68,18 @@ class InstrumentOperations(OwnershipMixin, AccessControlMixin, BaseResource):
                                     (or every status for an instrument_id lookup).
             affiliation: Caller relationship: 'owner', 'maintainer', or both
                          (combined with OR) to list the caller's instruments.
+            sort: Explicit ordering, one of crucible.constants.INSTRUMENT_SORTS.
+            direction: Sort direction, asc or desc. Requires sort. Without it,
+                       dates default to desc and everything else to asc.
             **filters: Exact-match filters accepted by GET /instruments, such as
                        instrument_id (case-insensitive slug), manufacturer,
                        model, location, instrument_type, owner_id, other_id.
 
         Returns:
-            List[Dict]: Instrument objects with specifications and metadata
+            List[Dict]: Instrument objects with specifications, the caller's
+                        effective ``role`` on each record, and metadata
         """
-        from ..constants import INSTRUMENT_AFFILIATIONS
+        from ..constants import INSTRUMENT_AFFILIATIONS, INSTRUMENT_SORTS
 
         params = {k: v for k, v in filters.items() if v is not None}
         self._validate_filter_params(params, INSTRUMENT_LIST_FILTERS, '/instruments')
@@ -85,6 +90,7 @@ class InstrumentOperations(OwnershipMixin, AccessControlMixin, BaseResource):
         if status is not None:
             params['status'] = self._instrument_status(status)
         params.update(self._affiliation_params(affiliation, INSTRUMENT_AFFILIATIONS))
+        params.update(self._ordering_params(sort, direction, sorts=INSTRUMENT_SORTS))
         return [self._parse(item) for item in self._paginate('/instruments', params, limit, offset)]
 
     @staticmethod

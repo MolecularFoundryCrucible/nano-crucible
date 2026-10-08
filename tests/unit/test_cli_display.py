@@ -527,6 +527,21 @@ def test_project_detail_distinguishes_slug_and_mfid_and_shows_empty_members(caps
     assert 'Modified' in output
     assert 'Members (0)' in output
     assert 'No members found.' in output
+    assert 'My role' in output
+    assert '-' in output
+
+
+def test_project_detail_shows_the_callers_role(capsys):
+    project_cli._show_project({
+        'unique_id': MFID,
+        'project_id': 'project-slug',
+        'title': 'Project',
+        'role': 'admin',
+    })
+
+    output = capsys.readouterr().out
+    assert 'My role' in output
+    assert 'admin' in output
 
 
 def test_project_detail_links_only_canonical_mfid(monkeypatch, capsys):
@@ -582,6 +597,21 @@ def test_instrument_detail_distinguishes_slug_and_mfid(capsys):
     assert 'MFID' in output
     assert MFID in output
     assert 'maintenance' in output
+    assert 'My role' in output
+
+
+def test_instrument_detail_shows_the_callers_role(capsys):
+    instrument_cli._show_instrument({
+        'unique_id': MFID,
+        'instrument_id': 'instrument-slug',
+        'instrument_name': 'Instrument',
+        'status': 'active',
+        'role': 'maintainer',
+    })
+
+    output = capsys.readouterr().out
+    assert 'My role' in output
+    assert 'maintainer' in output
 
 
 def test_instrument_detail_links_only_canonical_mfid(monkeypatch, capsys):

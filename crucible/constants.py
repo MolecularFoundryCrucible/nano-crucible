@@ -8,11 +8,16 @@ DEFAULT_LIMIT = 100   # default page size for list requests
 API_PAGE_MAX  = 1000  # server hard cap per request
 
 PROJECT_MEMBER_ROLES = ('viewer', 'contributor', 'editor', 'admin')
+PROJECT_ACCESS_ROLES = ('viewer', 'contributor', 'editor', 'admin', 'owner')  # member_role filter; grants cannot assign owner
 PROJECT_SCOPES = ('assigned', 'shared', 'all')
 
 # Ordering and scoping options accepted by the dataset and sample collections.
 RESOURCE_SORTS = ('created', 'updated', 'name')
 SORT_DIRECTIONS = ('asc', 'desc')
+
+# Ordering options accepted by the project and instrument collections.
+PROJECT_SORTS = ('project_id', 'title', 'created', 'updated')
+INSTRUMENT_SORTS = ('instrument_id', 'name', 'created', 'updated')
 VISIBILITIES = ('all', 'public', 'private')
 AFFILIATIONS = ('owner',)
 INSTRUMENT_AFFILIATIONS = ('owner', 'maintainer')

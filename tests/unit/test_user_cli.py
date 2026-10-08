@@ -11,6 +11,7 @@ from crucible.cli.helpers import prompt_username
 from crucible.cli.user import (
     _execute_create,
     _execute_edit,
+    _execute_list_projects,
     _execute_revoke_keys,
     _execute_set_role,
     _register_create,
@@ -329,3 +330,21 @@ def test_grid_fills_columns_top_to_bottom(capsys):
     term.grid(['a', 'b', 'c', 'd', 'e'], columns=2, indent=0, gap=2)
 
     assert capsys.readouterr().out.splitlines() == ['a  d', 'b  e', 'c']
+
+
+def test_list_projects_uses_member_ref_route(monkeypatch, capsys):
+    client = SimpleNamespace(projects=SimpleNamespace())
+    client.projects.list = MagicMock(return_value=[{
+        'project_id': 'project-one',
+        'title': 'Project One',
+        'organization': 'LBL',
+        'role': 'contributor',
+    }])
+    monkeypatch.setattr('crucible.config.get_client', lambda: client)
+
+    _execute_list_projects(SimpleNamespace(user='alice', json=False, debug=False))
+
+    client.projects.list.assert_called_once_with(member_ref='alice')
+    output = capsys.readouterr().out
+    assert 'project-one' in output
+    assert 'contributor' in output
