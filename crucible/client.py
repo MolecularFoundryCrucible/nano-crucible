@@ -100,8 +100,23 @@ class CrucibleClient:
         # a response lost or delayed after a non-idempotent server-side
         # effect already happened (e.g. a physical print job published to
         # MQTT) must not be retried, since that would repeat the effect.
+        #
+        # Connection: close disables keep-alive so no connection from this
+        # session is ever reused across calls. Without it, an infrequently
+        # used pooled connection can go idle long enough for the server (or
+        # an intermediary) to close it; the next call then reuses the dead
+        # connection and fails with a connection-reset error on send, before
+        # any request bytes reached the server. That failure is safe to
+        # retry (nothing was sent), but urllib3 cannot distinguish it from a
+        # connection that died mid-request after the server received and
+        # possibly acted on it -- both surface the same way. Rather than
+        # retry either case, avoid connection reuse here so the safe case
+        # cannot occur in the first place.
         self._no_retry_session = requests.Session()
-        self._no_retry_session.headers.update({"Authorization": f"Bearer {api_key}"})
+        self._no_retry_session.headers.update({
+            "Authorization": f"Bearer {api_key}",
+            "Connection": "close",
+        })
 
         # Initialize resource operations
         from .resources import FileOperations, DatasetOperations, SampleOperations, \

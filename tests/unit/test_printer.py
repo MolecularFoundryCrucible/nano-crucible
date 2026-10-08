@@ -51,6 +51,26 @@ def test_request_retry_true_by_default(real_client):
     real_client._no_retry_session.request.assert_not_called()
 
 
+def test_no_retry_session_disables_keep_alive(monkeypatch):
+    """The no-retry session must never reuse a pooled connection: an
+    infrequently-used idle connection can be silently closed server-side,
+    and the next call reusing it fails with a connection reset before any
+    request bytes are sent. That failure is safe to retry in principle, but
+    urllib3 cannot distinguish it from a connection that died mid-request
+    after the server already received and acted on it (the real
+    double-print risk) -- both surface identically. Connection: close
+    avoids the ambiguity entirely by never reusing a connection here."""
+    from crucible.config import config
+
+    monkeypatch.setitem(config._data, 'api_url', 'https://example.test/api/v3')
+    monkeypatch.setitem(config._data, 'api_key', 'test-key')
+    config._data.pop('privilege_mode', None)
+
+    client = CrucibleClient()
+
+    assert client._no_retry_session.headers.get('Connection') == 'close'
+
+
 def make():
     client = MagicMock()
     resource = PrintOperations(client)
