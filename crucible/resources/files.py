@@ -156,7 +156,8 @@ class FileOperations(BaseResource):
             wait_for_response: Block until ingestion completes.
 
         Returns:
-            Dict: IngestionRequest record (id, status, ...)
+            Dict: IngestionRequest record (id, status, ...); with
+            wait_for_response, the record in its final state.
         """
         params = {'status':'requested'}
         if ingestion_class:
@@ -171,7 +172,7 @@ class FileOperations(BaseResource):
                      f"status={ingestion_request.get('status')}")
 
         if wait_for_response and ingestion_request:
-            self._client._wait_for_request_completion(ingestion_request['id'])
+            ingestion_request = self._client._wait_for_request_completion(ingestion_request['id'])
 
         return ingestion_request
 

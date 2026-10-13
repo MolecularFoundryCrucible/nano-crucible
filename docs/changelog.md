@@ -68,6 +68,7 @@
 - `edit` commands work on Windows without configuration: they default to Notepad instead of nano, recognize `code.cmd` and `.exe` editors when adding wait flags, start batch-file editors such as VS Code's, and add the flags Notepad++ needs to wait.
 - Project ownership transfer, access commands, and scientific metadata updates accept a project ID; they previously failed with 404 unless given the project MFID.
 - Renaming a project with `project update` or `project edit` updates the saved current project when it named the old ID.
+- Waiting for ingestion (`files.request_ingestion(wait_for_response=True)`, `add_file(wait_for_ingestion_response=True)`, and `create(wait_for_ingestion_response=True)`) returns the request in its final state instead of the initial `requested` record.
 - Listing calls that page by offset no longer stop at the first 1000 records when the server also reports an empty `next_cursor`.
 - Files uploaded through the multipart upload service show and download under their recorded filename instead of a storage path, and count as ingested regardless of bucket.
 - Downloads refuse file names that would write outside the target folder, and `dataset download` warns about files the server will not provide a link for instead of skipping them silently.

@@ -422,12 +422,13 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
                 file_results.append(self.add_remote_file(dataset_mfid, remote))
 
         if wait_for_ingestion_response and not skip_ingestion:
-            pending = [r['ingestion_request']['id'] for r in file_results
+            pending = [r for r in file_results
                        if isinstance(r, dict) and (r.get('ingestion_request') or {}).get('id')]
             if pending:
                 logger.debug(f'Waiting on {len(pending)} ingestion request(s) for {dataset_mfid}')
-            for request_id in pending:
-                self._client.ingestions.wait(request_id)
+            for file_result in pending:
+                file_result['ingestion_request'] = self._client.ingestions.wait(
+                    file_result['ingestion_request']['id'])
 
         result = {"created_record": new_ds_record,
                   "scientific_metadata_record": scimd,
