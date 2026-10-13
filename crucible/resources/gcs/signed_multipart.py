@@ -40,6 +40,10 @@ class SignedMultipartUnavailable(Exception):
     """The server does not offer signed multipart uploads for this file."""
 
 
+class _FilenameTaken(Exception):
+    pass
+
+
 def scan_file(file_path: str, part_size: int = PART_SIZE) -> Tuple[str, str, List[str]]:
     """Return (sha256 hex, whole-file CRC32C, per-part CRC32Cs) in one read pass.
 
@@ -153,6 +157,7 @@ class _Upload:
     def __init__(self, client, dsid: str, file_path: str, filename: str,
                  workers: int, progress: Optional[Progress]):
         self.client = client
+        self.dsid = dsid
         self.base = f'/datasets/{dsid}/upload/multipart'
         self.file_path = file_path
         self.filename = filename
@@ -168,7 +173,10 @@ class _Upload:
 
     def run(self) -> Tuple[Dict, bool]:
         sha256_hash, crc32c, self.part_checksums = scan_file(self.file_path, PART_SIZE)
-        status = self._initiate(sha256_hash)
+        try:
+            status = self._initiate(sha256_hash)
+        except _FilenameTaken:
+            return self._same_file(sha256_hash), True
         if status.get('existing_file') is not None:
             logger.info(f"{self.filename} already exists in the dataset, skipping upload")
             return status['existing_file'], True
@@ -198,7 +206,25 @@ class _Upload:
                     or _disabled(error)):
                 raise SignedMultipartUnavailable(
                     "This server does not offer signed multipart uploads.") from error
+            if status == 409 and 'filename already exists' in _detail(error).lower():
+                raise _FilenameTaken() from error
             raise
+
+    def _same_file(self, sha256_hash: str) -> Dict:
+        """The dataset's record for this filename when it holds the same content.
+
+        The server only deduplicates hashes it has verified, so an identical
+        re-upload is recognized here, as the legacy route does.
+        """
+        for record in self.client.datasets.list_files(self.dsid):
+            if record.get('filename') == self.filename:
+                if record.get('sha256_hash') == sha256_hash and record.get('size') == self.size:
+                    logger.info(f"{self.filename} already exists in the dataset, skipping upload")
+                    return record
+                break
+        raise RuntimeError(
+            f"{self.filename} already exists in this dataset with different content. "
+            "Delete that file first to replace it.")
 
     def _acknowledged_parts(self) -> set:
         acknowledged, marker = set(), None

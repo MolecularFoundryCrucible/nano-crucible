@@ -241,3 +241,28 @@ def test_progress_line_renders_only_on_a_terminal():
     out = tty.getvalue()
     assert 'data.bin' in out and ' 50%' in out and '100%' in out
     assert out.endswith('\n') and out.count('\n') == 1
+
+
+def _existing(api, sha):
+    api.fail('post', f'{BASE}/initiate', http_error(409, 'Filename already exists'))
+    api.datasets = SimpleNamespace(list_files=lambda dsid: [
+        {'mfid': 'old', 'filename': 'data.bin', 'size': len(DATA), 'sha256_hash': sha}])
+
+
+def test_same_file_again_returns_the_existing_record(source, storage):
+    import hashlib
+    api = FakeApi()
+    _existing(api, hashlib.sha256(DATA).hexdigest())
+
+    record, existing = sm.upload_file_signed_multipart(api, DSID, source)
+
+    assert existing is True and record['mfid'] == 'old'
+    assert storage.puts == []
+
+
+def test_same_name_with_new_content_is_refused(source, storage):
+    api = FakeApi()
+    _existing(api, 'f' * 64)
+
+    with pytest.raises(RuntimeError, match='different content'):
+        sm.upload_file_signed_multipart(api, DSID, source)
