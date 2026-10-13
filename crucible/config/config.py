@@ -240,9 +240,9 @@ class Config:
 
     @property
     def pager(self) -> str:
-        """Whether long CLI listings open in a pager: "auto" (default) or "never"."""
-        value = (self._data.get('pager') or 'auto').lower()
-        return 'never' if value in ('never', 'off', 'false', '0', 'no') else 'auto'
+        """Whether long CLI listings open in a pager: "never" (default) or "auto"."""
+        value = (self._data.get('pager') or 'never').lower()
+        return 'auto' if value in ('auto', 'on', 'true', '1', 'yes') else 'never'
 
     def _parse_bool(self, key: str) -> bool:
         return self._data.get(key, 'false').lower() in ('true', '1', 'yes')

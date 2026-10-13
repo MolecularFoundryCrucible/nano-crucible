@@ -23,7 +23,7 @@ def tty(monkeypatch):
     monkeypatch.delenv('CRUCIBLE_PAGER', raising=False)
     monkeypatch.delenv('PAGER', raising=False)
     from crucible.config import config
-    monkeypatch.delitem(config._data, 'pager', raising=False)
+    monkeypatch.setitem(config._data, 'pager', 'auto')
 
     def install():
         stdout = io.StringIO()
@@ -57,6 +57,15 @@ def test_paging_needs_a_terminal(tty, monkeypatch):
     out = tty()
     out.isatty = lambda: False
 
+    assert pager.should_page(args()) is False
+
+
+def test_paging_is_off_unless_turned_on(tty, monkeypatch):
+    tty()
+    from crucible.config import config
+    monkeypatch.delitem(config._data, 'pager')
+
+    assert config.pager == 'never'
     assert pager.should_page(args()) is False
 
 

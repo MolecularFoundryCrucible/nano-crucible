@@ -200,7 +200,7 @@ Examples:
         '--no-pager',
         action='store_true',
         default=False,
-        help='Print long listings directly instead of opening them in a pager'
+        help='Print long listings directly even when the pager setting is auto'
     )
 
     parser.add_argument(

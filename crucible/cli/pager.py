@@ -32,7 +32,7 @@ def should_page(args) -> bool:
         return False
     if not (hasattr(sys.stdout, 'isatty') and sys.stdout.isatty()):
         return False
-    return config.pager != 'never'
+    return config.pager == 'auto'
 
 
 def _terminal_lines() -> int:
