@@ -268,9 +268,20 @@ Examples:
     # config file. Admin-only operations request elevation per call, so this
     # only governs ordinary reads and writes.
     from ..config import config as _config
+    try:
+        configured_mode = _config.privilege_mode
+    except ValueError as exc:
+        if args.command != 'config':
+            if _config.source('privilege_mode') == 'environment':
+                hint = "Unset CRUCIBLE_PRIVILEGE_MODE"
+            else:
+                hint = "Run `crucible config unset privilege_mode`"
+            print(f"{exc} {hint} or set a valid value.", file=sys.stderr)
+            sys.exit(1)
+        configured_mode = None
     if getattr(args, 'elevated', False):
         _config._data['privilege_mode'] = 'elevated'
-    elif args.command is not None and _config.privilege_mode == 'elevated':
+    elif args.command is not None and configured_mode == 'elevated':
         # Elevation from the config file or the environment leaves no trace on
         # the command line, so say so rather than silently widening access.
         print(term.yellow(

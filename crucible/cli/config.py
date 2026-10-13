@@ -12,6 +12,7 @@ import logging
 import subprocess
 
 from . import term
+from ..constants import PRIVILEGE_MODES
 
 logger = logging.getLogger(__name__)
 
@@ -338,31 +339,7 @@ def cmd_get(args):
     key = args.key
 
     try:
-        if key == 'api_key':
-            value = config.api_key
-        elif key == 'api_url':
-            value = config.api_url
-        elif key == 'cache_dir':
-            value = config.cache_dir
-        elif key == 'graph_explorer_url':
-            value = config.graph_explorer_url
-        elif key == 'current_project':
-            value = config.current_project
-        elif key == 'editor':
-            value = config.editor
-        elif key == 'sample_group_by':
-            value = config.sample_group_by
-        elif key == 'dataset_group_by':
-            value = config.dataset_group_by
-        elif key == 'connect_timeout':
-            value = config.connect_timeout
-        elif key == 'read_timeout':
-            value = config.read_timeout
-        elif key == 'default_limit':
-            value = config.default_limit
-        else:
-            logger.error(f"Unknown config key: {key}")
-            sys.exit(1)
+        value = getattr(config, key)
 
         if value is None:
             print(f"{key}: <not set>")
@@ -427,6 +404,9 @@ def cmd_set(args):
         )
     key   = args.key
     value = args.value
+    if key == 'privilege_mode' and value not in PRIVILEGE_MODES:
+        logger.error(f"privilege_mode must be one of: {', '.join(PRIVILEGE_MODES)}.")
+        sys.exit(1)
     section, config_file = set_config_value(key, value)
     term.success(f"Set {key} = {value}  (in [{section}])", args)
     term.success(f"Saved to {config_file}", args)
