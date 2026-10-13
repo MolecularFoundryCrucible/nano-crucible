@@ -15,7 +15,9 @@ Follow [`nano-crucible-development`](../nano-crucible-development/SKILL.md), the
 - Get the client with `get_client()` from `crucible.config`, never `CrucibleClient()`: the shell shares one client across commands so its session, privilege mode, and cached profile carry over. Tests patch `crucible.config.get_client`.
 - Keep API work in `crucible/resources/`. CLI modules should parse input, call the client, present results, and translate expected failures into useful command errors.
 - Make destructive or access-changing commands identify their target and retain the established confirmation behavior.
-- Gate a command that needs an account capability with `require_capability()` from `helpers.py` so it fails before the request; it defers to the API when the capability is unknown.
+- Gate a command that needs an account capability with `require_capability()` from `helpers.py` so it fails before the request; it defers to the API when the capability is unknown. Use `require_elevation()` instead for operations that always request elevation.
+- List commands use `add_limit_arguments()`, `resolve_limit()`, `page_kwargs()`, `count_label()`, and `print_more_hint()` from `helpers.py`, so they share the default limit, `--all`, the shell's `more`, and the "N more not shown" note.
+- Upload commands use `add_upload_arguments()` and wrap the upload in `upload_session(client, args)`, which applies `--upload-protocol`, `--replace`, `--no-ingest`, and the progress line to the shared client and restores them afterwards.
 
 ## Match terminal conventions
 

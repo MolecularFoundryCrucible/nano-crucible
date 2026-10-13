@@ -16,7 +16,8 @@ When adding a new resource namespace, export the operations class from `crucible
 ## Preserve response and payload behavior
 
 - Filter `None` values from request payloads unless the endpoint distinguishes an explicit null from an omitted field.
-- Use `BaseResource._paginate()` for paginated envelopes. Datasets and samples use cursor pagination; other current resources use offsets.
+- Use `BaseResource._paginate()` for paginated envelopes; it follows a non-null `next_cursor` and otherwise pages by offset from `total`. It returns a `ListResult` (a `list` with `has_more`, `total`, `next_cursor`, `next_offset`). List methods accept `cursor=` and return `ListResult.like(raw, [...])` so transformations keep that metadata.
+- Uploads go through `upload_file_gcs()` in `crucible/resources/gcs/upload.py`, which picks the signed multipart flow (`signed_multipart.py`) or the legacy routes. Signed URLs are bearer credentials: call the API with `log_body=False` and never put them in logs or error messages.
 - When a response has the shape of an existing dataset, sample, or file model, pass it through the resource's `_parse()` method before returning it.
 - Most resource models allow extra fields. Removing a declared field does not prevent callers from sending it, so search model constructors, payload builders, CLI code, parsers, cast, tests, and docs for the old field.
 - Preserve intentional compatibility with `_deprecated` or `_removed` helpers when changing a public method or parameter. Do not retain an alias silently.
