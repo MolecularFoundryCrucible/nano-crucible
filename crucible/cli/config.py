@@ -123,7 +123,7 @@ the interactive shell's 'use PROJECT_ID' command to save a selection.
         choices=['api_key', 'api_url', 'graph_explorer_url', 'current_project',
                  'privilege_mode', 'cache_dir',
                  'editor', 'sample_group_by', 'dataset_group_by',
-                 'include_metadata', 'include_links',
+                 'include_metadata', 'include_links', 'pager',
                  'connect_timeout', 'read_timeout', 'default_limit',
                  'upload_chunk_size_mb', 'upload_max_workers'],
         help='Configuration key to retrieve'
@@ -140,7 +140,7 @@ the interactive shell's 'use PROJECT_ID' command to save a selection.
         choices=['api_key', 'api_url', 'graph_explorer_url', 'current_project',
                  'privilege_mode', 'cache_dir',
                  'editor', 'sample_group_by', 'dataset_group_by',
-                 'include_metadata', 'include_links',
+                 'include_metadata', 'include_links', 'pager',
                  'connect_timeout', 'read_timeout', 'default_limit',
                  'upload_chunk_size_mb', 'upload_max_workers'],
         help='Configuration key to set'
@@ -160,7 +160,7 @@ the interactive shell's 'use PROJECT_ID' command to save a selection.
         choices=['api_key', 'api_url', 'graph_explorer_url', 'current_project',
                  'privilege_mode', 'cache_dir',
                  'editor', 'sample_group_by', 'dataset_group_by',
-                 'include_metadata', 'include_links',
+                 'include_metadata', 'include_links', 'pager',
                  'connect_timeout', 'read_timeout', 'default_limit',
                  'upload_chunk_size_mb', 'upload_max_workers'],
         help='Configuration key to remove from the config file'
@@ -306,6 +306,7 @@ def cmd_show(args):
     _p("editor",               config.editor)
     _p("sample_group_by",      config.sample_group_by)
     _p("dataset_group_by",     config.dataset_group_by)
+    _p("pager",                config.pager)
 
     # [network] — timeouts and pagination
     term.subheader("[network]  timeouts / pagination")

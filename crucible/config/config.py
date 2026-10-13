@@ -44,6 +44,7 @@ class Config:
         'dataset_group_by':   {'env': 'CRUCIBLE_DATASET_GROUP_BY',   'ini': 'dataset_group_by',   'section': 'display'},
         'include_metadata':   {'env': 'CRUCIBLE_INCLUDE_METADATA',   'ini': 'include_metadata',   'section': 'display'},
         'include_links':      {'env': 'CRUCIBLE_INCLUDE_LINKS',      'ini': 'include_links',      'section': 'display'},
+        'pager':              {'env': 'CRUCIBLE_PAGER_MODE',         'ini': 'pager',              'section': 'display'},
         # [network] – timeouts and pagination
         'connect_timeout':    {'env': 'CRUCIBLE_CONNECT_TIMEOUT',    'ini': 'connect_timeout',    'section': 'network'},
         'read_timeout':       {'env': 'CRUCIBLE_READ_TIMEOUT',       'ini': 'read_timeout',       'section': 'network'},
@@ -236,6 +237,12 @@ class Config:
     def dataset_group_by(self):
         """Default group-by field for 'crucible dataset list' (e.g. 'measurement', 'session')."""
         return self._data.get('dataset_group_by')
+
+    @property
+    def pager(self) -> str:
+        """Whether long CLI listings open in a pager: "auto" (default) or "never"."""
+        value = (self._data.get('pager') or 'auto').lower()
+        return 'never' if value in ('never', 'off', 'false', '0', 'no') else 'auto'
 
     def _parse_bool(self, key: str) -> bool:
         return self._data.get(key, 'false').lower() in ('true', '1', 'yes')

@@ -434,7 +434,9 @@ class CrucibleShell:
             if hasattr(args, 'func'):
                 args._shell_state = self.state
                 try:
-                    args.func(args)
+                    from ..pager import paged
+                    with paged(args):
+                        args.func(args)
                 finally:
                     if inline_elevated:
                         self.state['elevated'] = session_elevated

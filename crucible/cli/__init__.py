@@ -197,6 +197,13 @@ Examples:
     )
 
     parser.add_argument(
+        '--no-pager',
+        action='store_true',
+        default=False,
+        help='Print long listings directly instead of opening them in a pager'
+    )
+
+    parser.add_argument(
         '--no-color',
         action='store_true',
         default=False,
@@ -301,7 +308,9 @@ Examples:
     # Each subcommand module should have added a 'func' attribute via set_defaults()
     try:
         if hasattr(args, 'func'):
-            args.func(args)
+            from .pager import paged
+            with paged(args):
+                args.func(args)
         else:
             parser.print_help()
             sys.exit(1)

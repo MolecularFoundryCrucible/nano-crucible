@@ -285,6 +285,7 @@ def add_limit_arguments(parser, noun: str = 'results', short: bool = False) -> N
         '--all', dest='all_results', action='store_true', default=False,
         help=f'Show every matching {noun}'
     )
+    parser.set_defaults(pageable=True)
 
 
 def resolve_limit(args):
