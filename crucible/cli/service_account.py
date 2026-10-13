@@ -316,8 +316,11 @@ def _execute_list(args):
     from crucible.config import get_client
     try:
         client = get_client()
-        accounts = client.service_accounts.list_admin(q=getattr(args, 'q', None),
-                                                      limit=args.limit)
+        q = getattr(args, 'q', None)
+        if client.can_elevate:
+            accounts = client.service_accounts.list_admin(q=q, limit=args.limit)
+        else:
+            accounts = client.users.list(limit=args.limit, q=q, is_service_account=True)
         if getattr(args, 'json', False):
             print(json.dumps(accounts, indent=2, default=str))
             return

@@ -59,6 +59,7 @@ def test_empty_listings_name_their_subject(execute, args, expected, monkeypatch,
         access_groups=SimpleNamespace(list_join_requests=lambda **kwargs: []),
         account=SimpleNamespace(join_requests=lambda **kwargs: []),
         service_accounts=SimpleNamespace(list_admin=lambda **kwargs: []),
+        users=SimpleNamespace(list=lambda **kwargs: []),
         deletions=SimpleNamespace(list_deleted=lambda **kwargs: []),
         can_elevate=False,
         _admin_mode=lambda: None,
@@ -1081,7 +1082,8 @@ def test_service_account_list_shows_platform_role(monkeypatch, capsys):
         {'unique_id': MFID, 'username': 'idle-bot', 'platform_role': 'none'},
     ]
     list_admin = MagicMock(return_value=accounts)
-    client = SimpleNamespace(service_accounts=SimpleNamespace(list_admin=list_admin))
+    client = SimpleNamespace(service_accounts=SimpleNamespace(list_admin=list_admin),
+                             can_elevate=True)
     monkeypatch.setattr('crucible.config.get_client', lambda: client)
 
     service_account_cli._execute_list(SimpleNamespace(limit=10, q='bot', json=False))
@@ -1090,6 +1092,20 @@ def test_service_account_list_shows_platform_role(monkeypatch, capsys):
     assert 'PLATFORM ROLE' in output
     assert 'contributor' in output and 'none' in output
     list_admin.assert_called_once_with(q='bot', limit=10)
+
+
+def test_service_account_list_falls_back_for_non_admins(monkeypatch, capsys):
+    list_admin = MagicMock()
+    users_list = MagicMock(return_value=[{'unique_id': MFID, 'username': 'ingest-bot'}])
+    client = SimpleNamespace(service_accounts=SimpleNamespace(list_admin=list_admin),
+                             users=SimpleNamespace(list=users_list), can_elevate=False)
+    monkeypatch.setattr('crucible.config.get_client', lambda: client)
+
+    service_account_cli._execute_list(SimpleNamespace(limit=10, q='bot', json=False))
+
+    assert 'ingest-bot' in capsys.readouterr().out
+    list_admin.assert_not_called()
+    users_list.assert_called_once_with(limit=10, q='bot', is_service_account=True)
 
 
 def test_sa_get_uses_the_admin_record_and_names_groups(monkeypatch, capsys):

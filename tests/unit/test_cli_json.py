@@ -173,7 +173,7 @@ def test_service_account_get_and_list_json_use_object_and_array_shapes(
     operations = SimpleNamespace(list_admin=MagicMock(return_value=[account]))
     monkeypatch.setattr(
         'crucible.config.get_client',
-        lambda: SimpleNamespace(service_accounts=operations),
+        lambda: SimpleNamespace(service_accounts=operations, can_elevate=True),
     )
     monkeypatch.setattr(
         service_account_cli,
