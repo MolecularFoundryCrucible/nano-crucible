@@ -1,6 +1,6 @@
 """Unit coverage for the ordering, visibility, and time-range list filters."""
 
-from datetime import datetime
+from datetime import date, datetime, timedelta, timezone
 from unittest.mock import MagicMock
 
 import pytest
@@ -72,21 +72,56 @@ def test_unknown_visibility_is_rejected(cls):
 
 
 @pytest.mark.parametrize('cls', [DatasetOperations, SampleOperations])
-def test_datetime_bounds_are_normalized_to_iso(cls):
+def test_naive_datetime_bound_is_taken_as_utc(cls):
     resource, request = make(cls)
 
     resource.list(creation_time_gte=datetime(2026, 1, 2, 3, 4, 5))
 
-    assert sent_params(request)['creation_time_gte'] == '2026-01-02T03:04:05'
+    assert sent_params(request)['creation_time_gte'] == '2026-01-02T03:04:05+00:00'
 
 
 @pytest.mark.parametrize('cls', [DatasetOperations, SampleOperations])
-def test_string_bounds_pass_through(cls):
+def test_aware_bounds_keep_their_offset(cls):
+    resource, request = make(cls)
+    pacific = timezone(timedelta(hours=-8))
+
+    resource.list(modification_time_lte='2026-01-02T00:00:00Z',
+                  creation_time_gte=datetime(2026, 1, 2, tzinfo=pacific))
+
+    params = sent_params(request)
+    assert params['modification_time_lte'] == '2026-01-02T00:00:00+00:00'
+    assert params['creation_time_gte'] == '2026-01-02T00:00:00-08:00'
+
+
+@pytest.mark.parametrize('cls', [DatasetOperations, SampleOperations])
+@pytest.mark.parametrize('value', ['2026-01-02', date(2026, 1, 2)])
+def test_bare_date_bounds_cover_the_whole_day(cls, value):
     resource, request = make(cls)
 
-    resource.list(modification_time_lte='2026-01-02T00:00:00Z')
+    resource.list(creation_time_gte=value, creation_time_lte=value)
 
-    assert sent_params(request)['modification_time_lte'] == '2026-01-02T00:00:00Z'
+    params = sent_params(request)
+    assert params['creation_time_gte'] == '2026-01-02T00:00:00+00:00'
+    assert params['creation_time_lte'] == '2026-01-02T23:59:59.999999+00:00'
+
+
+@pytest.mark.parametrize('cls', [DatasetOperations, SampleOperations])
+def test_unparseable_string_bound_is_left_to_the_server(cls):
+    resource, request = make(cls)
+
+    resource.list(creation_time_gte='last tuesday')
+
+    assert sent_params(request)['creation_time_gte'] == 'last tuesday'
+
+
+@pytest.mark.parametrize('cls', [DatasetOperations, SampleOperations])
+def test_count_normalizes_time_bounds(cls):
+    resource, request = make(cls)
+    request.return_value = {'items': [], 'total': 0}
+
+    resource.count(modification_time_lte='2026-01-02')
+
+    assert sent_params(request)['modification_time_lte'] == '2026-01-02T23:59:59.999999+00:00'
 
 
 @pytest.mark.parametrize('cls', [DatasetOperations, SampleOperations])

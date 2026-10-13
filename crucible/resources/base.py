@@ -112,23 +112,53 @@ class BaseResource:
             params['direction'] = direction
         return params
 
+    _TIME_BOUNDS = ('creation_time_gte', 'creation_time_lte',
+                    'modification_time_gte', 'modification_time_lte')
+
     @staticmethod
     def _time_range_params(**bounds) -> dict:
-        """Normalize datetime or ISO-string time bounds into query parameters."""
-        from datetime import date, datetime
+        """Normalize time bounds into timezone-aware ISO 8601 query parameters.
+
+        The API requires an explicit offset. A bare date covers the whole day,
+        so it starts at midnight for a ``_gte`` bound and ends at the last
+        microsecond for a ``_lte`` bound. A datetime without a timezone is
+        taken as UTC.
+        """
+        from datetime import date, datetime, time, timezone
 
         params = {}
         for name, value in bounds.items():
             if value is None:
                 continue
-            if isinstance(value, (datetime, date)):
+            if isinstance(value, str) and value:
+                text = value.strip()
+                try:
+                    if len(text) == 10:
+                        value = date.fromisoformat(text)
+                    else:
+                        if text[-1] in 'Zz':
+                            text = text[:-1] + '+00:00'
+                        value = datetime.fromisoformat(text)
+                except ValueError:
+                    params[name] = value
+                    continue
+            if isinstance(value, datetime):
+                if value.tzinfo is None:
+                    value = value.replace(tzinfo=timezone.utc)
                 params[name] = value.isoformat()
-            elif isinstance(value, str) and value:
-                params[name] = value
+            elif isinstance(value, date):
+                bound = time.max if name.endswith('_lte') else time.min
+                params[name] = datetime.combine(
+                    value, bound, tzinfo=timezone.utc).isoformat()
             else:
                 raise ValueError(
                     f"{name} must be a datetime, date, or non-empty ISO 8601 string.")
         return params
+
+    def _normalize_time_filters(self, params: dict) -> None:
+        """Apply _time_range_params to any time bounds already in params."""
+        params.update(self._time_range_params(
+            **{k: params.pop(k) for k in self._TIME_BOUNDS if k in params}))
 
     @staticmethod
     def _choice_params(**choices) -> dict:
@@ -179,6 +209,7 @@ class BaseResource:
             raise ValueError(f"field must be one of: {', '.join(fields)}.")
 
         params = {k: v for k, v in (filters or {}).items() if v is not None}
+        self._normalize_time_filters(params)
         params['field'] = field
         params['limit'] = limit
         # Unlike the list endpoints, facets carry their own sort default and

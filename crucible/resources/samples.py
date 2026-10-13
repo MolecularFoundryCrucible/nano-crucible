@@ -251,6 +251,7 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
         params = {k: v for k, v in kwargs.items() if v is not None}
         params.update(self._project_scope_params(
             project_id, project_mfid, project_scope))
+        self._normalize_time_filters(params)
         self._validate_filter_params(params, SAMPLE_LIST_PARAMS, '/samples')
         result = self._request('get', '/samples', params={**params, 'limit': 1})
         return result['total']

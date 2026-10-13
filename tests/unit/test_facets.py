@@ -131,3 +131,12 @@ def test_typed_reference_on_a_bucket_is_preserved():
 
     assert result['items'][0]['instrument']['instrument_name'] == 'titanx'
     assert result['next_cursor'] == 'more'
+
+
+def test_facets_normalize_time_bounds():
+    resource, request = make(DatasetOperations)
+
+    resource.facets('measurement', creation_time_gte='2026-01-02')
+
+    params = request.call_args.kwargs['params']
+    assert params['creation_time_gte'] == '2026-01-02T00:00:00+00:00'
