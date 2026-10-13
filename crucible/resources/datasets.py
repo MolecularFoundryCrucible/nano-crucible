@@ -880,14 +880,22 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
     #%% Download Methods
 
     @_deprecated_parameter('dsid', 'dataset_mfid')
-    def get_download_links(self, dataset_mfid: str) -> Dict:
+    def get_download_links(self, dataset_mfid: str, disposition: Optional[str] = None) -> Dict:
         """Get signed download URLs for all ingested files in a dataset.
 
+        Args:
+            dataset_mfid: Dataset MFID
+            disposition: "attachment" (the server default) to download, or
+                "inline" to let a browser display the files.
+
         Returns:
-            Dict: Mapping of file MFID → signed URL. Empty dict if no ingested files.
+            Dict: Mapping of file MFID → signed URL, or None for a file whose
+                stored location the server will not serve. Empty dict if no
+                ingested files.
         """
+        params = {'disposition': disposition} if disposition else None
         try:
-            return self._request('get', f"/datasets/{dataset_mfid}/download_links")
+            return self._request('get', f"/datasets/{dataset_mfid}/download_links", params=params)
         except requests.exceptions.HTTPError as e:
             if e.response is not None:
                 if e.response.status_code == 404:

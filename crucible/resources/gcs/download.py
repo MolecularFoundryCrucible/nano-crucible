@@ -17,7 +17,7 @@ import os
 import tempfile
 from typing import Dict, List, Optional
 
-from ...utils.io import storage_display_name
+from ...utils.io import safe_output_path, storage_display_name
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +65,9 @@ def download_dataset_files(client, dsid: str, output_dir: str,
             if backend != 'gcs':
                 logger.info(f"Skipping '{name}': stored on '{backend}', not GCS - "
                            f"see storage_path/access_note ({f.get('storage_path') or 'not set'})")
+            elif f.get('storage_path'):
+                logger.warning(f"Skipping '{name}': the server gave no download link, "
+                               "so its stored location is probably not valid.")
 
     if include:
         candidates = [(f, n, u) for f, n, u in candidates
@@ -78,7 +81,11 @@ def download_dataset_files(client, dsid: str, output_dir: str,
 
     downloads = []
     for _, name, signed_url in candidates:
-        download_path = os.path.join(output_dir, name)
+        try:
+            download_path = safe_output_path(output_dir, name)
+        except ValueError as e:
+            logger.warning(f"Skipping '{name}': {e}")
+            continue
 
         if not overwrite_existing and os.path.exists(download_path):
             downloads.append(download_path)

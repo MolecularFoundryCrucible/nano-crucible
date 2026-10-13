@@ -16,8 +16,7 @@ logger = logging.getLogger(__name__)
 
 from . import term
 from .helpers import add_limit_arguments, count_label, print_more_hint, resolve_limit, sort_like, page_kwargs
-from ..constants import GCS_BUCKET_PREFIX
-from ..utils.io import storage_display_name
+from ..utils.io import gcs_object_parts, storage_display_name
 
 
 def _build_file_display(af_list, link_map, dsid):
@@ -27,13 +26,11 @@ def _build_file_display(af_list, link_map, dsid):
     ingested, backend ('gcs' unless the file is cataloged elsewhere).
     link_map is {mfid: signed_url} from get_download_links.
     """
-    prefix_sp = f'{GCS_BUCKET_PREFIX}{dsid}/'
     result = []
     for f in af_list:
         mfid         = f.get('mfid')
-        storage_path = f.get('storage_path') or ''
         backend      = f.get('storage_backend') or 'gcs'
-        if storage_path.startswith(prefix_sp):
+        if gcs_object_parts(f) is not None:
             name     = storage_display_name(f, dsid)
             ingested = True
         else:

@@ -46,6 +46,7 @@
 - Setting `pager` to `auto` opens listings taller than the terminal in a pager (`$CRUCIBLE_PAGER`, `$PAGER`, or `less -FRX`); it is off by default, and `--no-pager` skips it for one command.
 - List methods return a `ListResult`, a `list` that also carries `has_more`, the server's `total`, and `next_cursor` or `next_offset`; every list method accepts `cursor=` to resume from a previous result.
 - The interactive shell's `more` shows the next page of the last listing.
+- `files.get_download_link()` and `datasets.get_download_links()` accept `disposition="inline"` for browser display.
 - A mistyped command, subcommand, or flag ends with a "Did you mean ...?" suggestion, and API errors add a next step for rejected keys, missing permissions, unknown identifiers, options an older server does not know, timeouts, and unreachable servers.
 - Shell completion matches project IDs and facet values fuzzily (`xt` offers `xrd-titan`), ranked by how closely they match; commands, flags, and MFIDs still complete by prefix.
 - The interactive shell hides service-account commands from completion for callers who cannot manage them, and `refresh` now re-reads permissions.
@@ -61,6 +62,9 @@
 - Project ownership transfer, access commands, and scientific metadata updates accept a project ID; they previously failed with 404 unless given the project MFID.
 - Renaming a project with `project update` or `project edit` updates the saved current project when it named the old ID.
 - Listing calls that page by offset no longer stop at the first 1000 records when the server also reports an empty `next_cursor`.
+- Files uploaded through the multipart upload service show and download under their recorded filename instead of a storage path, and count as ingested regardless of bucket.
+- Downloads refuse file names that would write outside the target folder, and `dataset download` warns about files the server will not provide a link for instead of skipping them silently.
+- Errors for files with an invalid stored location, and for edits to the storage path, size, or checksum of GCS files, explain what happened.
 - The API reference now documents the ownership, access, and project-reassignment methods shared by datasets, samples, projects, and instruments.
 - The interactive shell no longer records `config set api_key` or `API_KEY=` lines in its history file, and keeps that file readable only by its owner.
 

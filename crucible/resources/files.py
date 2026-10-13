@@ -12,7 +12,7 @@ from typing import Optional, List, Dict
 
 from .base import BaseResource, ListResult
 from ..constants import DEFAULT_LIMIT
-from ..utils.io import storage_display_name
+from ..utils.io import safe_output_path, storage_display_name
 
 logger = logging.getLogger(__name__)
 
@@ -105,7 +105,7 @@ class FileOperations(BaseResource):
         name = storage_display_name(file_record) or file_id
 
         import os
-        output_path = os.path.join(output_dir, name)
+        output_path = safe_output_path(output_dir, name)
         os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
 
         response = self._client._session.get(url, stream=True)
@@ -198,11 +198,14 @@ class FileOperations(BaseResource):
         return self._parse(self._request('patch', f'/files/{file_id}', json=updates))
 
 
-    def get_download_link(self, file_id: str) -> str:
+    def get_download_link(self, file_id: str, disposition: Optional[str] = None) -> str:
         """Get a signed download URL for a single file.
 
         Args:
             file_id: File MFID
+            disposition: "attachment" (the server default) to download, or
+                "inline" to let a browser display the file. HTML, SVG, and XML
+                always download.
 
         Returns:
             str: Signed URL valid for 1 hour, no auth required.
@@ -210,5 +213,6 @@ class FileOperations(BaseResource):
         Raises:
             HTTPError 404: File has not been ingested yet.
         """
-        result = self._request('get', f'/files/{file_id}/download_link')
+        params = {'disposition': disposition} if disposition else None
+        result = self._request('get', f'/files/{file_id}/download_link', params=params)
         return result['url']

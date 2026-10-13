@@ -91,6 +91,14 @@ def _error_hint(error_type, status, details):
                 "administrators can retry with -E/--elevate.")
     if status == 404:
         return "Nothing was found for that identifier; check it, or try `crucible get ID`."
+    messages = ' '.join(item.get('message', '') for item in details)
+    if status == 409 and 'storage location is not valid' in messages:
+        return ("The server will not serve this file because its stored location is not "
+                "valid. Ask a Crucible administrator to check the file record.")
+    if status == 422 and ('assigned by the upload API' in messages
+                          or 'determined by the stored object' in messages):
+        return ("For GCS files, the storage path, size, and checksum are set by the upload "
+                "and cannot be edited; renaming and other fields still can.")
     if status == 422 and any(item.get('type') == 'extra_forbidden' for item in details):
         return (f"The server at {config.api_url} rejected an option it does not know; "
                 "it may run an older API version than this client.")
