@@ -95,23 +95,9 @@ class CrucibleClient:
         self._session.mount("https://", adapter)
         self._session.mount("http://", adapter)
 
-        # Session for calls that must not be retried on 429/502/503/504.
-        # The default HTTPAdapter retries nothing, which is correct here:
-        # a response lost or delayed after a non-idempotent server-side
-        # effect already happened (e.g. a physical print job published to
-        # MQTT) must not be retried, since that would repeat the effect.
-        #
-        # Connection: close disables keep-alive so no connection from this
-        # session is ever reused across calls. Without it, an infrequently
-        # used pooled connection can go idle long enough for the server (or
-        # an intermediary) to close it; the next call then reuses the dead
-        # connection and fails with a connection-reset error on send, before
-        # any request bytes reached the server. That failure is safe to
-        # retry (nothing was sent), but urllib3 cannot distinguish it from a
-        # connection that died mid-request after the server received and
-        # possibly acted on it -- both surface the same way. Rather than
-        # retry either case, avoid connection reuse here so the safe case
-        # cannot occur in the first place.
+        # Non-idempotent calls (e.g. printing) must never be retried. Keep-alive
+        # is off because a stale pooled connection would fail in a way that
+        # cannot be told apart from a request the server already acted on.
         self._no_retry_session = requests.Session()
         self._no_retry_session.headers.update({
             "Authorization": f"Bearer {api_key}",
@@ -139,16 +125,25 @@ class CrucibleClient:
         self.print = PrintOperations(self)
         self._authorization = None
         self._capabilities = None
+        self._profile_stale = False
 
     def _load_profile(self, refresh: bool = False) -> None:
         """Populate the cached authorization and capability blocks."""
         from .models import AccountAuthorization, AccountCapabilities
 
-        if self._authorization is not None and not refresh:
+        if self._authorization is not None and not self._profile_stale and not refresh:
             return
+        self._profile_stale = False
         try:
             profile = self.account.profile()
-        except Exception:
+        except Exception as exc:
+            response = getattr(exc, 'response', None)
+            status = getattr(response, 'status_code', None)
+            # Re-read next time after a transient failure instead of caching
+            # "no authority" for the client's lifetime.
+            self._profile_stale = (
+                isinstance(exc, (requests.ConnectionError, requests.Timeout))
+                or status == 429 or (status is not None and status >= 500))
             profile = {}
         self._authorization = AccountAuthorization.model_validate(
             profile.get('authorization') or {})

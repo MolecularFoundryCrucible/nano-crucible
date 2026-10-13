@@ -325,6 +325,7 @@ def test_inline_elevated_restores_the_exact_session_mode(session_mode):
 
     def boom(args):
         seen['mode'] = instance.client.privilege_mode
+        seen['refreshes'] = instance.client.refresh_profile.call_count
         raise RuntimeError('command failed')
 
     args = MagicMock(elevated=True, func=boom)
@@ -333,7 +334,9 @@ def test_inline_elevated_restores_the_exact_session_mode(session_mode):
     instance._dispatch('--elevated dataset list')
 
     assert seen['mode'] == 'elevated'
+    assert seen['refreshes'] == 1
     assert instance.client.privilege_mode == session_mode
+    assert instance.client.refresh_profile.call_count == 2
 
 
 def test_refresh_profile_re_reads_capabilities(make_client):
@@ -437,3 +440,27 @@ def test_reload_keeps_the_client_unless_its_settings_change(monkeypatch):
     data['api_key'] = 'other'
     config.reload()
     assert config._client is None
+
+
+def test_transient_profile_failure_is_retried(make_client):
+    import requests
+
+    client = make_client()
+    ok = {'authorization': {'can_elevate': True}, 'capabilities': {}}
+    with patch.object(client.account, 'profile',
+                      side_effect=[requests.ConnectionError(), ok]) as profile:
+        assert client.can_elevate is False
+        assert client.can_elevate is True
+        assert client.can_elevate is True
+    assert profile.call_count == 2
+
+
+def test_permanent_profile_failure_is_cached(make_client):
+    import requests
+
+    client = make_client()
+    forbidden = requests.HTTPError(response=MagicMock(status_code=403))
+    with patch.object(client.account, 'profile', side_effect=[forbidden]) as profile:
+        assert client.can_elevate is False
+        assert client.can_elevate is False
+    assert profile.call_count == 1

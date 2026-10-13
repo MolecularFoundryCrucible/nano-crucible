@@ -400,6 +400,7 @@ class CrucibleShell:
             session_elevated = self.state.get('elevated', False)
             if inline_elevated and self.client is not None:
                 self.client.privilege_mode = 'elevated'
+                self.client.refresh_profile()
             if hasattr(args, 'func'):
                 args._shell_state = self.state
                 try:
@@ -409,6 +410,7 @@ class CrucibleShell:
                         self.state['elevated'] = session_elevated
                         if self.client is not None:
                             self.client.privilege_mode = session_mode
+                            self.client.refresh_profile()
                 from ..helpers import fetch_project_context
                 project_id, project_source = fetch_project_context()
                 self.state['project'] = project_id
