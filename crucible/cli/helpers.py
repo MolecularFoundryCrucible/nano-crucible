@@ -288,7 +288,7 @@ def add_listing_filters(parser) -> None:
         choices=SORT_DIRECTIONS,
         default=None,
         metavar='DIR',
-        help=f"Sort direction ({', '.join(SORT_DIRECTIONS)}, default: desc). Requires --sort."
+        help=f"Sort direction ({', '.join(SORT_DIRECTIONS)}, default: desc for created and updated, asc for name). Requires --sort."
     )
 
 
@@ -298,14 +298,15 @@ def resolve_list_project(args):
     An explicit --project-id or --project-mfid wins, --all-projects disables
     the current project, and otherwise the current project applies if one is
     set. An instrument filter also skips the current project, because
-    instruments are shared across projects. Returning (None, None) means
+    instruments are shared across projects, and so does --missing project. Returning (None, None) means
     every accessible project.
     """
     project_id = getattr(args, 'project_id', None)
     project_mfid = getattr(args, 'project_mfid', None)
     if project_id or project_mfid or getattr(args, 'all_projects', False):
         return project_id, project_mfid
-    if ((getattr(args, 'instrument_mfid', None) or getattr(args, 'instrument_id', None))
+    if ((getattr(args, 'instrument_mfid', None) or getattr(args, 'instrument_id', None)
+            or 'project' in (getattr(args, 'missing', None) or []))
             and not getattr(args, 'project_scope', None)):
         return None, None
     project_id, _ = resolve_project_context(args)
@@ -374,9 +375,12 @@ def display_order(records: list, sort: str | None = None,
 
     The server returns the most relevant records first, newest by default,
     so --limit keeps the newest N. Reversing puts the newest row last, next
-    to the prompt. An explicit ascending sort is already in reading order.
+    to the prompt. An ascending sort, including the server's default for
+    name, is already in reading order.
     """
-    if sort is not None and direction == 'asc':
+    if direction is None and sort is not None:
+        direction = 'desc' if sort in ('created', 'updated') else 'asc'
+    if direction == 'asc':
         return list(records)
     return list(reversed(records))
 
@@ -792,8 +796,7 @@ def fetch_projects(client):
 def fetch_deletions(client):
     """Return pending deletion requests, or None if the user lacks permission."""
     try:
-        scope = 'reviewable' if client.can_elevate else None
-        return client.deletions.list(status='pending', scope=scope)
+        return client.deletions.list(status='pending', scope='reviewable')
     except Exception:
         return None
 
