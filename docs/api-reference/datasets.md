@@ -6,10 +6,12 @@ File operations are also available via `client.files` (by MFID) and ingestion vi
 
 ::: crucible.resources.datasets.DatasetOperations
     options:
+      inherited_members: true
       members:
         - get
         - list
         - count
+        - facets
         - search
         - create
         - update
@@ -43,4 +45,5 @@ File operations are also available via `client.files` (by MFID) and ingestion vi
         - set_private
         - transfer_ownership
         - reassign_project
+        - assign_instrument
         - graph

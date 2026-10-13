@@ -10,45 +10,22 @@ import sys
 import os
 import logging
 import subprocess
-from pathlib import Path
 
 from . import term
+from ..constants import PRIVILEGE_MODES
 
 logger = logging.getLogger(__name__)
 
-#%%
+
+def _mask_secret(value: str) -> str:
+    """Render a secret as eight asterisks and its last four characters."""
+    return f"{'*' * 8}\u2026{value[-4:]}"
 
 def get_default_editor():
-    """Get the best available editor for the current platform."""
-    import shutil
-    from crucible.config import config as _cfg
+    """Get the configured editor, or the best available platform default."""
+    from .editor import configured_editor, default_editor
+    return configured_editor() or default_editor()
 
-    # Priority: crucible config > $VISUAL > $EDITOR > platform defaults
-    editor = _cfg.editor or os.environ.get('VISUAL') or os.environ.get('EDITOR')
-    if editor:
-        return editor
-
-    if sys.platform == 'win32':
-        # Try common Windows editors in order of preference
-        candidates = ['code', 'notepad++', 'notepad']
-        for candidate in candidates:
-            if shutil.which(candidate):
-                return candidate
-        return 'notepad'  # notepad is always available on Windows
-
-    elif sys.platform == 'darwin':
-        candidates = ['code', 'nano', 'vim', 'vi']
-        for candidate in candidates:
-            if shutil.which(candidate):
-                return candidate
-        return 'nano'
-
-    else:  # Linux and other Unix-like
-        candidates = ['code', 'nano', 'vim', 'vi', 'gedit', 'kate']
-        for candidate in candidates:
-            if shutil.which(candidate):
-                return candidate
-        return 'vi'  # vi is POSIX-guaranteed
 
 def register_subcommand(subparsers):
     """Register the config subcommand."""
@@ -144,11 +121,11 @@ the interactive shell's 'use PROJECT_ID' command to save a selection.
     get_parser.add_argument(
         'key',
         choices=['api_key', 'api_url', 'graph_explorer_url', 'current_project',
-                 'cache_dir',
+                 'privilege_mode', 'cache_dir',
                  'editor', 'sample_group_by', 'dataset_group_by',
-                 'include_metadata', 'include_links',
+                 'include_metadata', 'include_links', 'pager',
                  'connect_timeout', 'read_timeout', 'default_limit',
-                 'upload_chunk_size_mb', 'upload_max_workers'],
+                 'upload_chunk_size_mb', 'upload_max_workers', 'upload_protocol'],
         help='Configuration key to retrieve'
     )
     get_parser.set_defaults(func=cmd_get)
@@ -161,11 +138,11 @@ the interactive shell's 'use PROJECT_ID' command to save a selection.
     set_parser.add_argument(
         'key',
         choices=['api_key', 'api_url', 'graph_explorer_url', 'current_project',
-                 'cache_dir',
+                 'privilege_mode', 'cache_dir',
                  'editor', 'sample_group_by', 'dataset_group_by',
-                 'include_metadata', 'include_links',
+                 'include_metadata', 'include_links', 'pager',
                  'connect_timeout', 'read_timeout', 'default_limit',
-                 'upload_chunk_size_mb', 'upload_max_workers'],
+                 'upload_chunk_size_mb', 'upload_max_workers', 'upload_protocol'],
         help='Configuration key to set'
     )
     set_parser.add_argument(
@@ -181,11 +158,11 @@ the interactive shell's 'use PROJECT_ID' command to save a selection.
     unset_parser.add_argument(
         'key',
         choices=['api_key', 'api_url', 'graph_explorer_url', 'current_project',
-                 'cache_dir',
+                 'privilege_mode', 'cache_dir',
                  'editor', 'sample_group_by', 'dataset_group_by',
-                 'include_metadata', 'include_links',
+                 'include_metadata', 'include_links', 'pager',
                  'connect_timeout', 'read_timeout', 'default_limit',
-                 'upload_chunk_size_mb', 'upload_max_workers'],
+                 'upload_chunk_size_mb', 'upload_max_workers', 'upload_protocol'],
         help='Configuration key to remove from the config file'
     )
     unset_parser.set_defaults(func=cmd_unset)
@@ -311,7 +288,7 @@ def cmd_show(args):
     term.subheader("[crucible]  API connection")
     try:
         api_key = config.api_key
-        masked = f"{'*' * 8}…{api_key[-4:]}" if not args.secrets else api_key
+        masked = api_key if args.secrets else _mask_secret(api_key)
         _p("api_key",           masked)
     except ValueError:
         _p("api_key",           None)
@@ -329,6 +306,7 @@ def cmd_show(args):
     _p("editor",               config.editor)
     _p("sample_group_by",      config.sample_group_by)
     _p("dataset_group_by",     config.dataset_group_by)
+    _p("pager",                config.pager)
 
     # [network] — timeouts and pagination
     term.subheader("[network]  timeouts / pagination")
@@ -340,6 +318,7 @@ def cmd_show(args):
     term.subheader("[upload]  multipart upload")
     _p("upload_chunk_size_mb", config.upload_chunk_size_mb)
     _p("upload_max_workers",   config.upload_max_workers)
+    _p("upload_protocol",      config.upload_protocol)
 
     from crucible.config.config import Config
     env_overrides = {
@@ -350,7 +329,8 @@ def cmd_show(args):
     if active:
         term.subheader("Environment overrides")
         for env_key, value in active.items():
-            display = f"{'*' * 8}…{value[-4:]}" if 'API_KEY' in env_key and not args.secrets else value
+            secret = 'API_KEY' in env_key and not args.secrets
+            display = _mask_secret(value) if secret else value
             print(f"  {env_key}  {display}")
 
 
@@ -361,31 +341,7 @@ def cmd_get(args):
     key = args.key
 
     try:
-        if key == 'api_key':
-            value = config.api_key
-        elif key == 'api_url':
-            value = config.api_url
-        elif key == 'cache_dir':
-            value = config.cache_dir
-        elif key == 'graph_explorer_url':
-            value = config.graph_explorer_url
-        elif key == 'current_project':
-            value = config.current_project
-        elif key == 'editor':
-            value = config.editor
-        elif key == 'sample_group_by':
-            value = config.sample_group_by
-        elif key == 'dataset_group_by':
-            value = config.dataset_group_by
-        elif key == 'connect_timeout':
-            value = config.connect_timeout
-        elif key == 'read_timeout':
-            value = config.read_timeout
-        elif key == 'default_limit':
-            value = config.default_limit
-        else:
-            logger.error(f"Unknown config key: {key}")
-            sys.exit(1)
+        value = getattr(config, key)
 
         if value is None:
             print(f"{key}: <not set>")
@@ -408,7 +364,7 @@ def set_config_value(key, value):
     """
     from configupdater import ConfigUpdater
     from crucible.config import config
-    from crucible.config.config import Config
+    from crucible.config.config import Config, restrict_config_permissions
 
     mapping = Config._CONFIG_MAP[key]
     section = mapping['section']
@@ -435,6 +391,7 @@ def set_config_value(key, value):
             updater.remove_option('crucible', ini_key)
 
     config_file.write_text(str(updater))
+    restrict_config_permissions(config_file)
     config.reload()
     return section, config_file
 
@@ -449,6 +406,9 @@ def cmd_set(args):
         )
     key   = args.key
     value = args.value
+    if key == 'privilege_mode' and value not in PRIVILEGE_MODES:
+        logger.error(f"privilege_mode must be one of: {', '.join(PRIVILEGE_MODES)}.")
+        sys.exit(1)
     section, config_file = set_config_value(key, value)
     term.success(f"Set {key} = {value}  (in [{section}])", args)
     term.success(f"Saved to {config_file}", args)
@@ -458,7 +418,7 @@ def unset_config_value(key):
     """Remove a config-file value and reload configuration."""
     from configupdater import ConfigUpdater
     from crucible.config import config
-    from crucible.config.config import Config
+    from crucible.config.config import Config, restrict_config_permissions
 
     mapping = Config._CONFIG_MAP[key]
     section = mapping['section']
@@ -481,6 +441,7 @@ def unset_config_value(key):
 
         if removed:
             config_file.write_text(str(updater))
+            restrict_config_permissions(config_file)
 
     config.reload()
     return removed, config_file, mapping['env']
@@ -510,7 +471,7 @@ def cmd_path(args):
         print(f"(exists, {config_file.stat().st_size} bytes)")
     else:
         print("(does not exist yet)")
-        print(f"\nCreate it with: crucible config init")
+        print("\nCreate it with: crucible config init")
 
 
 def cmd_edit(args):
@@ -531,16 +492,14 @@ def cmd_edit(args):
         print("Create it first with: crucible config init")
         sys.exit(1)
 
-    editor = get_default_editor()
-    parts = editor.split()
-    editor_bin = os.path.basename(parts[0])
-    extra = [f for f in term._GUI_EDITOR_WAIT_FLAGS.get(editor_bin, []) if f not in parts]
-    cmd = parts + extra
+    from .editor import editor_command, edit_file
 
+    editor = get_default_editor()
+    cmd = editor_command(editor)
     print(f"Opening {config_file} with {' '.join(cmd)}...")
 
     try:
-        subprocess.run(cmd + [str(config_file)], check=True)
+        edit_file(config_file, editor)
         print()
         term.success("Config file updated", args)
         config.reload()
@@ -550,5 +509,6 @@ def cmd_edit(args):
         sys.exit(1)
     except FileNotFoundError:
         logger.error(f"Editor not found: {editor}")
-        logger.error("Set your editor with: crucible config set editor vim")
+        logger.error("Set your editor with: crucible config set editor notepad "
+                     "(or code --wait, vim, ...)")
         sys.exit(1)

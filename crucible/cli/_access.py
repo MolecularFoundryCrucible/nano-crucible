@@ -74,8 +74,8 @@ def _register_set_private(subparsers, resource_ops_name, id_metavar):
 
 
 def _ops(args):
-    from crucible.client import CrucibleClient
-    client = CrucibleClient()
+    from crucible.config import get_client
+    client = get_client()
     return getattr(client, args._resource_ops_name)
 
 

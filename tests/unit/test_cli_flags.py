@@ -151,7 +151,7 @@ def test_visibility_commands_remap_deprecated_names(old_command, new_command, ca
 def test_visibility_commands_dispatch_to_canonical_methods(
         command, method_name, monkeypatch, capsys):
     client = MagicMock()
-    monkeypatch.setattr('crucible.client.CrucibleClient', lambda: client)
+    monkeypatch.setattr('crucible.config.get_client', lambda: client)
     args = make_parser(dataset).parse_args(['dataset', command, 'resource-id'])
 
     args.func(args)
@@ -167,7 +167,7 @@ def test_visibility_commands_dispatch_to_canonical_methods(
 def test_sample_update_visibility_options_delegate_with_warning(
         option, method_name, monkeypatch, capsys):
     client = MagicMock()
-    monkeypatch.setattr('crucible.client.CrucibleClient', lambda: client)
+    monkeypatch.setattr('crucible.config.get_client', lambda: client)
     args = make_parser(sample).parse_args(['sample', 'update', 'sample-id', option])
 
     args.func(args)
@@ -234,7 +234,7 @@ def test_dataset_create_without_files_uses_direct_client(monkeypatch):
     client = MagicMock()
     client.projects.get.return_value = {'project_id': 'project-one'}
     client.datasets.create.return_value = {'created_record': {}}
-    monkeypatch.setattr('crucible.client.CrucibleClient', lambda: client)
+    monkeypatch.setattr('crucible.config.get_client', lambda: client)
     args = make_parser(dataset).parse_args([
         'dataset', 'create', '--project-id', 'project-one', '--name', 'Planned experiment',
         '--metadata', '{"temperature": 300}', '--keywords', 'planned,draft',
@@ -256,7 +256,7 @@ def test_dataset_create_without_files_uses_direct_client(monkeypatch):
 def test_dataset_create_with_mfids_does_not_apply_project_default(monkeypatch):
     client = MagicMock()
     client.datasets.create.return_value = {'created_record': {}}
-    monkeypatch.setattr('crucible.client.CrucibleClient', lambda: client)
+    monkeypatch.setattr('crucible.config.get_client', lambda: client)
     args = make_parser(dataset).parse_args([
         'dataset', 'create', '--name', 'Planned experiment',
         '--project-mfid', '0tkn2knjast3h0008nyq9zps2c',
@@ -298,7 +298,7 @@ def test_sample_create_with_project_mfid_does_not_apply_project_default(monkeypa
         'unique_id': '0td7evvtg5wb90005k1j97ak94',
         'sample_name': 'Sample',
     }
-    monkeypatch.setattr('crucible.client.CrucibleClient', lambda: client)
+    monkeypatch.setattr('crucible.config.get_client', lambda: client)
     monkeypatch.setattr(sample, '_show_sample', MagicMock())
     args = make_parser(sample).parse_args([
         'sample', 'create', '--name', 'Sample',
@@ -316,7 +316,7 @@ def test_dataset_add_thumbnail_dispatches_local_image(monkeypatch, tmp_path, cap
     image_path = tmp_path / 'preview.png'
     image_path.write_bytes(b'png bytes')
     client = MagicMock()
-    monkeypatch.setattr('crucible.client.CrucibleClient', lambda: client)
+    monkeypatch.setattr('crucible.config.get_client', lambda: client)
     args = make_parser(dataset).parse_args([
         'dataset', 'add-thumbnail',
         '0tkn2knjast3h0008nyq9zps2c', str(image_path),

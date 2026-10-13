@@ -174,7 +174,7 @@ def test_cache_clear_cancellation_preserves_dataset(monkeypatch, tmp_path):
 
 def test_dataset_delete_yes_bypasses_prompt(monkeypatch):
     client = SimpleNamespace(datasets=SimpleNamespace(delete=MagicMock()))
-    monkeypatch.setattr('crucible.client.CrucibleClient', lambda: client)
+    monkeypatch.setattr('crucible.config.get_client', lambda: client)
     monkeypatch.setattr(
         helpers,
         'prompt_confirm',
@@ -192,7 +192,7 @@ def test_dataset_delete_yes_bypasses_prompt(monkeypatch):
 
 def test_file_delete_yes_bypasses_prompt(monkeypatch):
     client = SimpleNamespace(files=SimpleNamespace(delete=MagicMock()))
-    monkeypatch.setattr('crucible.client.CrucibleClient', lambda: client)
+    monkeypatch.setattr('crucible.config.get_client', lambda: client)
     monkeypatch.setattr(
         helpers,
         'prompt_confirm',
@@ -211,7 +211,7 @@ def test_file_delete_cancellation_skips_client(monkeypatch, capsys):
     confirm = MagicMock(return_value=False)
     monkeypatch.setattr(helpers, 'prompt_confirm', confirm)
     monkeypatch.setattr(
-        'crucible.client.CrucibleClient',
+        'crucible.config.get_client',
         lambda: pytest.fail('client should not be created'),
     )
 
@@ -255,7 +255,7 @@ def test_project_create_reprompts_for_invalid_required_values(monkeypatch):
         'project_id': 'valid-project',
         'organization': 'LBNL',
     })
-    monkeypatch.setattr('crucible.client.CrucibleClient', lambda: client)
+    monkeypatch.setattr('crucible.config.get_client', lambda: client)
     monkeypatch.setattr(project_cli, '_show_project', lambda project: None)
 
     project_cli._execute_create(SimpleNamespace(
@@ -285,7 +285,7 @@ def test_instrument_create_reprompts_for_invalid_slug(monkeypatch):
         'instrument_name': 'Instrument',
         'location': 'Building 67',
     })
-    monkeypatch.setattr('crucible.client.CrucibleClient', lambda: client)
+    monkeypatch.setattr('crucible.config.get_client', lambda: client)
     monkeypatch.setattr(instrument_cli, '_show_instrument', lambda instrument: None)
 
     instrument_cli._execute_create(SimpleNamespace(
@@ -320,7 +320,7 @@ def test_sample_create_reprompts_when_project_is_not_found(monkeypatch):
         'sample_name': 'Sample',
         'project_id': 'valid-project',
     })
-    monkeypatch.setattr('crucible.client.CrucibleClient', lambda: client)
+    monkeypatch.setattr('crucible.config.get_client', lambda: client)
     monkeypatch.setattr(sample_cli, '_show_sample', lambda sample, client: None)
 
     sample_cli._execute_create(SimpleNamespace(
@@ -355,7 +355,7 @@ def test_sample_create_uses_active_shell_project_without_prompt(monkeypatch):
         'sample_name': 'Sample',
         'project_id': 'shell-project',
     })
-    monkeypatch.setattr('crucible.client.CrucibleClient', lambda: client)
+    monkeypatch.setattr('crucible.config.get_client', lambda: client)
     monkeypatch.setattr(sample_cli, '_show_sample', lambda sample, client: None)
 
     sample_cli._execute_create(SimpleNamespace(

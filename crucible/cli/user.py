@@ -13,7 +13,8 @@ import json
 logger = logging.getLogger(__name__)
 
 from . import term
-from ..config import config as _config
+from .helpers import add_limit_arguments, count_label, print_more_hint, resolve_limit, page_kwargs
+from ..constants import PROJECT_ACCESS_ROLES, PROJECT_SORTS, SORT_DIRECTIONS
 
 
 def register_subcommand(subparsers):
@@ -43,6 +44,8 @@ def register_subcommand(subparsers):
     _register_update(user_subparsers)
     _register_edit(user_subparsers)
     _register_list(user_subparsers)
+    _register_set_role(user_subparsers)
+    _register_revoke_keys(user_subparsers)
     _register_list_datasets(user_subparsers)
     _register_check_access(user_subparsers)
     _register_list_access_groups(user_subparsers)
@@ -107,9 +110,9 @@ def _execute_search(args):
     if len(args.query) < 3:
         from .helpers import fail
         fail("searching users", ValueError("Search term must be at least 3 characters."), args)
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        users = CrucibleClient().users.search(args.query)
+        users = get_client().users.search(args.query)
 
         if getattr(args, 'json', False):
             print(json.dumps(users, indent=2, default=str))
@@ -177,28 +180,57 @@ Examples:
 
 def _register_list(subparsers):
     """Register the 'user list' subcommand."""
+    from crucible.constants import PLATFORM_ROLES
+
     parser = subparsers.add_parser(
         'list',
         help='List visible users',
-        description='List public-safe users visible to the authenticated caller',
+        description='List public-safe users visible to the authenticated caller. '
+                    'Platform administrators see the full directory with email '
+                    'and platform roles.',
         formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     crucible user list
     crucible user list --limit 50
+    crucible user list --q fabrice
+    crucible user list --sort username --direction desc
 """
     )
 
-    parser.add_argument(
-        '--limit',
-        type=int,
-        default=_config.default_limit,
-        metavar='N',
-        help=f'Maximum number of users to return (default: {_config.default_limit})'
-    )
+    add_limit_arguments(parser, 'users')
 
     parser.add_argument('-u', '--username', metavar='USERNAME', default=None,
                         help='Filter by exact username')
+
+    parser.add_argument('--q', metavar='QUERY', default=None,
+                        help='Substring search across names, usernames, and IDs')
+
+    parser.add_argument('--first-name', dest='first_name', metavar='NAME', default=None,
+                        help='Filter by first name (substring unless --exact)')
+    parser.add_argument('--last-name', dest='last_name', metavar='NAME', default=None,
+                        help='Filter by last name (substring unless --exact)')
+    parser.add_argument('--email', metavar='EMAIL', default=None,
+                        help='Filter by exact email')
+
+    parser.add_argument('--platform-role', dest='platform_role', metavar='ROLE',
+                        choices=PLATFORM_ROLES, default=None,
+                        help=f'Filter by platform role ({", ".join(PLATFORM_ROLES)}); admin only')
+
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument('--service-account', dest='service_account',
+                       action='store_const', const=True, default=None,
+                       help='Only service accounts')
+    group.add_argument('--human', dest='service_account',
+                       action='store_const', const=False,
+                       help='Only human users')
+
+    parser.add_argument('--sort', choices=('name', 'username', 'unique_id', 'email'),
+                        default=None, help='Sort order (default: last name, first name)')
+    parser.add_argument('--direction', choices=('asc', 'desc'), default=None,
+                        help='Sort direction (default: asc)')
+    parser.add_argument('--exact', action='store_true', default=False,
+                        help='Match --first-name and --last-name exactly instead of by substring')
 
     parser.add_argument('--json', action='store_true', default=False,
                         help='Output as JSON array')
@@ -222,11 +254,27 @@ def _show_user(user):
         _p("Email", email)
     if user.get('is_service_account'):
         _p("Type", "service account")
+    caps = user.get('user_capabilities') or {}
+    role = user.get('platform_role')
+    status = user.get('api_key_status')
+    can_view_private = caps.get('can_view_private') or (role and role != 'none') or bool(status)
+    can_manage_api_key = caps.get('can_manage_api_key') or bool(status)
+    if can_view_private or can_manage_api_key:
+        term.subheader("Authorization")
+        if can_view_private:
+            _p("Platform role", term.platform_role_label(role))
+        if status:
+            valid = status.get('valid')
+            _p("API key", term.green('valid') if valid else term.red('invalid'))
+            _p("Issued", term.fmt_date(status.get('created_at')))
+            _p("Expires", term.fmt_date(status.get('expires_at')))
+        elif can_manage_api_key:
+            _p("API key", term.dim('none issued'))
 
 
 def _execute_get(args):
     """Execute the 'user get' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     from .helpers import parse_user_ref
     import warnings
 
@@ -251,7 +299,7 @@ def _execute_get(args):
         sys.exit(1)
 
     try:
-        client = CrucibleClient()
+        client = get_client()
         user = client.users.get(**ref_kwargs)
 
         if user is None:
@@ -271,7 +319,7 @@ def _execute_get(args):
 
 def _execute_create(args):
     """Execute the 'user create' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     from .helpers import (
         prompt_optional,
         prompt_required,
@@ -329,7 +377,7 @@ def _execute_create(args):
             email = validate_email(email)
         if projects is not None:
             projects = validate_project_ids(projects)
-        client = CrucibleClient()
+        client = get_client()
 
         user = User(
             unique_id=orcid,
@@ -374,7 +422,7 @@ Examples:
 
 def _execute_update(args):
     """Execute the 'user update' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     from .helpers import resolve_user_id
 
     fields = {k: v for k, v in {
@@ -392,7 +440,7 @@ def _execute_update(args):
         sys.exit(1)
 
     try:
-        client = CrucibleClient()
+        client = get_client()
         user_id = resolve_user_id(client, args.user)
         result = client.users.update(user_id, **fields)
         term.success("User updated", args)
@@ -432,7 +480,7 @@ Examples:
 
 def _execute_edit(args):
     """Execute the 'user edit' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     from .helpers import parse_user_ref
     import warnings
 
@@ -455,7 +503,7 @@ def _execute_edit(args):
         sys.exit(1)
 
     try:
-        client = CrucibleClient()
+        client = get_client()
         user = client.users.get(**ref_kwargs)
         if user is None:
             logger.error("User not found")
@@ -516,10 +564,10 @@ Examples:
 
 def _execute_add_access_group(args):
     """Execute the 'user add-access-group' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     from .helpers import resolve_user_id
     try:
-        client = CrucibleClient()
+        client = get_client()
         user_id = resolve_user_id(client, args.user)
         client.users.add_to_access_group(user_id, args.group_name)
         term.success(f"Added {args.user} to access group '{args.group_name}'", args)
@@ -554,10 +602,10 @@ Examples:
 
 def _execute_remove_access_group(args):
     """Execute the 'user remove-access-group' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     from .helpers import resolve_user_id
     try:
-        client = CrucibleClient()
+        client = get_client()
         user_id = resolve_user_id(client, args.user)
         client.users.remove_from_access_group(user_id, args.group_name)
         term.success(f"Removed {args.user} from access group '{args.group_name}'", args)
@@ -571,23 +619,38 @@ def _execute_remove_access_group(args):
 
 def _execute_list(args):
     """Execute the 'user list' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
-        username_filter = getattr(args, 'username', None)
-        kwargs = {'username': username_filter} if username_filter else {}
-        users = client.users.list(limit=args.limit, **kwargs)
+        client = get_client()
+        kwargs = {
+            'q': getattr(args, 'q', None),
+            'first_name': getattr(args, 'first_name', None),
+            'last_name': getattr(args, 'last_name', None),
+            'username': getattr(args, 'username', None),
+            'email': getattr(args, 'email', None),
+            'platform_role': getattr(args, 'platform_role', None),
+            'is_service_account': getattr(args, 'service_account', None),
+            'sort': getattr(args, 'sort', None),
+            'direction': getattr(args, 'direction', None),
+        }
+        if getattr(args, 'exact', False):
+            kwargs['permissive'] = False
+        kwargs = {k: v for k, v in kwargs.items() if v is not None}
+        users = client.users.list(limit=resolve_limit(args), **page_kwargs(args), **kwargs)
 
         if getattr(args, 'json', False):
+            print_more_hint(users, resolve_limit(args), args)
             print(json.dumps(users, indent=2, default=str))
             return
 
-        term.header(f"Users ({len(users)})")
+        term.header(f"Users ({count_label(users)})")
 
         if not users:
             print(f"  {term.dim('No users found.')}")
             return
 
+        show_emails = any(u.get('email') for u in users)
+        show_roles = any(u.get('platform_role') for u in users)
         rows = []
         for user in users:
             name = term.user_link(
@@ -596,17 +659,119 @@ def _execute_list(args):
             )
             user_id  = term.cyan(user.get('unique_id')) if user.get('unique_id') else '-'
             username = user.get('username') or '-'
-            rows.append((username, name, user_id))
-        term.table(
-            rows,
-            ['Username', 'Name', 'ID'],
-            max_widths=[24, 25, 26],
-            min_widths=[24, 4, 26],
-        )
+            row = [username, name, user_id]
+            if show_emails:
+                row.append(user.get('email') or '-')
+            if show_roles:
+                row.append(term.platform_role_label(user.get('platform_role')))
+            rows.append(tuple(row))
+        headers = ['Username', 'Name', 'ID']
+        max_widths = [24, 25, 26]
+        min_widths = [24, 4, 26]
+        if show_emails:
+            headers.append('Email')
+            max_widths.append(28)
+            min_widths.append(6)
+        if show_roles:
+            headers.append('Platform role')
+            max_widths.append(13)
+            min_widths.append(13)
+        term.table(rows, headers, max_widths=max_widths, min_widths=min_widths)
+        print_more_hint(users, resolve_limit(args), args)
 
     except Exception as e:
         from .helpers import fail
         fail("listing users", e, args)
+
+
+def _register_set_role(subparsers):
+    from crucible.constants import PLATFORM_ROLES
+
+    parser = subparsers.add_parser(
+        'set-role',
+        help="Set a user's platform role (human platform admins only)",
+        description='Change the platform-wide role granted to a human user. '
+                    'Service accounts are managed through service-account set-role.',
+        formatter_class=term.ColorHelpFormatter,
+        epilog="""
+Examples:
+    crucible user set-role 0000-0002-1825-0097 contributor
+    crucible user set-role fabrice admin
+    crucible user set-role jane none
+"""
+    )
+    parser.add_argument('user', metavar='USER', help='ORCID, MFID, username, or email of the user')
+    parser.add_argument('platform_role', metavar='ROLE', choices=PLATFORM_ROLES,
+                        help=f"Platform role: {', '.join(PLATFORM_ROLES)}")
+    parser.add_argument('--json', action='store_true', default=False,
+                        help='Output as JSON object')
+    parser.set_defaults(func=_execute_set_role)
+
+
+def _execute_set_role(args):
+    from crucible.config import get_client
+    from .helpers import require_elevation, resolve_user_id
+    try:
+        client = get_client()
+        require_elevation(client, 'change user platform roles')
+        user_id = resolve_user_id(client, args.user)
+        user = client.users.set_platform_role(user_id, args.platform_role)
+        if getattr(args, 'json', False):
+            print(json.dumps(user, indent=2, default=str))
+            return
+        term.success(
+            f"Set {user.get('username') or args.user} role to {args.platform_role}",
+            args)
+        _show_user(user)
+    except ValueError as e:
+        logger.error(str(e))
+        sys.exit(1)
+    except Exception as e:
+        from .helpers import fail
+        fail("", e, args)
+
+
+def _register_revoke_keys(subparsers):
+    parser = subparsers.add_parser(
+        'revoke-keys',
+        help='Revoke every API key held by a user (admin only)',
+        description='Revoke all API keys held by a human user or service account. '
+                    'Their keys stop authenticating within the API cache TTL.',
+        formatter_class=term.ColorHelpFormatter,
+        epilog="""
+Examples:
+    crucible user revoke-keys 0000-0002-1825-0097
+    crucible user revoke-keys fabrice --yes
+"""
+    )
+    parser.add_argument('user', metavar='USER', help='ORCID, MFID, username, or email of the user')
+    parser.add_argument('--yes', action='store_true', default=False,
+                        help='Skip the confirmation prompt')
+    parser.set_defaults(func=_execute_revoke_keys)
+
+
+def _execute_revoke_keys(args):
+    from crucible.config import get_client
+    from .helpers import prompt_confirm, require_elevation, resolve_user_id
+    try:
+        client = get_client()
+        require_elevation(client, 'revoke user API keys')
+        user_id = resolve_user_id(client, args.user)
+        confirmed = args.yes or prompt_confirm(
+            f"Revoke every API key held by {args.user}?",
+            option='--yes',
+        )
+        if not confirmed:
+            logger.info("Aborted.")
+            return
+        client.users.revoke_api_keys(user_id)
+        term.success(f"Revoked every API key held by {args.user}", args)
+    except ValueError as e:
+        logger.error(str(e))
+        sys.exit(1)
+    except Exception as e:
+        from .helpers import fail
+        fail("", e, args)
 
 
 def _register_list_datasets(subparsers):
@@ -626,10 +791,7 @@ Examples:
 """
     )
     parser.add_argument('user', metavar='USER', help='ORCID, MFID, username, or email of the user')
-    parser.add_argument(
-        '--limit', type=int, default=_config.default_limit, metavar='N',
-        help=f'Maximum number of datasets to return (default: {_config.default_limit})',
-    )
+    add_limit_arguments(parser, 'datasets')
     parser.set_defaults(func=_execute_list_datasets)
 
 
@@ -653,7 +815,6 @@ Examples:
 
 def _register_list_access_groups(subparsers):
     """Register the 'user list-access-groups' subcommand."""
-    import argparse
     parser = subparsers.add_parser(
         'list-access-groups',
         help='List access groups for a user',
@@ -671,7 +832,6 @@ Examples:
 
 def _register_list_projects(subparsers):
     """Register the 'user list-projects' subcommand."""
-    import argparse
     parser = subparsers.add_parser(
         'list-projects',
         help='List projects for a user',
@@ -680,30 +840,39 @@ def _register_list_projects(subparsers):
         epilog="""
 Examples:
     crucible user list-projects 0000-0002-1825-0097
-    crucible user list-projects fabrice
+    crucible user list-projects fabrice --role owner --role admin
+    crucible user list-projects fabrice --sort updated
 """
     )
     parser.add_argument('user', metavar='USER', help='ORCID, MFID, username, or email of the user')
+    parser.add_argument('--role', action='append', choices=PROJECT_ACCESS_ROLES, default=None,
+                        help="Only projects where the user holds this role (repeatable)")
+    parser.add_argument('--sort', choices=PROJECT_SORTS, default=None,
+                        help='Sort by project_id, title, created, or updated (default: project ID)')
+    parser.add_argument('--direction', choices=SORT_DIRECTIONS, default=None,
+                        help='Sort direction (dates default desc, everything else asc); requires --sort')
     parser.set_defaults(func=_execute_list_projects)
 
 
 def _execute_list_datasets(args):
     """Execute the 'user list-datasets' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
+        limit = resolve_limit(args)
         datasets = client.datasets.list(
             accessible_to_user=args.user,
-            limit=args.limit,
+            limit=limit, **page_kwargs(args),
         )
         dataset_ids = [dataset['unique_id'] for dataset in datasets]
 
-        term.header(f"Datasets · {args.user} ({len(dataset_ids)})")
+        term.header(f"Datasets · {args.user} ({count_label(datasets)})")
         if not dataset_ids:
             print(f"  {term.dim('No datasets found.')}")
             return
         for dsid in dataset_ids:
             print(f"  {term.cyan(dsid)}")
+        print_more_hint(datasets, limit, args)
 
     except ValueError as e:
         logger.error(str(e))
@@ -715,9 +884,9 @@ def _execute_list_datasets(args):
 
 def _execute_check_access(args):
     """Execute the 'user check-access' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
         access = client.users.check_dataset_access(args.user, args.dataset_id)
 
         _p = term.field_printer(14)
@@ -736,10 +905,10 @@ def _execute_check_access(args):
 
 def _execute_list_access_groups(args):
     """Execute the 'user list-access-groups' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     from .helpers import resolve_user_id
     try:
-        client = CrucibleClient()
+        client = get_client()
         user_id = resolve_user_id(client, args.user)
         groups = client.users.list_access_groups(user_id)
 
@@ -760,12 +929,17 @@ def _execute_list_access_groups(args):
 
 def _execute_list_projects(args):
     """Execute the 'user list-projects' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     from .helpers import resolve_user_id
     try:
-        client = CrucibleClient()
+        client = get_client()
         user_id = resolve_user_id(client, args.user)
-        projects = client.users.get_projects(user_id)
+        sort = getattr(args, 'sort', None)
+        projects = client.users.get_projects(
+            user_id, limit=None, role=getattr(args, 'role', None),
+            sort=sort, direction=getattr(args, 'direction', None))
+        if sort is None:
+            projects = sorted(projects, key=lambda p: (p.get('project_id') or '').lower())
 
         term.header(f"Projects · {args.user} ({len(projects)})")
         if not projects:
@@ -781,13 +955,14 @@ def _execute_list_projects(args):
                 project_id if title else term.project_link(project_id, url),
                 term.navigation_link(title, url) if title else '-',
                 project.get('organization') or '-',
+                term.role_label(project.get('role')),
             )
         rows = [_project_row(project) for project in projects]
         term.table(
             rows,
-            ['Project ID', 'Title', 'Organization'],
-            max_widths=[25, 30, 20],
-            min_widths=[25, 5, 12],
+            ['Project ID', 'Title', 'Organization', 'Role'],
+            max_widths=[25, 30, 20, 13],
+            min_widths=[25, 5, 12, 4],
         )
 
     except ValueError as e:

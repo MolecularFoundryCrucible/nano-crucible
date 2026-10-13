@@ -87,7 +87,7 @@ def _configure_status(monkeypatch, health, http_status=200):
             'last_name': 'User',
         },
     })
-    monkeypatch.setattr('crucible.client.CrucibleClient', lambda: client)
+    monkeypatch.setattr('crucible.config.get_client', lambda: client)
 
 
 def test_status_displays_full_nested_readiness_contract(monkeypatch, capsys):

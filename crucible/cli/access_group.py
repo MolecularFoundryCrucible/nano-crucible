@@ -11,6 +11,7 @@ lets admins/leads review the request. Accessible as both
 import sys
 import logging
 from . import term
+from .helpers import add_limit_arguments, count_label, print_more_hint, resolve_limit, page_kwargs
 
 logger = logging.getLogger(__name__)
 
@@ -91,9 +92,9 @@ Examples:
 
 
 def _execute_request(args):
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
         record = client.access_groups.request_join(args.group_name, reason=args.reason)
         term.success("Join request submitted", args)
         print()
@@ -124,26 +125,28 @@ Examples:
                         default='pending', help='Filter by status (default: pending)')
     parser.add_argument('--requester', dest='requester_id', metavar='ORCID', default=None,
                         help='Filter to one user\'s requests (admin use)')
-    parser.add_argument('--limit', type=int, default=100, metavar='N')
+    add_limit_arguments(parser, 'requests')
     parser.set_defaults(func=_execute_list)
 
 
 def _execute_list(args):
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
         status = None if args.status == 'all' else args.status
         records = client.access_groups.list_join_requests(
             group_name=args.group_name, status=status,
-            requester_id=args.requester_id, limit=args.limit,
+            requester_id=args.requester_id, limit=resolve_limit(args), **page_kwargs(args),
+            privilege_mode=(None if args.group_name else client._admin_mode()),
         )
-        term.header(f"Join Requests — {args.status} ({len(records)})")
+        term.header(f"Join Requests — {args.status} ({count_label(records)})")
         if not records:
             print(f"  {term.dim('No join requests found.')}")
             return
         term.table(_table_rows(records, client=client),
                   ['ID', 'Group', 'Status', 'Requester', 'Requested'],
                   max_widths=[6, 25, 10, 25, 12])
+        print_more_hint(records, resolve_limit(args), args)
     except Exception as e:
         from .helpers import fail
         fail("", e, args)
@@ -165,23 +168,24 @@ Examples:
     )
     parser.add_argument('--status', choices=['pending', 'approved', 'rejected', 'all'],
                         default='pending', help='Filter by status (default: pending)')
-    parser.add_argument('--limit', type=int, default=100, metavar='N')
+    add_limit_arguments(parser, 'requests')
     parser.set_defaults(func=_execute_mine)
 
 
 def _execute_mine(args):
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
         status = None if args.status == 'all' else args.status
-        records = client.account.join_requests(status=status, limit=args.limit)
-        term.header(f"My Join Requests — {args.status} ({len(records)})")
+        records = client.account.join_requests(status=status, limit=resolve_limit(args), **page_kwargs(args))
+        term.header(f"My Join Requests — {args.status} ({count_label(records)})")
         if not records:
             print(f"  {term.dim('No join requests found.')}")
             return
         term.table(_table_rows(records, client=client),
                   ['ID', 'Group', 'Status', 'Requester', 'Requested'],
                   max_widths=[6, 25, 10, 25, 12])
+        print_more_hint(records, resolve_limit(args), args)
     except Exception as e:
         from .helpers import fail
         fail("", e, args)
@@ -204,9 +208,9 @@ Examples:
 
 
 def _execute_get(args):
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
         record = client.access_groups.get(args.request_id)
         if record is None:
             logger.error(f"Join request not found: {args.request_id}")
@@ -238,9 +242,9 @@ Examples:
 
 
 def _execute_approve(args):
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
     except Exception as e:
         from .helpers import fail
         fail("connecting", e)
@@ -282,9 +286,9 @@ Examples:
 
 
 def _execute_reject(args):
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
     except Exception as e:
         from .helpers import fail
         fail("connecting", e)

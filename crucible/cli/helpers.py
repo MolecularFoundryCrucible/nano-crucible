@@ -74,10 +74,43 @@ def _error_details(error):
                 entry['field'] = '.'.join(location)
             if item.get('type'):
                 entry['type'] = str(item['type'])
+            if item.get('code'):
+                entry['code'] = str(item['code'])
             details.append(entry)
         else:
             details.append({'message': str(item)})
     return status, reason, details
+
+
+def _error_hint(error_type, status, details):
+    """A next step for common failures, or None."""
+    from ..config import config
+
+    if status == 401:
+        return "Your API key was not accepted. Set a new one with `crucible config init`."
+    if status == 403:
+        return ("Your account is not allowed to do this. `crucible whoami` shows your role; "
+                "administrators can retry with -E/--elevate.")
+    if status == 404:
+        return "Nothing was found for that identifier; check it, or try `crucible get ID`."
+    messages = ' '.join(item.get('message', '') for item in details)
+    if status == 409 and any(item.get('code') == 'storage_location_invalid' for item in details):
+        return ("The server will not serve this file because its stored location is not "
+                "valid. Ask a Crucible administrator to check the file record.")
+    if status == 422 and ('assigned by the upload API' in messages
+                          or 'determined by the stored object' in messages):
+        return ("For GCS files, the storage path, size, and checksum are set by the upload "
+                "and cannot be edited; renaming and other fields still can.")
+    if status == 422 and any(item.get('type') == 'extra_forbidden' for item in details):
+        return (f"The server at {config.api_url} rejected an option it does not know; "
+                "it may run an older API version than this client.")
+    if error_type == 'timeout':
+        return ("The server took too long to answer. Raise the limit with "
+                "`crucible config set read_timeout 60`.")
+    if error_type == 'connection_error':
+        return (f"Could not reach {config.api_url}. Check the network or VPN, "
+                "and `crucible config get api_url`.")
+    return None
 
 
 def format_cli_error(action: str, error: Exception) -> dict:
@@ -107,6 +140,9 @@ def format_cli_error(action: str, error: Exception) -> dict:
         result['status'] = status
     if reason:
         result['reason'] = str(reason)
+    hint = _error_hint(error_type, status, details)
+    if hint:
+        result['hint'] = hint
     return result
 
 
@@ -138,6 +174,10 @@ def print_cli_error(data: dict, as_json: bool = False) -> None:
             else:
                 print(f"  {message}", file=sys.stderr)
 
+    if data.get('hint'):
+        print(file=sys.stderr)
+        print(term.dim(data['hint'], stream=sys.stderr), file=sys.stderr)
+
 
 def show_warning(message) -> None:
     from . import term
@@ -157,6 +197,618 @@ def add_relationship_type_filter(parser) -> None:
         help=f"Only show links of this kind ({', '.join(RELATIONSHIP_TYPES)}). "
              f"Untyped links are excluded when this is set."
     )
+
+
+def add_scope_filters(parser, resource: str) -> None:
+    """Add filters shared by '<resource> list' and '<resource> facets'.
+
+    These narrow which records are considered, so both commands accept the
+    same selection: project, visibility, ownership, time range, and the
+    resource's own exact-match and empty-field filters.
+    """
+    from ..constants import PROJECT_SCOPES, VISIBILITIES
+
+    project_group = parser.add_mutually_exclusive_group()
+    project_group.add_argument(
+        '--project-id', '-p', default=None, metavar='ID',
+        help='Crucible project ID (uses the current project if one is set; '
+             'otherwise every accessible project)'
+    )
+    project_group.add_argument(
+        '--project-mfid', default=None, metavar='MFID',
+        help='Canonical project MFID'
+    )
+    project_group.add_argument(
+        '--all-projects', action='store_true', default=False,
+        help='Ignore the current project and include every accessible project'
+    )
+    parser.add_argument(
+        '-pid', action=DeprecatedAliasAction, deprecated_options={'-pid'},
+        replacement='--project-id', dest='project_id', default=argparse.SUPPRESS,
+        metavar='ID', help=argparse.SUPPRESS,
+    )
+    parser.add_argument(
+        '--project-scope', choices=PROJECT_SCOPES, default=None, metavar='SCOPE',
+        help=f"Project relationship to include: {', '.join(PROJECT_SCOPES)} "
+             f"(default: assigned)"
+    )
+    parser.add_argument(
+        '--visibility', choices=VISIBILITIES, default=None, metavar='LEVEL',
+        help=f"Restrict results by visibility ({', '.join(VISIBILITIES)})"
+    )
+    parser.add_argument(
+        '--mine', action='store_true', default=False,
+        help=f'Only include {resource}s you own'
+    )
+    parser.add_argument(
+        '--owner', default=None, dest='owner_id', metavar='USER',
+        help='Only include records owned by this user (username, ORCID, or MFID)'
+    )
+    parser.add_argument(
+        '--created-after', dest='creation_time_gte', default=None, metavar='WHEN',
+        help='Created at or after this time (ISO 8601 or YYYY-MM-DD, UTC unless an offset is given)'
+    )
+    parser.add_argument(
+        '--created-before', dest='creation_time_lte', default=None, metavar='WHEN',
+        help='Created at or before this time (a bare date includes the whole day)'
+    )
+    parser.add_argument(
+        '--modified-after', dest='modification_time_gte', default=None, metavar='WHEN',
+        help='Modified at or after this time'
+    )
+    parser.add_argument(
+        '--modified-before', dest='modification_time_lte', default=None, metavar='WHEN',
+        help='Modified at or before this time (a bare date includes the whole day)'
+    )
+    for flags, dest, metavar, text in _RESOURCE_FILTERS[resource]:
+        parser.add_argument(*flags, dest=dest, default=None, metavar=metavar,
+                            help=text)
+    empty_fields = _EMPTY_FIELDS[resource]
+    parser.add_argument(
+        '--missing', dest='missing', action='append', default=None,
+        choices=empty_fields, metavar='FIELD',
+        help=f"Only include records with no value for FIELD "
+             f"({', '.join(empty_fields)}); repeatable"
+    )
+
+
+# (flags, dest, metavar, help) for each resource's exact-match filters, shared
+# by list and facets. dest is the API query parameter.
+_RESOURCE_FILTERS = {
+    'dataset': [
+        (('-m', '--measurement'), 'measurement', 'TYPE',
+         'Filter by measurement (exact match)'),
+        (('--session',), 'session_name', 'NAME', 'Filter by session name (exact match)'),
+        (('--data-format',), 'data_format', 'FORMAT', 'Filter by data format (exact match)'),
+        (('--instrument-id',), 'instrument_id', 'ID',
+         'Filter by instrument slug (any casing)'),
+        (('--instrument-mfid',), 'instrument_mfid', 'MFID',
+         'Filter by canonical instrument MFID'),
+        (('--sample-mfid',), 'sample_mfid', 'MFID',
+         'Only include datasets linked to this sample'),
+    ],
+    'sample': [
+        (('--type',), 'sample_type', 'TYPE',
+         'Filter by sample type (exact match, or use * / ? wildcards in list)'),
+        (('--dataset-mfid',), 'dataset_mfid', 'MFID',
+         'Only include samples linked to this dataset'),
+    ],
+}
+
+# User-facing field name -> API *_is_null parameter.
+_EMPTY_FIELDS = {
+    'dataset': ('session', 'measurement', 'data_format', 'instrument',
+                'project', 'owner'),
+    'sample': ('sample_type', 'project', 'owner'),
+}
+_EMPTY_FIELD_PARAMS = {
+    'session': 'session_name_is_null',
+    'measurement': 'measurement_is_null',
+    'data_format': 'data_format_is_null',
+    'instrument': 'instrument_mfid_is_null',
+    'project': 'project_mfid_is_null',
+    'owner': 'owner_id_is_null',
+    'sample_type': 'sample_type_is_null',
+}
+
+
+_INGESTOR_CACHE_SECONDS = 24 * 3600
+_ingestor_names = None
+
+
+def ingestor_names(client=None) -> list:
+    """Ingestion classes the API offers, for --ingestor completion.
+
+    Read from the API at most once a day per API URL and kept in the cache
+    folder, since command-line completion starts a new process on every Tab.
+    Falls back to the built-in list when the API cannot be reached.
+    """
+    import hashlib
+    import time
+    from ..config import config
+    from ..constants import AVAILABLE_INGESTORS
+
+    global _ingestor_names
+    if _ingestor_names is not None:
+        return _ingestor_names
+    try:
+        key = hashlib.sha256((config.api_url or '').encode()).hexdigest()[:12]
+        cache = config.cache_dir / f'ingestors-{key}.json'
+    except Exception:
+        cache = None
+    try:
+        if cache is not None and time.time() - cache.stat().st_mtime < _INGESTOR_CACHE_SECONDS:
+            _ingestor_names = json.loads(cache.read_text())
+            return _ingestor_names
+    except (OSError, ValueError):
+        pass
+    try:
+        if client is None:
+            from ..config import get_client
+            client = get_client()
+        names = sorted(client._request('get', '/ingestors', timeout=(3, 5)))
+        if cache is not None:
+            cache.parent.mkdir(parents=True, exist_ok=True)
+            cache.write_text(json.dumps(names))
+        _ingestor_names = names
+    except Exception:
+        _ingestor_names = list(AVAILABLE_INGESTORS)
+    return _ingestor_names
+
+
+def complete_ingestors(**kwargs):
+    """argcomplete completer for --ingestor."""
+    return ingestor_names()
+
+
+def add_upload_arguments(parser) -> None:
+    """Add --upload-protocol, --replace, and --no-ingest to a command that uploads files."""
+    from ..constants import UPLOAD_PROTOCOLS
+
+    parser.add_argument(
+        '--upload-protocol', choices=UPLOAD_PROTOCOLS, default=None, metavar='MODE',
+        help=f"Upload route: {', '.join(UPLOAD_PROTOCOLS)} "
+             "(default: the upload_protocol setting, normally auto)"
+    )
+    parser.add_argument(
+        '--replace', action='store_true', default=False,
+        help='Replace files the dataset already has under the same name with different '
+             'content, keeping their MFIDs (on a terminal you are asked otherwise)'
+    )
+    parser.add_argument(
+        '--no-ingest', dest='no_ingest', action='store_true', default=False,
+        help='Upload without requesting ingestion; request it later with '
+             '"crucible file request-ingestion FILE_MFID"'
+    )
+
+
+class upload_session:
+    """Apply a command's upload options and progress line to the shared client.
+
+    Restores the previous values afterwards, since the shell keeps one client.
+    """
+
+    def __init__(self, client, args):
+        self.client = client
+        self.values = {
+            'upload_progress': UploadProgress(),
+            'upload_protocol': getattr(args, 'upload_protocol', None),
+            'request_ingestion': not getattr(args, 'no_ingest', False),
+            'replace_existing': getattr(args, 'replace', False),
+        }
+
+    _DEFAULTS = {'upload_progress': None, 'upload_protocol': None, 'request_ingestion': True,
+                 'replace_existing': False}
+
+    def __enter__(self):
+        self.saved = {name: getattr(self.client, name, self._DEFAULTS[name])
+                      for name in self.values}
+        for name, value in self.values.items():
+            setattr(self.client, name, value)
+        return self.client
+
+    def __exit__(self, *exc):
+        for name, value in self.saved.items():
+            setattr(self.client, name, value)
+        return False
+
+
+class UploadProgress:
+    """One self-updating stderr line per uploading file: bar, percent, size, rate, time left.
+
+    Silent unless stderr is a terminal. Safe to call from upload threads.
+    """
+
+    def __init__(self, stream=None, interval: float = 0.2):
+        import threading
+
+        self._stream = stream or sys.stderr
+        self._enabled = hasattr(self._stream, 'isatty') and self._stream.isatty()
+        self._interval = interval
+        self._lock = threading.Lock()
+        self._started = {}
+        self._shown = {}
+
+    def __call__(self, name: str, done: int, total: int) -> None:
+        import time
+
+        if not self._enabled or total <= 0:
+            return
+        with self._lock:
+            now = time.monotonic()
+            started = self._started.setdefault(name, now)
+            finished = done >= total
+            if not finished and now - self._shown.get(name, 0) < self._interval:
+                return
+            if self._shown.get(name) == 'done':
+                return
+            self._shown[name] = 'done' if finished else now
+            elapsed = max(now - started, 1e-6)
+            rate = done / elapsed
+            left = (total - done) / rate if rate and not finished else 0
+            line = (f"{done / total:4.0%}  {_human_bytes(done)}/{_human_bytes(total)}  "
+                    f"{_human_bytes(rate)}/s  {_clock(left)} left")
+            import shutil
+            width = shutil.get_terminal_size((80, 24)).columns
+            bar_width = max(10, min(30, width - len(line) - len(name) - 10))
+            filled = int(bar_width * done / total)
+            label = name if len(name) <= 30 else name[:29] + chr(8230)
+            text = f"  {label}  [{'#' * filled}{'.' * (bar_width - filled)}]  {line}"
+            self._stream.write('\r' + text[:width - 1].ljust(width - 1))
+            if finished:
+                self._stream.write('\n')
+            self._stream.flush()
+
+
+def _human_bytes(count: float) -> str:
+    for unit in ('B', 'KB', 'MB', 'GB', 'TB'):
+        if count < 1024 or unit == 'TB':
+            return f"{count:.0f} {unit}" if unit == 'B' else f"{count:.1f} {unit}"
+        count /= 1024
+
+
+def _clock(seconds: float) -> str:
+    seconds = int(seconds)
+    hours, rest = divmod(seconds, 3600)
+    return f"{hours}:{rest // 60:02d}:{rest % 60:02d}" if hours else f"{rest // 60}:{rest % 60:02d}"
+
+
+def add_limit_arguments(parser, noun: str = 'results', short: bool = False) -> None:
+    """Add --limit and --all, defaulting to the default_limit setting."""
+    from ..config import config
+
+    parser.add_argument(
+        *(('--limit', '-l') if short else ('--limit',)), type=int, default=None, metavar='N',
+        help=f'Maximum number of {noun} to show (default: {config.default_limit}, '
+             f'from the default_limit setting)'
+    )
+    parser.add_argument(
+        '--all', dest='all_results', action='store_true', default=False,
+        help=f'Show every matching {noun}'
+    )
+    parser.set_defaults(pageable=True)
+
+
+_PAGE = {'start': 0, 'total': None, 'next': None}
+
+
+def begin_page(start: int = 0, total=None) -> None:
+    """Reset paging state before a list command.
+
+    start is the first record's position; total carries the first page's
+    match count, since continued cursor pages do not report it.
+    """
+    _PAGE.update(start=start, total=total, next=None)
+
+
+def _known_total(records):
+    total = getattr(records, 'total', None)
+    return _PAGE['total'] if total is None else total
+
+
+def next_page():
+    """Where the last listing stopped, as {'cursor', 'offset', 'start'}, or None."""
+    return _PAGE['next']
+
+
+def page_kwargs(args) -> dict:
+    """List-method keywords that resume the listing args.page points at."""
+    page = getattr(args, 'page', None) or {}
+    if page.get('cursor'):
+        return {'cursor': page['cursor']}
+    if page.get('offset'):
+        return {'offset': page['offset']}
+    return {}
+
+
+def resolve_limit(args):
+    """Return the record limit for a list command, or None for --all."""
+    from ..config import config
+
+    if getattr(args, 'all_results', False):
+        return None
+    limit = getattr(args, 'limit', None)
+    return config.default_limit if limit is None else limit
+
+
+def sort_like(records, key=None, reverse=False):
+    """sorted() that keeps a list result's has_more and total."""
+    from ..resources.base import ListResult
+
+    return ListResult.like(records, sorted(records, key=key, reverse=reverse))
+
+
+def count_label(records, shown=None) -> str:
+    """Header count such as "50 of 1,234", "51-100 of 1,234", "50+", or "50"."""
+    shown = len(records) if shown is None else shown
+    total = _known_total(records)
+    start = _PAGE['start']
+    if start:
+        position = f"{start + 1:,}-{start + shown:,}"
+        return f"{position} of {total:,}" if total is not None else position
+    if total is not None and total > shown:
+        return f"{shown:,} of {total:,}"
+    if getattr(records, 'has_more', False):
+        return f"{shown:,}+"
+    return f"{shown:,}"
+
+
+def print_more_hint(records, limit, args=None, hint=None, allow_all=True) -> None:
+    """Say when a listing stopped short of every match, and how to see more.
+
+    A list result that reports has_more is trusted; a plain list is assumed
+    truncated when it reached the limit. Script output (--json or a pipe)
+    gets the note on stderr so stdout stays pure data.
+    """
+    from . import term
+
+    has_more = getattr(records, 'has_more', None)
+    truncated = has_more if has_more is not None else (
+        limit is not None and len(records) >= limit)
+    if not truncated:
+        return
+    start = _PAGE['start']
+    next_cursor = getattr(records, 'next_cursor', None)
+    next_offset = getattr(records, 'next_offset', None)
+    can_continue = bool(next_cursor) or next_offset is not None
+    total = _known_total(records)
+    if can_continue:
+        _PAGE['next'] = {'cursor': next_cursor, 'offset': next_offset,
+                         'start': start + len(records), 'total': total}
+    remaining = None if total is None else total - start - len(records)
+    if remaining is not None and remaining > 0:
+        lead = f"{remaining:,} more not shown"
+    elif has_more is None:
+        lead = f"Showing the first {len(records):,}; there may be more"
+    else:
+        lead = "More results not shown"
+    tips = ([hint] if hint else []) + ['raise --limit N'] + (['use --all'] if allow_all else [])
+    if can_continue and hasattr(args, '_shell_state'):
+        tips.insert(0, "type 'more' for the next page")
+    if len(tips) == 1:
+        tips.insert(0, 'refine the query')
+    message = f"{lead}. To see them, {', '.join(tips[:-1])}, or {tips[-1]}."
+    if getattr(args, 'json', False) or not sys.stdout.isatty():
+        print(message, file=sys.stderr)
+    else:
+        print(f"  {term.dim(chr(8230) + ' ' + message)}")
+
+
+def add_listing_filters(parser) -> None:
+    """Add the list-only ordering options."""
+    from ..constants import RESOURCE_SORTS, SORT_DIRECTIONS
+
+    parser.add_argument(
+        '--sort',
+        choices=RESOURCE_SORTS,
+        default=None,
+        metavar='FIELD',
+        help=f"Order results by {', '.join(RESOURCE_SORTS)} (default: created, newest first)"
+    )
+    parser.add_argument(
+        '--direction',
+        choices=SORT_DIRECTIONS,
+        default=None,
+        metavar='DIR',
+        help=f"Sort direction ({', '.join(SORT_DIRECTIONS)}, default: desc for created and updated, asc for name). Requires --sort."
+    )
+
+
+def resolve_list_project(args):
+    """Return (project_id, project_mfid) for a list or facets command.
+
+    An explicit --project-id or --project-mfid wins, --all-projects disables
+    the current project, and otherwise the current project applies if one is
+    set. An instrument filter also skips the current project, because
+    instruments are shared across projects, and so does --missing project. Returning (None, None) means
+    every accessible project.
+    """
+    project_id = getattr(args, 'project_id', None)
+    project_mfid = getattr(args, 'project_mfid', None)
+    if project_id or project_mfid or getattr(args, 'all_projects', False):
+        return project_id, project_mfid
+    if ((getattr(args, 'instrument_mfid', None) or getattr(args, 'instrument_id', None)
+            or 'project' in (getattr(args, 'missing', None) or []))
+            and not getattr(args, 'project_scope', None)):
+        return None, None
+    project_id, _ = resolve_project_context(args)
+    return project_id, None
+
+
+def scope_filter_kwargs(args, client=None) -> dict:
+    """Collect the shared selection filters into list() or facets() keywords.
+
+    Includes the resolved project context. A --owner value that is not
+    already a canonical ORCID or MFID is resolved through the API, so the
+    request always carries the stable identifier.
+    """
+    kwargs = {}
+    project_id, project_mfid = resolve_list_project(args)
+    if project_id is not None:
+        kwargs['project_id'] = project_id
+    if project_mfid is not None:
+        kwargs['project_mfid'] = project_mfid
+    project_scope = getattr(args, 'project_scope', None)
+    if project_scope is not None:
+        if project_id is None and project_mfid is None:
+            raise ValueError("--project-scope requires a project")
+        kwargs['project_scope'] = project_scope
+    names = ['visibility', 'creation_time_gte', 'creation_time_lte',
+             'modification_time_gte', 'modification_time_lte']
+    for filters in _RESOURCE_FILTERS.values():
+        names.extend(dest for _, dest, _, _ in filters)
+    for name in names:
+        value = getattr(args, name, None)
+        if value is not None:
+            kwargs[name] = value
+    owner = getattr(args, 'owner_id', None)
+    if owner is not None:
+        if client is None:
+            from ..config import get_client
+            client = get_client()
+        kwargs['owner_id'] = resolve_user_id(client, owner)
+    if getattr(args, 'mine', False):
+        kwargs['affiliation'] = 'owner'
+    for field in getattr(args, 'missing', None) or []:
+        kwargs[_EMPTY_FIELD_PARAMS[field]] = True
+    return kwargs
+
+
+def listing_filter_kwargs(args) -> dict:
+    """Collect the list-only ordering options into list() keywords.
+
+    Without --sort, request newest-created first explicitly: the server's
+    own default orders by MFID, which is not chronological for legacy
+    records whose MFIDs predate the time-ordered scheme.
+    """
+    sort = getattr(args, 'sort', None)
+    if sort is None:
+        return {'sort': 'created', 'direction': 'desc'}
+    kwargs = {'sort': sort}
+    direction = getattr(args, 'direction', None)
+    if direction is not None:
+        kwargs['direction'] = direction
+    return kwargs
+
+
+def display_order(records: list, sort: str | None = None,
+                  direction: str | None = None) -> list:
+    """Order fetched records for a terminal table.
+
+    The server returns the most relevant records first, newest by default,
+    so --limit keeps the newest N. Reversing puts the newest row last, next
+    to the prompt. An ascending sort, including the server's default for
+    name, is already in reading order.
+    """
+    if direction is None and sort is not None:
+        direction = 'desc' if sort in ('created', 'updated') else 'asc'
+    if direction == 'asc':
+        return list(records)
+    return list(reversed(records))
+
+
+def group_records(records: list, field: str) -> list:
+    """Split display-ordered records into (value, records) groups.
+
+    Groups keep the records' order and are themselves ordered by the
+    position of their last record, so the group holding the newest record
+    is printed last.
+    """
+    groups = {}
+    last_seen = {}
+    for index, record in enumerate(records):
+        key = record.get(field) or None
+        groups.setdefault(key, []).append(record)
+        last_seen[key] = index
+    return [(key, groups[key]) for key in sorted(groups, key=last_seen.get)]
+
+
+def register_facets_command(subparsers, resource: str, fields, examples: str):
+    """Register a '<resource> facets FIELD' subcommand."""
+    from . import term
+    from ..constants import FACET_SORTS, SORT_DIRECTIONS
+
+    parser = subparsers.add_parser(
+        'facets',
+        help=f'Count {resource}s grouped by a field',
+        description=f'Group {resource}s into value buckets with counts, '
+                    f'without fetching the records themselves',
+        formatter_class=term.ColorHelpFormatter,
+        epilog=examples,
+    )
+    parser.add_argument(
+        'field',
+        metavar='FIELD',
+        choices=fields,
+        help=f"Field to group by: {', '.join(fields)}"
+    )
+    parser.add_argument(
+        '--sort', choices=FACET_SORTS, default=None, metavar='BY',
+        help=f"Order buckets by {', '.join(FACET_SORTS)} (default: value)"
+    )
+    parser.add_argument(
+        '--direction', choices=SORT_DIRECTIONS, default=None, metavar='DIR',
+        help=f"Bucket ordering direction ({', '.join(SORT_DIRECTIONS)})"
+    )
+    parser.add_argument(
+        '--limit', '-l', type=int, default=100, metavar='N',
+        help='Maximum number of buckets to return (default: 100)'
+    )
+    add_scope_filters(parser, resource)
+    parser.add_argument(
+        '--json', action='store_true', default=False,
+        help='Output as JSON'
+    )
+    return parser
+
+
+def execute_facets_command(args, resource: str):
+    """Execute a '<resource> facets FIELD' subcommand."""
+    import json
+    from . import term
+    from ..config import get_client
+
+    try:
+        client = get_client()
+        filters = scope_filter_kwargs(args, client)
+
+        operations = getattr(client, f'{resource}s')
+        response = operations.facets(
+            args.field, limit=args.limit, sort=args.sort,
+            direction=args.direction, **filters)
+
+        if args.json:
+            print(json.dumps(response, indent=2, default=str))
+            return
+
+        buckets = response.get('items') or []
+        scope = filters.get('project_id') or filters.get('project_mfid')
+        scope_label = f" · {scope}" if scope else ''
+        term.header(f"{args.field}{scope_label} · {len(buckets)} values")
+        if not buckets:
+            print(f"  {term.dim(f'No {resource}s matched.')}")
+            return
+
+        rows = []
+        for bucket in buckets:
+            value, label = bucket.get('value'), bucket.get('label')
+            if value is None:
+                rows.append((term.dim('(none)'), '', bucket.get('count')))
+            elif not str(value).strip():
+                rows.append((term.dim('(empty)'), '', bucket.get('count')))
+            else:
+                rows.append((label or value,
+                             value if label and label != value else '',
+                             bucket.get('count')))
+        if any(row[1] for row in rows):
+            term.table(rows, ['VALUE', 'ID', 'COUNT'])
+        else:
+            term.table([(row[0], row[2]) for row in rows], ['VALUE', 'COUNT'])
+        if response.get('next_cursor'):
+            print(f"\n  {term.dim('More values available; raise --limit to see them.')}")
+
+    except Exception as e:
+        fail(f"retrieving {resource} facets", e, args)
 
 
 def format_relationship_type(link) -> str:
@@ -380,6 +1032,41 @@ def fail(action: str, error: Exception, args=None) -> None:
     sys.exit(1)
 
 
+def require_capability(client, capability: str, action: str) -> None:
+    """Exit early when the caller's account cannot perform an action.
+
+    Checked before interactive prompts so the user is not asked to fill in a
+    form the server will reject. An unreadable profile leaves capabilities
+    empty, in which case the attempt proceeds and the API decides.
+    """
+    capabilities = getattr(client, 'capabilities', None)
+    if getattr(capabilities, capability, None) is False:
+        _not_permitted(action)
+
+
+def require_elevation(client, action: str) -> None:
+    """Exit early when the caller cannot run an always-elevated operation.
+
+    Administrator-only operations request elevation per call, so the
+    current privilege mode and its capabilities do not apply; only whether
+    the caller may elevate at all does. An unreadable profile lets the API
+    decide.
+    """
+    authorization = getattr(client, 'authorization', None)
+    if getattr(authorization, 'platform_role', None) is None:
+        return
+    if not authorization.can_elevate:
+        _not_permitted(action)
+
+
+def _not_permitted(action: str) -> None:
+    from . import term
+
+    print(term.red('Not permitted', stream=sys.stderr), file=sys.stderr)
+    print(f"Your account is not permitted to {action}.", file=sys.stderr)
+    sys.exit(1)
+
+
 def parse_user_ref(value: str) -> dict:
     """Sniff a user identifier's format and return a kwargs dict for users.get()/users.resolve().
 
@@ -400,6 +1087,12 @@ def parse_sa_ref(value: str) -> dict:
     if _MFID_RE.match(value):
         return {'unique_id': value}
     return {'username': value}
+
+
+def add_user_reference_argument(parser) -> None:
+    """Add the --user/-u option shared by member-management commands."""
+    parser.add_argument('--user', '-u', metavar='USER', required=True,
+                        help='ORCID, MFID, username, or email of the user')
 
 
 def resolve_user_id(client, value: str) -> str:
@@ -444,7 +1137,7 @@ def fetch_projects(client):
 def fetch_deletions(client):
     """Return pending deletion requests, or None if the user lacks permission."""
     try:
-        return client.deletions.list(status='pending')
+        return client.deletions.list(status='pending', scope='reviewable')
     except Exception:
         return None
 
@@ -452,15 +1145,17 @@ def fetch_deletions(client):
 def fetch_join_requests(client):
     """Return pending join requests, or None if the user lacks permission."""
     try:
-        return client.access_groups.list_join_requests(status='pending')
+        return client.access_groups.list_join_requests(
+            status='pending', privilege_mode=client._admin_mode())
     except Exception:
         return None
 
 
 def fetch_service_accounts(client):
-    """Return all service accounts, or None if the user lacks permission."""
+    """Return all service accounts with their platform roles, or None if the
+    user lacks permission."""
     try:
-        return client.service_accounts.list()
+        return client.service_accounts.list_admin()
     except Exception:
         return None
 
@@ -769,7 +1464,7 @@ def sort_members(members) -> list:
         name = term.fmt_name(d, default='') or ''
         return (-rank, name.lower())
 
-    return sorted(members, key=key)
+    return sort_like(members, key=key)
 
 
 def show_reassign_project(result, confirm: bool) -> None:

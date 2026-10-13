@@ -7,24 +7,18 @@ Operations that take a dataset ID (list-files, add-file, bulk download)
 live under 'crucible dataset'. Operations that take a file MFID live here.
 """
 
-import os
 import sys
 import logging
 from . import term
+from .helpers import add_limit_arguments, count_label, print_more_hint, resolve_limit, page_kwargs
+from ..utils.io import storage_display_name
 
 logger = logging.getLogger(__name__)
 
 
 def _bare_name(file_record: dict) -> str:
     """Extract display filename from a file record."""
-    sp = file_record.get('storage_path') or ''
-    if sp.startswith('mf-storage-prod/'):
-        # strip mf-storage-prod/{dsid}/
-        after_bucket = sp[len('mf-storage-prod/'):]
-        _, _, name = after_bucket.partition('/')
-        return name or after_bucket
-    staging = file_record.get('filename') or ''
-    return os.path.basename(staging) or file_record.get('mfid', '')
+    return storage_display_name(file_record) or file_record.get('mfid', '')
 
 
 def _status_label(file_record: dict) -> str:
@@ -50,6 +44,7 @@ def register_subcommand(subparsers):
     _register_download(file_subparsers)
     _register_ingestion(file_subparsers)
     _register_request_ingestion(file_subparsers)
+    _register_replace(file_subparsers)
     _register_delete(file_subparsers)
 
 
@@ -71,10 +66,7 @@ Examples:
         '--dataset', '-d', metavar='DSID', default=None,
         help='Scope to a specific dataset (faster than global list)',
     )
-    parser.add_argument(
-        '--limit', type=int, default=100, metavar='N',
-        help='Maximum number of files to return (default: 100)',
-    )
+    add_limit_arguments(parser, 'files')
     parser.add_argument(
         '--sha256', metavar='HASH',
         help='Filter by SHA-256 hex digest',
@@ -84,20 +76,23 @@ Examples:
 
 def _execute_list(args):
     """Execute 'crucible file list'."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
         dsid = getattr(args, 'dataset', None)
+        limit = None if dsid else resolve_limit(args)
         if dsid:
             files = client.datasets.list_files(dsid)
         else:
-            files = client.files.list(limit=args.limit, sha256_hash=args.sha256)
+            files = client.files.list(limit=limit, sha256_hash=args.sha256, **page_kwargs(args))
+        fetched = files
 
         sha256_filter = getattr(args, 'sha256', None)
         if sha256_filter and dsid:
             files = [f for f in files if f.get('sha256_hash', '').startswith(sha256_filter)]
 
-        header = f"Files · {dsid} ({len(files)})" if dsid else f"Files ({len(files)})"
+        count = count_label(fetched, len(files))
+        header = f"Files · {dsid} ({count})" if dsid else f"Files ({count})"
         term.header(header)
         if not files:
             print(f"  {term.dim('No files found.')}")
@@ -118,6 +113,7 @@ def _execute_list(args):
             max_widths=[40, 10, 26, 26, 10],
             min_widths=[4, 4, 26, 26, 6],
         )
+        print_more_hint(fetched, limit, args)
 
     except Exception as e:
         from .helpers import fail
@@ -142,9 +138,9 @@ Examples:
 
 def _execute_get(args):
     """Execute 'crucible file get'."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
         f = client.files.get(args.file_id)
 
         _p = term.field_printer(12)
@@ -202,9 +198,9 @@ Examples:
 def _execute_download(args):
     """Execute 'crucible file download'."""
     import requests as _requests
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
         try:
             output_path = client.files.download(args.file_id, output_dir=args.output_dir)
         except RuntimeError as e:
@@ -213,9 +209,9 @@ def _execute_download(args):
         except _requests.exceptions.HTTPError as e:
             if e.response is not None and e.response.status_code == 404:
                 logger.error(f"File {args.file_id} is not yet available for download")
-            else:
-                logger.error(f"Failed to download: {e}")
-            sys.exit(1)
+                sys.exit(1)
+            from .helpers import fail
+            fail("downloading file", e, args)
 
         term.success(f"Downloaded {output_path}", args)
 
@@ -224,6 +220,80 @@ def _execute_download(args):
     except Exception as e:
         from .helpers import fail
         fail("", e, args)
+
+
+def _register_replace(subparsers):
+    parser = subparsers.add_parser(
+        'replace',
+        help="Replace a file's content, keeping its MFID and filename",
+        description="Upload new content for an existing file. The file keeps its MFID, "
+                    "filename, and metadata. The previous content is no longer served and "
+                    "stays in storage for at least 7 days.",
+        formatter_class=term.ColorHelpFormatter,
+        epilog="""
+Examples:
+    crucible file replace FILE_MFID -i results_v2.dat
+    crucible file replace FILE_MFID -i results_v2.dat --no-ingest --yes
+""",
+    )
+    parser.add_argument('file_id', metavar='FILE_MFID', help='File MFID')
+    input_arg = parser.add_argument('-i', '--input', required=True, metavar='PATH',
+                                    help='Local file with the new content')
+    ingestor_arg = parser.add_argument(
+        '--ingestor', default=None, metavar='CLASS',
+        help='Ingestion class to use (default: auto-detected from file format)')
+    parser.add_argument('--no-ingest', dest='no_ingest', action='store_true', default=False,
+                        help='Replace without requesting ingestion')
+    parser.add_argument('--wait', action='store_true',
+                        help='Wait for ingestion to complete before returning')
+    parser.add_argument('-y', '--yes', action='store_true', default=False,
+                        help='Skip the confirmation prompt')
+    from .helpers import complete_ingestors
+    ingestor_arg.completer = complete_ingestors
+    try:
+        from argcomplete.completers import FilesCompleter
+        input_arg.completer = FilesCompleter()
+    except ImportError:
+        pass
+    parser.set_defaults(func=_execute_replace)
+
+
+def _execute_replace(args):
+    """Execute 'crucible file replace'."""
+    from pathlib import Path
+    from crucible.config import get_client
+    from .helpers import fail, prompt_confirm, upload_session
+
+    path = Path(args.input)
+    if not path.is_file():
+        logger.error(f"File not found: {path}")
+        sys.exit(1)
+    if args.no_ingest and (args.wait or args.ingestor):
+        logger.error("--no-ingest cannot be combined with --wait or --ingestor.")
+        sys.exit(1)
+    try:
+        client = get_client()
+        record = client.files.get(args.file_id)
+        name = record.get('filename') or args.file_id
+        if not args.yes and not prompt_confirm(
+                f"Replace the content of {name} ({args.file_id}) with {path.name}?",
+                option='--yes'):
+            logger.info("Aborted.")
+            return
+        with upload_session(client, args):
+            result = client.files.replace(
+                args.file_id, str(path), etag=record.get('etag'),
+                ingestion_class=args.ingestor, wait_for_ingestion_response=args.wait,
+                skip_ingestion=args.no_ingest)
+        updated = result['associated_file']
+        term.success(f"Replaced {updated.get('filename') or name}", args)
+        _p = term.field_printer(10)
+        _p("MFID", updated.get('mfid'))
+        _p("Size", term.fmt_size(updated.get('size')))
+        request = result.get('ingestion_request')
+        _p("Ingestion", term.status_label(request.get('status')) if request else 'not requested')
+    except Exception as e:
+        fail("replacing file", e, args)
 
 
 def _register_delete(subparsers):
@@ -251,7 +321,7 @@ Examples:
 
 def _execute_delete(args):
     """Execute 'crucible file delete'."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     from .helpers import prompt_confirm
     confirmed = args.yes or prompt_confirm(
         f"Delete file {args.file_id}? This cannot be undone.",
@@ -261,7 +331,7 @@ def _execute_delete(args):
         print("Aborted.")
         return
     try:
-        client = CrucibleClient()
+        client = get_client()
         client.files.delete(args.file_id)
         term.success(f"Deleted {args.file_id}", args)
     except Exception as e:
@@ -286,9 +356,9 @@ Examples:
 
 def _execute_ingestion(args):
     """Execute 'crucible file ingestion'."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
         reqs = client.ingestions.list(file_id=args.file_id)
 
         term.header(f"Ingestion Requests · {args.file_id} ({len(reqs)})")
@@ -326,25 +396,28 @@ Examples:
 """,
     )
     parser.add_argument('file_id', metavar='FILE_ID', help='File MFID')
-    parser.add_argument(
+    ingestor_arg = parser.add_argument(
         '--ingestor',
         default=None,
         metavar='CLASS',
-        help='Ingestion class to use (default: auto-detected from file format)'
+        help='Ingestion class to use (default: auto-detected from file format). '
+             'Run "crucible dataset ingestors" to see them.'
     )
     parser.add_argument(
         '--wait',
         action='store_true',
         help='Wait for ingestion to complete before returning'
     )
+    from .helpers import complete_ingestors
+    ingestor_arg.completer = complete_ingestors
     parser.set_defaults(func=_execute_request_ingestion)
 
 
 def _execute_request_ingestion(args):
     """Execute 'crucible file request-ingestion'."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
         req = client.files.request_ingestion(
             args.file_id,
             ingestion_class=getattr(args, 'ingestor', None),

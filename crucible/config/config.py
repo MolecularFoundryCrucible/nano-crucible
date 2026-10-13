@@ -35,6 +35,7 @@ class Config:
         'graph_explorer_url': {'env': 'CRUCIBLE_GRAPH_EXPLORER_URL', 'ini': 'graph_explorer_url', 'section': 'crucible'},
         'current_project':    {'env': 'CRUCIBLE_CURRENT_PROJECT',    'ini': 'current_project',    'section': 'crucible'},
         'current_session':    {'env': 'CRUCIBLE_CURRENT_SESSION',    'ini': 'current_session',    'section': 'crucible'},
+        'privilege_mode':     {'env': 'CRUCIBLE_PRIVILEGE_MODE',     'ini': 'privilege_mode',     'section': 'crucible'},
         # [cache]
         'cache_dir':          {'env': 'CRUCIBLE_CACHE_DIR',          'ini': 'cache_dir',          'section': 'cache'},
         # [display] – UI preferences
@@ -43,6 +44,7 @@ class Config:
         'dataset_group_by':   {'env': 'CRUCIBLE_DATASET_GROUP_BY',   'ini': 'dataset_group_by',   'section': 'display'},
         'include_metadata':   {'env': 'CRUCIBLE_INCLUDE_METADATA',   'ini': 'include_metadata',   'section': 'display'},
         'include_links':      {'env': 'CRUCIBLE_INCLUDE_LINKS',      'ini': 'include_links',      'section': 'display'},
+        'pager':              {'env': 'CRUCIBLE_PAGER_MODE',         'ini': 'pager',              'section': 'display'},
         # [network] – timeouts and pagination
         'connect_timeout':    {'env': 'CRUCIBLE_CONNECT_TIMEOUT',    'ini': 'connect_timeout',    'section': 'network'},
         'read_timeout':       {'env': 'CRUCIBLE_READ_TIMEOUT',       'ini': 'read_timeout',       'section': 'network'},
@@ -50,6 +52,7 @@ class Config:
         # [upload] – multipart upload tuning
         'upload_chunk_size_mb': {'env': 'CRUCIBLE_UPLOAD_CHUNK_SIZE_MB', 'ini': 'chunk_size_mb', 'section': 'upload'},
         'upload_max_workers':   {'env': 'CRUCIBLE_UPLOAD_MAX_WORKERS',   'ini': 'max_workers',   'section': 'upload'},
+        'upload_protocol':      {'env': 'CRUCIBLE_UPLOAD_PROTOCOL',      'ini': 'protocol',      'section': 'upload'},
     }
 
     def __init__(self):
@@ -198,12 +201,28 @@ class Config:
         return self._data.get('current_session') or None
 
     @property
+    def privilege_mode(self):
+        """Authorization mode sent with each request, or None to send nothing.
+
+        Returns:
+            str or None: "normal", "elevated", or None.
+        """
+        from ..constants import PRIVILEGE_MODES
+
+        value = self._data.get('privilege_mode') or None
+        if value is not None and value not in PRIVILEGE_MODES:
+            raise ValueError(
+                f"privilege_mode must be one of: {', '.join(PRIVILEGE_MODES)}.")
+        return value
+
+    @property
     def editor(self):
         """
         Get the preferred editor for interactive editing commands.
 
         Priority: CRUCIBLE_EDITOR env var > config file > None.
-        When None, open_editor_json falls back to $VISUAL, $EDITOR, then nano.
+        When None, editors fall back to $VISUAL, $EDITOR, then a platform default
+        (Notepad on Windows); see crucible.cli.editor.
 
         Returns:
             str or None: Editor command (e.g. "code --wait", "gvim -f") or None
@@ -219,6 +238,12 @@ class Config:
     def dataset_group_by(self):
         """Default group-by field for 'crucible dataset list' (e.g. 'measurement', 'session')."""
         return self._data.get('dataset_group_by')
+
+    @property
+    def pager(self) -> str:
+        """Whether long CLI listings open in a pager: "never" (default) or "auto"."""
+        value = (self._data.get('pager') or 'never').lower()
+        return 'auto' if value in ('auto', 'on', 'true', '1', 'yes') else 'never'
 
     def _parse_bool(self, key: str) -> bool:
         return self._data.get(key, 'false').lower() in ('true', '1', 'yes')
@@ -253,12 +278,12 @@ class Config:
 
     @property
     def default_limit(self) -> int:
-        """Default maximum results per list/search request (default 100)."""
+        """Default number of records the CLI lists and searches show (default 50)."""
         raw = self._data.get('default_limit')
         try:
             return int(raw)
         except (TypeError, ValueError):
-            return 100
+            return 50
 
     @property
     def upload_chunk_size_mb(self) -> int:
@@ -281,6 +306,22 @@ class Config:
             return UPLOAD_MAX_WORKERS
 
     @property
+    def upload_protocol(self) -> str:
+        """How multipart uploads reach storage: "auto" (default), "signed", or "legacy".
+
+        "auto" uses the signed multipart flow and falls back to the legacy
+        token route when the server has it switched off; "signed" never falls
+        back; "legacy" always uses the token route.
+        """
+        from ..constants import UPLOAD_PROTOCOLS
+
+        value = (self._data.get('upload_protocol') or 'auto').lower()
+        if value not in UPLOAD_PROTOCOLS:
+            raise ValueError(
+                f"upload_protocol must be one of: {', '.join(UPLOAD_PROTOCOLS)}.")
+        return value
+
+    @property
     def client(self):
         """
         Get a configured CrucibleClient instance.
@@ -294,12 +335,22 @@ class Config:
             self._client = CrucibleClient(self.api_url, self.api_key)
         return self._client
 
+    # Settings a CrucibleClient is built from; changing one invalidates it.
+    _CLIENT_KEYS = ('api_url', 'api_key', 'privilege_mode')
+
     def reload(self):
-        """Reload configuration from all sources."""
+        """Reload configuration from all sources.
+
+        The shared client survives unless a setting it was built from
+        changed, so saving e.g. the current project keeps its HTTP session,
+        cached profile, and any session privilege toggle.
+        """
+        before = {key: self._data.get(key) for key in self._CLIENT_KEYS}
         self._data.clear()
         self._sources.clear()
-        self._client = None
         self._load()
+        if any(self._data.get(key) != value for key, value in before.items()):
+            self._client = None
 
     def source(self, key):
         """Return the source of an effective configuration value."""
@@ -401,6 +452,19 @@ def get_client():
     return config.client
 
 
+def restrict_config_permissions(config_file):
+    """Restrict a config file to owner-only access.
+
+    The file holds the API key in cleartext, so it should not be readable by
+    other users. Failures are logged and ignored because some filesystems do
+    not support POSIX modes.
+    """
+    try:
+        os.chmod(config_file, 0o600)
+    except OSError as exc:
+        logger.debug("Could not restrict permissions on %s: %s", config_file, exc)
+
+
 def create_config_file(api_key, api_url=None, cache_dir=None,
                        graph_explorer_url=None, current_project=None,
                        editor=None, connect_timeout=None, read_timeout=None,
@@ -408,11 +472,12 @@ def create_config_file(api_key, api_url=None, cache_dir=None,
     """
     Create a configuration file with the given API key and optional settings.
 
-    The file uses four INI sections:
+    The file uses five INI sections:
       [crucible]  – API connection settings
       [cache]     – cache directory
       [display]   – UI preferences (editor, group-by defaults)
       [network]   – request timeouts
+      [upload]    – multipart upload tuning
 
     Old single-section [crucible] files are still read correctly — the loader
     falls back to [crucible] for any key not found in its designated section.
@@ -433,6 +498,10 @@ def create_config_file(api_key, api_url=None, cache_dir=None,
     """
     config_dir = Path(user_config_dir("nano-crucible"))
     config_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        os.chmod(config_dir, 0o700)
+    except OSError as exc:
+        logger.debug("Could not restrict permissions on %s: %s", config_dir, exc)
     config_file = config_dir / "config.ini"
 
     default_cache_dir           = str(user_cache_dir("nano-crucible"))
@@ -520,6 +589,8 @@ def create_config_file(api_key, api_url=None, cache_dir=None,
         f.write("\n")
         f.write("# Concurrent upload threads (benchmarked optimum: 8)\n")
         f.write("# max_workers = 8\n")
+
+    restrict_config_permissions(config_file)
 
     logger.info(f"Created config file: {config_file}")
 

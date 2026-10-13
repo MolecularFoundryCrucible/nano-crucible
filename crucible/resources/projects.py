@@ -7,10 +7,11 @@ Provides organized access to project-related API endpoints.
 """
 
 import logging
-from typing import Optional, List, Dict, Sequence, Union
-from .base import BaseResource
+from typing import Any, Optional, List, Dict, Sequence, Union
+from .base import BaseResource, ListResult
 from .capabilities import AccessControlMixin, OwnershipMixin
-from ..constants import DEFAULT_LIMIT, PROJECT_MEMBER_ROLES
+from .users import _as_query_list
+from ..constants import DEFAULT_LIMIT, PROJECT_ACCESS_ROLES, PROJECT_MEMBER_ROLES, PROJECT_SORTS
 from ..models import Project, ProjectMember
 from ..utils.deprecation import _deprecated_parameter
 from ..utils.identifiers import (
@@ -98,6 +99,12 @@ class ProjectOperations(OwnershipMixin, AccessControlMixin, BaseResource):
             include_members=include_members,
         )
 
+    def _resource_mfid(self, project_ref: str) -> str:
+        """Return the MFID for a project MFID or slug (slugs ignore case)."""
+        if is_mfid(project_ref):
+            return project_ref
+        return self._get_by_project_id(project_ref)['unique_id']
+
     def _get_by_mfid(self, project_mfid: str, include_metadata: bool = False,
                      include_members: bool = False) -> Dict:
         """Get a project through its canonical single-resource route."""
@@ -127,33 +134,70 @@ class ProjectOperations(OwnershipMixin, AccessControlMixin, BaseResource):
     def list(self, orcid: Optional[str] = None, include_metadata: bool = False,
              limit: int = DEFAULT_LIMIT, offset: int = 0,
              accessible_to_user: Optional[Union[str, Sequence[str]]] = None,
-             accessible_to_project: Optional[Union[str, Sequence[str]]] = None) -> List[Dict]:
+             accessible_to_project: Optional[Union[str, Sequence[str]]] = None,
+             sort: Optional[str] = None, direction: Optional[str] = None,
+             member_ref: Optional[Union[str, Sequence[str]]] = None,
+             member_role: Optional[Union[str, Sequence[str]]] = None,
+             cursor: Optional[str] = None) -> List[Dict]:
         """List all accessible projects.
 
         Each project dict includes a ``lead`` key with the project lead's
-        public-safe user record.
+        public-safe user record and a ``role`` key with the caller's
+        membership role (None when the project is only visible through
+        platform role or resource grants).
 
         Args:
             orcid (str, optional): Filter projects by those associated with a certain user
             include_metadata (bool): Include scientific metadata in results
             limit (int): Maximum number of results to return (default: 100)
             offset (int): Starting position in the full result set (default: 0)
+            cursor (str, optional): Continuation token from a previous
+                result's next_cursor; the listing resumes there.
             accessible_to_user: User reference or references whose effective access
                                 must include every result
             accessible_to_project: Project reference or references whose direct access
                                    must include every result
+            sort: Explicit ordering, one of crucible.constants.PROJECT_SORTS.
+                  Applies to /projects only, not the per-user listing.
+            direction: Sort direction, asc or desc. Requires sort. Without it,
+                       dates default to desc and everything else to asc.
+            member_ref: User reference or references (ORCID, service-account
+                        MFID, username, or email) whose membership must include
+                        every result. Repeated values use AND semantics.
+            member_role: Restrict member_ref to these project roles. Repeated
+                         values use OR semantics and require member_ref.
 
         Returns:
-            List[Dict]: Project metadata including project_id, title, organization, lead
+            List[Dict]: Project metadata including project_id, title, organization, lead, role
         """
         params = self._access_selector_params(
             accessible_to_user, accessible_to_project)
         if orcid and params:
             raise ValueError("Pass orcid or typed access selectors, not both")
+        member_selectors = _as_query_list(member_ref)
+        member_roles = _as_query_list(member_role)
+        if orcid and (sort or direction or member_selectors or member_roles):
+            raise ValueError(
+                "sort, direction, and member filters apply to /projects only; "
+                "pass orcid or those, not both")
+        if member_roles and not member_selectors:
+            raise ValueError("member_role requires member_ref.")
+        invalid = [role for role in (member_roles or [])
+                   if role not in PROJECT_ACCESS_ROLES]
+        if invalid:
+            raise ValueError(
+                f"member_role must be one of: {', '.join(PROJECT_ACCESS_ROLES)}.")
         if include_metadata:
             params['include_metadata'] = True
+        if not orcid:
+            params.update(self._ordering_params(sort, direction,
+                                                sorts=PROJECT_SORTS))
+            if member_selectors:
+                params['member_ref'] = member_selectors
+            if member_roles:
+                params['member_role'] = member_roles
         endpoint = f'/users/{orcid}/projects' if orcid else '/projects'
-        return self._paginate(endpoint, params, limit, offset)
+        return self._paginate(endpoint, params, limit, offset, cursor=cursor)
 
     def create(self, project: Union[Project, Dict],
                scientific_metadata: Optional[Dict] = None) -> Dict:
@@ -216,7 +260,8 @@ class ProjectOperations(OwnershipMixin, AccessControlMixin, BaseResource):
         return result
 
     def get_users(self, project_id: str, limit: int = DEFAULT_LIMIT,
-                  offset: int = 0) -> List[ProjectMember]:
+                  offset: int = 0,
+                  cursor: Optional[str] = None) -> List[ProjectMember]:
         """Get users associated with a project.
 
         **Requires admin permissions.**
@@ -225,14 +270,16 @@ class ProjectOperations(OwnershipMixin, AccessControlMixin, BaseResource):
             project_id (str): Unique project identifier
             limit (int): Maximum number of results to return (default: 100)
             offset (int): Starting position in the full result set (default: 0)
+            cursor (str, optional): Continuation token from a previous
+                result's next_cursor; the listing resumes there.
 
         Returns:
             List[ProjectMember]: Project team members (excludes project lead)
         """
-        raw = self._paginate(f'/projects/{project_id}/users', {}, limit, offset)
-        return [ProjectMember.model_validate(m) for m in raw]
+        raw = self._paginate(f'/projects/{project_id}/users', {}, limit, offset, cursor=cursor)
+        return ListResult.like(raw, [ProjectMember.model_validate(m) for m in raw])
 
-    def update(self, proj_id: str, **kwargs) -> Dict:
+    def update(self, proj_id: str, **kwargs: Any) -> Dict:
         """Partially update a project record.
 
         **Requires admin permissions.**
@@ -274,17 +321,19 @@ class ProjectOperations(OwnershipMixin, AccessControlMixin, BaseResource):
     def _resolve_member_unique_id(self, user_unique_id: Optional[str] = None,
                                   email: Optional[str] = None,
                                   username: Optional[str] = None) -> str:
-        """Resolve a project membership target to its canonical user identifier."""
+        """Return a project membership target for the {user_ref} path segment.
+
+        ORCID, service-account MFID, and username pass straight through. Email
+        is deprecated in path segments, so it is resolved to the canonical
+        unique_id with a user lookup first.
+        """
         provided = [value for value in (user_unique_id, email, username) if value is not None]
         if len(provided) != 1:
             raise ValueError("Provide exactly one user identifier")
-        if user_unique_id is not None:
-            return user_unique_id
+        if email is None:
+            return user_unique_id if user_unique_id is not None else username
 
-        user = (
-            self._client.users.get(email=email)
-            if email else self._client.users.get(username=username)
-        )
+        user = self._client.users.get(email=email)
         resolved = user.get('unique_id') if isinstance(user, dict) else None
         if not resolved:
             raise ValueError("Resolved user is missing a canonical unique_id")

@@ -11,6 +11,7 @@ import json
 import sys
 import logging
 from . import term
+from .helpers import add_limit_arguments, count_label, print_more_hint, resolve_limit, page_kwargs
 
 logger = logging.getLogger(__name__)
 
@@ -33,24 +34,82 @@ def register_subcommand(subparsers):
         _register_list(sa_subparsers)
         _register_edit(sa_subparsers)
         _register_update(sa_subparsers)
+        _register_show(sa_subparsers)
+        _register_set_role(sa_subparsers)
         _register_list_access_groups(sa_subparsers)
         _register_add_access_group(sa_subparsers)
         _register_remove_access_group(sa_subparsers)
 
 
-def _show_sa(sa, key=None):
-    """Display a service account record."""
+def _show_sa(sa, key=None, groups=None):
+    """Display a service account record.
+
+    Shows the platform role and API key status when the record carries them
+    (the administrator view), and the groups it belongs to when given.
+    """
     _p = term.field_printer(14)
     term.header("Service Account")
-    _p("MFID",     sa.get('unique_id'))
-    _p("Username", sa.get('username'))
-    name = term.fmt_name(sa, fallback_username=False)
-    if name:
+    _p("Username", term.bold(sa.get('username')) if sa.get('username') else None)
+    _p("MFID",     term.cyan(sa.get('unique_id')) if sa.get('unique_id') else None)
+    name = ' '.join(p for p in (sa.get('first_name'), sa.get('last_name')) if p)
+    if name and name != sa.get('username'):
         _p("Name", name)
+    if sa.get('email'):
+        _p("Email", sa.get('email'))
+
+    if 'platform_role' in sa or 'api_key_status' in sa:
+        term.subheader("Authorization")
+        _p("Platform role", term.platform_role_label(sa.get('platform_role')))
+        status = sa.get('api_key_status') or {}
+        if status:
+            valid = status.get('valid')
+            _p("API key", term.green('valid') if valid else term.red('invalid'))
+            _p("Issued", term.fmt_date(status.get('created_at')))
+            _p("Expires", term.fmt_date(status.get('expires_at')))
+        else:
+            _p("API key", term.dim('none issued'))
+
+    if groups is not None:
+        term.subheader(f"Member of ({len(groups)})")
+        _group_table(groups)
+
     if key:
         print()
         print(f"  {term.yellow('API Key')}  {term.bold(key)}")
-        print(f"  {term.dim('Store this now — it will not be shown again.')}")
+        print(f"  {term.dim('Store this now; it will not be shown again.')}")
+
+
+def _describe_groups(client, group_ids, own_id=None):
+    """Name a service account's access groups by the project or instrument behind them.
+
+    Access groups are named by the MFID of what they grant: a project group
+    by the project, an instrument operator group by the instrument. The
+    account's personal group is named by its own MFID.
+    """
+    described = []
+    for group_id in group_ids:
+        if group_id == own_id:
+            described.append({'group': group_id, 'kind': 'personal', 'label': '(own group)'})
+            continue
+        kind, label = 'group', None
+        try:
+            resource = client.get(group_id, include_owner=False, include_datasets=False)
+        except Exception:
+            resource = None
+        if resource:
+            kind = resource.get('resource_type') or 'group'
+            label = (resource.get('project_id') or resource.get('instrument_id')
+                     or resource.get('title') or resource.get('instrument_name'))
+        described.append({'group': group_id, 'kind': kind, 'label': label})
+    return described
+
+
+def _group_table(groups):
+    if not groups:
+        print(f"  {term.dim('No access groups.')}")
+        return
+    rows = [(g['label'] or term.dim('-'), g['kind'], term.cyan(g['group'])) for g in groups]
+    term.table(rows, ['Name', 'Kind', 'Group'], max_widths=[30, 12, 26])
 
 
 def _resolve_sa(client, unique_id=None, username=None, ambiguous=False):
@@ -116,9 +175,11 @@ Examples:
 
 
 def _execute_create(args):
-    from crucible.client import CrucibleClient
-    from .helpers import prompt_optional, prompt_username
+    from crucible.config import get_client
+    from .helpers import prompt_optional, prompt_username, require_elevation
     from ..utils.identifiers import validate_mfid, validate_username
+
+    require_elevation(get_client(), 'manage service accounts')
 
     username = getattr(args, 'username', None)
     unique_id = getattr(args, 'unique_id', None)
@@ -135,7 +196,7 @@ def _execute_create(args):
         username = validate_username(username)
         if unique_id is not None:
             unique_id = validate_mfid(unique_id)
-        client = CrucibleClient()
+        client = get_client()
         result = client.service_accounts.create(username=username, unique_id=unique_id)
         _show_sa(result, key=result.get('api_key'))
     except Exception as e:
@@ -164,10 +225,12 @@ Examples:
 
 
 def _execute_rotate_key(args):
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
+    from .helpers import require_elevation
     try:
         unique_id, username, ambiguous = _resolve_sa_ref(args)
-        client = CrucibleClient()
+        client = get_client()
+        require_elevation(client, 'rotate service account API keys')
         sa = _resolve_sa(client, unique_id=unique_id, username=username, ambiguous=ambiguous)
         result = client.service_accounts.rotate_key(sa.get('unique_id'))
         _show_sa(result, key=result.get('api_key'))
@@ -195,21 +258,37 @@ Examples:
     group = parser.add_mutually_exclusive_group()
     group.add_argument('--unique-id', '-o', metavar='MFID',    help='(deprecated, use positional SA)')
     group.add_argument('--username',  '-u', metavar='USERNAME', help='(deprecated, use positional SA)')
+    parser.add_argument('--groups', '-g', action='store_true', default=False,
+                        help='Also list the projects and instruments it belongs to')
     parser.add_argument('--json', action='store_true', default=False,
                         help='Output as JSON object')
     parser.set_defaults(func=_execute_get)
 
 
 def _execute_get(args):
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
         unique_id, username, ambiguous = _resolve_sa_ref(args)
-        client = CrucibleClient()
+        client = get_client()
         sa = _resolve_sa(client, unique_id=unique_id, username=username, ambiguous=ambiguous)
+        capabilities = getattr(client, 'capabilities', None)
+        if (getattr(client, 'can_elevate', False)
+                or getattr(capabilities, 'can_manage_service_accounts', False)):
+            try:
+                sa = client.service_accounts.get_admin(sa['unique_id'])
+            except Exception as e:
+                logger.debug(f"Administrator record unavailable: {e}")
+        groups = None
+        if getattr(args, 'groups', False):
+            group_ids = client.service_accounts.list_access_groups(sa['unique_id'])
+            groups = _describe_groups(client, group_ids, sa['unique_id'])
         if getattr(args, 'json', False):
-            print(json.dumps(sa, indent=2, default=str))
+            payload = dict(sa)
+            if groups is not None:
+                payload['access_groups'] = groups
+            print(json.dumps(payload, indent=2, default=str))
         else:
-            _show_sa(sa)
+            _show_sa(sa, groups=groups)
     except SystemExit:
         raise
     except Exception as e:
@@ -223,29 +302,104 @@ def _register_list(subparsers):
         help='List all service accounts',
         formatter_class=term.ColorHelpFormatter,
     )
-    parser.add_argument('--limit', type=int, default=100, metavar='N')
+    add_limit_arguments(parser, 'service accounts')
+    parser.add_argument('--search', '-q', dest='q', default=None, metavar='TEXT',
+                        help='Filter by username or name (at least 3 characters)')
     parser.add_argument('--json', action='store_true', default=False,
                         help='Output as JSON array')
     parser.set_defaults(func=_execute_list)
 
 
 def _execute_list(args):
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
-        accounts = client.service_accounts.list(limit=args.limit)
+        client = get_client()
+        q = getattr(args, 'q', None)
+        if client.can_elevate:
+            accounts = client.service_accounts.list_admin(q=q, limit=resolve_limit(args), **page_kwargs(args))
+        else:
+            accounts = client.users.list(limit=resolve_limit(args), **page_kwargs(args), q=q, is_service_account=True)
         if getattr(args, 'json', False):
+            print_more_hint(accounts, resolve_limit(args), args)
             print(json.dumps(accounts, indent=2, default=str))
             return
-        term.header(f"Service Accounts ({len(accounts)})")
+        term.header(f"Service Accounts ({count_label(accounts)})")
         if not accounts:
             print(f"  {term.dim('No service accounts found.')}")
             return
+        def _name(sa):
+            full = ' '.join(p for p in (sa.get('first_name'), sa.get('last_name')) if p)
+            return full if full and full != sa.get('username') else None
+
+        show_names = any(_name(sa) for sa in accounts)
         rows = []
         for sa in accounts:
-            rows.append((sa.get('username') or '-',
-                         term.cyan(sa.get('unique_id')) if sa.get('unique_id') else '-'))
-        term.table(rows, ['Username', 'MFID'], max_widths=[30, 30])
+            row = (sa.get('username') or '-',)
+            if show_names:
+                row += (_name(sa) or '-',)
+            rows.append(row + (
+                term.cyan(sa.get('unique_id')) if sa.get('unique_id') else '-',
+                term.platform_role_label(sa.get('platform_role'))))
+        headers = ['Username'] + (['Name'] if show_names else []) + ['MFID', 'Platform role']
+        max_widths = [30] + ([25] if show_names else []) + [26, 13]
+        term.table(rows, headers, max_widths=max_widths)
+        print_more_hint(accounts, resolve_limit(args), args)
+    except Exception as e:
+        from .helpers import fail
+        fail("", e, args)
+
+
+def _register_show(subparsers):
+    parser = subparsers.add_parser(
+        'show',
+        help='Alias for get',
+        description='Alias for "get": show a service account with its platform role, '
+                    'API key status (administrators), and optionally its groups.',
+    )
+    parser.add_argument('sa', metavar='SA', help='MFID or username of the service account')
+    parser.add_argument('--groups', '-g', action='store_true', default=False,
+                        help='Also list the projects and instruments it belongs to')
+    parser.add_argument('--json', action='store_true', default=False,
+                        help='Output as JSON object')
+    parser.set_defaults(func=_execute_get)
+
+
+def _register_set_role(subparsers):
+    from crucible.constants import PLATFORM_ROLES
+
+    parser = subparsers.add_parser(
+        'set-role',
+        help='Set a service account platform role (admin only)',
+        description='Set the platform-wide role granted to a service account.',
+        formatter_class=term.ColorHelpFormatter,
+        epilog="""
+Examples:
+    crucible service-account set-role SA_MFID contributor
+    crucible service-account set-role SA_MFID none
+"""
+    )
+    parser.add_argument('sa', metavar='SA_MFID', help='Service account MFID')
+    parser.add_argument('platform_role', metavar='ROLE', choices=PLATFORM_ROLES,
+                        help=f"Platform role: {', '.join(PLATFORM_ROLES)}")
+    parser.add_argument('--json', action='store_true', default=False,
+                        help='Output as JSON object')
+    parser.set_defaults(func=_execute_set_role)
+
+
+def _execute_set_role(args):
+    from crucible.config import get_client
+    from .helpers import require_elevation
+    try:
+        client = get_client()
+        require_elevation(client, 'change service account platform roles')
+        sa = client.service_accounts.set_platform_role(
+            args.sa, args.platform_role)
+        if getattr(args, 'json', False):
+            print(json.dumps(sa, indent=2, default=str))
+            return
+        term.success(
+            f"Set {sa.get('username') or args.sa} role to {args.platform_role}",
+            args)
     except Exception as e:
         from .helpers import fail
         fail("", e, args)
@@ -272,10 +426,10 @@ Examples:
 
 
 def _execute_edit(args):
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
         unique_id, username, ambiguous = _resolve_sa_ref(args)
-        client = CrucibleClient()
+        client = get_client()
         sa = _resolve_sa(client, unique_id=unique_id, username=username, ambiguous=ambiguous)
         uid = sa.get('unique_id')
         original = {k: sa.get(k) for k in _EDITABLE}
@@ -330,10 +484,10 @@ Examples:
 
 
 def _execute_update(args):
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
         unique_id, username, ambiguous = _resolve_sa_ref(args)
-        client = CrucibleClient()
+        client = get_client()
         sa = _resolve_sa(client, unique_id=unique_id, username=username, ambiguous=ambiguous)
         uid = sa.get('unique_id')
 
@@ -374,23 +528,25 @@ Examples:
     group = parser.add_mutually_exclusive_group()
     group.add_argument('--unique-id', '-o', metavar='MFID',    help='(deprecated, use positional SA)')
     group.add_argument('--username',  '-u', metavar='USERNAME', help='(deprecated, use positional SA)')
+    parser.add_argument('--json', action='store_true', default=False,
+                        help='Output as JSON array')
     parser.set_defaults(func=_execute_list_access_groups)
 
 
 def _execute_list_access_groups(args):
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
         unique_id, username, ambiguous = _resolve_sa_ref(args)
-        client = CrucibleClient()
+        client = get_client()
         sa = _resolve_sa(client, unique_id=unique_id, username=username, ambiguous=ambiguous)
 
-        groups = client.service_accounts.list_access_groups(sa.get('unique_id'))
-        term.header(f"Access Groups · {sa.get('username') or sa.get('unique_id')} ({len(groups)})")
-        if not groups:
-            print(f"  {term.dim('No access groups found.')}")
+        group_ids = client.service_accounts.list_access_groups(sa.get('unique_id'))
+        groups = _describe_groups(client, group_ids, sa.get('unique_id'))
+        if getattr(args, 'json', False):
+            print(json.dumps(groups, indent=2, default=str))
             return
-        for g in groups:
-            print(f"  {g}")
+        term.header(f"Access Groups · {sa.get('username') or sa.get('unique_id')} ({len(groups)})")
+        _group_table(groups)
 
     except SystemExit:
         raise
@@ -415,10 +571,10 @@ Examples:
 
 
 def _execute_add_access_group(args):
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     from .helpers import resolve_sa_id
     try:
-        client = CrucibleClient()
+        client = get_client()
         unique_id = resolve_sa_id(client, args.sa)
         client.service_accounts.add_to_access_group(unique_id, args.group_name)
         term.success(f"Added {args.sa} to access group '{args.group_name}'", args)
@@ -446,10 +602,10 @@ Examples:
 
 
 def _execute_remove_access_group(args):
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     from .helpers import resolve_sa_id
     try:
-        client = CrucibleClient()
+        client = get_client()
         unique_id = resolve_sa_id(client, args.sa)
         client.service_accounts.remove_from_access_group(unique_id, args.group_name)
         term.success(f"Removed {args.sa} from access group '{args.group_name}'", args)

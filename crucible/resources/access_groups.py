@@ -11,7 +11,7 @@ DeletionRequest, not a primary content resource.
 
 from typing import Dict, List, Optional
 
-from .base import BaseResource
+from .base import BaseResource, ListResult
 from ..constants import DEFAULT_LIMIT
 from ..models import JoinRequest
 
@@ -47,7 +47,9 @@ class AccessGroupOperations(BaseResource):
     def list_join_requests(self, group_name: Optional[str] = None,
                            status: Optional[str] = None,
                            requester_id: Optional[str] = None,
-                           limit: int = DEFAULT_LIMIT, offset: int = 0) -> List[Dict]:
+                           limit: int = DEFAULT_LIMIT, offset: int = 0,
+                           privilege_mode: Optional[str] = None,
+                           cursor: Optional[str] = None) -> List[Dict]:
         """List join requests. Admin, or the lead of the given group_name.
 
         Args:
@@ -57,6 +59,9 @@ class AccessGroupOperations(BaseResource):
             requester_id: Filter to one user's requests (admin use).
             limit: Maximum number of results (default 100, max 1000).
             offset: Starting position in the full result set.
+            cursor (str, optional): Continuation token from a previous
+                result's next_cursor; the listing resumes there.
+            privilege_mode: Per-call privilege mode.
 
         Returns:
             List[Dict]: Matching JoinRequest records, most recent first.
@@ -71,8 +76,9 @@ class AccessGroupOperations(BaseResource):
             params['status'] = status
         if requester_id is not None:
             params['requester_id'] = requester_id
-        raw = self._paginate('/join_requests', params, limit, offset)
-        return [self._parse(r) for r in raw]
+        raw = self._paginate('/join_requests', params, limit, offset,
+                             privilege_mode=privilege_mode, cursor=cursor)
+        return ListResult.like(raw, [self._parse(r) for r in raw])
 
     def get(self, request_id: int) -> Optional[Dict]:
         """Fetch a single join request by ID. Admin only.
@@ -91,7 +97,8 @@ class AccessGroupOperations(BaseResource):
         Raises:
             HTTPError 403: Caller is not admin.
         """
-        for r in self.list_join_requests(limit=1000):
+        for r in self.list_join_requests(limit=1000,
+                                         privilege_mode=self._client._admin_mode()):
             if r.get('id') == request_id:
                 return r
         return None

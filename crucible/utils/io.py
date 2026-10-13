@@ -224,3 +224,50 @@ def data2thumbnail(image) -> str:
         f"Unsupported thumbnail type: {type(image)}. "
         f"Supported types: str, Path, PIL.Image, matplotlib.Figure, numpy.ndarray"
     )
+
+
+def gcs_object_parts(file_record: dict):
+    """Split a GCS record's storage_path into (bucket, dataset_mfid, object name).
+
+    Works for any bucket. Returns None for records that are not on GCS, have
+    no storage path yet, or whose path is not bucket/dataset/object.
+    """
+    if (file_record.get('storage_backend') or 'gcs') != 'gcs':
+        return None
+    parts = (file_record.get('storage_path') or '').split('/', 2)
+    if len(parts) < 3 or not all(parts):
+        return None
+    return parts[0], parts[1], parts[2]
+
+
+def storage_display_name(file_record: dict, dataset_mfid: str = None) -> str:
+    """Return the display filename for a file record.
+
+    GCS records are named by their ``filename``, which carries any relative
+    folders; the object path is a server detail that differs between upload
+    flows. Legacy objects stored directly below the dataset folder keep their
+    object path when it extends the filename with folders. Other records fall
+    back to the basename of their storage path or filename.
+    """
+    filename = file_record.get('filename') or ''
+    parts = gcs_object_parts(file_record)
+    if parts is not None:
+        _bucket, owner_dataset, object_name = parts
+        dataset_mfid = dataset_mfid or file_record.get('dataset_mfid')
+        legacy = owner_dataset == dataset_mfid and not object_name.startswith('_files/')
+        if legacy and (not filename or object_name.endswith(filename)):
+            return object_name
+        return filename or object_name
+    storage_path = file_record.get('storage_path') or ''
+    if storage_path:
+        return os.path.basename(storage_path)
+    return os.path.basename(filename)
+
+
+def safe_output_path(output_dir: str, name: str) -> str:
+    """Join name onto output_dir, refusing names that would land outside it."""
+    root = os.path.abspath(output_dir)
+    target = os.path.abspath(os.path.join(root, name))
+    if os.path.isabs(name) or os.path.commonpath([root, target]) != root:
+        raise ValueError(f"Refusing to write '{name}' outside {root}.")
+    return target

@@ -14,8 +14,6 @@ from crucible import Dataset
 
 logger = logging.getLogger(__name__)
 
-#%%
-
 class BaseParser:
 
     _measurement = None
@@ -74,6 +72,7 @@ class BaseParser:
         self.session_name    = session_name
         self.timestamp       = timestamp
         self.owner_orcid     = owner_orcid
+        self.owner           = None
         self.public          = public
         self.instrument_name = instrument_name
         self.instrument_id   = instrument_id
@@ -253,6 +252,7 @@ class BaseParser:
             project_id     = self.project_id,
             project_mfid   = self.project_mfid,
             owner_orcid    = self.owner_orcid,  # API key handles user authentication
+            owner          = getattr(self, 'owner', None),
             dataset_name   = self.dataset_name,
             session_name   = self.session_name,
             timestamp      = self.timestamp,
@@ -265,7 +265,7 @@ class BaseParser:
         )
 
         return crucible_dataset
-    
+
     def upload_dataset(self, ingestor=None,
                        verbose=False, wait_for_ingestion_response=True):
         """
@@ -306,6 +306,6 @@ class BaseParser:
 
         if self.thumbnail is not None:
             self.client.datasets.add_thumbnail(dataset_id, self.thumbnail)
-            logger.info(f"  Thumbnail uploaded")
+            logger.info("  Thumbnail uploaded")
 
         return result

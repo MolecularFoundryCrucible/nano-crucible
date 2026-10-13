@@ -7,7 +7,7 @@ Pydantic models for Crucible API request and response objects.
 from pydantic import BaseModel, ConfigDict
 from typing import Dict, List, Literal, Optional, Union
 
-#%% Base model
+# Base model
 
 class CrucibleResource(BaseModel):
     """Shared fields common to all Crucible resources."""
@@ -22,7 +22,7 @@ class CrucibleResource(BaseModel):
     model_config = ConfigDict(from_attributes=True, populate_by_name=True, extra='allow')
 
 
-#%% Models
+# Models
 
 class PublicUser(BaseModel):
     """Public-safe user record embedded in resource responses."""
@@ -43,6 +43,34 @@ class ResourceCapabilities(BaseModel):
     can_change_status: bool
     can_transfer: bool
     max_grant_role: Optional[Literal['viewer', 'contributor', 'editor', 'admin']] = None
+
+    model_config = ConfigDict(from_attributes=True, extra='allow')
+
+
+class AccountCapabilities(BaseModel):
+    """Account-level actions the caller may take, from /account/profile.
+
+    A flag is None when the server did not report it, in which case callers
+    should let the API decide rather than refuse.
+    """
+
+    can_manage_service_accounts: Optional[bool] = None
+    can_manage_users: Optional[bool] = None
+    can_create_project: Optional[bool] = None
+    can_register_instrument: Optional[bool] = None
+    can_create_sample: Optional[bool] = None
+    can_create_dataset: Optional[bool] = None
+    can_create_for_others: Optional[bool] = None
+
+    model_config = ConfigDict(from_attributes=True, extra='allow')
+
+
+class AccountAuthorization(BaseModel):
+    """The caller's platform role and privilege mode, from /account/profile."""
+
+    platform_role: Optional[str] = None
+    effective_privilege_mode: Optional[Literal['normal', 'elevated']] = None
+    can_elevate: bool = False
 
     model_config = ConfigDict(from_attributes=True, extra='allow')
 
@@ -121,6 +149,7 @@ class Instrument(CrucibleResource):
     other_id_source: Optional[str] = None
     status: Optional[str] = None
     capabilities: Optional[ResourceCapabilities] = None
+    members: Optional[List['AccessGrant']] = None
 
 
 class Project(BaseModel):
@@ -217,6 +246,25 @@ class ProjectReassignment(BaseModel):
     resource_id: str
     previous_project_id: Optional[str] = None
     new_project_id: str
+    resource_mfid: Optional[str] = None
+    previous_project_mfid: Optional[str] = None
+    new_project_mfid: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class InstrumentAssignment(BaseModel):
+    '''Result of PUT /datasets/{dataset_mfid}/instrument.
+
+    previous_instrument_name is the dataset's old instrument_name label. For
+    datasets whose name never named a registered instrument, it is the only
+    record of what was there, since previous_instrument is None for those.
+    '''
+
+    dataset_mfid: str
+    previous_instrument: Optional[InstrumentReference] = None
+    previous_instrument_name: Optional[str] = None
+    instrument: InstrumentReference
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -236,6 +284,64 @@ class AssociatedFile(BaseModel):
     model_config = ConfigDict(from_attributes=True, populate_by_name=True, extra='allow')
 
 
+class ServiceAccountKeyStatus(BaseModel):
+    '''Issue and expiry state of a service account's current API key.'''
+
+    created_at: Optional[str] = None
+    expires_at: Optional[str] = None
+    valid: Optional[bool] = None
+
+    model_config = ConfigDict(from_attributes=True, extra='allow')
+
+
+class ServiceAccountAdmin(BaseModel):
+    '''A service account as seen by an administrator, with role and key state.'''
+
+    unique_id: Optional[str] = None
+    username: Optional[str] = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    email: Optional[str] = None
+    is_service_account: Optional[bool] = True
+    platform_role: Optional[str] = None
+    api_key_status: Optional[ServiceAccountKeyStatus] = None
+
+    model_config = ConfigDict(from_attributes=True, extra='allow')
+
+
+class FacetBucket(BaseModel):
+    '''One grouped value and its count from a facet response.
+
+    Owner, project, and instrument facets also carry a typed reference object
+    under the matching key, preserved by extra='allow'.
+    '''
+
+    value: Optional[str] = None
+    label: Optional[str] = None
+    count: Optional[int] = None
+
+    model_config = ConfigDict(from_attributes=True, extra='allow')
+
+
+class FacetResponse(BaseModel):
+    '''A page of facet buckets for one grouping field.'''
+
+    field: Optional[str] = None
+    items: List[FacetBucket] = []
+    limit: Optional[int] = None
+    next_cursor: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True, extra='allow')
+
+
+class DeletionRequestCapabilities(BaseModel):
+    '''What the calling user may do with a deletion request.'''
+
+    can_review: Optional[bool] = None
+
+    model_config = ConfigDict(from_attributes=True, extra='allow')
+
+
 class DeletionRequest(BaseModel):
     '''A pending or resolved request to delete a resource.'''
 
@@ -244,13 +350,17 @@ class DeletionRequest(BaseModel):
     resource_id: Optional[str] = None
     resource_name: Optional[str] = None
     project_id: Optional[str] = None
+    project_mfid: Optional[str] = None
     requester_id: Optional[str] = None
+    requester: Optional[Dict] = None
     reason: Optional[str] = None
     status: Optional[str] = None          # "pending" | "approved" | "rejected"
     request_time: Optional[str] = None
     review_time: Optional[str] = None
     reviewer_id: Optional[str] = None
+    reviewer: Optional[Dict] = None
     reviewer_notes: Optional[str] = None
+    capabilities: Optional[DeletionRequestCapabilities] = None
 
     model_config = ConfigDict(from_attributes=True, populate_by_name=True, extra='allow')
 
@@ -298,12 +408,18 @@ class DeletionAuditLog(BaseModel):
     resource_type: Optional[str] = None
     resource_name: Optional[str] = None
     project_id: Optional[str] = None
+    project_mfid: Optional[str] = None
     requester_id: Optional[str] = None
+    requester: Optional[Dict] = None
     reason: Optional[str] = None
     request_time: Optional[str] = None
     reviewer_id: Optional[str] = None
+    reviewer: Optional[Dict] = None
     reviewer_notes: Optional[str] = None
     review_time: Optional[str] = None
     deleted_at: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True, populate_by_name=True, extra='allow')
+
+
+Instrument.model_rebuild()

@@ -13,3 +13,6 @@ For ingestion management use `client.ingestions`.
         - download
         - get_download_link
         - request_ingestion
+        - replace
+        - update
+        - delete

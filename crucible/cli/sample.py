@@ -14,6 +14,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 from . import term
+from .helpers import add_limit_arguments, count_label, print_more_hint, resolve_limit, sort_like, page_kwargs
 
 try:
     import argcomplete
@@ -22,7 +23,6 @@ except ImportError:
     ARGCOMPLETE_AVAILABLE = False
 
 from ..config import config as _config
-from ..constants import PROJECT_SCOPES
 
 
 def register_subcommand(subparsers):
@@ -62,6 +62,7 @@ def register_subcommand(subparsers):
     _register_add_dataset(sample_subparsers)
     _register_remove_dataset(sample_subparsers)
     _register_remove_child(sample_subparsers)
+    _register_facets(sample_subparsers)
     from ._access import register_access_commands
     register_access_commands(sample_subparsers, 'samples', id_metavar='SAMPLE_MFID')
 
@@ -71,113 +72,59 @@ def _register_list(subparsers):
     parser = subparsers.add_parser(
         'list',
         help='List samples',
-        description='List samples, with optional filters',
+        description='List samples, oldest to newest so the newest is closest '
+                    'to the prompt. Uses the current project if one is set, '
+                    'otherwise every accessible project.',
         formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
-    crucible sample list --project-id my-project
+    crucible sample list
+    crucible sample list --all-projects --mine
     crucible sample list --project-id my-project --project-scope shared
-    crucible sample list --project-mfid 0tkn2knjast3h0008nyq9zps2c --project-scope all
     crucible sample list --project-id my-project --type wafer
-    crucible sample list --project-id my-project --group-by type
-    crucible sample list --project-id my-project --include "Silicon*" "Wafer*"
-    crucible sample list --project-id my-project --exclude "*test*" "*dummy*"
+    crucible sample list --dataset-mfid 0tkn2knjast3h0008nyq9zps2c
+    crucible sample list --missing sample_type
+    crucible sample list --sort name --direction asc
+    crucible sample list --group-by type
+    crucible sample list --include "Silicon*" "Wafer*" --exclude "*test*"
 """
     )
 
-    from .helpers import DeprecatedAliasAction
-    project_group = parser.add_mutually_exclusive_group()
-    project_group.add_argument(
-        '--project-id', '-p',
-        required=False,
-        default=None,
-        metavar='ID',
-        help='Crucible project ID (uses the saved current project if omitted)'
-    )
-    project_group.add_argument(
-        '--project-mfid',
-        default=None,
-        metavar='MFID',
-        help='Canonical project MFID'
-    )
-    parser.add_argument(
-        '-pid',
-        action=DeprecatedAliasAction,
-        deprecated_options={'-pid'},
-        replacement='--project-id',
-        dest='project_id',
-        default=argparse.SUPPRESS,
-        metavar='ID',
-        help=argparse.SUPPRESS,
-    )
-    parser.add_argument(
-        '--project-scope',
-        choices=PROJECT_SCOPES,
-        default=None,
-        metavar='SCOPE',
-        help='Project relationship to include: assigned, shared, or all (default: assigned)'
-    )
+    from .helpers import add_listing_filters, add_scope_filters
+    add_scope_filters(parser, 'sample')
+    add_listing_filters(parser)
 
     parser.add_argument(
-        '-n', '--name',
-        default=None,
-        metavar='NAME',
+        '-n', '--name', default=None, metavar='NAME',
         help='Filter by sample name (exact match)'
     )
-
     parser.add_argument(
-        '--type',
-        default=None,
-        dest='sample_type',
-        metavar='TYPE',
-        help='Filter by sample type (exact match, or use * / ? wildcards)'
+        '--description', default=None, metavar='TEXT',
+        help='Filter by description (exact match)'
     )
-
     parser.add_argument(
-        '--group-by',
-        dest='group_by',
-        default=None,
-        choices=['type', 'project'],
-        metavar='FIELD',
-        help='Group results by field: type, project (default from config, fallback: type)'
+        '--group-by', dest='group_by', default=None,
+        choices=['type', 'project', 'none'], metavar='FIELD',
+        help='Group results by field: type, project, or none '
+             '(default: sample_group_by from config, else none)'
     )
-
     parser.add_argument(
-        '--include',
-        nargs='+',
-        metavar='PATTERN',
+        '--include', nargs='+', metavar='PATTERN',
         help='Only show samples whose name matches any glob pattern (e.g. "Silicon*", "wafer-??")'
     )
-
     parser.add_argument(
-        '--exclude',
-        nargs='+',
-        metavar='PATTERN',
+        '--exclude', nargs='+', metavar='PATTERN',
         help='Exclude samples whose name matches any glob pattern'
     )
-
+    add_limit_arguments(parser)
     parser.add_argument(
-        '--limit',
-        type=int,
-        default=_config.default_limit,
-        metavar='N',
-        help=f'Maximum number of results to return (default: {_config.default_limit})'
-    )
-
-    parser.add_argument(
-        '--include-metadata',
-        action='store_true',
-        dest='include_metadata',
+        '--include-metadata', action='store_true', dest='include_metadata',
         help='Include scientific metadata in results'
     )
-
     parser.add_argument(
-        '--json',
-        action='store_true',
-        default=False,
-        help='Output as JSON array'
+        '--json', action='store_true', default=False,
+        help='Output raw JSON in server order'
     )
-
     parser.set_defaults(func=_execute_list)
 
 
@@ -316,6 +263,12 @@ Examples:
     )
 
     parser.add_argument(
+        '--owner', default=None, metavar='USER',
+        help='Create it for this user (username, ORCID, MFID, or email). '
+             'Platform contributors and admins can name anyone; others only themselves'
+    )
+
+    parser.add_argument(
         '--public',
         action='store_true',
         default=False,
@@ -340,7 +293,6 @@ def _sample_updatable_fields():
 
 def _register_update(subparsers):
     """Register the 'sample update' subcommand."""
-    fields = _sample_updatable_fields()
     parser = subparsers.add_parser(
         'update',
         help='Update sample fields or scientific metadata',
@@ -402,7 +354,7 @@ Use `sample reassign-project` or `sample transfer-ownership` to change project o
 
 def _execute_update(args):
     """Execute the 'sample update' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     from .helpers import cast_value
 
     has_set      = bool(getattr(args, 'set_fields', None))
@@ -453,7 +405,7 @@ def _execute_update(args):
             sys.exit(1)
 
     try:
-        client = CrucibleClient()
+        client = get_client()
 
         updates.update(named)
 
@@ -492,19 +444,25 @@ Examples:
 """
     )
     parser.add_argument('sample_id', metavar='SAMPLE_MFID', help='Sample MFID')
-    parser.add_argument('project_id', metavar='PROJECT_ID', help='Target project ID')
+    parser.add_argument('project_id', metavar='PROJECT', help='Target project ID or MFID')
     parser.add_argument('--confirm', action='store_true', help='Execute the move (default: preview only)')
     parser.set_defaults(func=_execute_reassign_project)
 
 
 def _execute_reassign_project(args):
     """Execute the 'sample reassign-project' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
+    from ..utils.identifiers import is_mfid
     from .helpers import fail, show_reassign_project
 
     try:
-        client = CrucibleClient()
-        result = client.samples.reassign_project(args.sample_id, args.project_id, confirm=args.confirm)
+        client = get_client()
+        if is_mfid(args.project_id):
+            result = client.samples.reassign_project(
+                args.sample_id, confirm=args.confirm, project_mfid=args.project_id)
+        else:
+            result = client.samples.reassign_project(
+                args.sample_id, args.project_id, confirm=args.confirm)
         show_reassign_project(result, args.confirm)
     except Exception as e:
         fail("reassigning sample project", e, args)
@@ -531,11 +489,11 @@ Examples:
 
 def _execute_transfer_ownership(args):
     """Execute the 'sample transfer-ownership' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     from .helpers import fail, show_transfer_ownership
 
     try:
-        client = CrucibleClient()
+        client = get_client()
         result = client.samples.transfer_ownership(args.sample_id, args.new_owner, confirm=args.confirm)
         show_transfer_ownership(result, args.confirm)
     except Exception as e:
@@ -616,9 +574,9 @@ def _edit_sample(sid, client, debug=False):
 
 def _execute_edit(args):
     """Execute the 'sample edit' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
     except Exception as e:
         from .helpers import fail
         fail("connecting", e)
@@ -691,8 +649,7 @@ Examples:
 """
     )
     parser.add_argument('sample_id', metavar='SAMPLE_MFID', help='Sample MFID')
-    parser.add_argument('--limit', type=int, default=_config.default_limit, metavar='N',
-                        help=f'Maximum number of results (default: {_config.default_limit})')
+    add_limit_arguments(parser)
     from .helpers import add_relationship_type_filter
     add_relationship_type_filter(parser)
     parser.set_defaults(func=_execute_list_parents)
@@ -712,11 +669,34 @@ Examples:
 """
     )
     parser.add_argument('sample_id', metavar='SAMPLE_MFID', help='Sample MFID')
-    parser.add_argument('--limit', type=int, default=_config.default_limit, metavar='N',
-                        help=f'Maximum number of results (default: {_config.default_limit})')
+    add_limit_arguments(parser)
     from .helpers import add_relationship_type_filter
     add_relationship_type_filter(parser)
     parser.set_defaults(func=_execute_list_children)
+
+
+def _register_facets(subparsers):
+    """Register the 'sample facets' subcommand."""
+    from .helpers import register_facets_command
+    from crucible.constants import SAMPLE_FACET_FIELDS
+
+    parser = register_facets_command(
+        subparsers, 'sample', SAMPLE_FACET_FIELDS,
+        examples="""
+Examples:
+    crucible sample facets sample_type
+    crucible sample facets owner --sort count --direction desc
+    crucible sample facets project --project-id my-project
+    crucible sample facets sample_type --mine --json
+"""
+    )
+    parser.set_defaults(func=_execute_facets)
+
+
+def _execute_facets(args):
+    """Execute the 'sample facets' subcommand."""
+    from .helpers import execute_facets_command
+    execute_facets_command(args, 'sample')
 
 
 def _register_list_datasets(subparsers):
@@ -732,57 +712,46 @@ Examples:
 """
     )
     parser.add_argument('sample_id', metavar='SAMPLE_MFID', help='Sample MFID')
-    parser.add_argument('--limit', type=int, default=_config.default_limit, metavar='N',
-                        help=f'Maximum number of results (default: {_config.default_limit})')
+    add_limit_arguments(parser)
     parser.set_defaults(func=_execute_list_datasets)
 
 
 def _execute_list(args):
     """Execute the 'sample list' subcommand."""
     from crucible.config import config
-    from crucible.client import CrucibleClient
-    from .helpers import resolve_project_context
-    project_id = args.project_id
-    project_mfid = getattr(args, 'project_mfid', None)
-    project_scope = getattr(args, 'project_scope', None)
-    if project_id is not None and project_mfid is not None:
-        logger.error("Error: Specify either --project-id or --project-mfid, not both.")
-        sys.exit(1)
-    if project_id is None and project_mfid is None:
-        project_id, _ = resolve_project_context(args)
-    if project_id is None and project_mfid is None:
-        logger.error("Error: Project ID or project MFID required. Specify --project-id, --project-mfid, or set current_project in config.")
-        sys.exit(1)
-
-    filters = {}
-    if args.name:
-        filters['sample_name'] = args.name
-    type_pattern = args.sample_type or None
-    if type_pattern and not any(c in type_pattern for c in ('*', '?', '[')):
-        filters['sample_type'] = type_pattern
-        type_pattern = None  # exact match handled by API; no client-side filter needed
-    project_filters = {}
-    if project_id is not None:
-        project_filters['project_id'] = project_id
-    if project_mfid is not None:
-        project_filters['project_mfid'] = project_mfid
-    if project_scope is not None:
-        project_filters['project_scope'] = project_scope
+    from crucible.config import get_client
+    from .helpers import (display_order, group_records, listing_filter_kwargs,
+                          scope_filter_kwargs)
 
     try:
         import fnmatch
-        client = CrucibleClient()
-        samples = client.samples.list(limit=args.limit, **project_filters,
-                                         include_metadata=getattr(args, 'include_metadata', False) or _config.include_metadata,
-                                         **filters)
+        client = get_client()
+        try:
+            filters = scope_filter_kwargs(args, client)
+        except ValueError as e:
+            logger.error(f"Error: {e}")
+            sys.exit(1)
+        type_pattern = filters.get('sample_type')
+        if type_pattern and any(c in type_pattern for c in ('*', '?', '[')):
+            del filters['sample_type']
+        else:
+            type_pattern = None
+        if args.name:
+            filters['sample_name'] = args.name
+        if getattr(args, 'description', None):
+            filters['description'] = args.description
+        filters.update(listing_filter_kwargs(args))
+        limit = resolve_limit(args)
+        fetched = client.samples.list(
+            limit=limit, **page_kwargs(args),
+            include_metadata=getattr(args, 'include_metadata', False) or _config.include_metadata,
+            **filters)
+        samples = fetched
 
-        # Client-side wildcard filtering on type
         if type_pattern:
             samples = [s for s in samples if fnmatch.fnmatch(
                 (s.get('sample_type') or '').lower(), type_pattern.lower()
             )]
-
-        # Client-side glob filtering on name
         if getattr(args, 'include', None):
             samples = [s for s in samples if any(
                 fnmatch.fnmatch((s.get('sample_name') or '').lower(), p.lower())
@@ -794,70 +763,72 @@ def _execute_list(args):
                 for p in args.exclude
             )]
 
+        more_hint = 'narrow with filters such as --mine, --type TYPE, or --created-after (see "sample facets")'
         if getattr(args, 'json', False):
             import json
+            print_more_hint(fetched, limit, args, hint=more_hint)
             print(json.dumps(samples, indent=2, default=str))
             return
 
-        project_label = project_id or project_mfid
+        project_id = filters.get('project_id')
+        project_scope = filters.get('project_scope')
+        project_label = project_id or filters.get('project_mfid')
         scope_label = f" · {project_scope}" if project_scope else ''
-        title = f"Samples · {project_label}{scope_label} ({len(samples)})" if project_label else f"Samples ({len(samples)})"
+        count = count_label(fetched, len(samples))
+        title = (f"Samples · {project_label}{scope_label} ({count})" if project_label
+                 else f"Samples · all projects ({count})")
         term.header(title)
         if filters:
             logger.info(f"Filters: {', '.join(f'{k}={v}' for k, v in filters.items())}")
 
         if not samples:
             print(f"  {term.dim('No samples found.')}")
+            return
+
+        from .helpers import explorer_url, project_reference
+
+        _GROUP_FIELD = {'type': 'sample_type', 'project': 'project_id'}
+        group_by = _GROUP_FIELD.get(args.group_by or config.sample_group_by or 'none')
+        show_project = project_label is None or project_scope in ('shared', 'all')
+
+        def _make_row(s):
+            uid = s.get('unique_id') or ''
+            _, referenced_project_id, _ = project_reference(s)
+            pid = referenced_project_id or project_id
+            row = (
+                s.get('sample_name') or '(unnamed)',
+                term.mfid_link(uid, explorer_url(uid, pid, 'sample')) if uid else '-',
+            )
+            if show_project:
+                row += (referenced_project_id or '-',)
+            if project_scope in ('shared', 'all'):
+                row += (s.get('project_relation') or '-',)
+            return row + (s.get('sample_type') or '-',
+                          term.fmt_date(s.get('creation_time')))
+
+        headers, max_widths, min_widths = ['Name', 'MFID'], [35, 26], [4, 26]
+        if show_project:
+            headers.append('Project')
+            max_widths.append(25)
+            min_widths.append(7)
+        if project_scope in ('shared', 'all'):
+            headers.append('Relation')
+            max_widths.append(8)
+            min_widths.append(8)
+        headers += ['Type', 'Created']
+        max_widths += [20, 10]
+        min_widths += [4, 10]
+
+        ordered = display_order(samples, args.sort, args.direction)
+        if not group_by:
+            term.table([_make_row(s) for s in ordered], headers,
+                       max_widths=max_widths, min_widths=min_widths)
         else:
-            from .helpers import explorer_url, project_reference
-
-            _GROUP_FIELD = {'type': 'sample_type', 'project': 'project_id'}
-            group_by_key = args.group_by or config.sample_group_by or 'type'
-            group_by = _GROUP_FIELD.get(group_by_key)
-
-            def _make_row(s):
-                uid = s.get('unique_id') or ''
-                _, referenced_project_id, _ = project_reference(s)
-                pid = referenced_project_id or project_id
-                row = (
-                    s.get('sample_name') or '(unnamed)',
-                    term.mfid_link(uid, explorer_url(uid, pid, 'sample')) if uid else '-',
-                )
-                if project_scope in ('shared', 'all'):
-                    row += (
-                        referenced_project_id or '-',
-                        s.get('project_relation') or '-',
-                    )
-                return row + (s.get('sample_type') or '-',)
-
-            contextual_headers = ['Name', 'MFID', 'Project', 'Relation', 'Type']
-            standard_headers = ['Name', 'MFID', 'Type']
-            headers = contextual_headers if project_scope in ('shared', 'all') else standard_headers
-            contextual_max = [30, 26, 25, 8, 20]
-            standard_max = [35, 26, 20]
-            max_widths = contextual_max if project_scope in ('shared', 'all') else standard_max
-            contextual_min = [4, 26, 7, 8, 4]
-            standard_min = [4, 26, 4]
-            min_widths = contextual_min if project_scope in ('shared', 'all') else standard_min
-
-            _by_name = lambda s: (s.get('sample_name') or '').lower()
-
-            if not group_by:
-                term.table([_make_row(s) for s in sorted(samples, key=_by_name)],
-                           headers, max_widths=max_widths,
-                           min_widths=min_widths)
-            else:
-                from collections import defaultdict
-                groups = defaultdict(list)
-                for s in samples:
-                    groups[s.get(group_by) or None].append(s)
-                keys = sorted(k for k in groups if k) + ([None] if None in groups else [])
-                for key in keys:
-                    label = key or '(none)'
-                    term.subheader(f"{label} ({len(groups[key])})")
-                    term.table([_make_row(s) for s in sorted(groups[key], key=_by_name)],
-                               headers, max_widths=max_widths,
-                               min_widths=min_widths)
+            for key, group in group_records(ordered, group_by):
+                term.subheader(f"{key or '(none)'} ({len(group)})")
+                term.table([_make_row(s) for s in group], headers,
+                           max_widths=max_widths, min_widths=min_widths)
+        print_more_hint(fetched, limit, args, hint=more_hint)
 
     except Exception as e:
         from .helpers import fail
@@ -974,12 +945,12 @@ def _show_sample(sample, client, verbose=False, graph=False, include_metadata=Fa
 def _execute_get(args):
     """Execute the 'sample get' subcommand."""
     import json
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     as_json = getattr(args, 'json', False)
     include_metadata = as_json or getattr(args, 'include_metadata', False) or _config.include_metadata
     try:
         graph  = getattr(args, 'graph', False)
-        client = CrucibleClient()
+        client = get_client()
         sample = client.samples.get(args.sample_id, include_links=graph or _config.include_links,
                                     include_metadata=include_metadata, include_owner=True,
                                     include_datasets=as_json)
@@ -1004,7 +975,7 @@ def _execute_get(args):
 
 def _execute_create(args):
     """Execute the 'sample create' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
 
     from ..utils import parse_timestamp
     from ..utils.identifiers import IdentifierNotFoundError, validate_slug
@@ -1035,7 +1006,7 @@ def _execute_create(args):
         print("")
 
     try:
-        client = CrucibleClient()
+        client = get_client()
     except Exception as e:
         fail("connecting", e)
 
@@ -1104,6 +1075,7 @@ def _execute_create(args):
                 sample_type=sample_type,
                 timestamp=timestamp,
                 public=True if args.public else None,
+                owner=getattr(args, 'owner', None),
             ),
             scientific_metadata=metadata_dict,
         )
@@ -1118,9 +1090,9 @@ def _execute_create(args):
 
 def _execute_link(args):
     """Execute the 'sample link' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
         client.samples.link(args.parent, args.child, args.relationship_type)
 
         suffix = f" ({args.relationship_type})" if args.relationship_type else ""
@@ -1134,14 +1106,14 @@ def _execute_link(args):
 
 def _execute_list_parents(args):
     """Execute the 'sample list-parents' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
-        parents = sorted(client.samples.list_parents(
-            args.sample_id, limit=args.limit,
+        client = get_client()
+        parents = sort_like(client.samples.list_parents(
+            args.sample_id, limit=resolve_limit(args), **page_kwargs(args),
             relationship_type=args.relationship_type),
                          key=lambda s: (s.get('sample_name') or '').lower())
-        term.header(f"Parent Samples · {args.sample_id} ({len(parents)})")
+        term.header(f"Parent Samples · {args.sample_id} ({count_label(parents)})")
         if not parents:
             print(f"  {term.dim('No parent samples found.')}")
             return
@@ -1149,6 +1121,7 @@ def _execute_list_parents(args):
                  term.cyan(s.get('unique_id')) if s.get('unique_id') else '-',
                  s.get('sample_type') or '-') for s in parents]
         term.table(rows, ['Name', 'MFID', 'Type'], max_widths=[35, 26, 20])
+        print_more_hint(parents, resolve_limit(args), args)
     except Exception as e:
         from .helpers import fail
         fail("listing parent samples", e, args)
@@ -1156,14 +1129,14 @@ def _execute_list_parents(args):
 
 def _execute_list_children(args):
     """Execute the 'sample list-children' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
-        children = sorted(client.samples.list_children(
-            args.sample_id, limit=args.limit,
+        client = get_client()
+        children = sort_like(client.samples.list_children(
+            args.sample_id, limit=resolve_limit(args), **page_kwargs(args),
             relationship_type=args.relationship_type),
                           key=lambda s: (s.get('sample_name') or '').lower())
-        term.header(f"Child Samples · {args.sample_id} ({len(children)})")
+        term.header(f"Child Samples · {args.sample_id} ({count_label(children)})")
         if not children:
             print(f"  {term.dim('No child samples found.')}")
             return
@@ -1171,6 +1144,7 @@ def _execute_list_children(args):
                  term.cyan(s.get('unique_id')) if s.get('unique_id') else '-',
                  s.get('sample_type') or '-') for s in children]
         term.table(rows, ['Name', 'MFID', 'Type'], max_widths=[35, 26, 20])
+        print_more_hint(children, resolve_limit(args), args)
     except Exception as e:
         from .helpers import fail
         fail("listing child samples", e, args)
@@ -1178,12 +1152,12 @@ def _execute_list_children(args):
 
 def _execute_list_datasets(args):
     """Execute the 'sample list-datasets' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
-        datasets = sorted(client.datasets.list(sample_mfid=args.sample_id, limit=args.limit),
+        client = get_client()
+        datasets = sort_like(client.datasets.list(sample_mfid=args.sample_id, limit=resolve_limit(args), **page_kwargs(args)),
                           key=lambda ds: (ds.get('dataset_name') or '').lower())
-        term.header(f"Datasets · {args.sample_id} ({len(datasets)})")
+        term.header(f"Datasets · {args.sample_id} ({count_label(datasets)})")
         if not datasets:
             print(f"  {term.dim('No datasets linked.')}")
             return
@@ -1191,6 +1165,7 @@ def _execute_list_datasets(args):
                  term.cyan(ds.get('unique_id')) if ds.get('unique_id') else '-',
                  ds.get('measurement') or '-') for ds in datasets]
         term.table(rows, ['Name', 'MFID', 'Measurement'], max_widths=[35, 26, 15])
+        print_more_hint(datasets, resolve_limit(args), args)
     except Exception as e:
         from .helpers import fail
         fail("listing datasets", e, args)
@@ -1198,9 +1173,9 @@ def _execute_list_datasets(args):
 
 def _execute_link_dataset(args):
     """Execute the 'sample add-dataset' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
         sample_id = args.sample_id
         client.samples.link_dataset(sample_id, args.dataset)
 
@@ -1230,9 +1205,9 @@ Examples:
 
 def _execute_remove_child(args):
     """Execute the 'sample remove-child' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
         client.samples.unlink(args.parent_id, args.child)
         term.success(f"Unlinked child sample {args.child} from parent sample {args.parent_id}", args)
     except Exception as e:
@@ -1259,9 +1234,9 @@ Examples:
 
 def _execute_remove_dataset(args):
     """Execute the 'sample remove-dataset' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
         client.samples.unlink_dataset(args.sample_id, args.dataset)
         term.success(f"Unlinked sample {args.sample_id} from dataset {args.dataset}", args)
     except Exception as e:
@@ -1312,17 +1287,18 @@ def _execute_search(args):
     if len(args.query) < 3:
         from .helpers import fail
         fail("searching samples", ValueError("Search term must be at least 3 characters."), args)
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
         from .helpers import resolve_project_context
-        client     = CrucibleClient()
+        client     = get_client()
         project_id, _ = resolve_project_context(args, args.project_id)
         results    = client.samples.search(args.query, project_id=project_id,
                                            limit=args.limit)
         if getattr(args, 'json', False):
+            print_more_hint(results, args.limit, args, allow_all=False)
             print(json.dumps(results, indent=2, default=str))
             return
-        term.header(f"Samples matching '{args.query}' ({len(results)})")
+        term.header(f"Samples matching '{args.query}' ({count_label(results)})")
         if not results:
             print(f"  {term.dim('No results found.')}")
             return
@@ -1338,6 +1314,7 @@ def _execute_search(args):
                 r.get('sample_type') or '-',
             ))
         term.table(rows, ['Name', 'MFID', 'Type'], max_widths=[35, 26, 20])
+        print_more_hint(results, args.limit, args, allow_all=False)
     except Exception as e:
         from .helpers import fail
         fail("", e, args)
@@ -1360,9 +1337,9 @@ def _register_search_metadata(subparsers):
 
 
 def _execute_search_metadata(args):
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client  = CrucibleClient()
+        client  = get_client()
         results = client.samples.search_metadata(args.query, limit=args.limit)
         if getattr(args, 'json', False):
             print(json.dumps(results, indent=2, default=str))

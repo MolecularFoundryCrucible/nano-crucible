@@ -9,8 +9,10 @@ POST /resources/{id}/delete, admins approve or reject them via /deletion_request
 
 from typing import Dict, List, Optional
 
-from .base import BaseResource
-from ..constants import DEFAULT_LIMIT
+from .base import BaseResource, ListResult
+from ..constants import (DEFAULT_LIMIT, DELETION_AUDIT_SCOPES,
+                         DELETION_REQUEST_SCOPES, DELETION_REQUEST_SORTS,
+                         SORT_DIRECTIONS)
 from ..models import DeletionRequest, DeletionAuditLog
 
 
@@ -41,14 +43,27 @@ class DeletionOperations(BaseResource):
         return self._parse(raw)
 
     def list(self, status: Optional[str] = None, limit: int = DEFAULT_LIMIT,
-             offset: int = 0) -> List[Dict]:
-        """List deletion requests. Admin only.
+             offset: int = 0, scope: Optional[str] = None,
+             project_mfid: Optional[str] = None,
+             sort: Optional[str] = None,
+             direction: Optional[str] = None,
+             cursor: Optional[str] = None) -> List[Dict]:
+        """List deletion requests.
 
         Args:
             status: Filter by status — "pending", "approved", or "rejected".
                     Omit to return all requests.
             limit (int): Maximum number of results to return (default: 100)
             offset (int): Starting position in the full result set (default: 0)
+            cursor (str, optional): Continuation token from a previous
+                result's next_cursor; the listing resumes there.
+            scope: One of crucible.constants.DELETION_REQUEST_SCOPES. The
+                   server defaults to "accessible"; "submitted" returns only
+                   the caller's own requests and "reviewable" only those the
+                   caller may act on.
+            project_mfid: Limit to resources assigned to this project MFID.
+            sort: One of crucible.constants.DELETION_REQUEST_SORTS.
+            direction: "asc" or "desc".
 
         Returns:
             List[Dict]: Matching DeletionRequest records.
@@ -56,8 +71,17 @@ class DeletionOperations(BaseResource):
         params = {}
         if status is not None:
             params["status"] = status
-        raw = self._paginate("/deletion_requests", params, limit, offset)
-        return [self._parse(r) for r in raw]
+        if project_mfid is not None:
+            params['project_mfid'] = project_mfid
+        params.update(self._choice_params(
+            scope=(scope, DELETION_REQUEST_SCOPES),
+            sort=(sort, DELETION_REQUEST_SORTS),
+            direction=(direction, SORT_DIRECTIONS)))
+        mode = (self._client._admin_mode()
+                if scope == 'reviewable' else None)
+        raw = self._paginate("/deletion_requests", params, limit, offset,
+                             privilege_mode=mode, cursor=cursor)
+        return ListResult.like(raw, [self._parse(r) for r in raw])
 
     def get(self, request_id: int) -> Dict:
         """Fetch a single deletion request by ID. Admin only.
@@ -68,7 +92,8 @@ class DeletionOperations(BaseResource):
         Returns:
             Dict: The DeletionRequest record.
         """
-        raw = self._request("get", f"/deletion_requests/{request_id}")
+        raw = self._request("get", f"/deletion_requests/{request_id}",
+                            privilege_mode=self._client._admin_mode())
         return self._parse(raw)
 
     def approve(self, request_id: int, reviewer_notes: Optional[str] = None) -> Dict:
@@ -102,8 +127,14 @@ class DeletionOperations(BaseResource):
     def list_deleted(self, resource_id: Optional[str] = None,
                    requester_id: Optional[str] = None,
                    reviewer_id: Optional[str] = None,
-                   limit: int = DEFAULT_LIMIT) -> List[Dict]:
-        """List hard-deletion audit log entries. Admin only.
+                   limit: int = DEFAULT_LIMIT,
+                   scope: Optional[str] = None,
+                   project_id: Optional[str] = None,
+                   project_mfid: Optional[str] = None,
+                   direction: Optional[str] = None,
+                   offset: int = 0,
+                   cursor: Optional[str] = None) -> List[Dict]:
+        """List hard-deletion audit log entries.
 
         Returns a permanent record of every resource that was hard-deleted,
         ordered by deletion time descending. Audit entries survive even after
@@ -114,6 +145,17 @@ class DeletionOperations(BaseResource):
             requester_id: Filter by the ORCID of who requested deletion.
             reviewer_id: Filter by the ORCID of who approved deletion.
             limit: Maximum number of results.
+            offset: Starting position in the full result set (default: 0).
+            cursor: Continuation token from a previous result's next_cursor;
+                the listing resumes there.
+            scope: One of crucible.constants.DELETION_AUDIT_SCOPES. Defaults to
+                   "all" (the platform-wide administrator audit) for callers
+                   who can elevate and "submitted" (the caller's own
+                   deletions) for everyone else.
+            project_id: Project slug captured at deletion time.
+            project_mfid: Project MFID captured at deletion time. Entries
+                          predating project MFID snapshots will not match.
+            direction: "asc" or "desc" on deletion time.
 
         Returns:
             List[Dict]: DeletionAuditLog records.
@@ -125,8 +167,20 @@ class DeletionOperations(BaseResource):
             params['requester_id'] = requester_id
         if reviewer_id:
             params['reviewer_id'] = reviewer_id
-        raw = self._paginate('/deletion_audit', params, limit=limit)
-        return [DeletionAuditLog(**r).model_dump() for r in raw]
+        if project_id is not None:
+            params['project_id'] = project_id
+        if project_mfid is not None:
+            params['project_mfid'] = project_mfid
+        if scope is None and not self._client.can_elevate:
+            scope = 'submitted'
+        params.update(self._choice_params(
+            scope=(scope, DELETION_AUDIT_SCOPES),
+            direction=(direction, SORT_DIRECTIONS)))
+        mode = (self._client._admin_mode()
+                if scope in (None, 'all') else None)
+        raw = self._paginate('/deletion_audit', params, limit=limit,
+                             privilege_mode=mode, offset=offset, cursor=cursor)
+        return ListResult.like(raw, [DeletionAuditLog(**r).model_dump() for r in raw])
 
     def get_deleted(self, audit_id: int) -> Dict:
         """Get a single hard-deletion audit log entry by ID. Admin only.
@@ -140,7 +194,8 @@ class DeletionOperations(BaseResource):
         Raises:
             HTTPError 404: Audit entry not found.
         """
-        raw = self._request('get', f'/deletion_audit/{audit_id}')
+        raw = self._request('get', f'/deletion_audit/{audit_id}',
+                            privilege_mode=self._client._admin_mode())
         return DeletionAuditLog(**raw).model_dump()
 
     def delete(self, resource_id: str, force: bool = False) -> Dict:
@@ -161,7 +216,8 @@ class DeletionOperations(BaseResource):
             HTTPError 404: Resource not found.
         """
         params = {'force': True} if force else None
-        return self._request('delete', f'/resources/{resource_id}', params=params)
+        return self._request('delete', f'/resources/{resource_id}', params=params,
+                             privilege_mode=self._client._admin_mode())
 
     def _review(self, request_id: int, status: str,
                 reviewer_notes: Optional[str] = None) -> Dict:
@@ -169,5 +225,6 @@ class DeletionOperations(BaseResource):
         params = {"status": status}
         if reviewer_notes is not None:
             params["reviewer_notes"] = reviewer_notes
-        raw = self._request("patch", f"/deletion_requests/{request_id}", params=params)
+        raw = self._request("patch", f"/deletion_requests/{request_id}", params=params,
+                            privilege_mode=self._client._admin_mode())
         return self._parse(raw)

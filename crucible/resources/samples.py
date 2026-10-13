@@ -6,15 +6,40 @@ Sample resource operations for Crucible API.
 Provides organized access to sample-related API endpoints.
 """
 
+from datetime import date, datetime
 import logging
-from typing import Optional, List, Dict, Sequence, Union
-from .base import BaseResource
+from typing import Any, Optional, List, Dict, Sequence, Union
+from .base import BaseResource, ListResult
 from .capabilities import AccessControlMixin, OwnershipMixin, ProjectAssignmentMixin
-from ..constants import DEFAULT_LIMIT, API_PAGE_MAX
+from ..constants import DEFAULT_LIMIT, SAMPLE_FACET_FIELDS, VISIBILITIES
 from ..utils.deprecation import _deprecated, _deprecated_parameter
 from ..utils.identifiers import is_mfid, require_canonical_identifier
 
 logger = logging.getLogger(__name__)
+
+# Query parameters accepted by GET /samples. The API rejects anything else
+# with 422 extra_forbidden.
+SAMPLE_LIST_PARAMS = frozenset({
+    'accessible_to_project', 'accessible_to_user', 'affiliation',
+    'anchor_mfid', 'creation_time_gte', 'creation_time_lte', 'cursor',
+    'dataset_mfid', 'description', 'direction', 'include_datasets',
+    'include_links', 'include_metadata', 'include_owner', 'include_total',
+    'limit', 'modification_time_gte', 'modification_time_lte', 'offset',
+    'owner_id', 'owner_id_is_null', 'owner_orcid', 'project_id',
+    'project_mfid', 'project_mfid_is_null', 'project_scope', 'public',
+    'sample_name', 'sample_type', 'sample_type_is_null', 'sort',
+    'timestamp', 'unique_id', 'visibility',
+})
+
+# Query parameters accepted by GET /samples/facets.
+SAMPLE_FACET_PARAMS = frozenset({
+    'accessible_to_project', 'accessible_to_user', 'affiliation',
+    'creation_time_gte', 'creation_time_lte', 'cursor', 'dataset_mfid',
+    'direction', 'field', 'limit', 'modification_time_gte',
+    'modification_time_lte', 'owner_id', 'owner_id_is_null', 'project_id',
+    'project_mfid', 'project_mfid_is_null', 'project_scope',
+    'sample_type', 'sample_type_is_null', 'sort', 'visibility',
+})
 
 
 class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixin, BaseResource):
@@ -91,7 +116,17 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
              project_id: Optional[str] = None,
              project_mfid: Optional[str] = None,
              project_scope: Optional[str] = None,
-             **kwargs) -> List[Dict]:
+             sort: Optional[str] = None,
+             direction: Optional[str] = None,
+             visibility: Optional[str] = None,
+             affiliation: Optional[Union[str, Sequence[str]]] = None,
+             include_total: Optional[bool] = None,
+             creation_time_gte: Optional[Union[str, date, datetime]] = None,
+             creation_time_lte: Optional[Union[str, date, datetime]] = None,
+             modification_time_gte: Optional[Union[str, date, datetime]] = None,
+             modification_time_lte: Optional[Union[str, date, datetime]] = None,
+             cursor: Optional[str] = None,
+             **kwargs: Any) -> List[Dict]:
         """List samples with optional filtering and automatic pagination.
 
         Args:
@@ -106,6 +141,8 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
             offset (int): Deprecated for the /samples collection, which uses
                           keyset pagination and ignores offset. Still honored for
                           the parent-child sub-listing.
+            cursor (str, optional): Continuation token from a previous
+                result's next_cursor; the listing resumes there.
             accessible_to_user: User reference or references whose effective access
                                 must include every result
             accessible_to_project: Project reference or references whose direct access
@@ -114,6 +151,21 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
             project_mfid: Canonical project MFID used to scope results by project relationship
             project_scope: Project relationship to include: assigned, shared, or all.
                            Requires project_id or project_mfid and defaults to assigned.
+            sort: Explicit ordering, one of crucible.constants.RESOURCE_SORTS.
+                  Omit to keep the legacy unique_id descending order.
+            direction: Sort direction, asc or desc. Requires sort.
+            visibility: Restrict results by public visibility: all, public, or private.
+            affiliation: Caller relationship each result must have, currently
+                         only 'owner'. Accepts a single value or a sequence.
+            include_total: Request the exact authorization-filtered total. Omit
+                           to keep the endpoint's default behavior.
+            creation_time_gte: Inclusive lower creation-time bound. Accepts a
+                datetime, date, or ISO 8601 string.
+            creation_time_lte: Inclusive upper creation-time bound, same types.
+            modification_time_gte: Inclusive lower modification-time bound,
+                same types.
+            modification_time_lte: Inclusive upper modification-time bound,
+                same types.
             **kwargs: Query parameters for filtering samples
 
         Returns:
@@ -128,8 +180,25 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
             project_id, project_mfid, project_scope)
         if parent_mfid and dataset_mfid is None and project_params:
             raise ValueError("Project scope is supported only by the top-level sample list")
+        collection_params = {}
+        collection_params.update(self._ordering_params(sort, direction))
+        collection_params.update(self._affiliation_params(affiliation))
+        collection_params.update(self._choice_params(
+            visibility=(visibility, VISIBILITIES)))
+        collection_params.update(self._time_range_params(
+            creation_time_gte=creation_time_gte,
+            creation_time_lte=creation_time_lte,
+            modification_time_gte=modification_time_gte,
+            modification_time_lte=modification_time_lte))
+        if include_total is not None:
+            collection_params['include_total'] = include_total
+        if parent_mfid and dataset_mfid is None and collection_params:
+            raise ValueError(
+                "Ordering, visibility, affiliation, and time filters are "
+                "supported only by the top-level sample list")
         params.update(selectors)
         params.update(project_params)
+        params.update(collection_params)
         if dataset_mfid is not None:
             params['dataset_mfid'] = dataset_mfid
         if include_metadata:
@@ -142,6 +211,7 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
             endpoint = f"/samples/{parent_mfid}/children"
         else:
             endpoint = "/samples"
+            self._validate_filter_params(params, SAMPLE_LIST_PARAMS, endpoint)
             if offset:
                 import warnings
                 warnings.warn(
@@ -149,8 +219,33 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
                     "pagination; results start from the newest sample.",
                     DeprecationWarning, stacklevel=2,
                 )
-        raw = self._paginate(endpoint, params, limit, offset)
-        return [self._parse(s) for s in raw]
+        raw = self._paginate(endpoint, params, limit, offset, cursor=cursor)
+        return ListResult.like(raw, [self._parse(s) for s in raw])
+
+    def facets(self, field: str, limit: int = 100,
+               sort: Optional[str] = None, direction: Optional[str] = None,
+               cursor: Optional[str] = None, **filters) -> Dict:
+        """Group samples into value buckets with counts, without fetching records.
+
+        Args:
+            field: Field to group by, one of
+                   crucible.constants.SAMPLE_FACET_FIELDS.
+            limit: Maximum number of buckets to return (default: 100, max 1000).
+            sort: Bucket ordering, one of crucible.constants.FACET_SORTS
+                  (default: value).
+            direction: Bucket ordering direction, asc or desc (default: asc).
+            cursor: Continuation cursor from a previous response's next_cursor.
+            **filters (Any): Any sample list filter, restricting which samples
+                       contribute to the counts.
+
+        Returns:
+            Dict: field, items (buckets with value, label, count, and a typed
+                  owner/project reference where applicable), limit, and
+                  next_cursor.
+        """
+        return self._facets('/samples/facets', field, SAMPLE_FACET_FIELDS,
+                            SAMPLE_FACET_PARAMS, limit=limit, sort=sort,
+                            direction=direction, cursor=cursor, filters=filters)
 
     def count(self, project_id: Optional[str] = None,
               project_mfid: Optional[str] = None,
@@ -159,6 +254,8 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
         params = {k: v for k, v in kwargs.items() if v is not None}
         params.update(self._project_scope_params(
             project_id, project_mfid, project_scope))
+        self._normalize_time_filters(params)
+        self._validate_filter_params(params, SAMPLE_LIST_PARAMS, '/samples')
         result = self._request('get', '/samples', params={**params, 'limit': 1})
         return result['total']
 
@@ -166,13 +263,16 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
     @_deprecated_parameter('sample_mfid', 'child_mfid')
     def list_parents(self, child_mfid: str, limit: int = DEFAULT_LIMIT,
                      offset: int = 0, relationship_type: Optional[str] = None,
-                     **kwargs) -> List[Dict]:
+                     cursor: Optional[str] = None,
+                     **kwargs: Any) -> List[Dict]:
         """List the parents of a given sample with optional filtering.
 
         Args:
             child_mfid (str): Child sample MFID
             limit (int): Maximum number of results to return (default: 100)
             offset (int): Starting position in the full result set (default: 0)
+            cursor (str, optional): Continuation token from a previous
+                result's next_cursor; the listing resumes there.
             relationship_type (str, optional): Only return parents linked with
                 this kind of link, one of crucible.constants.RELATIONSHIP_TYPES.
             **kwargs: Query parameters for filtering samples
@@ -183,19 +283,22 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
         params = {k: v for k, v in kwargs.items() if v is not None}
         if relationship_type is not None:
             params['relationship_type'] = relationship_type
-        return self._paginate(f"/samples/{child_mfid}/parents", params, limit, offset)
+        return self._paginate(f"/samples/{child_mfid}/parents", params, limit, offset, cursor=cursor)
 
     @_deprecated_parameter('sample_id', 'parent_mfid')
     @_deprecated_parameter('sample_mfid', 'parent_mfid')
     def list_children(self, parent_mfid: str, limit: int = DEFAULT_LIMIT,
                       offset: int = 0, relationship_type: Optional[str] = None,
-                      **kwargs) -> List[Dict]:
+                      cursor: Optional[str] = None,
+                      **kwargs: Any) -> List[Dict]:
         """List the children of a given sample with optional filtering.
 
         Args:
             parent_mfid (str): Parent sample MFID
             limit (int): Maximum number of results to return (default: 100)
             offset (int): Starting position in the full result set (default: 0)
+            cursor (str, optional): Continuation token from a previous
+                result's next_cursor; the listing resumes there.
             relationship_type (str, optional): Only return children linked with
                 this kind of link, one of crucible.constants.RELATIONSHIP_TYPES.
             **kwargs: Query parameters for filtering samples
@@ -206,10 +309,11 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
         params = {k: v for k, v in kwargs.items() if v is not None}
         if relationship_type is not None:
             params['relationship_type'] = relationship_type
-        return self._paginate(f"/samples/{parent_mfid}/children", params, limit, offset)
+        return self._paginate(f"/samples/{parent_mfid}/children", params, limit, offset, cursor=cursor)
 
     def create(self, sample=None, scientific_metadata: Optional[Dict] = None,
-               parents: List[Dict] = [], children: List[Dict] = [],
+               parents: Optional[List[Dict]] = None,
+               children: Optional[List[Dict]] = None,
                **kwargs) -> Dict:
         """Create a new sample record.
 
@@ -272,9 +376,9 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
             self._request('post', "/samples", json=sample_info))
         sample_mfid = new_samp['unique_id']
 
-        for p in parents:
+        for p in parents or []:
             self._request('post', f"/samples/{p['unique_id']}/children/{sample_mfid}")
-        for chd in children:
+        for chd in children or []:
             self._request('post', f"/samples/{sample_mfid}/children/{chd['unique_id']}")
 
         if scientific_metadata:
@@ -288,7 +392,8 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
                owner_orcid: Optional[str] = None,
                project_id: Optional[str] = None, sample_type: Optional[str] = None,
                public: Optional[bool] = None,
-               parents: List[Dict] = [], children: List[Dict] = [],
+               parents: Optional[List[Dict]] = None,
+               children: Optional[List[Dict]] = None,
                # deprecated aliases (creation_time/modification_time are server-assigned)
                date_created: Optional[str] = None, creation_date: Optional[str] = None,
                owner_id: Optional[int] = None,
@@ -367,13 +472,13 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
         else:
             upd_samp = self.get(sample_mfid)
 
-        for p in parents:
+        for p in parents or []:
             parent_sample_mfid = p['unique_id']
             child_sample_mfid = upd_samp['unique_id']
             self._request(
                 'post', f"/samples/{parent_sample_mfid}/children/{child_sample_mfid}")
 
-        for chd in children:
+        for chd in children or []:
             parent_sample_mfid = upd_samp['unique_id']
             child_sample_mfid = chd['unique_id']
             self._request(
@@ -513,7 +618,7 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
 
     @_deprecated_parameter('sample_id', 'sample_mfid')
     def graph(self, sample_mfid: str, recursive: bool = False,
-              as_networkx: bool = False):
+              as_networkx: bool = False) -> Any:
         """Return the graph of entities connected to this sample.
 
         Delegates to client.graphs.get(). See GraphOperations.get() for full docs.

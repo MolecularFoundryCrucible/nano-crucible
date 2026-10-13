@@ -24,23 +24,28 @@ class IngestionOperations(BaseResource):
 
     def list(self, dsid: Optional[str] = None,
              file_id: Optional[str] = None,
-             limit: int = DEFAULT_LIMIT) -> List[Dict]:
+             limit: int = DEFAULT_LIMIT,
+             offset: int = 0,
+             cursor: Optional[str] = None) -> List[Dict]:
         """List ingestion requests, optionally filtered by dataset or file.
 
         Args:
-            dsid: Filter by dataset ID
+            dsid: Filter by dataset MFID
             file_id: Filter by file MFID
             limit: Maximum number of results
+            offset: Starting position in the full result set (default: 0).
+            cursor: Continuation token from a previous result's next_cursor;
+                the listing resumes there.
 
         Returns:
             List[Dict]: IngestionRequest records
         """
         params = {}
         if dsid:
-            params['dataset_id'] = dsid
+            params['dataset_mfid'] = dsid
         if file_id:
-            params['file_id'] = file_id
-        return self._paginate('/ingestion_requests', params, limit=limit)
+            params['file_mfid'] = file_id
+        return self._paginate('/ingestion_requests', params, limit=limit, offset=offset, cursor=cursor)
 
     def get(self, request_id: str) -> Dict:
         """Get the status of a single ingestion request.

@@ -17,22 +17,14 @@ import os
 import tempfile
 from typing import Dict, List, Optional
 
+from ...utils.io import safe_output_path, storage_display_name
+
 logger = logging.getLogger(__name__)
 
 
 def bare_name(file_record: Dict, dsid: str) -> str:
-    """Extract the display filename from a file record.
-
-    Strips the GCS bucket and dataset prefix from storage_path when present,
-    falls back to the filename field.
-    """
-    sp     = file_record.get('storage_path') or ''
-    prefix = f'mf-storage-prod/{dsid}/'
-    if sp.startswith(prefix):
-        return sp[len(prefix):]
-    if sp:
-        return os.path.basename(sp)
-    return os.path.basename(file_record.get('filename') or '')
+    """Extract the display filename from a file record."""
+    return storage_display_name(file_record, dsid)
 
 
 def download_dataset_files(client, dsid: str, output_dir: str,
@@ -73,6 +65,9 @@ def download_dataset_files(client, dsid: str, output_dir: str,
             if backend != 'gcs':
                 logger.info(f"Skipping '{name}': stored on '{backend}', not GCS - "
                            f"see storage_path/access_note ({f.get('storage_path') or 'not set'})")
+            elif f.get('storage_path'):
+                logger.warning(f"Skipping '{name}': the server gave no download link, "
+                               "so its stored location is probably not valid.")
 
     if include:
         candidates = [(f, n, u) for f, n, u in candidates
@@ -86,7 +81,11 @@ def download_dataset_files(client, dsid: str, output_dir: str,
 
     downloads = []
     for _, name, signed_url in candidates:
-        download_path = os.path.join(output_dir, name)
+        try:
+            download_path = safe_output_path(output_dir, name)
+        except ValueError as e:
+            logger.warning(f"Skipping '{name}': {e}")
+            continue
 
         if not overwrite_existing and os.path.exists(download_path):
             downloads.append(download_path)

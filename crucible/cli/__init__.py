@@ -11,7 +11,6 @@ Available subcommands:
     completion  Install shell autocomplete
 """
 
-import argparse
 import sys
 import logging
 from crucible import __version__
@@ -140,7 +139,8 @@ def setup_logging(debug=False):
 
 def main():
     """Main entry point for the unified Crucible CLI."""
-    parser = argparse.ArgumentParser(
+    from .parser import SuggestingArgumentParser
+    parser = SuggestingArgumentParser(
         prog='crucible',
         description='Crucible API command-line interface',
         formatter_class=term.ColorHelpFormatter,
@@ -168,6 +168,10 @@ Examples:
 
     # Debug mode (place before subcommand)
     crucible --debug dataset list
+
+    # Platform-administrator elevation (place before subcommand)
+    crucible --elevate deletion list
+    crucible -E deletion list
 """
     )
 
@@ -182,6 +186,21 @@ Examples:
         action='store_true',
         default=False,
         help='Enable debug logging (HTTP calls, raw API responses, tracebacks)'
+    )
+
+    parser.add_argument(
+        '-E', '--elevate',
+        dest='elevated',
+        action='store_true',
+        default=False,
+        help='Run this command with platform-administrator elevation'
+    )
+
+    parser.add_argument(
+        '--no-pager',
+        action='store_true',
+        default=False,
+        help='Print long listings directly even when the pager setting is auto'
     )
 
     parser.add_argument(
@@ -202,7 +221,7 @@ Examples:
     from . import (
         dataset, sample, project, instrument, user, file as file_cmd, ingestion,  # Resource commands
         service_account, access_group,
-        upload, completion, config as config_cmd, open as open_cmd, link, unlink, whoami, account, cache, download, get, edit, status, deletion, tree, cast, qr  # Utility commands
+        upload, completion, config as config_cmd, open as open_cmd, link, unlink, whoami, account, cache, download, get, edit, status, deletion, tree, cast, qr, printer  # Utility commands
     )
 
     # Register resource commands (new structure)
@@ -234,6 +253,7 @@ Examples:
     tree.register_subcommand(subparsers)
     cast.register_subcommand(subparsers)
     qr.register_subcommand(subparsers)
+    printer.register_subcommand(subparsers)
 
     # Enable shell completion if argcomplete is available
     if ARGCOMPLETE_AVAILABLE:
@@ -252,6 +272,32 @@ Examples:
     # Configure logging once for the entire CLI
     setup_logging(debug=getattr(args, 'debug', False))
 
+    # Every client built during this invocation reads the mode from the config
+    # singleton, so setting it once here covers all of them without writing the
+    # config file. Admin-only operations request elevation per call, so this
+    # only governs ordinary reads and writes.
+    from ..config import config as _config
+    try:
+        configured_mode = _config.privilege_mode
+    except ValueError as exc:
+        if args.command != 'config':
+            if _config.source('privilege_mode') == 'environment':
+                hint = "Unset CRUCIBLE_PRIVILEGE_MODE"
+            else:
+                hint = "Run `crucible config unset privilege_mode`"
+            print(f"{exc} {hint} or set a valid value.", file=sys.stderr)
+            sys.exit(1)
+        configured_mode = None
+    if getattr(args, 'elevated', False):
+        _config._data['privilege_mode'] = 'elevated'
+    elif args.command is not None and configured_mode == 'elevated':
+        # Elevation from the config file or the environment leaves no trace on
+        # the command line, so say so rather than silently widening access.
+        print(term.yellow(
+            "Elevated privilege is active from "
+            f"{_config.source('privilege_mode') or 'configuration'}."),
+            file=sys.stderr)
+
     # If no command specified, start interactive shell
     if args.command is None:
         from .shell import run as _run_shell
@@ -262,7 +308,9 @@ Examples:
     # Each subcommand module should have added a 'func' attribute via set_defaults()
     try:
         if hasattr(args, 'func'):
-            args.func(args)
+            from .pager import paged
+            with paged(args):
+                args.func(args)
         else:
             parser.print_help()
             sys.exit(1)

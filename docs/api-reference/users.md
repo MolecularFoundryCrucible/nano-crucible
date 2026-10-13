@@ -21,5 +21,7 @@ For self-service profile and API key operations see `client.account`.
         - list_access_groups
         - add_to_access_group
         - remove_from_access_group
-        - list_projects
+        - get_projects
         - verify_api_key
+        - set_platform_role
+        - revoke_api_keys

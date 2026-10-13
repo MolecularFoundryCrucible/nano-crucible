@@ -9,8 +9,10 @@ import requests
 
 from crucible.cli.project import (
     _execute_add_user,
+    _execute_list,
     _register_add_user,
     _register_get,
+    _register_list,
     _register_remove_user,
     _register_update_user_role,
 )
@@ -90,7 +92,7 @@ def test_add_user_dispatches_named_role_and_username(monkeypatch):
         first_name='Alice',
         last_name='User',
     )])
-    monkeypatch.setattr('crucible.client.CrucibleClient', lambda: client)
+    monkeypatch.setattr('crucible.config.get_client', lambda: client)
 
     _execute_add_user(SimpleNamespace(
         project_id='example-project',
@@ -120,7 +122,7 @@ def test_add_user_duplicate_conflict_uses_shared_error_formatter(monkeypatch, ca
     client = SimpleNamespace(projects=SimpleNamespace())
     client.projects.add_user = MagicMock(side_effect=requests.HTTPError(
         '409 Conflict', response=response))
-    monkeypatch.setattr('crucible.client.CrucibleClient', lambda: client)
+    monkeypatch.setattr('crucible.config.get_client', lambda: client)
 
     with pytest.raises(SystemExit) as raised:
         _execute_add_user(SimpleNamespace(
@@ -138,3 +140,79 @@ def test_add_user_duplicate_conflict_uses_shared_error_formatter(monkeypatch, ca
     error = capsys.readouterr().err
     assert 'Error 409 Conflict' in error
     assert 'User is already a project member' in error
+
+
+def test_rename_follows_the_saved_current_project(monkeypatch):
+    from crucible.cli import project as project_cli
+    from crucible.config import config
+
+    saved = {}
+    monkeypatch.setitem(config._data, 'current_project', 'old-id')
+    monkeypatch.setitem(config._sources, 'current_project', 'config file')
+    monkeypatch.setattr('crucible.cli.config.set_config_value',
+                        lambda key, value: saved.update({key: value}))
+
+    project_cli._follow_project_rename('OLD-ID', 'new-id')
+    project_cli._follow_project_rename('other-id', 'x')
+
+    assert saved == {'current_project': 'new-id'}
+
+
+def test_instrument_update_accepts_a_new_instrument_id():
+    import argparse
+    from crucible.cli import instrument as instrument_cli
+
+    parser = argparse.ArgumentParser()
+    instrument_cli.register_subcommand(parser.add_subparsers(dest='resource'))
+    args = parser.parse_args(['instrument', 'update', '0tkn2knjast3h0008nyq9zps2c',
+                              '--instrument-id', 'new-id'])
+
+    assert args.instrument_id == 'new-id'
+
+
+def test_project_list_parses_sort_and_member_filters():
+    args = parse_project_command(
+        _register_list, 'list',
+        '--sort', 'title', '--direction', 'desc',
+        '--member', 'alice', '--member', 'bob',
+        '--member-role', 'owner',
+    )
+
+    assert args.sort == 'title'
+    assert args.direction == 'desc'
+    assert args.member == ['alice', 'bob']
+    assert args.member_role == 'owner'
+
+
+def test_project_list_dispatches_filters_and_shows_role(monkeypatch, capsys):
+    client = SimpleNamespace(projects=SimpleNamespace())
+    client.projects.list = MagicMock(return_value=[{
+        'project_id': 'project-one',
+        'title': 'Project One',
+        'organization': 'LBL',
+        'role': 'admin',
+    }])
+    monkeypatch.setattr('crucible.config.get_client', lambda: client)
+
+    _execute_list(SimpleNamespace(
+        limit=10,
+        include_metadata=False,
+        sort=None,
+        direction=None,
+        member=None,
+        member_role=None,
+        json=False,
+        debug=False,
+    ))
+
+    client.projects.list.assert_called_once_with(
+        limit=10,
+        include_metadata=False,
+        sort=None,
+        direction=None,
+        member_ref=None,
+        member_role=None,
+    )
+    output = capsys.readouterr().out
+    assert 'ROLE' in output
+    assert 'admin' in output

@@ -122,7 +122,7 @@ def register(kb, shell):
         def _open():
             try:
                 import webbrowser
-                from .helpers import (
+                from ..helpers import (
                     explorer_url,
                     instrument_explorer_url,
                     project_explorer_url,

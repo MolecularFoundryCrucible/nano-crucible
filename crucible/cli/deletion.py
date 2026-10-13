@@ -13,6 +13,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 from . import term
+from .helpers import add_limit_arguments, count_label, print_more_hint, resolve_limit, page_kwargs
 
 
 def register_subcommand(subparsers):
@@ -71,6 +72,9 @@ def _show_deletion_request(record, client=None):
         reviewer_id = record.get('reviewer_id')
         _p("Reviewer",     term.user_link(names.get(reviewer_id, reviewer_id), reviewer_id))
         _p("Review Notes", record.get('reviewer_notes'))
+    capabilities = record.get('capabilities') or {}
+    if capabilities.get('can_review') is not None:
+        _p("Can Review", "yes" if capabilities['can_review'] else "no")
 
 
 # ── Subcommand registration ───────────────────────────────────────────────────
@@ -111,10 +115,22 @@ Examples:
     crucible deletion list                    # pending only (default)
     crucible deletion list --status approved
     crucible deletion list --status all
+    crucible deletion list --scope reviewable
+    crucible deletion list --sort resource_name --direction asc
 """,
     )
+    from ..constants import (DELETION_REQUEST_SCOPES, DELETION_REQUEST_SORTS,
+                             SORT_DIRECTIONS)
     parser.add_argument('--status', choices=['pending', 'approved', 'rejected', 'all'],
                         default='pending', help='Filter by status (default: pending)')
+    parser.add_argument('--scope', choices=list(DELETION_REQUEST_SCOPES), default=None,
+                        help='Requests to select (default: reviewable for administrators listing pending requests, otherwise accessible)')
+    parser.add_argument('--project-mfid', metavar='MFID', dest='project_mfid', default=None,
+                        help='Limit to resources in this project MFID')
+    parser.add_argument('--sort', choices=list(DELETION_REQUEST_SORTS), default=None,
+                        help='Field to order by')
+    parser.add_argument('--direction', choices=list(SORT_DIRECTIONS), default=None,
+                        help='Sort direction')
     parser.set_defaults(func=_execute_list)
 
 
@@ -208,16 +224,25 @@ Examples:
     crucible deletion list-deleted
     crucible deletion list-deleted --resource mf-abc123
     crucible deletion list-deleted --requester 0000-0002-1825-0097
+    crucible deletion list-deleted --scope submitted
 """,
     )
+    from ..constants import DELETION_AUDIT_SCOPES, SORT_DIRECTIONS
     parser.add_argument('--resource',  metavar='MFID',  dest='resource_id',  default=None,
                         help='Filter by resource MFID')
     parser.add_argument('--requester', metavar='ORCID', dest='requester_id', default=None,
                         help='Filter by requester ORCID')
     parser.add_argument('--reviewer',  metavar='ORCID', dest='reviewer_id',  default=None,
                         help='Filter by reviewer ORCID')
-    parser.add_argument('--limit', type=int, default=50, metavar='N',
-                        help='Maximum number of results (default: 50)')
+    parser.add_argument('--scope', choices=list(DELETION_AUDIT_SCOPES), default=None,
+                        help='Entries to select (default: all for administrators, otherwise submitted)')
+    parser.add_argument('--project-id', metavar='ID', dest='project_id', default=None,
+                        help='Filter by project slug captured at deletion time')
+    parser.add_argument('--project-mfid', metavar='MFID', dest='project_mfid', default=None,
+                        help='Filter by project MFID captured at deletion time')
+    parser.add_argument('--direction', choices=list(SORT_DIRECTIONS), default=None,
+                        help='Sort direction on deletion time')
+    add_limit_arguments(parser)
     parser.set_defaults(func=_execute_list_deleted)
 
 
@@ -241,17 +266,21 @@ Examples:
 
 def _execute_list_deleted(args):
     """Execute 'crucible deletion list-deleted'."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
         records = client.deletions.list_deleted(
             resource_id=args.resource_id,
             requester_id=args.requester_id,
             reviewer_id=args.reviewer_id,
-            limit=args.limit,
+            limit=resolve_limit(args), **page_kwargs(args),
+            scope=args.scope,
+            project_id=args.project_id,
+            project_mfid=args.project_mfid,
+            direction=args.direction,
         )
 
-        term.header(f"Deleted Resources ({len(records)})")
+        term.header(f"Deleted Resources ({count_label(records)})")
         if not records:
             print(f"  {term.dim('No deleted resources found.')}")
             return
@@ -275,6 +304,7 @@ def _execute_list_deleted(args):
         ]
         term.table(rows, ['ID', 'Resource ID', 'Type', 'Name', 'Deleted At', 'Requester'],
                    max_widths=[6, 26, 10, 20, 12, 25])
+        print_more_hint(records, resolve_limit(args), args)
 
     except Exception as e:
         from .helpers import fail
@@ -283,9 +313,9 @@ def _execute_list_deleted(args):
 
 def _execute_get_deleted(args):
     """Execute 'crucible deletion get-deleted'."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
         record = client.deletions.get_deleted(args.audit_id)
         _p = term.field_printer(16)
         from .helpers import explorer_url, project_explorer_url
@@ -310,9 +340,9 @@ def _execute_get_deleted(args):
 
 def _execute_request(args):
     """Execute the 'deletion request' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
         record = client.deletions.request(args.resource_id, reason=args.reason)
         term.success(f"Deletion request submitted (ID: {record.get('id')})", args)
         print()
@@ -324,12 +354,24 @@ def _execute_request(args):
 
 def _execute_list(args):
     """Execute the 'deletion list' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
 
         status = None if args.status == 'all' else args.status
-        records = sorted(client.deletions.list(status=status), key=lambda r: r.get('id') or 0)
+        scope = args.scope
+        # The server only counts pending requests as reviewable.
+        if scope is None and status == 'pending' and client.can_elevate:
+            scope = 'reviewable'
+        records = client.deletions.list(
+            status=status,
+            scope=scope,
+            project_mfid=args.project_mfid,
+            sort=args.sort,
+            direction=args.direction,
+        )
+        if args.sort is None and args.direction is None:
+            records = sorted(records, key=lambda r: r.get('id') or 0)
 
         term.header(f"Deletion Requests — {args.status} ({len(records)})")
 
@@ -372,9 +414,9 @@ def _execute_list(args):
 
 def _execute_get(args):
     """Execute the 'deletion get' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
         record = client.deletions.get(args.request_id)
         _show_deletion_request(record, client=client)
     except Exception as e:
@@ -384,9 +426,9 @@ def _execute_get(args):
 
 def _execute_approve(args):
     """Execute the 'deletion approve' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
     except Exception as e:
         from .helpers import fail
         fail("connecting", e)
@@ -412,9 +454,9 @@ def _execute_approve(args):
 def _execute_delete(args):
     """Execute the 'deletion delete' subcommand."""
     import requests as _req
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
         result = client.deletions.delete(args.resource_id, force=args.force)
         term.success(result.get('detail', f"Resource {args.resource_id} permanently deleted"), args)
     except _req.exceptions.HTTPError as e:
@@ -436,9 +478,9 @@ def _execute_delete(args):
 
 def _execute_reject(args):
     """Execute the 'deletion reject' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
     except Exception as e:
         from .helpers import fail
         fail("connecting", e)

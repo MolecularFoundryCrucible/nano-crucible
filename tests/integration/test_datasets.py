@@ -1,7 +1,5 @@
 """Integration tests for client.datasets.*"""
 
-import pytest
-
 
 def test_dataset_list(client, project_id):
     ds = client.datasets.list(project_id=project_id, limit=5)

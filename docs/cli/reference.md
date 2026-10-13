@@ -10,9 +10,34 @@ Project options use `--project-id` with the conventional `-p` short alias. Sampl
 |---|---|
 | `--version` | Print the installed client version and exit |
 | `--debug` | Enable Crucible debug logging; place it before the command |
+| `-E`, `--elevate` | Run one command with platform-administrator elevation; place it before the command |
 | `--no-color` | Disable ANSI colors while retaining interactive terminal hyperlinks; place it before the command |
+| `--no-pager` | Print a long listing directly even when the `pager` setting is `auto`; place it before the command |
+
+By default no privilege mode is sent, so a platform administrator runs elevated and sees every record, while everyone else gets their normal, ACL-derived access. Set `crucible config set privilege_mode normal` to restrict an administrator account to its own access; `--elevate` (`-E`) then widens a single command. A future release will default to `normal`. Administrator-only commands, such as `service-account show`, `service-account set-role`, and deletion review, elevate on their own and do not need the flag.
+
+Explicit elevation can also come from the `privilege_mode` config key or the `CRUCIBLE_PRIVILEGE_MODE` environment variable. Because neither is visible on the command line, the CLI prints a notice to stderr when a command runs elevated without `--elevate`. In the interactive shell, `elevate on|off` toggles it for the session, `elevate COMMAND` runs a single command elevated, and an `ELEVATED` badge appears in the toolbar while the toggle is on.
+
+`deletion list` shows the caller's review queue by default when they can review requests. Pass `--scope` to choose a different view.
+
+Commands that create projects, instruments, or service accounts check the caller's account capabilities first and refuse immediately rather than prompting for values the API would reject.
 
 Running `crucible` without a command starts the interactive shell. See the [CLI overview](index.md) for setup, shell completion, and interactive usage.
+
+### Listing
+
+- List commands show 50 records by default (the `default_limit` config key). `--limit N` changes that for one command, and `--all` fetches every match.
+- The header shows how many matched, for example `Projects (50 of 6,770)`. When records were left out, a note below the table says how many and how to see them.
+- With `--json` or piped output, that note goes to stderr, so stdout stays valid data.
+- In the interactive shell, `more` shows the next page of the last listing.
+- Search commands keep their own `--limit`, capped by the server.
+- Listings print directly. `crucible config set pager auto` opens long listings in `$CRUCIBLE_PAGER`, `$PAGER`, or `less -FRX`; `--no-pager` skips it for one command.
+
+### Errors
+
+- A mistyped command or flag ends with a "Did you mean ...?" suggestion.
+- API errors add a next step where one applies: `crucible config init` for a rejected key, `crucible whoami` for missing permissions, `read_timeout` for slow responses.
+- With `--json`, the hint appears as `error.hint`.
 
 `--json` is available for dataset, sample, and instrument `list` and `get`; project `list` and `get`; generic `get`; user `get`, `list`, and `search`; service-account `get` and `list`; account `show`; and dataset, sample, project, and instrument name or metadata searches. Collection and search commands return arrays, while singleton commands return objects.
 
@@ -20,14 +45,15 @@ Running `crucible` without a command starts the interactive shell. See the [CLI 
 
 | Command | Description |
 |---|---|
-| `dataset list` | List assigned or shared datasets by project ID or canonical project MFID, with instrument, metadata, and name-pattern filters |
+| `dataset list` | List datasets oldest to newest, in the current project or across every accessible project, with project, instrument, linked-sample, metadata, empty-field, and name-pattern filters |
 | `dataset get MFID` | Show a dataset, its files, and linked resources |
 | `dataset create [--input FILE ...]` | Create a dataset, optionally uploading or cataloging files |
 | `dataset update MFID` | Update model fields or scientific metadata |
 | `dataset edit MFID` | Edit dataset fields interactively |
-| `dataset reassign-project MFID PROJECT` | Move a dataset to another project |
+| `dataset reassign-project MFID PROJECT` | Move a dataset to another project; PROJECT accepts the project ID or MFID |
 | `dataset transfer-ownership MFID USER` | Transfer dataset ownership |
 | `dataset delete MFID` | Permanently delete a dataset after confirmation |
+| `dataset facets FIELD` | Group datasets into value buckets with counts |
 | `dataset search QUERY` | Search dataset names |
 | `dataset search-metadata QUERY` | Search scientific metadata; `search-md` is an alias |
 | `dataset link` | Link parent and child datasets; `--relationship-type` records the kind of link |
@@ -68,9 +94,24 @@ crucible dataset create --project-id my-project --name "Planned experiment"
 
 Dataset creation accepts `--project-id` or `--project-mfid` and `--instrument-id` or `--instrument-mfid`. Matching ID and MFID forms may be supplied together. Interactive use remains ID-oriented, while MFID flags support integrations and automation.
 
-The `--type`, `--ingestor`, `--no-upload`, `--backend`, and `--access-note` options require at least one `--input` file.
+### Creating records and uploading files
+
+- `sample create` and `dataset create` accept `--owner USER` (username, ORCID, MFID, or email). Platform contributors and administrators can name anyone; everyone else only themselves.
+- Run on a terminal without `--input` or `--name`, `dataset create` prompts for the name, project (default: the current project), measurement, session, and timestamp. Scripts are not prompted.
+- `--type`, `--ingestor`, `--no-upload`, `--backend`, `--access-note`, `--upload-protocol`, `--replace`, and `--no-ingest` require at least one `--input` file.
+- Uploads use signed multipart uploads, falling back to the legacy route when the server has them switched off. `--upload-protocol auto|signed|legacy` overrides the `upload_protocol` setting for one run.
+- On a terminal, `dataset create` and `dataset add-file` show a progress line per file.
+- `--no-ingest` uploads without requesting ingestion; request it later with `crucible file request-ingestion FILE_MFID`. It cannot be combined with `--wait` or `--ingestor`.
+- When a file exists with different content, both commands ask whether to replace it on a terminal. `--replace` replaces without asking; scripts without it fail.
+- `--ingestor` completes from the ingestion classes the API offers, cached for a day.
 
 Use `dataset list --project-id PROJECT --project-scope shared` to show resources shared with a project but assigned elsewhere or unassigned. Use `--project-scope all` to combine assigned and shared resources. `--project-mfid` accepts the canonical project MFID instead of a project ID. The interactive shell completes both identifiers through project search. Human-readable scoped results include the resource's actual project and its `assigned` or `shared` relation.
+
+`dataset list` and `sample list` use the current project when one is set and otherwise list every accessible project; `--all-projects` ignores the current project, and the table then shows each record's project. Results are fetched newest first, so `--limit N` keeps the N most recent, and printed oldest to newest so the newest row sits next to the prompt. `--sort created|updated|name` with `--direction asc|desc` changes the server ordering (`--direction` requires `--sort`); an ascending sort prints in that order. Tables are flat unless `--group-by` or the `dataset_group_by`/`sample_group_by` config key selects a field; groups keep chronological order and the group with the newest record comes last. `--json` returns records in server order.
+
+Both commands accept `--visibility all|public|private`, `--mine`, `--owner USER` (username, ORCID, or MFID, resolved to the stable identifier before the request), the time bounds `--created-after`, `--created-before`, `--modified-after`, and `--modified-before` (ISO 8601 or `YYYY-MM-DD`; a bare date covers the whole day and a time without an offset is UTC), and `--missing FIELD` (repeatable) to select records with no value for a field. Dataset listing adds `--name`, `-m/--measurement`, `--session`, `--data-format`, `--data-type`, `--instrument-id` (resolved to the instrument MFID), `--instrument-mfid`, `--sample-mfid`, and `-k/--keyword`; `--instrument NAME` is deprecated because instrument names are display text and may repeat; sample listing adds `--name`, `--type`, `--description`, and `--dataset-mfid`.
+
+`dataset facets FIELD` and `sample facets FIELD` count how many records fall into each value of a grouping field without fetching the records. Dataset fields are `session`, `measurement`, `data_format`, `owner`, `instrument`, and `project`; sample fields are `sample_type`, `owner`, and `project`. Both accept `--sort value|label|count`, `--direction`, `--limit`, `--json`, and the same project, visibility, ownership, time, exact-match, and `--missing` filters as the matching list command. In the interactive shell, `-m/--measurement`, `--session`, `--data-format`, and `--type` complete from these counts, scoped to the `--project-id` typed on the line or else the current project. These values and project IDs match fuzzily, so `xt` offers `xrd-titan`; commands, flags, fixed choices, and MFIDs complete by prefix.
 
 Fields normally updated through `dataset update --set` include `dataset_name`, `measurement`, `data_type`, `session_name`, `data_format`, and `timestamp`. Use `set-public` or `set-private` for public visibility, `reassign-project` for project changes, and `transfer-ownership` for owner changes. Instrument reassignment remains unavailable and is not exposed as ordinary metadata editing.
 
@@ -78,13 +119,14 @@ Fields normally updated through `dataset update --set` include `dataset_name`, `
 
 | Command | Description |
 |---|---|
-| `sample list` | List assigned or shared samples by project ID or canonical project MFID, with name, type, and name-pattern filters |
+| `sample list` | List samples oldest to newest, in the current project or across every accessible project, with project, type, linked-dataset, description, empty-field, and name-pattern filters |
 | `sample get MFID` | Show a sample and its linked resources |
 | `sample create` | Create a sample |
 | `sample update MFID` | Update sample fields or scientific metadata |
 | `sample edit MFID` | Edit sample fields interactively |
-| `sample reassign-project MFID PROJECT` | Move a sample to another project |
+| `sample reassign-project MFID PROJECT` | Move a sample to another project; PROJECT accepts the project ID or MFID |
 | `sample transfer-ownership MFID USER` | Transfer sample ownership |
+| `sample facets FIELD` | Group samples into value buckets with counts |
 | `sample search QUERY` | Search sample names |
 | `sample search-metadata QUERY` | Search scientific metadata; `search-md` is an alias |
 | `sample link` | Link parent and child samples; `--relationship-type` records the kind of link |
@@ -102,14 +144,12 @@ Fields normally updated through `sample update` include `sample_name`, `sample_t
 
 Sample creation accepts `--project-id` or `--project-mfid`, including both when they resolve to the same project. Interactive creation continues to prompt for the human-readable project ID.
 
-`sample list` uses the same `--project-id` or `--project-mfid` selectors and `--project-scope assigned|shared|all` behavior as dataset listing. Human-readable shared and combined results include the actual project and project relation.
-
 ## Project commands
 
 | Command | Description |
 |---|---|
-| `project list` | List accessible projects |
-| `project get PROJECT [--include-members]` | Show a project by MFID or project slug, optionally with its members |
+| `project list` | List accessible projects; `--sort`/`--direction` order them, `--member` (repeatable) and `--member-role` narrow to memberships, and a Role column shows your role in each |
+| `project get PROJECT [--include-members]` | Show a project by MFID or project slug, optionally with its members; also shows your role |
 | `project create` | Create a project |
 | `project update ID` | Update a project record or scientific metadata |
 | `project edit ID` | Edit project fields interactively |
@@ -138,8 +178,8 @@ The `access grant` commands accept `viewer`, `contributor`, `editor`, or `admin`
 
 | Command | Description |
 |---|---|
-| `instrument list` | List instruments |
-| `instrument get INSTRUMENT` | Show an instrument by MFID or instrument slug |
+| `instrument list` | List instruments; `--mine` lists those you own or maintain, `--sort`/`--direction` order them, `--manufacturer`, `--model`, `--location`, `--type`, `--owner` filter exactly, and a My role column shows your effective role |
+| `instrument get INSTRUMENT` | Show an instrument by MFID or instrument slug (any casing); `--include-members` adds the owner and maintainers |
 | `instrument create` | Register an instrument |
 | `instrument update MFID` | Update an instrument record or scientific metadata |
 | `instrument set-status MFID STATUS` | Change an instrument lifecycle status |
@@ -147,6 +187,10 @@ The `access grant` commands accept `viewer`, `contributor`, `editor`, or `admin`
 | `instrument list-service-accounts MFID` | List service accounts bound as instrument operators |
 | `instrument bind-sa MFID SA_MFID` | Bind a service account as an instrument operator |
 | `instrument unbind-sa MFID SA_MFID` | Remove an instrument operator binding |
+| `instrument list-users INSTRUMENT` | List the owner and maintainers (visible to callers with a role) |
+| `instrument add-user INSTRUMENT --user USER [--role editor\|admin]` | Add or change a maintainer |
+| `instrument remove-user INSTRUMENT --user USER` | Remove a maintainer |
+| `instrument update-user-role INSTRUMENT USER ROLE` | Change a maintainer's role |
 | `instrument edit MFID` | Edit instrument fields interactively |
 | `instrument search QUERY [--status STATUS]` | Search names, types, and manufacturers with optional lifecycle filtering |
 | `instrument search-metadata QUERY` | Search scientific metadata; `search-md` is an alias |
@@ -156,6 +200,8 @@ The `access grant` commands accept `viewer`, `contributor`, `editor`, or `admin`
 
 The deprecated `publish` and `unpublish` command names remain temporarily available as aliases for `set-public` and `set-private`.
 
+Instrument commands accept an MFID or the instrument slug, which ignores case. An instrument has two separate kinds of access. Its owner and maintainers manage the instrument record: `editor` edits details, `admin` also changes status, binds service accounts, and grants access. Maintainer roles never grant access to datasets recorded with the instrument; only bound service accounts reach those, at `contributor`. Member commands check the instrument's `can_manage_access` capability before sending a change.
+
 ## User commands
 
 Most user-management commands require administrator permissions.
@@ -164,16 +210,18 @@ Most user-management commands require administrator permissions.
 |---|---|
 | `user get USER` | Show a user by ORCID, MFID, username, or email |
 | `user search QUERY` | Search names and usernames |
-| `user list` | List users |
+| `user list [--q QUERY] [--first-name NAME] [--last-name NAME] [--username USERNAME] [--email EMAIL] [--platform-role ROLE] [--service-account\\|--human] [--sort FIELD] [--direction DIR] [--exact]` | List users; administrators see email and platform roles |
 | `user create` | Create a user |
 | `user update USER` | Update a user record |
 | `user edit USER` | Edit a user record interactively |
-| `user list-datasets USER [--limit N]` | List datasets accessible to a user |
+| `user set-role USER ROLE` | Change a human user's platform role (`none`, `contributor`, `admin`); human platform admins only |
+| `user revoke-keys USER [--yes]` | Revoke every API key held by a user; admin only |
+| `user list-datasets USER [--limit N\|--all]` | List datasets accessible to a user |
 | `user check-access USER DATASET_MFID` | Show a user's effective dataset access role |
 | `user list-access-groups USER` | List a user's access groups |
 | `user add-access-group USER GROUP` | Deprecated; use the typed project or instrument membership command |
 | `user remove-access-group USER GROUP` | Deprecated; use the typed project or instrument membership command |
-| `user list-projects USER` | List a user's projects |
+| `user list-projects USER [--role ROLE] [--sort FIELD] [--direction DIR]` | List the projects USER is a member of with USER's role in each, optionally filtered by role (repeatable) and sorted by `project_id`, `title`, `created`, or `updated` |
 
 Human users require a username and may optionally supply an ORCID during creation.
 When the ORCID is omitted, the API assigns a canonical MFID.
@@ -190,6 +238,7 @@ File commands operate on individual file MFIDs. Dataset-scoped file operations r
 | `file download ID` | Download one file |
 | `file ingestion ID` | Show ingestion requests for a file |
 | `file request-ingestion ID` | Request or repeat ingestion for a cataloged file |
+| `file replace FILE_MFID -i PATH [--ingestor CLASS] [--no-ingest] [--wait] [-y]` | Replace a file's content, keeping its MFID and filename; asks for confirmation unless `--yes` |
 | `file delete ID [--yes]` | Permanently delete a file after confirmation |
 
 ## Ingestion commands
@@ -210,10 +259,12 @@ Service-account creation uses the same username rules and interactive validation
 |---|---|
 | `sa create` | Create a service account |
 | `sa rotate-key USER` | Generate a new key and invalidate the previous key |
-| `sa get USER` | Show a service account |
-| `sa list` | List service accounts |
+| `sa get USER [--groups]` | Show a service account; administrators also see its platform role and API key status, and `--groups` lists the projects and instruments it belongs to |
+| `sa list [-q TEXT]` | List service accounts with their platform roles; `-q` filters by username or name |
 | `sa update USER` | Update a service account |
 | `sa edit USER` | Edit a service account interactively |
+| `sa show USER` | Alias for `sa get` |
+| `sa set-role USER ROLE` | Set a service account's platform role |
 | `sa list-access-groups USER` | List access groups for a service account |
 | `sa add-access-group USER GROUP` | Deprecated; use `project add-user` or `instrument bind-sa` |
 | `sa remove-access-group USER GROUP` | Deprecated; use `project remove-user` or `instrument unbind-sa` |
@@ -260,6 +311,8 @@ The deletion-request workflow is separate from direct permanent deletion. Review
 | `deletion list-deleted` | List permanent-deletion audit records |
 | `deletion get-deleted ID` | Show a permanent-deletion audit record |
 
+`deletion list` accepts `--scope accessible|submitted|reviewable`, `--project-mfid`, `--sort request_time|resource_name|project_id|requester_name|status`, and `--direction`. `deletion list-deleted` accepts `--scope all|submitted`, `--project-id`, `--project-mfid`, and `--direction`. `deletion get` shows whether you may review the request.
+
 ## Cast command
 
 `cast` loads a declarative `.crux` recipe containing datasets, samples, files, and links.
@@ -296,7 +349,7 @@ Configuration values can come from environment variables, the platform-specific 
 | Command | Description |
 |---|---|
 | `status` | Show endpoint reachability, deployment provenance, database readiness, and authentication identity |
-| `whoami` | Show the identity associated with the configured key |
+| `whoami` | Show the identity, platform role, privilege mode, and capabilities of the configured key |
 | `get MFID` | Show a dataset, sample, project, or instrument after detecting its resource type |
 | `edit MFID` | Edit a dataset, sample, or instrument after detecting its type |
 | `download MFID` | Save a record and, for datasets, associated files |
@@ -305,6 +358,7 @@ Configuration values can come from environment variables, the platform-specific 
 | `tree MFID` | Display connected ancestors and descendants |
 | `open [ID]` | Open the Graph Explorer or print its URL |
 | `qr ID` | Print a terminal QR code for an MFID |
+| `print barcode PRINTER_ID MFID NAME` | Publish a barcode print job and wait for confirmation it printed; exits non-zero unless the printer confirms success |
 | `completion [SHELL]` | Generate and install completion for bash, zsh, fish, or tcsh |
 | `upload ...` | Deprecated upload command; use `dataset create` |
 

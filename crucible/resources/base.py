@@ -13,6 +13,39 @@ from typing import Optional, Sequence, Union
 from ..constants import DEFAULT_LIMIT
 from ..utils.deprecation import _deprecated, _deprecated_parameter
 
+class ListResult(list):
+    """A list of records that also says whether more matches exist.
+
+    ``has_more`` is True when the listing stopped at the requested limit
+    with further matches left. ``total`` is the full match count when the
+    server reported one, otherwise None. To continue, pass ``next_cursor``
+    as ``cursor=`` (cursor-paged collections) or ``next_offset`` as
+    ``offset=`` (offset-paged ones) to the same list method; the other is
+    None. ``start`` is the offset of the first record, when known.
+    """
+
+    _META = ('has_more', 'total', 'next_cursor', 'next_offset', 'start')
+
+    def __init__(self, items=(), has_more: bool = False, total: Optional[int] = None,
+                 next_cursor: Optional[str] = None, next_offset: Optional[int] = None,
+                 start: int = 0):
+        super().__init__(items)
+        self.has_more = has_more
+        self.total = total
+        self.next_cursor = next_cursor
+        self.next_offset = next_offset
+        self.start = start
+
+    @classmethod
+    def like(cls, source, items) -> 'ListResult':
+        """Return items carrying source's list metadata, if it has any."""
+        result = cls(items)
+        for name in cls._META:
+            if hasattr(source, name):
+                setattr(result, name, getattr(source, name))
+        return result
+
+
 class BaseResource:
     """Base class for resource-specific operations.
 
@@ -85,18 +118,203 @@ class BaseResource:
             params['project_scope'] = project_scope
         return params
 
+    @staticmethod
+    def _ordering_params(sort: Optional[str] = None,
+                         direction: Optional[str] = None,
+                         sorts=None) -> dict:
+        """Build validated sort and direction query parameters.
+
+        The API returns 422 for a direction without a sort, so that pairing is
+        rejected locally.
+        """
+        from ..constants import RESOURCE_SORTS, SORT_DIRECTIONS
+
+        sorts = RESOURCE_SORTS if sorts is None else sorts
+        if direction is not None and sort is None:
+            raise ValueError("direction requires sort.")
+        if sort is not None and sort not in sorts:
+            raise ValueError(f"sort must be one of: {', '.join(sorts)}.")
+        if direction is not None and direction not in SORT_DIRECTIONS:
+            raise ValueError(
+                f"direction must be one of: {', '.join(SORT_DIRECTIONS)}.")
+
+        params = {}
+        if sort is not None:
+            params['sort'] = sort
+        if direction is not None:
+            params['direction'] = direction
+        return params
+
+    _TIME_BOUNDS = ('creation_time_gte', 'creation_time_lte',
+                    'modification_time_gte', 'modification_time_lte')
+
+    @staticmethod
+    def _time_range_params(**bounds) -> dict:
+        """Normalize time bounds into timezone-aware ISO 8601 query parameters.
+
+        The API requires an explicit offset. A bare date covers the whole day,
+        so it starts at midnight for a ``_gte`` bound and ends at the last
+        microsecond for a ``_lte`` bound. A datetime without a timezone is
+        taken as UTC.
+        """
+        from datetime import date, datetime, time, timezone
+
+        params = {}
+        for name, value in bounds.items():
+            if value is None:
+                continue
+            if isinstance(value, str) and value:
+                text = value.strip()
+                try:
+                    if len(text) == 10:
+                        value = date.fromisoformat(text)
+                    else:
+                        if text[-1] in 'Zz':
+                            text = text[:-1] + '+00:00'
+                        value = datetime.fromisoformat(text)
+                except ValueError:
+                    params[name] = value
+                    continue
+            if isinstance(value, datetime):
+                if value.tzinfo is None:
+                    value = value.replace(tzinfo=timezone.utc)
+                params[name] = value.isoformat()
+            elif isinstance(value, date):
+                bound = time.max if name.endswith('_lte') else time.min
+                params[name] = datetime.combine(
+                    value, bound, tzinfo=timezone.utc).isoformat()
+            else:
+                raise ValueError(
+                    f"{name} must be a datetime, date, or non-empty ISO 8601 string.")
+        return params
+
+    def _normalize_time_filters(self, params: dict) -> None:
+        """Apply _time_range_params to any time bounds already in params."""
+        params.update(self._time_range_params(
+            **{k: params.pop(k) for k in self._TIME_BOUNDS if k in params}))
+
+    @staticmethod
+    def _choice_params(**choices) -> dict:
+        """Validate single-choice query parameters against their allowed values.
+
+        Each keyword maps to a ``(value, allowed)`` pair. ``None`` values are
+        omitted so the server default applies.
+        """
+        params = {}
+        for name, (value, allowed) in choices.items():
+            if value is None:
+                continue
+            if value not in allowed:
+                raise ValueError(
+                    f"{name} must be one of: {', '.join(allowed)}.")
+            params[name] = value
+        return params
+
+    @staticmethod
+    def _affiliation_params(affiliation, allowed=None) -> dict:
+        """Build the repeated affiliation query parameter."""
+        from ..constants import AFFILIATIONS
+
+        allowed = allowed or AFFILIATIONS
+        if affiliation is None:
+            return {}
+        values = [affiliation] if isinstance(affiliation, str) else list(affiliation)
+        if not values:
+            return {}
+        if len(values) > 5:
+            raise ValueError("At most 5 affiliation values may be supplied")
+        for value in values:
+            if value not in allowed:
+                raise ValueError(
+                    f"affiliation values must be one of: {', '.join(allowed)}.")
+        return {'affiliation': values}
+
+    def _facets(self, endpoint: str, field: str, fields, allowed,
+                limit: int = 100, sort: Optional[str] = None,
+                direction: Optional[str] = None,
+                cursor: Optional[str] = None,
+                filters: Optional[dict] = None) -> dict:
+        """Fetch one page of facet buckets for a grouping field."""
+        from ..constants import FACET_SORTS, SORT_DIRECTIONS
+        from ..models import FacetResponse
+
+        if field not in fields:
+            raise ValueError(f"field must be one of: {', '.join(fields)}.")
+
+        params = {k: v for k, v in (filters or {}).items() if v is not None}
+        self._normalize_time_filters(params)
+        params['field'] = field
+        params['limit'] = limit
+        # Unlike the list endpoints, facets carry their own sort default and
+        # accept a direction on its own.
+        params.update(self._choice_params(
+            sort=(sort, FACET_SORTS), direction=(direction, SORT_DIRECTIONS)))
+        if cursor is not None:
+            params['cursor'] = cursor
+        self._validate_filter_params(params, allowed, endpoint)
+
+        raw = self._request('get', endpoint, params=params)
+        return FacetResponse.model_validate(raw).model_dump()
+
+    def _resource_mfid(self, reference: str) -> str:
+        """Return the MFID for a reference to this resource type.
+
+        Datasets and samples are addressed only by MFID. Projects and
+        instruments override this to also resolve their slugs.
+        """
+        return reference
+
+    @staticmethod
+    def _validate_filter_params(params: dict, allowed, endpoint: str) -> dict:
+        """Reject query parameters the endpoint does not accept.
+
+        The API rejects unknown query parameters with 422 extra_forbidden, so
+        catching them here turns an opaque server error into a local one that
+        names the offending key.
+
+        Args:
+            params: Query parameters about to be sent.
+            allowed: Container of accepted parameter names.
+            endpoint: API path, used in the error message.
+
+        Returns:
+            dict: The same params, unchanged, when every key is accepted.
+
+        Raises:
+            ValueError: If any key is not accepted by the endpoint.
+        """
+        unknown = [key for key in params if key not in allowed]
+        if not unknown:
+            return params
+
+        import difflib
+        details = []
+        for key in sorted(unknown):
+            close = difflib.get_close_matches(key, sorted(allowed), n=3)
+            if close:
+                details.append(f"{key!r} (did you mean {', '.join(repr(c) for c in close)}?)")
+            else:
+                details.append(repr(key))
+        raise ValueError(
+            f"{endpoint} does not accept these filters: {'; '.join(details)}. "
+            f"Accepted filters: {', '.join(sorted(allowed))}."
+        )
+
     def _paginate(self, endpoint: str, params: dict,
-                  limit: int = DEFAULT_LIMIT, offset: int = 0) -> list:
+                  limit: int = DEFAULT_LIMIT, offset: int = 0,
+                  privilege_mode: Optional[str] = None,
+                  cursor: Optional[str] = None) -> 'ListResult':
         """Fetch all matching records from a paginated envelope endpoint.
 
         Supports both pagination styles transparently, detected from the first
         response:
 
-        * Keyset (cursor) pagination — used by '/datasets' and '/samples'. The
-          response carries a 'next_cursor' token; pages are followed
+        * Keyset (cursor) pagination: the response carries a non-null
+          'next_cursor' token, or no 'total' to page by; pages are followed
           sequentially until the cursor is exhausted.
-        * Offset pagination — every other endpoint. The first response carries
-          'total'; remaining pages are fetched in parallel by offset.
+        * Offset pagination: the first response carries 'total' and a null or
+          absent 'next_cursor'; remaining pages are fetched in parallel by
+          offset.
 
         Args:
             endpoint: API path (e.g. '/datasets')
@@ -104,6 +322,9 @@ class BaseResource:
             limit:    Maximum number of records to return. Pass None to fetch all.
             offset:   Starting position in the full result set. Ignored by keyset
                       endpoints, which no longer accept an offset.
+            privilege_mode: Per-call privilege mode applied to every page.
+            cursor:   Continuation token from a previous ListResult.next_cursor;
+                      the listing resumes there instead of at offset.
 
         Returns:
             list: Raw item dicts, up to limit items (or all items if limit is None)
@@ -117,17 +338,22 @@ class BaseResource:
         if limit is not None and limit < 0:
             raise ValueError("limit must be non-negative or None")
         if limit == 0:
-            return []
+            return ListResult()
+
+        # Passed through only when set, so callers that never ask for a mode
+        # keep emitting the exact same request as before.
+        mode = {} if privilege_mode is None else {'privilege_mode': privilege_mode}
 
         page_size = API_PAGE_MAX if limit is None else min(API_PAGE_MAX, limit)
         first_params = {**params, 'limit': page_size}
-        if offset:
+        if cursor:
+            first_params['cursor'] = cursor
+        elif offset:
             first_params['offset'] = offset
-        first = self._request('get', endpoint, params=first_params)
+        first = self._request('get', endpoint, params=first_params, **mode)
         items = list(first['items'])
 
-        # Keyset (cursor) pagination — '/datasets' and '/samples'.
-        if 'next_cursor' in first:
+        if cursor or first.get('next_cursor') or first.get('total') is None:
             cursor = first.get('next_cursor')
             while cursor and (limit is None or len(items) < limit):
                 request_limit = (
@@ -136,33 +362,39 @@ class BaseResource:
                 )
                 resp = self._request('get', endpoint,
                                      params={**params, 'limit': request_limit,
-                                             'cursor': cursor})
+                                             'cursor': cursor}, **mode)
                 page = list(resp['items'])
                 if not page:
                     break
                 items.extend(page)
                 cursor = resp.get('next_cursor')
-            return items if limit is None else items[:limit]
+            items = items if limit is None else items[:limit]
+            return ListResult(items, has_more=bool(cursor), total=first.get('total'),
+                              next_cursor=cursor or None)
 
-        # Offset pagination — all other endpoints.
         total = first['total']
         need = total - offset if limit is None else min(total - offset, limit)
+        has_more = offset + need < total
+        next_offset = offset + need if has_more else None
         if len(items) >= need:
-            return items[:need]
+            return ListResult(items[:need], has_more=has_more, total=total,
+                              next_offset=next_offset, start=offset)
 
         remaining_offsets = range(offset + page_size, offset + need, API_PAGE_MAX)
 
         def _fetch(off):
             request_limit = min(API_PAGE_MAX, offset + need - off)
             r = self._request('get', endpoint,
-                              params={**params, 'limit': request_limit, 'offset': off})
+                              params={**params, 'limit': request_limit, 'offset': off},
+                              **mode)
             return r['items']
 
         with ThreadPoolExecutor(max_workers=min(len(remaining_offsets), 8)) as pool:
             for page in pool.map(_fetch, remaining_offsets):
                 items.extend(page)
 
-        return items[:need]
+        return ListResult(items[:need], has_more=has_more, total=total,
+                          next_offset=next_offset, start=offset)
 
     def search_metadata(self, q: str, limit: int = 20) -> list:
         """Full-text search across scientific metadata of all accessible resources.
@@ -193,14 +425,13 @@ class BaseResource:
     @_deprecated_parameter('resource_id', 'resource_mfid')
     def get_scientific_metadata(self, resource_mfid: str) -> dict:
         """Get scientific metadata for a resource."""
-        return self._request('get', f'/resources/{resource_mfid}/metadata')
+        return self._request('get', f'/resources/{self._resource_mfid(resource_mfid)}/metadata')
 
     @_deprecated_parameter('resource_id', 'resource_mfid')
     def replace_scientific_metadata(self, resource_mfid: str, metadata: dict) -> dict:
         """Create new scientific metadata entry for a resource."""
-        # this is kind of redundant with API but its better here? #TODO
         return self._request(
-            'post', f'/resources/{resource_mfid}/metadata',
+            'post', f'/resources/{self._resource_mfid(resource_mfid)}/metadata',
             json=metadata, params={'overwrite': True})
 
     @_deprecated_parameter('resource_id', 'resource_mfid')
@@ -213,7 +444,7 @@ class BaseResource:
         """
         if overwrite:
             return self._request(
-                'post', f'/resources/{resource_mfid}/metadata',
+                'post', f'/resources/{self._resource_mfid(resource_mfid)}/metadata',
                 json=metadata, params={'overwrite': overwrite})
         return self._request(
-            'patch', f'/resources/{resource_mfid}/metadata', json=metadata)
+            'patch', f'/resources/{self._resource_mfid(resource_mfid)}/metadata', json=metadata)

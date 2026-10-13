@@ -8,10 +8,11 @@ see DatasetOperations (client.datasets.*).
 """
 
 import logging
-from typing import Optional, List, Dict
+from typing import Any, Callable, Dict, List, Optional
 
-from .base import BaseResource
+from .base import BaseResource, ListResult
 from ..constants import DEFAULT_LIMIT
+from ..utils.io import safe_output_path, storage_display_name
 
 logger = logging.getLogger(__name__)
 
@@ -48,12 +49,17 @@ class FileOperations(BaseResource):
         return self._parse(self._request('get', f'/files/{file_id}'))
 
     def list(self, limit: int = DEFAULT_LIMIT,
-             sha256_hash: Optional[str] = None) -> List[Dict]:
+             sha256_hash: Optional[str] = None,
+             offset: int = 0,
+             cursor: Optional[str] = None) -> List[Dict]:
         """List files across all accessible datasets.
 
         Args:
             limit: Maximum number of results
             sha256_hash: Filter by SHA-256 hex digest
+            offset: Starting position in the full result set (default: 0).
+            cursor: Continuation token from a previous result's next_cursor;
+                the listing resumes there.
 
         Returns:
             List[Dict]: File records (mfid, filename, storage_path, storage_backend,
@@ -62,7 +68,8 @@ class FileOperations(BaseResource):
         params = {}
         if sha256_hash:
             params['sha256_hash'] = sha256_hash
-        return [self._parse(f) for f in self._paginate('/files', params, limit=limit)]
+        raw = self._paginate('/files', params, limit=limit, offset=offset, cursor=cursor)
+        return ListResult.like(raw, [self._parse(f) for f in raw])
 
     def download(self, file_id: str, output_dir: str = '.') -> str:
         """Download a single file by MFID to a local directory.
@@ -95,17 +102,10 @@ class FileOperations(BaseResource):
 
         url = self.get_download_link(file_id)
 
-        sp       = file_record.get('storage_path', '')
-        prefix   = 'mf-storage-prod/'
-        if sp.startswith(prefix):
-            after  = sp[len(prefix):]
-            _, _, name = after.partition('/')
-        else:
-            import os as _os
-            name = _os.path.basename(file_record.get('filename') or file_id)
+        name = storage_display_name(file_record) or file_id
 
         import os
-        output_path = os.path.join(output_dir, name)
+        output_path = safe_output_path(output_dir, name)
         os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
 
         response = self._client._session.get(url, stream=True)
@@ -129,7 +129,7 @@ class FileOperations(BaseResource):
     def _skip_ingestion(self, file_id) -> Dict:
 
         log_message = f"Skipping ingestion for file {file_id}"
-                   
+
         logger.info(log_message)
         params = {'status': 'not_requested'}
 
@@ -138,7 +138,7 @@ class FileOperations(BaseResource):
 
         logger.debug(f"Ingestion request created: id={ingestion_request.get('id')}, "
                      f"status={ingestion_request.get('status')}")
-        
+
         return ingestion_request
 
 
@@ -146,7 +146,7 @@ class FileOperations(BaseResource):
                           file_id: str,
                           ingestion_class: Optional[str] = None,
                           wait_for_response: bool = False) -> Dict:
-        
+
         """Request ingestion of an uploaded file.
 
         Args:
@@ -156,12 +156,13 @@ class FileOperations(BaseResource):
             wait_for_response: Block until ingestion completes.
 
         Returns:
-            Dict: IngestionRequest record (id, status, ...)
+            Dict: IngestionRequest record (id, status, ...); with
+            wait_for_response, the record in its final state.
         """
         params = {'status':'requested'}
         if ingestion_class:
             params['ingestion_class'] = ingestion_class
-            
+
         logger.info(f"Requesting ingestion for file {file_id}"
                     + (f" (class={ingestion_class})" if ingestion_class else ""))
 
@@ -171,7 +172,7 @@ class FileOperations(BaseResource):
                      f"status={ingestion_request.get('status')}")
 
         if wait_for_response and ingestion_request:
-            self._client._wait_for_request_completion(ingestion_request['id'])
+            ingestion_request = self._client._wait_for_request_completion(ingestion_request['id'])
 
         return ingestion_request
 
@@ -185,7 +186,7 @@ class FileOperations(BaseResource):
         self._request('delete', f'/files/{file_id}')
 
 
-    def update(self, file_id: str, **updates) -> Dict:
+    def update(self, file_id: str, **updates: Any) -> Dict:
         """Update fields on a file record.
 
         Args:
@@ -198,11 +199,61 @@ class FileOperations(BaseResource):
         return self._parse(self._request('patch', f'/files/{file_id}', json=updates))
 
 
-    def get_download_link(self, file_id: str) -> str:
+    def replace(self, file_id: str, file_path: str, etag: Optional[str] = None,
+                ingestion_class: Optional[str] = None,
+                wait_for_ingestion_response: bool = False,
+                skip_ingestion: bool = False,
+                max_workers: Optional[int] = None,
+                progress: Optional[Callable[[str, int, int], None]] = None) -> Dict:
+        """Replace a GCS file's content, keeping its MFID, filename, and metadata.
+
+        The new content uploads through the signed multipart flow and the
+        record is repointed once it is verified; the file stays downloadable
+        meanwhile. Needs EDIT on the file's dataset.
+
+        Args:
+            file_id: MFID of the file to replace.
+            file_path: Local path to the new content.
+            etag: The file's ``etag`` as you last read it. The replace is then
+                refused if the file changed since; None replaces whatever is
+                current.
+            ingestion_class: Ingestion class for the worker; defaults to
+                server auto-detection.
+            wait_for_ingestion_response: Block until ingestion completes.
+            skip_ingestion: Replace without requesting ingestion. Also implied
+                when client.request_ingestion is False.
+            max_workers: Parts uploaded in parallel (default 8).
+            progress: Called as progress(filename, bytes_done, total); defaults
+                to client.upload_progress.
+
+        Returns:
+            Dict: {'associated_file': the updated record, 'ingestion_request':
+            IngestionRequest or None}. No ingestion is requested when the file
+            already held this content.
+        """
+        from .gcs.signed_multipart import replace_file_signed_multipart
+
+        record, unchanged = replace_file_signed_multipart(
+            self._client, file_id, file_path, etag=etag, max_workers=max_workers,
+            progress=progress or getattr(self._client, 'upload_progress', None))
+        record = self._parse(record)
+        if unchanged:
+            logger.info(f"{record.get('filename')} already holds this content, nothing replaced")
+            return {'associated_file': record, 'ingestion_request': None}
+        if skip_ingestion or not getattr(self._client, 'request_ingestion', True):
+            return {'associated_file': record, 'ingestion_request': self._skip_ingestion(file_id)}
+        return {'associated_file': record,
+                'ingestion_request': self.request_ingestion(file_id, ingestion_class,
+                                                            wait_for_ingestion_response)}
+
+    def get_download_link(self, file_id: str, disposition: Optional[str] = None) -> str:
         """Get a signed download URL for a single file.
 
         Args:
             file_id: File MFID
+            disposition: "attachment" (the server default) to download, or
+                "inline" to let a browser display the file. HTML, SVG, and XML
+                always download.
 
         Returns:
             str: Signed URL valid for 1 hour, no auth required.
@@ -210,5 +261,6 @@ class FileOperations(BaseResource):
         Raises:
             HTTPError 404: File has not been ingested yet.
         """
-        result = self._request('get', f'/files/{file_id}/download_link')
+        params = {'disposition': disposition} if disposition else None
+        result = self._request('get', f'/files/{file_id}/download_link', params=params)
         return result['url']

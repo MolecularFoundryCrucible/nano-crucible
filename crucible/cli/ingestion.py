@@ -10,6 +10,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 from . import term
+from .helpers import add_limit_arguments, count_label, print_more_hint, resolve_limit, page_kwargs
 
 
 def register_subcommand(subparsers):
@@ -44,21 +45,20 @@ Examples:
                         metavar='DSID', help='Filter by dataset ID')
     parser.add_argument('--file', '-f', dest='file_id', default=None,
                         metavar='FILE_ID', help='Filter by file MFID')
-    parser.add_argument('--limit', '-l', type=int, default=50, metavar='N',
-                        help='Maximum results (default: 50)')
+    add_limit_arguments(parser, short=True)
     parser.set_defaults(func=_execute_list)
 
 
 def _execute_list(args):
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
         reqs   = client.ingestions.list(dsid=args.dataset_id,
                                         file_id=args.file_id,
-                                        limit=args.limit)
+                                        limit=resolve_limit(args), **page_kwargs(args))
 
         scope = args.dataset_id or args.file_id or 'all'
-        term.header(f"Ingestion Requests · {scope} ({len(reqs)})")
+        term.header(f"Ingestion Requests · {scope} ({count_label(reqs)})")
         if not reqs:
             print(f"  {term.dim('No ingestion requests found.')}")
             return
@@ -74,6 +74,7 @@ def _execute_list(args):
             ))
         term.table(rows, ['ID', 'Status', 'Class', 'File MFID', 'Created'],
                    max_widths=[8, 12, 25, 30, 20])
+        print_more_hint(reqs, resolve_limit(args), args)
 
     except Exception as e:
         from .helpers import fail
@@ -95,9 +96,9 @@ Examples:
 
 
 def _execute_list_ingestors(args):
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
         ingestors = client.ingestions.list_ingestors()
 
         term.header(f"Ingestors ({len(ingestors)})")
@@ -129,9 +130,9 @@ Examples:
 
 
 def _execute_get(args):
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
         r = client.ingestions.get(args.request_id)
         _p = term.field_printer(16)
         term.header(f"Ingestion Request #{r.get('id')}")
@@ -167,9 +168,9 @@ Examples:
 
 
 def _execute_wait(args):
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
         logger.info(f"Waiting for ingestion request {args.request_id}...")
         r = client.ingestions.wait(args.request_id)
         status = r.get('status', '-')

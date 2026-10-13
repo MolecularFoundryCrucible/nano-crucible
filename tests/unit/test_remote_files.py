@@ -181,3 +181,31 @@ class TestFileDownloadNonGcs:
 
         with pytest.raises(RuntimeError, match="not been ingested"):
             file_ops.download('mf-1')
+
+
+def test_create_warns_when_only_instrument_name_identifies_the_instrument():
+    import warnings
+    from unittest.mock import MagicMock
+    from crucible.models import Dataset
+    from crucible.resources.datasets import DatasetOperations
+
+    ops = DatasetOperations(MagicMock())
+    ops._request = MagicMock(return_value={'unique_id': 'D' * 26})
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        ops.create(Dataset(dataset_name='x', instrument_name='Titan'))
+        ops.create(Dataset(dataset_name='y', instrument_name='Titan', instrument_id='titan'))
+
+    messages = [str(w.message) for w in caught if issubclass(w.category, DeprecationWarning)]
+    assert sum('instrument_name' in m for m in messages) == 1
+
+
+def test_list_warns_on_instrument_name_filter():
+    import pytest
+    from unittest.mock import MagicMock
+    from crucible.resources.datasets import DatasetOperations
+
+    ops = DatasetOperations(MagicMock())
+    ops._paginate = MagicMock(return_value=[])
+    with pytest.warns(DeprecationWarning, match='instrument_name'):
+        ops.list(instrument_name='Titan')

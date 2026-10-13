@@ -6,31 +6,39 @@ Main client for Crucible API.
 Provides organized access to API endpoints.
 """
 
-import time
 import requests
 import json
 import logging
 from requests.adapters import HTTPAdapter
 from urllib.parse import urlparse
 from urllib3.util.retry import Retry
-from typing import Optional, List, Dict, Any, Union
-from .models import Dataset, Project
-from .constants import DEFAULT_LIMIT
-from .utils.deprecation import _deprecated, _deprecated_parameter, _removed
+from typing import TYPE_CHECKING, Optional, List, Dict, Any
+from .constants import DEFAULT_PRIVILEGE_MODE, PRIVILEGE_MODES
+from .utils.deprecation import _deprecated, _deprecated_parameter
 from .utils.identifiers import is_mfid, require_canonical_identifier
+
+if TYPE_CHECKING:
+    from .models import AccountAuthorization, AccountCapabilities
 
 logger = logging.getLogger(__name__)
 
-#%%
-
 class CrucibleClient:
-    def __init__(self, api_url: Optional[str] = None, api_key: Optional[str] = None):
+    def __init__(self, api_url: Optional[str] = None, api_key: Optional[str] = None,
+                 privilege_mode: Optional[str] = None):
         """
         Initialize the Crucible API client.
 
         Args:
             api_url: Base URL for the Crucible API (loads from config or the package default if not provided)
             api_key: API key for authentication (loads from config if not provided)
+            privilege_mode: "normal" or "elevated". Sent as the
+                Crucible-Privilege-Mode header on every request. Elevated mode
+                is what lets a platform administrator see beyond their own
+                ACL-derived access. Loads from config if not provided. When
+                unset, no header is sent and the server applies its legacy
+                behavior: elevated for a platform administrator, normal for
+                everyone else. Admin-only operations request elevation per
+                call regardless of this setting.
 
         Raises:
             ValueError: If api_key is not provided and not found in config
@@ -42,6 +50,12 @@ class CrucibleClient:
             api_url = _config.api_url
         if api_key is None:
             api_key = _config.api_key
+        if privilege_mode is None:
+            privilege_mode = _config.privilege_mode or DEFAULT_PRIVILEGE_MODE
+        elif privilege_mode not in PRIVILEGE_MODES:
+            raise ValueError(
+                f"privilege_mode must be one of: {', '.join(PRIVILEGE_MODES)}.")
+        self.privilege_mode = privilege_mode
 
         if not api_url:
             raise ValueError("api_url is required. Provide it directly or run 'crucible config init'")
@@ -81,11 +95,20 @@ class CrucibleClient:
         self._session.mount("https://", adapter)
         self._session.mount("http://", adapter)
 
+        # Non-idempotent calls (e.g. printing) must never be retried. Keep-alive
+        # is off because a stale pooled connection would fail in a way that
+        # cannot be told apart from a request the server already acted on.
+        self._no_retry_session = requests.Session()
+        self._no_retry_session.headers.update({
+            "Authorization": f"Bearer {api_key}",
+            "Connection": "close",
+        })
+
         # Initialize resource operations
         from .resources import FileOperations, DatasetOperations, SampleOperations, \
         ProjectOperations, UserOperations, InstrumentOperations, DeletionOperations, \
         GraphOperations, AccountOperations, IngestionOperations, ServiceAccountOperations, \
-        AccessGroupOperations
+        AccessGroupOperations, PrintOperations
 
         self.files = FileOperations(self)
         self.datasets = DatasetOperations(self)
@@ -99,14 +122,101 @@ class CrucibleClient:
         self.ingestions = IngestionOperations(self)
         self.service_accounts = ServiceAccountOperations(self)
         self.access_groups = AccessGroupOperations(self)
-    
-    def _request(self, method: str, endpoint: str, **kwargs) -> Any:
+        self.print = PrintOperations(self)
+        self._authorization = None
+        self._capabilities = None
+        self._profile_stale = False
+        self.upload_progress = None
+        self.upload_protocol = None
+        self.request_ingestion = True
+        self.replace_existing = False
+
+    def _load_profile(self, refresh: bool = False) -> None:
+        """Populate the cached authorization and capability blocks."""
+        from .models import AccountAuthorization, AccountCapabilities
+
+        if self._authorization is not None and not self._profile_stale and not refresh:
+            return
+        self._profile_stale = False
+        try:
+            profile = self.account.profile()
+        except Exception as exc:
+            response = getattr(exc, 'response', None)
+            status = getattr(response, 'status_code', None)
+            # Re-read next time after a transient failure instead of caching
+            # "no authority" for the client's lifetime.
+            self._profile_stale = (
+                isinstance(exc, (requests.ConnectionError, requests.Timeout))
+                or status == 429 or (status is not None and status >= 500))
+            profile = {}
+        self._authorization = AccountAuthorization.model_validate(
+            profile.get('authorization') or {})
+        self._capabilities = AccountCapabilities.model_validate(
+            profile.get('capabilities') or {})
+
+    def refresh_profile(self) -> None:
+        """Re-read authorization and capabilities from /account/profile."""
+        self._load_profile(refresh=True)
+
+    @property
+    def authorization(self) -> 'AccountAuthorization':
+        """The caller's platform_role and whether they can elevate.
+
+        Fetched once from /account/profile and cached; call refresh_profile()
+        to re-read it. An unreadable profile yields empty values, so callers
+        degrade to "no extra authority" rather than failing.
+        """
+        self._load_profile()
+        return self._authorization
+
+    @property
+    def capabilities(self) -> 'AccountCapabilities':
+        """The caller's account-level capability flags, cached like authorization.
+
+        They describe the authority of the privilege mode the client was in
+        when the profile was read; call refresh_profile() after changing
+        privilege_mode.
+        """
+        self._load_profile()
+        return self._capabilities
+
+    @property
+    def can_elevate(self) -> bool:
+        """Whether this caller may request elevated privilege mode at all."""
+        return self.authorization.can_elevate
+
+    @property
+    def is_elevated(self) -> bool:
+        """Whether ordinary requests from this client run elevated."""
+        if self.privilege_mode is None:
+            return self.can_elevate
+        return self.privilege_mode == 'elevated'
+
+    def _admin_mode(self) -> Optional[str]:
+        """Privilege mode for calls that need elevation but are not admin-only.
+
+        The server rejects an elevation request from an ineligible caller with a
+        hard 403, so an ordinary user keeps their normal-mode access instead.
+        """
+        return 'elevated' if self.can_elevate else None
+
+    def _request(self, method: str, endpoint: str,
+                 privilege_mode: Optional[str] = None,
+                 retry: bool = True, log_body: bool = True, **kwargs) -> Any:
         """Make an HTTP request to the API.
 
         Args:
             method: HTTP method (get, post, put, delete)
             endpoint: API endpoint path
-            **kwargs: Additional arguments to pass to requests
+            privilege_mode: Per-call override of the client's privilege mode.
+            retry: Whether transient 429/502/503/504 responses may be
+                retried. Set False for a non-idempotent endpoint where a
+                lost response after a server-side side effect must not
+                trigger a second attempt.
+            log_body: Whether the response body may be written to the debug
+                log. Set False when it carries credentials such as signed URLs.
+            **kwargs: Additional arguments to pass to requests, including a
+                timeout that replaces the configured one.
 
         Returns:
             Parsed JSON response
@@ -118,10 +228,21 @@ class CrucibleClient:
         """
         url = f"{self.api_url}/{endpoint.lstrip('/')}"
         logger.debug(f"{method.upper()} {url}")
-        timeout = (self._config.connect_timeout, self._config.read_timeout)
-        response = self._session.request(method, url, timeout=timeout, **kwargs)
+        timeout = kwargs.pop('timeout', None) or (self._config.connect_timeout,
+                                                  self._config.read_timeout)
+        mode = privilege_mode if privilege_mode is not None else self.privilege_mode
+        if mode is not None:
+            if mode not in PRIVILEGE_MODES:
+                raise ValueError(
+                    f"privilege_mode must be one of: {', '.join(PRIVILEGE_MODES)}.")
+            headers = dict(kwargs.pop('headers', None) or {})
+            headers.setdefault('Crucible-Privilege-Mode', mode)
+            kwargs['headers'] = headers
+        session = self._session if retry else self._no_retry_session
+        response = session.request(method, url, timeout=timeout, **kwargs)
         logger.debug(f"Status: {response.status_code}")
-        logger.debug(f"Response: {response.text}")
+        if log_body:
+            logger.debug(f"Response: {response.text}")
         if not response.ok:
             # Try to surface the server's error detail from the response body
             detail = None
@@ -144,12 +265,12 @@ class CrucibleClient:
         except (json.JSONDecodeError, ValueError) as e:
             logger.warning(f"Failed to parse JSON response from {url}: {e}")
             return response
-    
+
     def _wait_for_request_completion(self, reqid: str, sleep_interval: int = 1) -> Dict:
         """Internal: delegate to client.ingestions.wait()."""
         return self.ingestions.wait(reqid, sleep_interval=sleep_interval)
 
-    
+
     #%% GENERIC METHODS
 
     def live(self) -> Dict:
@@ -437,7 +558,7 @@ class CrucibleClient:
                 f"Cannot unlink resources: {resource_mfid_a} is {type_a}, "
                 f"{resource_mfid_b} is {type_b}."
             )
-    
+
     @_deprecated("client.datasets.download() or client.samples.download()")
     @_deprecated_parameter('resource_id', 'resource_mfid')
     def download(self, resource_mfid: str, output_dir: str = 'crucible-downloads',

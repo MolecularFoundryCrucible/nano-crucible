@@ -15,8 +15,9 @@ import warnings
 logger = logging.getLogger(__name__)
 
 from . import term
+from .helpers import add_limit_arguments, count_label, print_more_hint, resolve_limit, page_kwargs
 from ..config import config as _config
-from ..constants import PROJECT_MEMBER_ROLES
+from ..constants import PROJECT_ACCESS_ROLES, PROJECT_MEMBER_ROLES, PROJECT_SORTS, SORT_DIRECTIONS
 
 try:
     import argcomplete
@@ -87,19 +88,39 @@ def _register_list(subparsers):
         description='List all projects'
     )
 
-    parser.add_argument(
-        '--limit',
-        type=int,
-        default=_config.default_limit,
-        metavar='N',
-        help=f'Maximum number of results to return (default: {_config.default_limit})'
-    )
+    add_limit_arguments(parser, 'projects')
 
     parser.add_argument(
         '--include-metadata',
         action='store_true',
         dest='include_metadata',
         help='Include scientific metadata in results'
+    )
+
+    parser.add_argument(
+        '--sort',
+        choices=PROJECT_SORTS,
+        help='Sort by project_id, title, created, or updated'
+    )
+
+    parser.add_argument(
+        '--direction',
+        choices=SORT_DIRECTIONS,
+        help='Sort direction (dates default desc, everything else asc); requires --sort'
+    )
+
+    parser.add_argument(
+        '--member',
+        action='append',
+        metavar='USER',
+        dest='member',
+        help='Only projects where USER is a member (ORCID, username, or email; repeatable)'
+    )
+
+    parser.add_argument(
+        '--member-role',
+        choices=PROJECT_ACCESS_ROLES,
+        help='Restrict --member to this project role; requires --member'
     )
 
     parser.add_argument(
@@ -244,14 +265,12 @@ Examples:
 
 def _register_list_users(subparsers):
     """Register the 'project list-users' subcommand."""
-    import argparse
 
     def _add_args(p):
         pid_arg = p.add_argument('project_id', metavar='PROJECT_ID', help='Project ID')
         if ARGCOMPLETE_AVAILABLE:
             pid_arg.completer = argcomplete.completers.SuppressCompleter()
-        p.add_argument('--limit', type=int, default=_config.default_limit, metavar='N',
-                       help=f'Maximum number of results to return (default: {_config.default_limit})')
+        add_limit_arguments(p, 'members')
 
     parser = subparsers.add_parser(
         'list-users',
@@ -365,17 +384,22 @@ Examples:
 
 def _execute_list(args):
     """Execute the 'project list' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
-        projects = client.projects.list(limit=args.limit,
-                                        include_metadata=getattr(args, 'include_metadata', False))
+        client = get_client()
+        projects = client.projects.list(limit=resolve_limit(args), **page_kwargs(args),
+                                        include_metadata=getattr(args, 'include_metadata', False),
+                                        sort=getattr(args, 'sort', None),
+                                        direction=getattr(args, 'direction', None),
+                                        member_ref=getattr(args, 'member', None),
+                                        member_role=getattr(args, 'member_role', None))
 
         if getattr(args, 'json', False):
+            print_more_hint(projects, resolve_limit(args), args)
             print(json.dumps(projects, indent=2, default=str))
             return
 
-        term.header(f"Projects ({len(projects)})")
+        term.header(f"Projects ({count_label(projects)})")
         if not projects:
             print(f"  {term.dim('No projects found.')}")
         else:
@@ -389,11 +413,13 @@ def _execute_list(args):
                     term.navigation_link(title, url) if title else '-',
                     project.get('organization') or '-',
                     _lead_name(project) or '-',
+                    term.role_label(project.get('role')),
                 )
             rows = [_project_row(project) for project in projects]
-            term.table(rows, ['Project ID', 'Title', 'Organization', 'Lead'],
-                       max_widths=[25, 30, 20, 25],
-                       min_widths=[25, 5, 12, 4])
+            term.table(rows, ['Project ID', 'Title', 'Organization', 'Lead', 'Role'],
+                       max_widths=[25, 30, 20, 25, 13],
+                       min_widths=[25, 5, 12, 4, 4])
+            print_more_hint(projects, resolve_limit(args), args)
 
     except Exception as e:
         from .helpers import fail
@@ -432,6 +458,7 @@ def _show_project(project, include_metadata=False, include_members=False):
     _p("MFID",         term.mfid_link(uid, project_url))
     _p("Organization", project.get('organization'))
     _p("Status",       term.status_label(project.get('status')))
+    _p("My role",      term.role_label(project.get('role')))
 
     lead = _lead_name(project)
     if lead:
@@ -473,11 +500,11 @@ def _show_project(project, include_metadata=False, include_members=False):
 
 def _execute_get(args):
     """Execute the 'project get' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     include_metadata = getattr(args, 'json', False) or getattr(args, 'include_metadata', False) or _config.include_metadata
     include_members = getattr(args, 'include_members', False)
     try:
-        client = CrucibleClient()
+        client = get_client()
         project = client.projects.get(args.project_id,
                                       include_metadata=include_metadata,
                                       include_members=include_members)
@@ -503,9 +530,13 @@ def _execute_get(args):
 
 def _execute_create(args):
     """Execute the 'project create' subcommand."""
-    from crucible.client import CrucibleClient
-    from .helpers import prompt_optional, prompt_required, validate_user_reference
+    from crucible.config import get_client
+    from .helpers import (prompt_optional, prompt_required, require_capability,
+                          validate_user_reference)
     from ..utils.identifiers import validate_slug
+
+    require_capability(get_client(), 'can_create_project', 'create projects')
+
     # Interactive mode if any required arguments are missing
     project_id = args.project_id
     organization = args.organization
@@ -554,7 +585,7 @@ def _execute_create(args):
     try:
         from crucible.models import Project
         project_lead = validate_user_reference(project_lead)
-        client = CrucibleClient()
+        client = get_client()
 
         project = Project(
             project_id=project_id,
@@ -575,13 +606,13 @@ def _execute_create(args):
 
 def _execute_list_users(args):
     """Execute the 'project get-users' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     from .helpers import sort_members
     try:
-        client = CrucibleClient()
-        users = sort_members(client.projects.get_users(args.project_id, limit=args.limit))
+        client = get_client()
+        users = sort_members(client.projects.get_users(args.project_id, limit=resolve_limit(args), **page_kwargs(args)))
 
-        term.header(f"Users · {args.project_id} ({len(users)})")
+        term.header(f"Users · {args.project_id} ({count_label(users)})")
         if not users:
             print(f"  {term.dim('No users found.')}")
         else:
@@ -596,6 +627,7 @@ def _execute_list_users(args):
                 role     = term.role_label(u.role)
                 rows.append((username, name, role))
             term.table(rows, ['Username', 'Name', 'Role'], max_widths=[25, 25, 12])
+            print_more_hint(users, resolve_limit(args), args)
 
     except Exception as e:
         from .helpers import fail
@@ -606,7 +638,7 @@ def _execute_add_user(args):
     """Execute the 'project add-user' subcommand."""
     import re
     import warnings
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     from .helpers import parse_user_ref
 
     orcid    = getattr(args, 'orcid', None)
@@ -633,7 +665,7 @@ def _execute_add_user(args):
         sys.exit(1)
 
     try:
-        client = CrucibleClient()
+        client = get_client()
         role = getattr(args, 'role', None)
         users = client.projects.add_user(user_unique_id=orcid, project_id=args.project_id,
                                          email=email, username=username, role=role)
@@ -656,7 +688,7 @@ def _execute_add_user(args):
 
 def _execute_update(args):
     """Execute the 'project update' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
 
     fields = {k: v for k, v in {
         'title':               args.title,
@@ -681,14 +713,17 @@ def _execute_update(args):
             sys.exit(1)
 
     try:
-        client = CrucibleClient()
+        client = get_client()
         current_project_id = args.project_id
 
         if fields:
             result = client.projects.update(current_project_id, **fields)
             term.success("Project updated", args)
             _show_project(result)
-            current_project_id = result.get('project_id', current_project_id)
+            new_id = result.get('project_id')
+            if new_id and new_id != current_project_id:
+                _follow_project_rename(current_project_id, new_id)
+            current_project_id = result.get('unique_id') or new_id or current_project_id
 
         if metadata_dict is not None:
             overwrite = getattr(args, 'overwrite', False)
@@ -705,7 +740,7 @@ def _execute_remove_user(args):
     """Execute the 'project remove-user' subcommand."""
     import requests as _req
     import warnings
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     from .helpers import parse_user_ref
 
     orcid    = getattr(args, 'orcid', None)
@@ -727,7 +762,7 @@ def _execute_remove_user(args):
         sys.exit(1)
 
     try:
-        client = CrucibleClient()
+        client = get_client()
 
         try:
             user = client.users.get(orcid=orcid, email=email, username=username)
@@ -790,11 +825,11 @@ Examples:
 
 def _execute_update_user_role(args):
     """Execute the 'project update-user-role' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     from .helpers import fail, sort_members
 
     try:
-        client = CrucibleClient()
+        client = get_client()
         users = sort_members(client.projects.update_user_role(
             args.project_id, args.user_unique_id, args.role))
         term.success(
@@ -811,6 +846,22 @@ def _execute_update_user_role(args):
         term.table(rows, ['Username', 'Name', 'Role'], max_widths=[25, 25, 12])
     except Exception as e:
         fail("updating user role", e, args)
+
+
+def _follow_project_rename(old_id, new_id):
+    """Point the saved current project at a project's new ID after a rename."""
+    from crucible.config import config
+    from .config import set_config_value
+
+    current = config.current_project
+    if not old_id or not current or current.lower() != old_id.lower():
+        return
+    if config.source('current_project') == 'environment':
+        logger.warning(f"CRUCIBLE_CURRENT_PROJECT still names '{old_id}'; "
+                       f"update it to '{new_id}'.")
+        return
+    set_config_value('current_project', new_id)
+    logger.info(f"Current project updated: {old_id} -> {new_id}")
 
 
 def _register_transfer_ownership(subparsers):
@@ -838,11 +889,11 @@ Examples:
 
 def _execute_transfer_ownership(args):
     """Execute the 'project transfer-ownership' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     from .helpers import fail, show_transfer_ownership
 
     try:
-        client = CrucibleClient()
+        client = get_client()
         result = client.projects.transfer_ownership(args.project_id, args.new_owner, confirm=args.confirm)
         show_transfer_ownership(result, args.confirm)
     except Exception as e:
@@ -870,10 +921,10 @@ Examples:
 
 def _execute_request_join(args):
     """Execute the 'project request-join' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     from .access_group import _show_join_request
     try:
-        client = CrucibleClient()
+        client = get_client()
         record = client.projects.request_join(args.project_id, reason=args.reason)
         term.success("Join request submitted", args)
         _show_join_request(record, client=client)
@@ -898,25 +949,26 @@ Examples:
     parser.add_argument('project_id', metavar='PROJECT_ID', help='Project ID')
     parser.add_argument('--status', choices=['pending', 'approved', 'rejected'], default=None,
                         help='Filter by status')
-    parser.add_argument('--limit', type=int, default=100, metavar='N')
+    add_limit_arguments(parser, 'requests')
     parser.set_defaults(func=_execute_list_join_requests)
 
 
 def _execute_list_join_requests(args):
     """Execute the 'project list-join-requests' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     from .access_group import _table_rows
     try:
-        client = CrucibleClient()
+        client = get_client()
         records = client.projects.list_join_requests(args.project_id, status=args.status,
-                                                      limit=args.limit)
-        term.header(f"Join Requests · {args.project_id} ({len(records)})")
+                                                      limit=resolve_limit(args), **page_kwargs(args))
+        term.header(f"Join Requests · {args.project_id} ({count_label(records)})")
         if not records:
             print(f"  {term.dim('No join requests found.')}")
             return
         term.table(_table_rows(records, client=client),
                   ['ID', 'Group', 'Status', 'Requester', 'Requested'],
                   max_widths=[6, 25, 10, 25, 12])
+        print_more_hint(records, resolve_limit(args), args)
     except Exception as e:
         from .helpers import fail
         fail("", e, args)
@@ -985,10 +1037,14 @@ def _edit_project(project_id, client, debug=False):
         return
 
     try:
+        project_ref = project.get('unique_id') or project_id
         if field_changes:
-            client.projects.update(project_id, **field_changes)
+            client.projects.update(project_ref, **field_changes)
         if meta_changed:
-            client.projects.update_scientific_metadata(project_id, edited_meta, overwrite=True)
+            client.projects.update_scientific_metadata(project_ref, edited_meta, overwrite=True)
+        new_id = field_changes.get('project_id')
+        if new_id and new_id != project.get('project_id'):
+            _follow_project_rename(project.get('project_id'), new_id)
 
         diff_updated = dict(field_changes)
         if meta_changed:
@@ -1002,9 +1058,9 @@ def _edit_project(project_id, client, debug=False):
 
 def _execute_edit(args):
     """Execute the 'project edit' subcommand."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client = CrucibleClient()
+        client = get_client()
     except Exception as e:
         from .helpers import fail
         fail("connecting", e)
@@ -1036,14 +1092,15 @@ def _execute_search(args):
     if len(args.query) < 3:
         from .helpers import fail
         fail("searching projects", ValueError("Search term must be at least 3 characters."), args)
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client  = CrucibleClient()
+        client  = get_client()
         results = client.projects.search(args.query, limit=args.limit)
         if getattr(args, 'json', False):
+            print_more_hint(results, args.limit, args, allow_all=False)
             print(json.dumps(results, indent=2, default=str))
             return
-        term.header(f"Projects matching '{args.query}' ({len(results)})")
+        term.header(f"Projects matching '{args.query}' ({count_label(results)})")
         if not results:
             print(f"  {term.dim('No results found.')}")
             return
@@ -1064,6 +1121,7 @@ def _execute_search(args):
             max_widths=[25, 30, 20],
             min_widths=[25, 5, 12],
         )
+        print_more_hint(results, args.limit, args, allow_all=False)
     except Exception as e:
         from .helpers import fail
         fail("", e, args)
@@ -1086,9 +1144,9 @@ def _register_search_metadata(subparsers):
 
 
 def _execute_search_metadata(args):
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        client  = CrucibleClient()
+        client  = get_client()
         results = client.projects.search_metadata(args.query, limit=args.limit)
         if getattr(args, 'json', False):
             print(json.dumps(results, indent=2, default=str))

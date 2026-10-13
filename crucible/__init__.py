@@ -7,8 +7,8 @@ Python client library for the Crucible API - the Molecular Foundry data
 management system.
 """
 
-__version__ = "3.2.1"
-__author__ = "mkywall","roncofaber"
+__version__ = "3.3.0"
+__author__ = ("mkywall", "roncofaber")
 
 import logging
 import sys
@@ -59,6 +59,8 @@ def setup_logging(verbose=False):
 
 from .client import CrucibleClient
 from .models import (
+    AccountAuthorization,
+    AccountCapabilities,
     AssociatedFile,
     CrucibleResource,
     Dataset,
@@ -79,5 +81,6 @@ __all__ = [
     'CrucibleClient', 'CrucibleResource', 'Dataset', 'Sample', 'Project', 'User', 'PublicUser',
     'Instrument', 'InstrumentReference', 'ProjectReference', 'AssociatedFile',
     'EffectiveResourceAccess', 'ResourceSearchResult', 'ResourceCapabilities',
+    'AccountAuthorization', 'AccountCapabilities',
     'config', 'setup_logging', '__version__', '__author__',
 ]

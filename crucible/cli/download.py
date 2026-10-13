@@ -64,9 +64,9 @@ def register_subcommand(subparsers):
 
 def execute(args):
     """Execute the download command."""
-    from crucible.client import CrucibleClient
+    from crucible.config import get_client
     try:
-        downloaded = CrucibleClient().download(
+        downloaded = get_client().download(
             args.resource_id,
             output_dir=args.output_dir,
             no_files=args.no_files,
@@ -79,4 +79,4 @@ def execute(args):
             logger.info(path)
     except Exception as e:
         from .helpers import fail
-        fail("downloading {args.resource_id}", e, args)
+        fail(f"downloading {args.resource_id}", e, args)

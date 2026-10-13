@@ -12,14 +12,16 @@ import logging
 import requests
 import warnings
 from pathlib import Path
-from typing import Optional, List, Dict, Sequence, Union
+from datetime import date, datetime
+from typing import Callable, Optional, List, Dict, Sequence, Union
 
 import mfid
 
 # internal modules
-from .base import BaseResource
-from .capabilities import AccessControlMixin, OwnershipMixin, ProjectAssignmentMixin
-from ..constants import DEFAULT_LIMIT
+from .base import BaseResource, ListResult
+from .capabilities import (
+    AccessControlMixin, InstrumentAssignmentMixin, OwnershipMixin, ProjectAssignmentMixin)
+from ..constants import DATASET_FACET_FIELDS, DEFAULT_LIMIT, VISIBILITIES
 from ..utils.deprecation import _deprecated, _deprecated_parameter
 from ..utils.identifiers import is_mfid, require_canonical_identifier
 from ..models import AssociatedFile
@@ -30,8 +32,39 @@ from .gcs.upload import upload_file_gcs
 # set up logging
 logger = logging.getLogger(__name__)
 
+# Query parameters accepted by GET /datasets. The API rejects anything else
+# with 422 extra_forbidden.
+DATASET_LIST_PARAMS = frozenset({
+    'accessible_to_project', 'accessible_to_user', 'affiliation',
+    'anchor_mfid', 'creation_time_gte', 'creation_time_lte', 'cursor',
+    'data_format', 'data_format_is_null', 'data_type', 'dataset_name',
+    'direction', 'include_links', 'include_metadata', 'include_owner',
+    'include_total', 'instrument_mfid', 'instrument_mfid_is_null',
+    'instrument_name', 'keyword', 'limit', 'measurement',
+    'measurement_is_null', 'modification_time_gte',
+    'modification_time_lte', 'offset', 'owner_id', 'owner_id_is_null',
+    'owner_orcid', 'project_id', 'project_mfid', 'project_mfid_is_null',
+    'project_scope', 'public', 'sample_mfid', 'session_name',
+    'session_name_is_null', 'size', 'sort', 'timestamp', 'unique_id',
+    'visibility',
+})
 
-class DatasetOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixin, BaseResource):
+# Query parameters accepted by GET /datasets/facets.
+DATASET_FACET_PARAMS = frozenset({
+    'accessible_to_project', 'accessible_to_user', 'affiliation',
+    'creation_time_gte', 'creation_time_lte', 'cursor', 'data_format',
+    'data_format_is_null', 'direction', 'field', 'instrument_mfid',
+    'instrument_mfid_is_null', 'limit', 'measurement',
+    'measurement_is_null', 'modification_time_gte',
+    'modification_time_lte', 'owner_id', 'owner_id_is_null', 'project_id',
+    'project_mfid', 'project_mfid_is_null', 'project_scope',
+    'sample_mfid', 'session_name', 'session_name_is_null', 'sort',
+    'visibility',
+})
+
+
+class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, OwnershipMixin,
+                        AccessControlMixin, BaseResource):
     """Dataset-related API operations.
 
     Access via: client.datasets.get(), client.datasets.list(), etc.
@@ -95,9 +128,20 @@ class DatasetOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMix
              accessible_to_user: Optional[Union[str, Sequence[str]]] = None,
              accessible_to_project: Optional[Union[str, Sequence[str]]] = None,
              instrument_mfid: Optional[str] = None,
+             instrument_id: Optional[str] = None,
              project_id: Optional[str] = None,
              project_mfid: Optional[str] = None,
              project_scope: Optional[str] = None,
+             sort: Optional[str] = None,
+             direction: Optional[str] = None,
+             visibility: Optional[str] = None,
+             affiliation: Optional[Union[str, Sequence[str]]] = None,
+             include_total: Optional[bool] = None,
+             creation_time_gte: Optional[Union[str, date, datetime]] = None,
+             creation_time_lte: Optional[Union[str, date, datetime]] = None,
+             modification_time_gte: Optional[Union[str, date, datetime]] = None,
+             modification_time_lte: Optional[Union[str, date, datetime]] = None,
+             cursor: Optional[str] = None,
              **kwargs) -> List[Dict]:
         """List datasets with optional filtering and automatic pagination.
 
@@ -109,6 +153,8 @@ class DatasetOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMix
             offset (int): Deprecated. The /datasets collection uses keyset
                           pagination and ignores offset, including when filtered
                           by sample_mfid.
+            cursor (str, optional): Continuation token from a previous
+                result's next_cursor; the listing resumes there.
             include_metadata (bool): Include scientific metadata in results
             include_links (bool): Include linked resources (parents, children, associated) per dataset
             include_owner (bool): Resolve owner_orcid into a public-safe user object per dataset
@@ -117,29 +163,66 @@ class DatasetOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMix
             accessible_to_project: Project reference or references whose direct access
                                    must include every result
             instrument_mfid: Canonical instrument MFID assigned to every result
+            instrument_id: Instrument slug (any casing), resolved to its MFID.
+                May accompany a matching instrument_mfid.
             project_id: Project slug used to scope results by project relationship
             project_mfid: Canonical project MFID used to scope results by project relationship
             project_scope: Project relationship to include: assigned, shared, or all.
                            Requires project_id or project_mfid and defaults to assigned.
+            sort: Explicit ordering, one of crucible.constants.RESOURCE_SORTS.
+                  Omit to keep the legacy unique_id descending order.
+            direction: Sort direction, asc or desc. Requires sort.
+            visibility: Restrict results by public visibility: all, public, or private.
+            affiliation: Caller relationship each result must have, currently
+                         only 'owner'. Accepts a single value or a sequence.
+            include_total: Request the exact authorization-filtered total. Omit
+                           to keep the endpoint's default behavior.
+            creation_time_gte: Inclusive lower creation-time bound. Accepts a
+                datetime, date, or ISO 8601 string.
+            creation_time_lte: Inclusive upper creation-time bound, same types.
+            modification_time_gte: Inclusive lower modification-time bound,
+                same types.
+            modification_time_lte: Inclusive upper modification-time bound,
+                same types.
             **kwargs (Any): Query parameters for filtering. Supported fields include:
-                keyword, unique_id, public, dataset_name, owner_orcid, project_id,
-                instrument_name, timestamp, size, data_format, data_type, measurement,
-                session_name. Filters expect exact matches (case sensitive) except for
+                keyword, unique_id, public, dataset_name, owner_id, timestamp, size,
+                data_format, data_type, measurement, session_name, and the
+                deprecated instrument_name (use instrument_mfid). Filters expect exact matches (case sensitive) except for
                 keywords, which are case insensitive and match substrings.
 
         Returns:
             List[Dict]: Dataset objects matching filter criteria
         """
         params = {k: v for k, v in kwargs.items() if v is not None}
+        if 'instrument_name' in params:
+            warnings.warn(
+                "Filtering datasets by instrument_name is deprecated; pass "
+                "instrument_mfid instead.",
+                DeprecationWarning, stacklevel=2,
+            )
         selectors = self._access_selector_params(
             accessible_to_user, accessible_to_project)
         params.update(selectors)
         params.update(self._project_scope_params(
             project_id, project_mfid, project_scope))
+        params.update(self._ordering_params(sort, direction))
+        params.update(self._affiliation_params(affiliation))
+        params.update(self._choice_params(
+            visibility=(visibility, VISIBILITIES)))
+        params.update(self._time_range_params(
+            creation_time_gte=creation_time_gte,
+            creation_time_lte=creation_time_lte,
+            modification_time_gte=modification_time_gte,
+            modification_time_lte=modification_time_lte))
+        if include_total is not None:
+            params['include_total'] = include_total
         if sample_mfid is not None:
             params['sample_mfid'] = sample_mfid
         if instrument_mfid is not None:
             params['instrument_mfid'] = instrument_mfid
+        if instrument_id is not None:
+            params['instrument_id'] = instrument_id
+        self._resolve_instrument_filter(params)
         if include_metadata:
             params['include_metadata'] = True
         if include_links:
@@ -147,14 +230,41 @@ class DatasetOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMix
         if include_owner:
             params['include_owner'] = True
         if offset:
-            import warnings
             warnings.warn(
                 "'offset' is ignored by /datasets, which uses keyset "
                 "pagination; results start from the newest dataset.",
                 DeprecationWarning, stacklevel=2,
             )
-        raw = self._paginate('/datasets', params, limit, offset)
-        return [self._parse(d) for d in raw]
+        self._validate_filter_params(params, DATASET_LIST_PARAMS, '/datasets')
+        raw = self._paginate('/datasets', params, limit, offset, cursor=cursor)
+        return ListResult.like(raw, [self._parse(d) for d in raw])
+
+    def facets(self, field: str, limit: int = 100,
+               sort: Optional[str] = None, direction: Optional[str] = None,
+               cursor: Optional[str] = None, **filters) -> Dict:
+        """Group datasets into value buckets with counts, without fetching records.
+
+        Args:
+            field: Field to group by, one of
+                   crucible.constants.DATASET_FACET_FIELDS.
+            limit: Maximum number of buckets to return (default: 100, max 1000).
+            sort: Bucket ordering, one of crucible.constants.FACET_SORTS
+                  (default: value).
+            direction: Bucket ordering direction, asc or desc (default: asc).
+            cursor: Continuation cursor from a previous response's next_cursor.
+            **filters (Any): Any dataset list filter, restricting which datasets
+                       contribute to the counts, including instrument_id.
+
+        Returns:
+            Dict: field, items (buckets with value, label, count, and a typed
+                  owner/project/instrument reference where applicable), limit,
+                  and next_cursor.
+        """
+        filters = {k: v for k, v in filters.items() if v is not None}
+        self._resolve_instrument_filter(filters)
+        return self._facets('/datasets/facets', field, DATASET_FACET_FIELDS,
+                            DATASET_FACET_PARAMS, limit=limit, sort=sort,
+                            direction=direction, cursor=cursor, filters=filters)
 
     def count(self, project_id: Optional[str] = None,
               project_mfid: Optional[str] = None,
@@ -163,8 +273,26 @@ class DatasetOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMix
         params = {k: v for k, v in kwargs.items() if v is not None}
         params.update(self._project_scope_params(
             project_id, project_mfid, project_scope))
+        self._resolve_instrument_filter(params)
+        self._normalize_time_filters(params)
+        self._validate_filter_params(params, DATASET_LIST_PARAMS, '/datasets')
         result = self._request('get', '/datasets', params={**params, 'limit': 1})
         return result['total']
+
+    def _resolve_instrument_filter(self, params: Dict) -> None:
+        """Replace an instrument_id slug filter with its instrument_mfid in place."""
+        slug = params.pop('instrument_id', None)
+        if slug is None:
+            return
+        instrument = self._client.instruments.get(instrument_id=slug, include_owner=False)
+        if not instrument:
+            raise ValueError(f"Instrument '{slug}' not found.")
+        mfid = instrument['unique_id']
+        if params.get('instrument_mfid') not in (None, mfid):
+            raise ValueError(
+                f"instrument_id '{slug}' and instrument_mfid "
+                f"'{params['instrument_mfid']}' identify different instruments.")
+        params['instrument_mfid'] = mfid
 
 
     def create(self, dataset, scientific_metadata: Optional[Dict] = None,
@@ -239,6 +367,16 @@ class DatasetOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMix
         if dataset_details.get('owner') is not None and not isinstance(dataset_details['owner'], str):
             raise ValueError("Dataset.owner must be a string identifier when creating a dataset.")
 
+        if (dataset_details.get('instrument_name') is not None
+                and dataset_details.get('instrument_id') is None
+                and dataset_details.get('instrument_mfid') is None):
+            warnings.warn(
+                "Identifying a dataset's instrument by instrument_name is deprecated: "
+                "names are free-text and may repeat. Set instrument_mfid or "
+                "instrument_id instead.",
+                DeprecationWarning, stacklevel=2,
+            )
+
         if not dataset_details.get('unique_id'):
             dataset_details['unique_id'] = mfid.mfid()[0]
 
@@ -284,12 +422,13 @@ class DatasetOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMix
                 file_results.append(self.add_remote_file(dataset_mfid, remote))
 
         if wait_for_ingestion_response and not skip_ingestion:
-            pending = [r['ingestion_request']['id'] for r in file_results
+            pending = [r for r in file_results
                        if isinstance(r, dict) and (r.get('ingestion_request') or {}).get('id')]
             if pending:
                 logger.debug(f'Waiting on {len(pending)} ingestion request(s) for {dataset_mfid}')
-            for request_id in pending:
-                self._client.ingestions.wait(request_id)
+            for file_result in pending:
+                file_result['ingestion_request'] = self._client.ingestions.wait(
+                    file_result['ingestion_request']['id'])
 
         result = {"created_record": new_ds_record,
                   "scientific_metadata_record": scimd,
@@ -303,10 +442,12 @@ class DatasetOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMix
 
         'owner_orcid' and 'project_id' are no longer accepted here (422) -
         use transfer_ownership() / reassign_project() instead.
+
+        Instrument assignment is not available through generic PATCH - use
+        assign_instrument(). Omit 'instrument_id' and 'instrument_name' unless
+        resubmitting their current values for compatibility.
+
         The deprecated 'public' field delegates to set_public() or set_private().
-        Instrument reassignment is not available through generic PATCH. Omit
-        'instrument_id' and 'instrument_name' unless resubmitting their current
-        values for compatibility.
 
         Args:
             dataset_mfid (str): Dataset MFID
@@ -511,6 +652,7 @@ class DatasetOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMix
     @_deprecated_parameter('parent_dataset_mfid', 'parent_mfid')
     def list_children(self, parent_mfid: str, limit: int = DEFAULT_LIMIT,
                       offset: int = 0, relationship_type: Optional[str] = None,
+                      cursor: Optional[str] = None,
                       **kwargs) -> List[Dict]:
         """List the children of a given dataset with optional filtering.
 
@@ -518,6 +660,8 @@ class DatasetOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMix
             parent_mfid (str): Parent dataset MFID
             limit (int): Maximum number of results to return
             offset (int): Starting position in the full result set (default: 0)
+            cursor (str, optional): Continuation token from a previous
+                result's next_cursor; the listing resumes there.
             relationship_type (str, optional): Only return children linked with
                 this kind of link, one of crucible.constants.RELATIONSHIP_TYPES.
             **kwargs (Any): Query parameters for filtering datasets
@@ -529,13 +673,14 @@ class DatasetOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMix
         if relationship_type is not None:
             params['relationship_type'] = relationship_type
         raw = self._paginate(
-            f"/datasets/{parent_mfid}/children", params, limit, offset)
-        return [self._parse(dataset) for dataset in raw]
+            f"/datasets/{parent_mfid}/children", params, limit, offset, cursor=cursor)
+        return ListResult.like(raw, [self._parse(dataset) for dataset in raw])
 
     @_deprecated_parameter('child_dataset_id', 'child_mfid')
     @_deprecated_parameter('child_dataset_mfid', 'child_mfid')
     def list_parents(self, child_mfid: str, limit: int = DEFAULT_LIMIT,
                      offset: int = 0, relationship_type: Optional[str] = None,
+                     cursor: Optional[str] = None,
                      **kwargs) -> List[Dict]:
         """List the parents of a given dataset with optional filtering.
 
@@ -543,6 +688,8 @@ class DatasetOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMix
             child_mfid (str): Child dataset MFID
             limit (int): Maximum number of results to return
             offset (int): Starting position in the full result set (default: 0)
+            cursor (str, optional): Continuation token from a previous
+                result's next_cursor; the listing resumes there.
             relationship_type (str, optional): Only return parents linked with
                 this kind of link, one of crucible.constants.RELATIONSHIP_TYPES.
             **kwargs (Any): Query parameters for filtering datasets
@@ -554,8 +701,8 @@ class DatasetOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMix
         if relationship_type is not None:
             params['relationship_type'] = relationship_type
         raw = self._paginate(
-            f"/datasets/{child_mfid}/parents", params, limit, offset)
-        return [self._parse(dataset) for dataset in raw]
+            f"/datasets/{child_mfid}/parents", params, limit, offset, cursor=cursor)
+        return ListResult.like(raw, [self._parse(dataset) for dataset in raw])
 
     # Special Processing Methods
     @_deprecated_parameter('dsid', 'dataset_mfid')
@@ -622,7 +769,7 @@ class DatasetOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMix
     #%% Upload Methods
 
     @_deprecated_parameter('dsid', 'dataset_mfid')
-    def add_file(self, 
+    def add_file(self,
                  dataset_mfid: str,
                  file_path: str,
                  ingestion_class: Optional[str] = None,
@@ -630,7 +777,10 @@ class DatasetOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMix
                  multipart: bool = True,
                  chunk_size_mb: Optional[int] = None,
                  max_workers: Optional[int] = None,
-                 skip_ingestion: bool = False) -> Dict:
+                 skip_ingestion: bool = False,
+                 upload_protocol: Optional[str] = None,
+                 progress: Optional[Callable[[str, int, int], None]] = None,
+                 replace: bool = False) -> Dict:
 
         """Upload a file to a dataset and request ingestion.
 
@@ -646,20 +796,36 @@ class DatasetOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMix
             chunk_size_mb: Override chunk size in MiB (uses config/default if None).
             max_workers: Override number of upload threads (uses config/default if None).
             skip_ingestion: Upload the file without requesting ingestion. Request it
-                later with client.files.request_ingestion(mfid). 
+                later with client.files.request_ingestion(mfid). Also implied
+                when client.request_ingestion is False.
+            upload_protocol: "auto", "signed", or "legacy" for multipart uploads;
+                defaults to the upload_protocol setting. "auto" uses signed
+                upload URLs, falling back to the legacy token route when the
+                server has them switched off.
+            progress: Called as progress(filename, bytes_done, total) while a
+                signed upload sends its parts.
+            replace: If the dataset already has this filename with different
+                content, replace that file's content (same MFID and filename)
+                instead of raising FileExistsWithDifferentContent. Needs a
+                server with signed uploads. Also implied by
+                client.replace_existing.
 
         Returns:
             Dict: {'associated_file': AssociatedFileRead, 'ingestion_request': IngestionRequest}
         """
-        file_size = os.path.getsize(file_path)
-        filename  = os.path.basename(file_path)
+        filename = os.path.basename(file_path)
+        skip_ingestion = skip_ingestion or not getattr(self._client, 'request_ingestion', True)
+        replace = replace or getattr(self._client, 'replace_existing', False)
 
-        file_record, was_existing = upload_file_gcs(self._client, 
-                                                    dataset_mfid, 
+        file_record, was_existing = upload_file_gcs(self._client,
+                                                    dataset_mfid,
                                                     file_path,
                                                     multipart=multipart,
                                                     chunk_size_mb=chunk_size_mb,
-                                                    max_workers=max_workers)
+                                                    max_workers=max_workers,
+                                                    protocol=upload_protocol,
+                                                    progress=progress,
+                                                    replace=replace)
         file_record = self._client.files._parse(file_record)
 
         stored_filename = file_record.get('filename', filename)
@@ -722,7 +888,7 @@ class DatasetOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMix
                             multipart: bool = True,
                             chunk_size_mb: Optional[int] = None,
                             max_workers: Optional[int] = None) -> Dict:
-        
+
         return self.add_file(dataset_mfid=dataset_mfid, file_path=file_path,
                              ingestion_class=ingestion_class,
                              wait_for_ingestion_response=wait_for_ingestion_response,
@@ -735,14 +901,22 @@ class DatasetOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMix
     #%% Download Methods
 
     @_deprecated_parameter('dsid', 'dataset_mfid')
-    def get_download_links(self, dataset_mfid: str) -> Dict:
+    def get_download_links(self, dataset_mfid: str, disposition: Optional[str] = None) -> Dict:
         """Get signed download URLs for all ingested files in a dataset.
 
+        Args:
+            dataset_mfid: Dataset MFID
+            disposition: "attachment" (the server default) to download, or
+                "inline" to let a browser display the files.
+
         Returns:
-            Dict: Mapping of file MFID → signed URL. Empty dict if no ingested files.
+            Dict: Mapping of file MFID → signed URL, or None for a file whose
+                stored location the server will not serve. Empty dict if no
+                ingested files.
         """
+        params = {'disposition': disposition} if disposition else None
         try:
-            return self._request('get', f"/datasets/{dataset_mfid}/download_links")
+            return self._request('get', f"/datasets/{dataset_mfid}/download_links", params=params)
         except requests.exceptions.HTTPError as e:
             if e.response is not None:
                 if e.response.status_code == 404:

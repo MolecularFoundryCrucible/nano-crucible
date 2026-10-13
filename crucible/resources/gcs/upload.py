@@ -6,11 +6,12 @@ GCS upload helpers for Crucible datasets.
 Standalone functions — take an explicit `client` argument rather than `self`
 so they can be tested in isolation and reused outside of any resource class.
 
-Two strategies:
-  - upload_file_gcs_multipart  : parallel XML multipart via google-cloud-storage SDK
-  - upload_file_gcs_resumable  : sequential chunked resumable URI (plain requests)
+Three strategies:
+  - upload_file_signed_multipart : parallel parts to API-signed URLs (signed_multipart.py)
+  - upload_file_gcs_multipart    : legacy parallel XML multipart via a vended token
+  - upload_file_gcs_resumable    : sequential chunked resumable URI (plain requests)
 
-upload_file_gcs() dispatches between them based on the `multipart` flag.
+upload_file_gcs() picks one from the `multipart` flag and the upload protocol.
 """
 
 import os
@@ -18,7 +19,10 @@ import logging
 import requests
 from typing import Dict, Optional, Tuple
 
+from ...constants import UPLOAD_PROTOCOLS
 from ...utils.io import hash_file
+from .signed_multipart import (Progress, SignedMultipartUnavailable,
+                               upload_file_signed_multipart)
 
 logger = logging.getLogger(__name__)
 
@@ -26,26 +30,67 @@ logger = logging.getLogger(__name__)
 def upload_file_gcs(client, dsid: str, file_path: str,
                     multipart: bool = True,
                     chunk_size_mb: Optional[int] = None,
-                    max_workers: Optional[int] = None) -> Tuple[Dict, bool]:
-    """Dispatch to multipart or resumable upload.
+                    max_workers: Optional[int] = None,
+                    protocol: Optional[str] = None,
+                    progress: Optional[Progress] = None,
+                    replace: bool = False) -> Tuple[Dict, bool]:
+    """Dispatch to a multipart or resumable upload.
 
     Args:
         client:        CrucibleClient instance (provides _request and _config).
         dsid:          Dataset unique identifier.
         file_path:     Local path to the file.
         multipart:     Use parallel multipart (default True); False = sequential resumable.
-        chunk_size_mb: Chunk size in MiB — overrides config if provided.
+        chunk_size_mb: Chunk size in MiB for the legacy token route; signed
+                       uploads use the server's part size.
         max_workers:   Upload threads — overrides config if provided.
+        protocol:      "auto", "signed", or "legacy" for multipart uploads;
+                       defaults to client.upload_protocol, then the
+                       upload_protocol setting. "auto" falls
+                       back to the legacy token route when the server has
+                       signed uploads switched off.
+        progress:      Called as progress(filename, bytes_done, total) by
+                       signed uploads; defaults to client.upload_progress.
+        replace:       Replace the content of an existing file with this
+                       filename. Needs signed uploads, so it never uses the
+                       legacy route.
 
     Returns:
         Tuple[Dict, bool]: (AssociatedFileRead record, was_existing).
             was_existing is True when the file was a dedup hit and the upload was skipped.
     """
-    if multipart:
-        return upload_file_gcs_multipart(client, dsid, file_path,
-                                         chunk_size_mb=chunk_size_mb,
-                                         max_workers=max_workers)
-    return upload_file_gcs_resumable(client, dsid, file_path)
+    if not multipart:
+        return upload_file_gcs_resumable(client, dsid, file_path)
+    protocol = (protocol or getattr(client, 'upload_protocol', None)
+                or client._config.upload_protocol)
+    progress = progress or getattr(client, 'upload_progress', None)
+    if protocol not in UPLOAD_PROTOCOLS:
+        raise ValueError(f"protocol must be one of: {', '.join(UPLOAD_PROTOCOLS)}.")
+    if replace:
+        if protocol == 'legacy':
+            raise ValueError("Replacing a file needs signed uploads; the legacy upload "
+                             "protocol cannot replace.")
+        try:
+            return upload_file_signed_multipart(client, dsid, file_path, max_workers=max_workers,
+                                                progress=progress, replace=True)
+        except SignedMultipartUnavailable as error:
+            raise RuntimeError("Signed multipart uploads are switched off on this server, "
+                               "and replacing a file needs them.") from error
+    use_signed = protocol == 'signed' or (
+        protocol == 'auto' and not getattr(client, '_signed_uploads_unavailable', False))
+    if use_signed:
+        try:
+            return upload_file_signed_multipart(client, dsid, file_path,
+                                                max_workers=max_workers, progress=progress)
+        except SignedMultipartUnavailable as error:
+            if protocol == 'signed':
+                raise
+            if os.path.getsize(file_path):
+                client._signed_uploads_unavailable = True
+            logger.info(f"{error} Using the legacy upload route.")
+    return upload_file_gcs_multipart(client, dsid, file_path,
+                                     chunk_size_mb=chunk_size_mb,
+                                     max_workers=max_workers)
 
 
 def upload_file_gcs_multipart(client, dsid: str, file_path: str,

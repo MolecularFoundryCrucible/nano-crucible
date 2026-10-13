@@ -220,8 +220,8 @@ def execute(args):
         sys.exit(0 if readiness_ok and database_ok else 1)
 
     def _whoami():
-        from crucible.client import CrucibleClient
-        return CrucibleClient().whoami()
+        from crucible.config import get_client
+        return get_client().whoami()
 
     info, auth_ms, error = _check(stop, is_tty, _whoami)
     if error is not None:

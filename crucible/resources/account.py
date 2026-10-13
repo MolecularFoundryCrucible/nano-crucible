@@ -10,7 +10,7 @@ For admin operations on other users, use UserOperations (client.users).
 import logging
 from typing import Dict, List, Optional
 
-from .base import BaseResource
+from .base import BaseResource, ListResult
 from ..constants import DEFAULT_LIMIT
 from ..models import JoinRequest
 
@@ -35,13 +35,19 @@ class AccountOperations(BaseResource):
         """
         return self._request('get', '/account')
 
-    def profile(self) -> Dict:
+    def profile(self, privilege_mode: Optional[str] = None) -> Dict:
         """Return the authenticated caller's own user profile.
 
+        Args:
+            privilege_mode: Per-call privilege mode. The capability flags
+                describe the authority of the mode they were fetched under.
+
         Returns:
-            Dict: UserRead with unique_id, username, first_name, last_name, and email
+            Dict: UserRead with unique_id, username, first_name, last_name, and
+                  email, plus the authorization and capabilities blocks.
         """
-        return self._request('get', '/account/profile')
+        return self._request('get', '/account/profile',
+                             privilege_mode=privilege_mode)
 
     def update_profile(self, **kwargs) -> Dict:
         """Partially update the authenticated caller's own profile.
@@ -88,13 +94,17 @@ class AccountOperations(BaseResource):
         return self._request('post', '/account/sync-projects')
 
     def join_requests(self, status: Optional[str] = None,
-                      limit: int = DEFAULT_LIMIT, offset: int = 0) -> List[Dict]:
+                      limit: int = DEFAULT_LIMIT,
+                      offset: int = 0,
+                      cursor: Optional[str] = None) -> List[Dict]:
         """Return the caller's own join-request history, across all groups.
 
         Args:
             status: Filter by "pending", "approved", or "rejected".
             limit: Maximum number of results.
             offset: Starting position in the full result set.
+            cursor (str, optional): Continuation token from a previous
+                result's next_cursor; the listing resumes there.
 
         Returns:
             List[Dict]: JoinRequest records where requester_id == caller.
@@ -102,5 +112,5 @@ class AccountOperations(BaseResource):
         params = {}
         if status is not None:
             params['status'] = status
-        raw = self._paginate('/account/join_requests', params, limit, offset)
-        return [JoinRequest(**r).model_dump() for r in raw]
+        raw = self._paginate('/account/join_requests', params, limit, offset, cursor=cursor)
+        return ListResult.like(raw, [JoinRequest(**r).model_dump() for r in raw])
