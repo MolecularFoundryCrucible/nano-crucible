@@ -266,7 +266,21 @@ Ingestors will not overwrite the dataset attributes provided at dataset creation
 
 For updates to the scientific metadata, the ingestion process uses the `client.datasets.update_scientific_metadata(overwrite = False)` method. As a result, new key-value pairs parsed during the ingestion process will be appended to the existing `scientific_metadata` and newly parsed values for existing keys will be updated. If you would like to replace the entire scientific_metadata dictionary, it can be done manally with `update_scientific_metadata(overwrite=True)`.
 
-Files are deduplicated by SHA-256 hash. If you add the same file twice, the client returns the existing associated-file record without uploading or requesting ingestion again.
+Files are deduplicated by SHA-256 hash. If you add the same file twice, the client returns the existing associated-file record without uploading or requesting ingestion again. The server only trusts hashes it has verified, so a file uploaded through signed multipart uploads may be uploaded again until its hash is verified.
+
+### How uploads reach storage
+
+`add_file()` and `create()` upload through the API's signed multipart flow: the client checksums the file, the API signs one URL per 64 MiB part, eight parts upload in parallel straight to storage, and the API verifies and assembles the object. Parts that fail are retried, expired URLs are renewed, and a failed upload is cancelled so it leaves nothing behind.
+
+The `upload_protocol` setting chooses the route:
+
+| Value | Behavior |
+| --- | --- |
+| `auto` (default) | Signed multipart uploads, falling back to the legacy token-based route when the server does not offer them |
+| `signed` | Signed multipart uploads only; fails on a server without them |
+| `legacy` | The legacy token-based route only |
+
+Set it with `crucible config set upload_protocol legacy`, the `CRUCIBLE_UPLOAD_PROTOCOL` environment variable, or `add_file(..., upload_protocol="legacy")`. `multipart=False` keeps using the sequential resumable route. Pass `progress=callback` to `add_file()`, or set `client.upload_progress`, to receive `callback(filename, bytes_done, total)` while parts upload; the CLI uses it to show a progress line.
 
 If no ingestion class exists for your data type, reach out on [Discord](https://discord.gg/Wrepphsgbx) or contribute to the [crucible-ingestion](https://github.com/MolecularFoundryCrucible/crucible-ingestion) repository.
 

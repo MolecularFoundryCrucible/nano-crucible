@@ -13,7 +13,7 @@ import requests
 import warnings
 from pathlib import Path
 from datetime import date, datetime
-from typing import Optional, List, Dict, Sequence, Union
+from typing import Callable, Optional, List, Dict, Sequence, Union
 
 import mfid
 
@@ -776,7 +776,9 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
                  multipart: bool = True,
                  chunk_size_mb: Optional[int] = None,
                  max_workers: Optional[int] = None,
-                 skip_ingestion: bool = False) -> Dict:
+                 skip_ingestion: bool = False,
+                 upload_protocol: Optional[str] = None,
+                 progress: Optional[Callable[[str, int, int], None]] = None) -> Dict:
 
         """Upload a file to a dataset and request ingestion.
 
@@ -793,6 +795,12 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
             max_workers: Override number of upload threads (uses config/default if None).
             skip_ingestion: Upload the file without requesting ingestion. Request it
                 later with client.files.request_ingestion(mfid).
+            upload_protocol: "auto", "signed", or "legacy" for multipart uploads;
+                defaults to the upload_protocol setting ("auto": signed upload
+                URLs, falling back to the legacy token route when the server
+                does not offer them).
+            progress: Called as progress(filename, bytes_done, total) while a
+                signed upload sends its parts.
 
         Returns:
             Dict: {'associated_file': AssociatedFileRead, 'ingestion_request': IngestionRequest}
@@ -804,7 +812,9 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
                                                     file_path,
                                                     multipart=multipart,
                                                     chunk_size_mb=chunk_size_mb,
-                                                    max_workers=max_workers)
+                                                    max_workers=max_workers,
+                                                    protocol=upload_protocol,
+                                                    progress=progress)
         file_record = self._client.files._parse(file_record)
 
         stored_filename = file_record.get('filename', filename)

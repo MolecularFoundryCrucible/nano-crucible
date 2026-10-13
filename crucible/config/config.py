@@ -52,6 +52,7 @@ class Config:
         # [upload] – multipart upload tuning
         'upload_chunk_size_mb': {'env': 'CRUCIBLE_UPLOAD_CHUNK_SIZE_MB', 'ini': 'chunk_size_mb', 'section': 'upload'},
         'upload_max_workers':   {'env': 'CRUCIBLE_UPLOAD_MAX_WORKERS',   'ini': 'max_workers',   'section': 'upload'},
+        'upload_protocol':      {'env': 'CRUCIBLE_UPLOAD_PROTOCOL',      'ini': 'protocol',      'section': 'upload'},
     }
 
     def __init__(self):
@@ -303,6 +304,22 @@ class Config:
             return int(raw)
         except (TypeError, ValueError):
             return UPLOAD_MAX_WORKERS
+
+    @property
+    def upload_protocol(self) -> str:
+        """How multipart uploads reach storage: "auto" (default), "signed", or "legacy".
+
+        "auto" uses the signed multipart flow and falls back to the legacy
+        token route when the server does not offer it; "signed" never falls
+        back; "legacy" always uses the token route.
+        """
+        from ..constants import UPLOAD_PROTOCOLS
+
+        value = (self._data.get('upload_protocol') or 'auto').lower()
+        if value not in UPLOAD_PROTOCOLS:
+            raise ValueError(
+                f"upload_protocol must be one of: {', '.join(UPLOAD_PROTOCOLS)}.")
+        return value
 
     @property
     def client(self):

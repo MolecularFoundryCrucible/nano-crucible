@@ -1359,13 +1359,18 @@ def _execute_add_file(args):
 
         term.header(f"Add Files  {dsid}")
         rows = []
-        for fpath in files:
-            print(f"  Uploading {fpath.name} ...", flush=True)
-            client.datasets.add_file(dsid, str(fpath),
-                                                ingestion_class=ingestor,
-                                                wait_for_ingestion_response=wait)
-            rows.append((fpath.name, term.fmt_size(fpath.stat().st_size),
-                         term.status_marker('success')))
+        from .helpers import UploadProgress
+        client.upload_progress = UploadProgress()
+        try:
+            for fpath in files:
+                print(f"  Uploading {fpath.name} ...", flush=True)
+                client.datasets.add_file(dsid, str(fpath),
+                                         ingestion_class=ingestor,
+                                         wait_for_ingestion_response=wait)
+                rows.append((fpath.name, term.fmt_size(fpath.stat().st_size),
+                             term.status_marker('success')))
+        finally:
+            client.upload_progress = None
 
         print()
         term.table(rows, ['File', 'Size', ''], max_widths=[60, 10, 4])
@@ -2241,11 +2246,16 @@ def _execute_create(args):
                         files=[],
                     )
                 else:
-                    result = parser.upload_dataset(
-                        ingestor=args.ingestor,
-                        verbose=getattr(args, 'debug', False),
-                        wait_for_ingestion_response=True
-                    )
+                    from .helpers import UploadProgress
+                    parser.client.upload_progress = UploadProgress()
+                    try:
+                        result = parser.upload_dataset(
+                            ingestor=args.ingestor,
+                            verbose=getattr(args, 'debug', False),
+                            wait_for_ingestion_response=True
+                        )
+                    finally:
+                        parser.client.upload_progress = None
 
             term.success("Dataset created" if parser is None else "Upload completed", args)
             created = result.get('created_record', {}) if result else {}

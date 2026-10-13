@@ -310,6 +310,66 @@ _EMPTY_FIELD_PARAMS = {
 }
 
 
+class UploadProgress:
+    """One self-updating stderr line per uploading file: bar, percent, size, rate, time left.
+
+    Silent unless stderr is a terminal. Safe to call from upload threads.
+    """
+
+    def __init__(self, stream=None, interval: float = 0.2):
+        import threading
+
+        self._stream = stream or sys.stderr
+        self._enabled = hasattr(self._stream, 'isatty') and self._stream.isatty()
+        self._interval = interval
+        self._lock = threading.Lock()
+        self._started = {}
+        self._shown = {}
+
+    def __call__(self, name: str, done: int, total: int) -> None:
+        import time
+
+        if not self._enabled or total <= 0:
+            return
+        with self._lock:
+            now = time.monotonic()
+            started = self._started.setdefault(name, now)
+            finished = done >= total
+            if not finished and now - self._shown.get(name, 0) < self._interval:
+                return
+            if self._shown.get(name) == 'done':
+                return
+            self._shown[name] = 'done' if finished else now
+            elapsed = max(now - started, 1e-6)
+            rate = done / elapsed
+            left = (total - done) / rate if rate and not finished else 0
+            line = (f"{done / total:4.0%}  {_human_bytes(done)}/{_human_bytes(total)}  "
+                    f"{_human_bytes(rate)}/s  {_clock(left)} left")
+            import shutil
+            width = shutil.get_terminal_size((80, 24)).columns
+            bar_width = max(10, min(30, width - len(line) - len(name) - 10))
+            filled = int(bar_width * done / total)
+            label = name if len(name) <= 30 else name[:29] + chr(8230)
+            text = f"  {label}  [{'#' * filled}{'.' * (bar_width - filled)}]  {line}"
+            self._stream.write('\r' + text[:width - 1].ljust(width - 1))
+            if finished:
+                self._stream.write('\n')
+            self._stream.flush()
+
+
+def _human_bytes(count: float) -> str:
+    for unit in ('B', 'KB', 'MB', 'GB', 'TB'):
+        if count < 1024 or unit == 'TB':
+            return f"{count:.0f} {unit}" if unit == 'B' else f"{count:.1f} {unit}"
+        count /= 1024
+
+
+def _clock(seconds: float) -> str:
+    seconds = int(seconds)
+    hours, rest = divmod(seconds, 3600)
+    return f"{hours}:{rest // 60:02d}:{rest % 60:02d}" if hours else f"{rest // 60}:{rest % 60:02d}"
+
+
 def add_limit_arguments(parser, noun: str = 'results', short: bool = False) -> None:
     """Add --limit and --all, defaulting to the default_limit setting."""
     from ..config import config

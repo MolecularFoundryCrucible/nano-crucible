@@ -125,7 +125,7 @@ the interactive shell's 'use PROJECT_ID' command to save a selection.
                  'editor', 'sample_group_by', 'dataset_group_by',
                  'include_metadata', 'include_links', 'pager',
                  'connect_timeout', 'read_timeout', 'default_limit',
-                 'upload_chunk_size_mb', 'upload_max_workers'],
+                 'upload_chunk_size_mb', 'upload_max_workers', 'upload_protocol'],
         help='Configuration key to retrieve'
     )
     get_parser.set_defaults(func=cmd_get)
@@ -142,7 +142,7 @@ the interactive shell's 'use PROJECT_ID' command to save a selection.
                  'editor', 'sample_group_by', 'dataset_group_by',
                  'include_metadata', 'include_links', 'pager',
                  'connect_timeout', 'read_timeout', 'default_limit',
-                 'upload_chunk_size_mb', 'upload_max_workers'],
+                 'upload_chunk_size_mb', 'upload_max_workers', 'upload_protocol'],
         help='Configuration key to set'
     )
     set_parser.add_argument(
@@ -162,7 +162,7 @@ the interactive shell's 'use PROJECT_ID' command to save a selection.
                  'editor', 'sample_group_by', 'dataset_group_by',
                  'include_metadata', 'include_links', 'pager',
                  'connect_timeout', 'read_timeout', 'default_limit',
-                 'upload_chunk_size_mb', 'upload_max_workers'],
+                 'upload_chunk_size_mb', 'upload_max_workers', 'upload_protocol'],
         help='Configuration key to remove from the config file'
     )
     unset_parser.set_defaults(func=cmd_unset)
@@ -318,6 +318,7 @@ def cmd_show(args):
     term.subheader("[upload]  multipart upload")
     _p("upload_chunk_size_mb", config.upload_chunk_size_mb)
     _p("upload_max_workers",   config.upload_max_workers)
+    _p("upload_protocol",      config.upload_protocol)
 
     from crucible.config.config import Config
     env_overrides = {

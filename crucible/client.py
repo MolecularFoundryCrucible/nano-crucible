@@ -126,6 +126,7 @@ class CrucibleClient:
         self._authorization = None
         self._capabilities = None
         self._profile_stale = False
+        self.upload_progress = None
 
     def _load_profile(self, refresh: bool = False) -> None:
         """Populate the cached authorization and capability blocks."""
@@ -198,7 +199,7 @@ class CrucibleClient:
 
     def _request(self, method: str, endpoint: str,
                  privilege_mode: Optional[str] = None,
-                 retry: bool = True, **kwargs) -> Any:
+                 retry: bool = True, log_body: bool = True, **kwargs) -> Any:
         """Make an HTTP request to the API.
 
         Args:
@@ -209,7 +210,10 @@ class CrucibleClient:
                 retried. Set False for a non-idempotent endpoint where a
                 lost response after a server-side side effect must not
                 trigger a second attempt.
-            **kwargs: Additional arguments to pass to requests
+            log_body: Whether the response body may be written to the debug
+                log. Set False when it carries credentials such as signed URLs.
+            **kwargs: Additional arguments to pass to requests, including a
+                timeout that replaces the configured one.
 
         Returns:
             Parsed JSON response
@@ -221,7 +225,8 @@ class CrucibleClient:
         """
         url = f"{self.api_url}/{endpoint.lstrip('/')}"
         logger.debug(f"{method.upper()} {url}")
-        timeout = (self._config.connect_timeout, self._config.read_timeout)
+        timeout = kwargs.pop('timeout', None) or (self._config.connect_timeout,
+                                                  self._config.read_timeout)
         mode = privilege_mode if privilege_mode is not None else self.privilege_mode
         if mode is not None:
             if mode not in PRIVILEGE_MODES:
@@ -233,7 +238,8 @@ class CrucibleClient:
         session = self._session if retry else self._no_retry_session
         response = session.request(method, url, timeout=timeout, **kwargs)
         logger.debug(f"Status: {response.status_code}")
-        logger.debug(f"Response: {response.text}")
+        if log_body:
+            logger.debug(f"Response: {response.text}")
         if not response.ok:
             # Try to surface the server's error detail from the response body
             detail = None
