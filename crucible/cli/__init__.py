@@ -170,7 +170,8 @@ Examples:
     crucible --debug dataset list
 
     # Platform-administrator elevation (place before subcommand)
-    crucible --elevated deletion list
+    crucible --elevate deletion list
+    crucible -E deletion list
 """
     )
 
@@ -188,10 +189,11 @@ Examples:
     )
 
     parser.add_argument(
-        '--elevated',
+        '-E', '--elevate',
+        dest='elevated',
         action='store_true',
         default=False,
-        help='Request platform-administrator elevation for this command'
+        help='Run this command with platform-administrator elevation'
     )
 
     parser.add_argument(

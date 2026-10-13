@@ -329,7 +329,6 @@ class CrucibleCompleter(Completer):
     # resource name should appear in exactly one entry (verified: no overlaps).
     _RESOURCE_HANDLERS = {
         'debug':           '_complete_on_off',
-        'elevated':        '_complete_on_off',
         'use':             '_complete_use',
         'deletion':        '_complete_deletion',
         'ag':              '_complete_access_group',
@@ -356,9 +355,19 @@ class CrucibleCompleter(Completer):
         words          = text.split()
         trailing_space = text.endswith(' ')
 
+        if words and words[0] in ('elevate', '-E', '--elevate') and (len(words) > 1 or trailing_space):
+            from prompt_toolkit.document import Document
+            rest = text.lstrip()[len(words[0]):].lstrip()
+            if words[0] == 'elevate' and len(rest.split()) <= 1 and not rest.endswith(' '):
+                for choice in ('on', 'off'):
+                    if choice.startswith(rest):
+                        yield Completion(choice + ' ', start_position=-len(rest))
+            yield from self.get_completions(Document(rest), complete_event)
+            return
+
         if not words or (len(words) == 1 and not trailing_space):
             prefix = words[0] if words else ''
-            candidates = list(self._top) + ['use', 'unuse', 'refresh', 'reload', 'debug', 'elevated', 'cd', 'ls', 'pwd']
+            candidates = list(self._top) + ['use', 'unuse', 'refresh', 'reload', 'debug', 'elevate', 'cd', 'ls', 'pwd']
             for name in candidates:
                 if name in self.hidden:
                     continue

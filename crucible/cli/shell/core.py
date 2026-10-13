@@ -393,7 +393,7 @@ class CrucibleShell:
             argv = _remap_deprecated(shlex.split(line))
             args = self.parser.parse_args(argv)
             setup_logging(debug=getattr(args, 'debug', False) or self.state.get('debug', False))
-            # An inline --elevated applies to this command only; the session
+            # An inline --elevate applies to this command only; the session
             # toggle is what persists.
             inline_elevated = getattr(args, 'elevated', False)
             session_mode = self.client.privilege_mode if self.client else None

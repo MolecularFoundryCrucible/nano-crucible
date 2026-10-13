@@ -215,7 +215,8 @@ def test_project_scope_choices_are_completed():
     ('cd', '_cd'),
     ('!echo hi', '_bang'),
     ('debug on', '_debug'),
-    ('elevated', '_elevated'),
+    ('elevate', '_elevate'),
+    ('elevate dataset list', '_elevate'),
     ('use my-project', '_use'),
     ('v', '_toggle_verbose'),
     ('v extra', None),
@@ -378,3 +379,18 @@ def test_reload_waits_for_a_child_on_windows(monkeypatch):
     import signal
     assert calls['cmd'][1:] == ['-m', 'crucible.cli']
     assert calls['signal'] == (signal.SIGINT, signal.SIG_IGN)
+
+
+@pytest.mark.parametrize('prefix', ['elevate', '-E', '--elevate'])
+def test_elevate_prefix_completes_the_wrapped_command(prefix):
+    completer = make_completer(client=make_client())
+
+    assert complete(completer, f'{prefix} dataset li') == complete(completer, 'dataset li')
+
+
+def test_elevate_offers_on_and_off_and_commands():
+    completer = make_completer(client=make_client())
+
+    options = complete(completer, 'elevate o')
+    assert 'on' in options and 'off' in options
+    assert 'dataset' in complete(completer, 'elevate da')

@@ -107,7 +107,7 @@ def test_elevated_flag_sets_the_config_mode(monkeypatch):
         seen['mode'] = config.privilege_mode
 
     with patch('crucible.cli.dataset._execute_list', side_effect=execute):
-        monkeypatch.setattr('sys.argv', ['crucible', '--elevated', 'dataset', 'list'])
+        monkeypatch.setattr('sys.argv', ['crucible', '--elevate', 'dataset', 'list'])
         main()
 
     assert seen['mode'] == 'elevated'
@@ -152,7 +152,7 @@ def test_explicit_flag_is_not_announced(monkeypatch, capsys):
     config._data.pop('privilege_mode', None)
 
     with patch('crucible.cli.dataset._execute_list'):
-        monkeypatch.setattr('sys.argv', ['crucible', '--elevated', 'dataset', 'list'])
+        monkeypatch.setattr('sys.argv', ['crucible', '--elevate', 'dataset', 'list'])
         main()
 
     assert 'Elevated privilege is active' not in capsys.readouterr().err
@@ -332,7 +332,7 @@ def test_inline_elevated_restores_the_exact_session_mode(session_mode):
     args = MagicMock(elevated=True, func=boom)
     instance.parser = MagicMock(parse_args=MagicMock(return_value=args))
 
-    instance._dispatch('--elevated dataset list')
+    instance._dispatch('--elevate dataset list')
 
     assert seen['mode'] == 'elevated'
     assert seen['refreshes'] == 1
@@ -507,3 +507,40 @@ def test_require_elevation(platform_role, can_elevate, refused):
             require_elevation(client, 'x')
     else:
         require_elevation(client, 'x')
+
+
+def test_short_elevate_flag(monkeypatch):
+    from crucible.cli import main
+    from crucible.config import config
+
+    config._data.pop('privilege_mode', None)
+    seen = {}
+    with patch('crucible.cli.dataset._execute_list',
+               side_effect=lambda args: seen.setdefault('mode', config.privilege_mode)):
+        monkeypatch.setattr('sys.argv', ['crucible', '-E', 'dataset', 'list'])
+        main()
+
+    assert seen['mode'] == 'elevated'
+    config._data.pop('privilege_mode', None)
+
+
+def test_shell_elevate_runs_one_command_elevated():
+    from crucible.cli.shell import builtins
+
+    shell = SimpleNamespace(client=SimpleNamespace(can_elevate=True), state={},
+                            _dispatch=MagicMock(return_value=True))
+
+    assert builtins._elevate(shell, 'elevate dataset list -m XRD') is True
+    shell._dispatch.assert_called_once_with('--elevate dataset list -m XRD')
+
+
+def test_shell_elevate_refuses_ineligible_callers(capsys):
+    from crucible.cli.shell import builtins
+
+    shell = SimpleNamespace(client=SimpleNamespace(can_elevate=False), state={},
+                            _dispatch=MagicMock())
+
+    builtins._elevate(shell, 'elevate dataset list')
+
+    shell._dispatch.assert_not_called()
+    assert 'not eligible' in capsys.readouterr().out

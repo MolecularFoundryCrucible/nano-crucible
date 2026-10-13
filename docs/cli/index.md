@@ -41,7 +41,8 @@ Shell-specific commands:
 | `refresh` | Re-read config, permissions, projects, and pending reviews |
 | `reload` | Re-exec the process (picks up code changes) |
 | `debug on` / `debug off` | Toggle debug logging |
-| `elevated on` / `elevated off` | Toggle platform-administrator elevation; an `ELEVATED` badge appears in the toolbar while it is on. It starts on for platform administrators unless `privilege_mode` is set to `normal` |
+| `elevate on` / `elevate off` | Toggle platform-administrator elevation; an `ELEVATED` badge appears in the toolbar while it is on. It starts on for platform administrators unless `privilege_mode` is set to `normal` |
+| `elevate COMMAND` | Run one command with platform-administrator elevation, like `--elevate COMMAND` |
 | `help` | List available commands |
 | `exit` / `quit` | Exit the shell |
 

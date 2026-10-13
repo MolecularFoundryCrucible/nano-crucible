@@ -31,7 +31,8 @@ def _help(shell, line):
         ('refresh',       're-fetch projects, user info, deletions'),
         ('reload',        'restart the shell process'),
         ('debug on|off',  'toggle debug logging'),
-        ('elevated on|off', 'toggle platform-administrator elevation'),
+        ('elevate on|off', 'toggle platform-administrator elevation'),
+        ('elevate COMMAND', 'run one command with platform-administrator elevation'),
         ('v',             'toggle verbose view for last fetched resource'),
         ('! CMD',         'run a shell command'),
         ('ls [PATH]',     'list directory'),
@@ -250,7 +251,7 @@ def _debug(shell, line):
     return True
 
 
-def _elevated(shell, line):
+def _elevate(shell, line):
     parts   = line.split()
     current = shell.state.get('elevated', False)
     if len(parts) == 1:
@@ -258,8 +259,10 @@ def _elevated(shell, line):
         return True
     action = parts[1].lower()
     if action not in ('on', 'off'):
-        print("Usage: elevated on | elevated off")
-        return True
+        if shell.client is not None and not shell.client.can_elevate:
+            print("Your account is not eligible for elevated privilege.")
+            return True
+        return shell._dispatch('--elevate ' + line.split(None, 1)[1])
     on = (action == 'on')
     if on and shell.client is not None and not shell.client.can_elevate:
         print("Your account is not eligible for elevated privilege.")
@@ -285,7 +288,7 @@ BUILTINS = {
     'cd': (_cd, True),
     'v': (_toggle_verbose, False),
     'debug': (_debug, True),
-    'elevated': (_elevated, True),
+    'elevate': (_elevate, True),
 }
 
 
