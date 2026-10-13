@@ -221,25 +221,16 @@ for path in source_files:
 
 ### Replacing a file
 
-File replacement is an explicit delete-and-create workflow. Find the old associated-file MFID, delete that file, and then add the replacement to the dataset:
+`client.files.replace()` uploads new content into an existing file. The file keeps its MFID, filename, and metadata, stays downloadable during the upload, and is repointed only once the new content is verified. Pass the `etag` you last read to refuse the replace if someone changed the file in the meantime:
 
 ```python
-associated_files = client.datasets.list_files(dataset_mfid)
-old_file = next(file for file in associated_files if file["filename"] == "results.dat")
-
-client.files.delete(old_file["mfid"])
-client.datasets.add_file(dataset_mfid, "results.dat")
+old = next(f for f in client.datasets.list_files(dataset_mfid) if f["filename"] == "results.dat")
+client.files.replace(old["mfid"], "results.dat", etag=old["etag"])
 ```
 
-Deleting a file is irreversible. Verify the dataset MFID, file MFID, and filename before calling `delete()`.
+`add_file(..., replace=True)` does the same when the filename already exists with different content; without it, `add_file()` raises `FileExistsWithDifferentContent`, so nothing is ever replaced silently. Re-adding identical content returns the existing record. Replacing needs a server with signed multipart uploads; on other servers, delete the old file with `client.files.delete()` and add the new one. Ingestion is requested again after a replace unless `skip_ingestion=True`.
 
-The CLI follows the same sequence and asks for confirmation before deleting the old file:
-
-```bash
-crucible dataset list-files DATASET_MFID
-crucible file delete FILE_MFID
-crucible dataset add-file DATASET_MFID -i results.dat
-```
+In the CLI, `crucible file replace FILE_MFID -i results.dat` asks for confirmation (skip it with `--yes`), and `dataset add-file` asks before replacing a file that exists with different content, or replaces without asking with `--replace`.
 
 ### Re-uploading to an existing dataset
 
@@ -250,7 +241,7 @@ for path in source_files:
     client.datasets.add_file(dataset_mfid, str(path))
 ```
 
-An unchanged file that the API recognizes by its SHA-256 hash is not uploaded again. If a filename now represents different content, use the explicit delete-and-create workflow above.
+An unchanged file is not uploaded again. If a filename now holds different content, replace it as described above.
 
 ### How the data ingestion process works
 
@@ -266,7 +257,7 @@ Ingestors will not overwrite the dataset attributes provided at dataset creation
 
 For updates to the scientific metadata, the ingestion process uses the `client.datasets.update_scientific_metadata(overwrite = False)` method. As a result, new key-value pairs parsed during the ingestion process will be appended to the existing `scientific_metadata` and newly parsed values for existing keys will be updated. If you would like to replace the entire scientific_metadata dictionary, it can be done manally with `update_scientific_metadata(overwrite=True)`.
 
-Files are deduplicated by SHA-256 hash. If you add the same file twice, the client returns the existing associated-file record without uploading or requesting ingestion again. Adding a different file under an existing filename is refused; delete the old file first to replace it.
+Files are deduplicated by SHA-256 hash. If you add the same file twice, the client returns the existing associated-file record without uploading or requesting ingestion again. Adding a different file under an existing filename is refused unless you ask to replace it.
 
 ### How uploads reach storage
 

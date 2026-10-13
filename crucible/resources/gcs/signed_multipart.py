@@ -40,8 +40,26 @@ class SignedMultipartUnavailable(Exception):
     """The server does not offer signed multipart uploads for this file."""
 
 
+class FileExistsWithDifferentContent(RuntimeError):
+    """The dataset already has a file with this name but other content.
+
+    Carries what a replace needs: the existing file's MFID and ETag.
+    """
+
+    def __init__(self, filename: str, file_mfid: Optional[str], etag: Optional[str]):
+        super().__init__(
+            f"{filename} already exists in this dataset with different content. "
+            "Replace it with replace=True (--replace in the CLI), or delete it first.")
+        self.filename = filename
+        self.file_mfid = file_mfid
+        self.etag = etag
+
+
 class _FilenameTaken(Exception):
-    pass
+    def __init__(self, file_mfid=None, etag=None):
+        super().__init__()
+        self.file_mfid = file_mfid
+        self.etag = etag
 
 
 def scan_file(file_path: str, part_size: int = PART_SIZE) -> Tuple[str, str, List[str]]:
@@ -105,11 +123,23 @@ def _retry_after(response) -> float:
     return min(max(seconds, 1), _MAX_RETRY_AFTER)
 
 
-def _detail(error) -> str:
+def _detail_payload(error):
     try:
-        return str(error.response.json().get('detail') or '')
+        return error.response.json().get('detail')
     except (ValueError, AttributeError):
-        return ''
+        return None
+
+
+def _detail(error) -> str:
+    detail = _detail_payload(error)
+    if isinstance(detail, dict):
+        return str(detail.get('message') or '')
+    return str(detail or '')
+
+
+def _detail_code(error) -> Optional[str]:
+    detail = _detail_payload(error)
+    return detail.get('code') if isinstance(detail, dict) else None
 
 
 def _disabled(error) -> bool:
@@ -155,8 +185,11 @@ class _Upload:
     """One signed multipart session for one file."""
 
     def __init__(self, client, dsid: str, file_path: str, filename: str,
-                 workers: int, progress: Optional[Progress]):
+                 workers: int, progress: Optional[Progress], replace: bool = False,
+                 target: Optional[Tuple[str, str]] = None):
         self.client = client
+        self.replace = replace
+        self.target = target
         self.dsid = dsid
         self.base = f'/datasets/{dsid}/upload/multipart'
         self.file_path = file_path
@@ -175,8 +208,17 @@ class _Upload:
         sha256_hash, crc32c, self.part_checksums = scan_file(self.file_path, PART_SIZE)
         try:
             status = self._initiate(sha256_hash)
-        except _FilenameTaken:
-            return self._same_file(sha256_hash), True
+        except _FilenameTaken as taken:
+            existing = self._existing_record(taken)
+            if existing.get('sha256_hash') == sha256_hash and existing.get('size') == self.size:
+                logger.info(f"{self.filename} already exists in the dataset, skipping upload")
+                return existing, True
+            file_mfid = taken.file_mfid or existing.get('mfid')
+            etag = taken.etag or existing.get('etag')
+            if not self.replace:
+                raise FileExistsWithDifferentContent(self.filename, file_mfid, etag)
+            self.target = (file_mfid, etag or '*')
+            status = self._initiate(sha256_hash)
         if status.get('existing_file') is not None:
             logger.info(f"{self.filename} already exists in the dataset, skipping upload")
             return status['existing_file'], True
@@ -196,35 +238,50 @@ class _Upload:
         return record, False
 
     def _initiate(self, sha256_hash: str) -> Dict:
-        body = {'filename': self.filename, 'size': self.size, 'sha256_hash': sha256_hash}
+        headers = {'Idempotency-Key': uuid.uuid4().hex}
+        if self.target is not None:
+            file_mfid, etag = self.target
+            path = f'/files/{file_mfid}/upload/multipart/initiate'
+            body = {'size': self.size, 'sha256_hash': sha256_hash}
+            headers['If-Match'] = etag or '*'
+        else:
+            path = f'{self.base}/initiate'
+            body = {'filename': self.filename, 'size': self.size, 'sha256_hash': sha256_hash}
         try:
-            return _api(self.client, 'post', f'{self.base}/initiate', json=body,
-                        headers={'Idempotency-Key': uuid.uuid4().hex})
+            return _api(self.client, 'post', path, json=body, headers=headers)
         except requests.HTTPError as error:
             status = getattr(error.response, 'status_code', None)
             if (status in (404, 405) and _detail(error) in ('', 'Not Found', 'Method Not Allowed')
                     or _disabled(error)):
                 raise SignedMultipartUnavailable(
                     "This server does not offer signed multipart uploads.") from error
-            if status == 409 and 'filename already exists' in _detail(error).lower():
-                raise _FilenameTaken() from error
+            if status == 409 and (_detail_code(error) == 'filename_exists'
+                                  or 'filename already exists' in _detail(error).lower()):
+                detail = _detail_payload(error)
+                detail = detail if isinstance(detail, dict) else {}
+                raise _FilenameTaken(detail.get('file_mfid'), detail.get('etag')) from error
+            if status == 412 and _detail_code(error) == 'etag_mismatch':
+                raise RuntimeError(
+                    f"{self.filename} changed since it was read; nothing was replaced. "
+                    "Check the file and try again.") from error
+            if status == 409 and _detail_code(error) == 'replace_in_progress':
+                raise RuntimeError(
+                    f"Another replace of {self.filename} is in progress; try again once it "
+                    "finishes.") from error
             raise
 
-    def _same_file(self, sha256_hash: str) -> Dict:
-        """The dataset's record for this filename when it holds the same content.
+    def _existing_record(self, taken) -> Dict:
+        """The record that already holds this filename.
 
         The server only deduplicates hashes it has verified, so an identical
-        re-upload is recognized here, as the legacy route does.
+        re-upload is recognized from this record, as the legacy route does.
         """
+        if taken.file_mfid:
+            return self.client.files.get(taken.file_mfid)
         for record in self.client.datasets.list_files(self.dsid):
             if record.get('filename') == self.filename:
-                if record.get('sha256_hash') == sha256_hash and record.get('size') == self.size:
-                    logger.info(f"{self.filename} already exists in the dataset, skipping upload")
-                    return record
-                break
-        raise RuntimeError(
-            f"{self.filename} already exists in this dataset with different content. "
-            "Delete that file first to replace it.")
+                return record
+        return {}
 
     def _acknowledged_parts(self) -> set:
         acknowledged, marker = set(), None
@@ -306,7 +363,8 @@ class _Upload:
 
 def upload_file_signed_multipart(client, dsid: str, file_path: str,
                                  max_workers: Optional[int] = None,
-                                 progress: Optional[Progress] = None) -> Tuple[Dict, bool]:
+                                 progress: Optional[Progress] = None,
+                                 replace: bool = False) -> Tuple[Dict, bool]:
     """Upload a file through the signed multipart flow.
 
     Args:
@@ -315,6 +373,8 @@ def upload_file_signed_multipart(client, dsid: str, file_path: str,
         file_path:   Local path to the file.
         max_workers: Parts uploaded in parallel (default 8).
         progress:    Called as progress(filename, bytes_done, total) as parts upload.
+        replace:     When the dataset already has this filename with other
+                     content, replace that file's content instead of failing.
 
     Returns:
         Tuple[Dict, bool]: (AssociatedFileRead, was_existing).
@@ -322,9 +382,43 @@ def upload_file_signed_multipart(client, dsid: str, file_path: str,
     Raises:
         SignedMultipartUnavailable: The server lacks the flow, has it disabled,
             or the file is empty.
+        FileExistsWithDifferentContent: The filename exists with other content
+            and replace is False.
     """
     if os.path.getsize(file_path) == 0:
         raise SignedMultipartUnavailable("Empty files cannot use signed multipart uploads.")
     upload = _Upload(client, dsid, file_path, os.path.basename(file_path),
-                     max_workers or PART_WORKERS, progress)
+                     max_workers or PART_WORKERS, progress, replace=replace)
+    return upload.run()
+
+
+def replace_file_signed_multipart(client, file_mfid: str, file_path: str,
+                                  etag: Optional[str] = None,
+                                  max_workers: Optional[int] = None,
+                                  progress: Optional[Progress] = None) -> Tuple[Dict, bool]:
+    """Replace an existing file's content, keeping its MFID and filename.
+
+    Args:
+        client:      CrucibleClient instance.
+        file_mfid:   MFID of the file to replace.
+        file_path:   Local path to the new content.
+        etag:        The file's ETag as last read; the replace is refused if the
+                     file changed since. None replaces whatever is current.
+        max_workers: Parts uploaded in parallel (default 8).
+        progress:    Called as progress(filename, bytes_done, total) as parts upload.
+
+    Returns:
+        Tuple[Dict, bool]: (the updated AssociatedFileRead, unchanged), where
+        unchanged is True when the file already held this content.
+    """
+    if os.path.getsize(file_path) == 0:
+        raise ValueError("A file cannot be replaced with empty content.")
+    record = client.files.get(file_mfid)
+    if (record.get('storage_backend') or 'gcs') != 'gcs':
+        raise ValueError("Only files stored on GCS can be replaced; edit cataloged "
+                         "files with client.files.update().")
+    upload = _Upload(client, record['dataset_mfid'], file_path,
+                     record.get('filename') or os.path.basename(file_path),
+                     max_workers or PART_WORKERS, progress, replace=True,
+                     target=(file_mfid, etag or '*'))
     return upload.run()

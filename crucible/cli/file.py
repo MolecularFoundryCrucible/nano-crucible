@@ -44,6 +44,7 @@ def register_subcommand(subparsers):
     _register_download(file_subparsers)
     _register_ingestion(file_subparsers)
     _register_request_ingestion(file_subparsers)
+    _register_replace(file_subparsers)
     _register_delete(file_subparsers)
 
 
@@ -219,6 +220,80 @@ def _execute_download(args):
     except Exception as e:
         from .helpers import fail
         fail("", e, args)
+
+
+def _register_replace(subparsers):
+    parser = subparsers.add_parser(
+        'replace',
+        help="Replace a file's content, keeping its MFID and filename",
+        description="Upload new content for an existing file. The file keeps its MFID, "
+                    "filename, and metadata. The previous content is no longer served and "
+                    "stays in storage for at least 7 days.",
+        formatter_class=term.ColorHelpFormatter,
+        epilog="""
+Examples:
+    crucible file replace FILE_MFID -i results_v2.dat
+    crucible file replace FILE_MFID -i results_v2.dat --no-ingest --yes
+""",
+    )
+    parser.add_argument('file_id', metavar='FILE_MFID', help='File MFID')
+    input_arg = parser.add_argument('-i', '--input', required=True, metavar='PATH',
+                                    help='Local file with the new content')
+    ingestor_arg = parser.add_argument(
+        '--ingestor', default=None, metavar='CLASS',
+        help='Ingestion class to use (default: auto-detected from file format)')
+    parser.add_argument('--no-ingest', dest='no_ingest', action='store_true', default=False,
+                        help='Replace without requesting ingestion')
+    parser.add_argument('--wait', action='store_true',
+                        help='Wait for ingestion to complete before returning')
+    parser.add_argument('-y', '--yes', action='store_true', default=False,
+                        help='Skip the confirmation prompt')
+    from .helpers import complete_ingestors
+    ingestor_arg.completer = complete_ingestors
+    try:
+        from argcomplete.completers import FilesCompleter
+        input_arg.completer = FilesCompleter()
+    except ImportError:
+        pass
+    parser.set_defaults(func=_execute_replace)
+
+
+def _execute_replace(args):
+    """Execute 'crucible file replace'."""
+    from pathlib import Path
+    from crucible.config import get_client
+    from .helpers import fail, prompt_confirm, upload_session
+
+    path = Path(args.input)
+    if not path.is_file():
+        logger.error(f"File not found: {path}")
+        sys.exit(1)
+    if args.no_ingest and (args.wait or args.ingestor):
+        logger.error("--no-ingest cannot be combined with --wait or --ingestor.")
+        sys.exit(1)
+    try:
+        client = get_client()
+        record = client.files.get(args.file_id)
+        name = record.get('filename') or args.file_id
+        if not args.yes and not prompt_confirm(
+                f"Replace the content of {name} ({args.file_id}) with {path.name}?",
+                option='--yes'):
+            logger.info("Aborted.")
+            return
+        with upload_session(client, args):
+            result = client.files.replace(
+                args.file_id, str(path), etag=record.get('etag'),
+                ingestion_class=args.ingestor, wait_for_ingestion_response=args.wait,
+                skip_ingestion=args.no_ingest)
+        updated = result['associated_file']
+        term.success(f"Replaced {updated.get('filename') or name}", args)
+        _p = term.field_printer(10)
+        _p("MFID", updated.get('mfid'))
+        _p("Size", term.fmt_size(updated.get('size')))
+        request = result.get('ingestion_request')
+        _p("Ingestion", term.status_label(request.get('status')) if request else 'not requested')
+    except Exception as e:
+        fail("replacing file", e, args)
 
 
 def _register_delete(subparsers):

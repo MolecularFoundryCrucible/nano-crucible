@@ -33,7 +33,8 @@ def upload_file_gcs(client, dsid: str, file_path: str,
                     max_workers: Optional[int] = None,
                     protocol: Optional[str] = None,
                     progress: Optional[Progress] = None,
-                    for_ingestion: bool = False) -> Tuple[Dict, bool]:
+                    for_ingestion: bool = False,
+                    replace: bool = False) -> Tuple[Dict, bool]:
     """Dispatch to a multipart or resumable upload.
 
     Args:
@@ -54,6 +55,9 @@ def upload_file_gcs(client, dsid: str, file_path: str,
         for_ingestion: The caller will request ingestion of this file. "auto"
                        then uses the legacy route, because the ingestion
                        consumers cannot read signed-upload objects yet.
+        replace:       Replace the content of an existing file with this
+                       filename. Needs signed uploads, so it never uses the
+                       legacy route.
 
     Returns:
         Tuple[Dict, bool]: (AssociatedFileRead record, was_existing).
@@ -66,6 +70,16 @@ def upload_file_gcs(client, dsid: str, file_path: str,
     progress = progress or getattr(client, 'upload_progress', None)
     if protocol not in UPLOAD_PROTOCOLS:
         raise ValueError(f"protocol must be one of: {', '.join(UPLOAD_PROTOCOLS)}.")
+    if replace:
+        if protocol == 'legacy':
+            raise ValueError("Replacing a file needs signed uploads; the legacy upload "
+                             "protocol cannot replace.")
+        try:
+            return upload_file_signed_multipart(client, dsid, file_path, max_workers=max_workers,
+                                                progress=progress, replace=True)
+        except SignedMultipartUnavailable as error:
+            raise RuntimeError("This server cannot replace files yet. Delete the old file "
+                               "and add the new one instead.") from error
     use_signed = protocol == 'signed' or (
         protocol == 'auto' and not for_ingestion
         and not getattr(client, '_signed_uploads_unavailable', False))

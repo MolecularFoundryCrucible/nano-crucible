@@ -1375,13 +1375,23 @@ def _execute_add_file(args):
 
         term.header(f"Add Files  {dsid}")
         rows = []
-        from .helpers import upload_session
+        from ..resources.gcs.signed_multipart import FileExistsWithDifferentContent
+        from .helpers import _interactive_stdin, prompt_confirm, upload_session
         with upload_session(client, args):
             for fpath in files:
                 print(f"  Uploading {fpath.name} ...", flush=True)
-                client.datasets.add_file(dsid, str(fpath),
-                                         ingestion_class=ingestor,
-                                         wait_for_ingestion_response=wait)
+                upload = dict(ingestion_class=ingestor, wait_for_ingestion_response=wait)
+                try:
+                    client.datasets.add_file(dsid, str(fpath), **upload)
+                except FileExistsWithDifferentContent:
+                    if not _interactive_stdin():
+                        raise
+                    if not prompt_confirm(f"{fpath.name} already exists with different "
+                                          "content. Replace it?", option='--replace'):
+                        rows.append((fpath.name, term.fmt_size(fpath.stat().st_size),
+                                     term.dim('skipped')))
+                        continue
+                    client.datasets.add_file(dsid, str(fpath), replace=True, **upload)
                 rows.append((fpath.name, term.fmt_size(fpath.stat().st_size),
                              term.status_marker('success')))
 
@@ -2060,6 +2070,7 @@ def _execute_create(args):
                 ('--access-note', args.access_note is not None),
                 ('--upload-protocol', args.upload_protocol is not None),
                 ('--no-ingest', args.no_ingest),
+                ('--replace', args.replace),
             )
             if enabled
         ]

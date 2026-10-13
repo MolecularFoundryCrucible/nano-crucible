@@ -778,7 +778,8 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
                  max_workers: Optional[int] = None,
                  skip_ingestion: bool = False,
                  upload_protocol: Optional[str] = None,
-                 progress: Optional[Callable[[str, int, int], None]] = None) -> Dict:
+                 progress: Optional[Callable[[str, int, int], None]] = None,
+                 replace: bool = False) -> Dict:
 
         """Upload a file to a dataset and request ingestion.
 
@@ -804,12 +805,18 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
                 whenever ingestion is requested.
             progress: Called as progress(filename, bytes_done, total) while a
                 signed upload sends its parts.
+            replace: If the dataset already has this filename with different
+                content, replace that file's content (same MFID and filename)
+                instead of raising FileExistsWithDifferentContent. Needs a
+                server with signed uploads. Also implied by
+                client.replace_existing.
 
         Returns:
             Dict: {'associated_file': AssociatedFileRead, 'ingestion_request': IngestionRequest}
         """
         filename = os.path.basename(file_path)
         skip_ingestion = skip_ingestion or not getattr(self._client, 'request_ingestion', True)
+        replace = replace or getattr(self._client, 'replace_existing', False)
 
         file_record, was_existing = upload_file_gcs(self._client,
                                                     dataset_mfid,
@@ -819,7 +826,8 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
                                                     max_workers=max_workers,
                                                     protocol=upload_protocol,
                                                     progress=progress,
-                                                    for_ingestion=not skip_ingestion)
+                                                    for_ingestion=not skip_ingestion,
+                                                    replace=replace)
         file_record = self._client.files._parse(file_record)
 
         stored_filename = file_record.get('filename', filename)

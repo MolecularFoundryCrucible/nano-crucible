@@ -129,6 +129,7 @@ class CrucibleClient:
         self.upload_progress = None
         self.upload_protocol = None
         self.request_ingestion = True
+        self.replace_existing = False
 
     def _load_profile(self, refresh: bool = False) -> None:
         """Populate the cached authorization and capability blocks."""

@@ -755,6 +755,30 @@ class CrucibleCompleter(Completer):
         yield from self._yield_entity_completions(entity_type, arg_text, query, icon)
         return True
 
+    @staticmethod
+    def _yield_paths(current):
+        """Complete a local file or directory path for a flag value."""
+        expanded = os.path.expanduser(current)
+        search_dir = os.path.dirname(expanded) or '.'
+        prefix = os.path.basename(expanded)
+        try:
+            entries = sorted(os.scandir(search_dir), key=lambda entry: entry.name)
+        except (PermissionError, FileNotFoundError, NotADirectoryError):
+            return
+        for entry in entries:
+            if not entry.name.startswith(prefix):
+                continue
+            if entry.name.startswith('.') and not prefix.startswith('.'):
+                continue
+            is_dir = entry.is_dir(follow_symlinks=True)
+            suffix = '/' if is_dir else ' '
+            yield Completion(
+                entry.name[len(prefix):] + suffix,
+                start_position=0,
+                display=shell_html(f'<ansicyan><b>{_html.escape(entry.name)}/</b></ansicyan>'
+                                   if is_dir else _html.escape(entry.name)),
+            )
+
     def _complete_path(self, ctx):
         text, words, trailing_space, resource = ctx
         current = (words[1] if len(words) == 2 and not trailing_space else
@@ -925,6 +949,10 @@ class CrucibleCompleter(Completer):
                 not current_word or not current_word.startswith('-')):
             yield from self._yield_facet_completions(resource, facet_field, words,
                                                      current_word)
+            return
+
+        if prev in ('-i', '--input') and (not current_word or not current_word.startswith('-')):
+            yield from self._yield_paths(current_word)
             return
 
         if prev == '--ingestor' and (not current_word or not current_word.startswith('-')):

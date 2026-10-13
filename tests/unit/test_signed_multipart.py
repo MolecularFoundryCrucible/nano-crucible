@@ -46,6 +46,9 @@ class FakeApi:
         queued = self.errors.get((method, path))
         if queued:
             raise queued.pop(0)
+        if path.startswith('/files/') and path.endswith('/initiate'):
+            return {'upload_id': 'u1', 'state': 'uploading', 'part_size': 4, 'part_count': 3,
+                    'parts': [], 'existing_file': None}
         if path.endswith('/initiate'):
             if self.existing:
                 return {'state': 'completed', 'existing_file': self.existing}
@@ -358,3 +361,164 @@ def test_add_file_cli_rejects_no_ingest_with_wait(tmp_path, monkeypatch, capsys)
 
     with pytest.raises(SystemExit):
         args.func(args)
+
+
+def _structured_conflict(api, sha, etag='"e1"'):
+    api.fail('post', f'{BASE}/initiate', http_error(409, None))
+    api.errors[('post', f'{BASE}/initiate')][0].response.json = lambda: {'detail': {
+        'code': 'filename_exists', 'message': 'Filename already exists',
+        'file_mfid': 'old', 'etag': etag}}
+    api.files = SimpleNamespace(get=MagicMock(return_value={
+        'mfid': 'old', 'filename': 'data.bin', 'size': len(DATA), 'sha256_hash': sha,
+        'etag': etag, 'dataset_mfid': DSID, 'storage_backend': 'gcs'}))
+    api.datasets = SimpleNamespace(list_files=lambda dsid: pytest.fail('listed the dataset'))
+
+
+def test_structured_conflict_with_same_content_reads_only_that_file(source, storage):
+    import hashlib
+    api = FakeApi()
+    _structured_conflict(api, hashlib.sha256(DATA).hexdigest())
+
+    record, existing = sm.upload_file_signed_multipart(api, DSID, source)
+
+    assert existing is True and record['mfid'] == 'old'
+    api.files.get.assert_called_once_with('old')
+
+
+def test_conflict_carries_what_a_replace_needs(source, storage):
+    api = FakeApi()
+    _structured_conflict(api, 'f' * 64)
+
+    with pytest.raises(sm.FileExistsWithDifferentContent) as caught:
+        sm.upload_file_signed_multipart(api, DSID, source)
+
+    assert (caught.value.file_mfid, caught.value.etag) == ('old', '"e1"')
+    assert isinstance(caught.value, RuntimeError)
+
+
+def test_replace_true_replaces_with_the_conflict_etag(source, storage):
+    api = FakeApi()
+    _structured_conflict(api, 'f' * 64)
+
+    record, existing = sm.upload_file_signed_multipart(api, DSID, source, replace=True)
+
+    assert (record, existing) == (RECORD, False)
+    replace_call = next(kw for m, path, kw in api.calls if path == '/files/old/upload/multipart/initiate')
+    assert replace_call['headers']['If-Match'] == '"e1"'
+    assert replace_call['json'] == {'size': len(DATA), 'sha256_hash': __import__('hashlib').sha256(DATA).hexdigest()}
+    assert sorted(p['body'] for p in storage.puts) == [b'abcd', b'efgh', b'ij']
+
+
+@pytest.mark.parametrize('etag, expected', [(None, '*'), ('"e9"', '"e9"')])
+def test_replace_by_file_mfid(source, storage, etag, expected):
+    api = FakeApi()
+    _structured_conflict(api, 'f' * 64)
+
+    sm.replace_file_signed_multipart(api, 'old', source, etag=etag)
+
+    replace_call = next(kw for m, path, kw in api.calls if path == '/files/old/upload/multipart/initiate')
+    assert replace_call['headers']['If-Match'] == expected
+
+
+def test_replace_refuses_a_changed_file(source, storage):
+    api = FakeApi()
+    _structured_conflict(api, 'f' * 64)
+    error = http_error(412, None)
+    error.response.json = lambda: {'detail': {'code': 'etag_mismatch', 'etag': '"new"'}}
+    api.fail('post', '/files/old/upload/multipart/initiate', error)
+
+    with pytest.raises(RuntimeError, match='changed since'):
+        sm.replace_file_signed_multipart(api, 'old', source, etag='"e1"')
+    assert storage.puts == []
+
+
+def test_replace_needs_signed_uploads(source, monkeypatch):
+    with pytest.raises(ValueError, match='legacy'):
+        dispatch.upload_file_gcs(FakeApi(), DSID, source, protocol='legacy', replace=True)
+
+    api = FakeApi()
+    api.fail('post', f'{BASE}/initiate', http_error(404, 'Not Found'))
+    monkeypatch.setattr(dispatch, 'upload_file_gcs_multipart', lambda *a, **k: pytest.fail('legacy'))
+    with pytest.raises(RuntimeError, match='cannot replace'):
+        dispatch.upload_file_gcs(api, DSID, source, replace=True)
+
+
+@pytest.mark.parametrize('unchanged, skip, ingests', [
+    (False, False, True), (False, True, False), (True, False, False)])
+def test_files_replace_requests_ingestion_only_for_new_content(monkeypatch, unchanged, skip, ingests):
+    from crucible.resources.files import FileOperations
+
+    monkeypatch.setattr('crucible.resources.gcs.signed_multipart.replace_file_signed_multipart',
+                        lambda *a, **k: ({'mfid': 'old', 'filename': 'data.bin'}, unchanged))
+    client = MagicMock(request_ingestion=True, upload_progress=None)
+    files = FileOperations(client)
+    files.request_ingestion = MagicMock(return_value={'status': 'pending'})
+    files._skip_ingestion = MagicMock(return_value=None)
+
+    files.replace('old', 'x', skip_ingestion=skip)
+
+    assert files.request_ingestion.called is ingests
+
+
+def _add_file_args(tmp_path, extra=()):
+    import argparse
+    from crucible.cli import dataset as dataset_cli
+    path = tmp_path / 'data.bin'
+    path.write_bytes(DATA)
+    parser = argparse.ArgumentParser()
+    dataset_cli.register_subcommand(parser.add_subparsers(dest='command'))
+    return parser.parse_args(['dataset', 'add-file', DSID, '-i', str(path), *extra])
+
+
+def _conflicting_client():
+    calls = []
+
+    def add_file(dsid, path, replace=False, **kwargs):
+        calls.append(replace)
+        if not replace:
+            raise sm.FileExistsWithDifferentContent('data.bin', 'old', '"e1"')
+        return {'associated_file': RECORD}
+
+    return SimpleNamespace(datasets=SimpleNamespace(add_file=add_file)), calls
+
+
+@pytest.mark.parametrize('answer, expected', [(True, [False, True]), (False, [False])])
+def test_add_file_asks_before_replacing(tmp_path, monkeypatch, answer, expected):
+    client, calls = _conflicting_client()
+    monkeypatch.setattr('crucible.config.get_client', lambda: client)
+    monkeypatch.setattr('crucible.cli.helpers._interactive_stdin', lambda: True)
+    monkeypatch.setattr('crucible.cli.helpers.prompt_confirm', lambda *a, **k: answer)
+    args = _add_file_args(tmp_path)
+
+    args.func(args)
+
+    assert calls == expected
+
+
+def test_add_file_without_a_terminal_does_not_replace(tmp_path, monkeypatch):
+    client, calls = _conflicting_client()
+    monkeypatch.setattr('crucible.config.get_client', lambda: client)
+    monkeypatch.setattr('crucible.cli.helpers._interactive_stdin', lambda: False)
+    args = _add_file_args(tmp_path)
+
+    with pytest.raises(SystemExit):
+        args.func(args)
+    assert calls == [False]
+
+
+def test_shell_completes_input_paths(tmp_path, monkeypatch):
+    import argparse
+    from prompt_toolkit.document import Document
+    from crucible.cli import dataset as dataset_cli
+    from crucible.cli.shell.completer import CrucibleCompleter
+
+    (tmp_path / 'results.dat').write_text('x')
+    (tmp_path / 'raw').mkdir()
+    monkeypatch.chdir(tmp_path)
+    parser = argparse.ArgumentParser()
+    dataset_cli.register_subcommand(parser.add_subparsers(dest='resource'))
+    completer = CrucibleCompleter(parser, client=MagicMock(), state={})
+
+    options = [c.text for c in completer.get_completions(Document('dataset add-file X -i r'), None)]
+
+    assert options == ['aw/', 'esults.dat ']

@@ -360,13 +360,18 @@ def complete_ingestors(**kwargs):
 
 
 def add_upload_arguments(parser) -> None:
-    """Add --upload-protocol and --no-ingest to a command that uploads files."""
+    """Add --upload-protocol, --replace, and --no-ingest to a command that uploads files."""
     from ..constants import UPLOAD_PROTOCOLS
 
     parser.add_argument(
         '--upload-protocol', choices=UPLOAD_PROTOCOLS, default=None, metavar='MODE',
         help=f"Upload route: {', '.join(UPLOAD_PROTOCOLS)} "
              "(default: the upload_protocol setting, normally auto)"
+    )
+    parser.add_argument(
+        '--replace', action='store_true', default=False,
+        help='Replace files the dataset already has under the same name with different '
+             'content, keeping their MFIDs (on a terminal you are asked otherwise)'
     )
     parser.add_argument(
         '--no-ingest', dest='no_ingest', action='store_true', default=False,
@@ -387,9 +392,11 @@ class upload_session:
             'upload_progress': UploadProgress(),
             'upload_protocol': getattr(args, 'upload_protocol', None),
             'request_ingestion': not getattr(args, 'no_ingest', False),
+            'replace_existing': getattr(args, 'replace', False),
         }
 
-    _DEFAULTS = {'upload_progress': None, 'upload_protocol': None, 'request_ingestion': True}
+    _DEFAULTS = {'upload_progress': None, 'upload_protocol': None, 'request_ingestion': True,
+                 'replace_existing': False}
 
     def __enter__(self):
         self.saved = {name: getattr(self.client, name, self._DEFAULTS[name])

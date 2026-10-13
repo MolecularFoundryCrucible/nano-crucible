@@ -8,7 +8,7 @@ see DatasetOperations (client.datasets.*).
 """
 
 import logging
-from typing import Optional, List, Dict
+from typing import Any, Callable, Dict, List, Optional
 
 from .base import BaseResource, ListResult
 from ..constants import DEFAULT_LIMIT
@@ -185,7 +185,7 @@ class FileOperations(BaseResource):
         self._request('delete', f'/files/{file_id}')
 
 
-    def update(self, file_id: str, **updates) -> Dict:
+    def update(self, file_id: str, **updates: Any) -> Dict:
         """Update fields on a file record.
 
         Args:
@@ -197,6 +197,53 @@ class FileOperations(BaseResource):
         """
         return self._parse(self._request('patch', f'/files/{file_id}', json=updates))
 
+
+    def replace(self, file_id: str, file_path: str, etag: Optional[str] = None,
+                ingestion_class: Optional[str] = None,
+                wait_for_ingestion_response: bool = False,
+                skip_ingestion: bool = False,
+                max_workers: Optional[int] = None,
+                progress: Optional[Callable[[str, int, int], None]] = None) -> Dict:
+        """Replace a GCS file's content, keeping its MFID, filename, and metadata.
+
+        The new content uploads through the signed multipart flow and the
+        record is repointed once it is verified; the file stays downloadable
+        meanwhile. Needs EDIT on the file's dataset.
+
+        Args:
+            file_id: MFID of the file to replace.
+            file_path: Local path to the new content.
+            etag: The file's ``etag`` as you last read it. The replace is then
+                refused if the file changed since; None replaces whatever is
+                current.
+            ingestion_class: Ingestion class for the worker; defaults to
+                server auto-detection.
+            wait_for_ingestion_response: Block until ingestion completes.
+            skip_ingestion: Replace without requesting ingestion. Also implied
+                when client.request_ingestion is False.
+            max_workers: Parts uploaded in parallel (default 8).
+            progress: Called as progress(filename, bytes_done, total); defaults
+                to client.upload_progress.
+
+        Returns:
+            Dict: {'associated_file': the updated record, 'ingestion_request':
+            IngestionRequest or None}. No ingestion is requested when the file
+            already held this content.
+        """
+        from .gcs.signed_multipart import replace_file_signed_multipart
+
+        record, unchanged = replace_file_signed_multipart(
+            self._client, file_id, file_path, etag=etag, max_workers=max_workers,
+            progress=progress or getattr(self._client, 'upload_progress', None))
+        record = self._parse(record)
+        if unchanged:
+            logger.info(f"{record.get('filename')} already holds this content, nothing replaced")
+            return {'associated_file': record, 'ingestion_request': None}
+        if skip_ingestion or not getattr(self._client, 'request_ingestion', True):
+            return {'associated_file': record, 'ingestion_request': self._skip_ingestion(file_id)}
+        return {'associated_file': record,
+                'ingestion_request': self.request_ingestion(file_id, ingestion_class,
+                                                            wait_for_ingestion_response)}
 
     def get_download_link(self, file_id: str, disposition: Optional[str] = None) -> str:
         """Get a signed download URL for a single file.
