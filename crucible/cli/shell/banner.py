@@ -1,8 +1,8 @@
-"""Startup banner: the Crucible mark rendered with half-block pixels."""
+"""Startup welcome: the Crucible mark in half-block pixels beside a session summary."""
 
 from .. import term
-from ._common import (BANNER_MIN_WIDTH, BANNER_PIXEL_COLORS, shell_color_depth,
-                      vlen)
+from ._common import (BANNER_PIXEL_COLORS, BRAND_OFF_WHITE, BRAND_ORANGE,
+                      shell_color_depth, vlen)
 
 
 def load_shell_banner():
@@ -37,49 +37,131 @@ def shell_banner_panel(banner):
         for upper_row, lower_row in shell_banner_row_pairs(banner)
     )
 
-def shell_banner_left_margin(panel, columns):
-    width = max((vlen(line) for line in panel.splitlines()), default=0)
-    return max((columns - width) // 2, 0)
+WELCOME_MARGIN = 2
+WELCOME_GAP = 4
+WELCOME_MIN_TEXT = 40
 
-def shell_banner_fragments(banner, left_margin=0):
-    from prompt_toolkit.formatted_text import FormattedText
+_DIM = 'fg:ansibrightblack'
+_TITLE = f'bold fg:{BRAND_ORANGE}'
+_ELEVATED = f'bold bg:#b00020 fg:{BRAND_OFF_WHITE}'
 
-    fragments = []
-    pairs = list(shell_banner_row_pairs(banner))
-    for row_index, (upper_row, lower_row) in enumerate(pairs):
-        if left_margin:
-            fragments.append(('', ' ' * left_margin))
+
+def shell_banner_row_fragments(banner):
+    """Return the colored mark as one list of (style, text) fragments per row."""
+    rows = []
+    for upper_row, lower_row in shell_banner_row_pairs(banner):
+        row = []
         for upper, lower in zip(upper_row, lower_row):
             upper_color = BANNER_PIXEL_COLORS[upper]
             lower_color = BANNER_PIXEL_COLORS[lower]
             if upper_color == lower_color:
-                style = f'bg:{lower_color}'
-                text = ' '
+                style, text = f'bg:{lower_color}', ' '
             else:
-                style = f'fg:{upper_color} bg:{lower_color}'
-                text = '▀'
-            if fragments and fragments[-1][0] == style:
-                previous_style, previous_text = fragments[-1]
-                fragments[-1] = (previous_style, previous_text + text)
+                style, text = f'fg:{upper_color} bg:{lower_color}', '▀'
+            if row and row[-1][0] == style:
+                row[-1] = (style, row[-1][1] + text)
             else:
-                fragments.append((style, text))
-        if row_index < len(pairs) - 1:
-            fragments.append(('', '\n'))
-    return FormattedText(fragments)
+                row.append((style, text))
+        rows.append(row)
+    return rows
 
-def print_shell_banner(columns):
-    if columns < BANNER_MIN_WIDTH:
-        return False
+
+def welcome_rows(*, version, first_name, user_label, platform_role, api_url,
+                 project, elevated, deletions, joins):
+    """Build the session summary printed beside the mark at startup."""
+    def field(label, *value):
+        return [(_DIM, label.ljust(10))] + list(value)
+
+    user = user_label + (f' · {platform_role}'
+                         if platform_role and platform_role != 'none' else '')
+    rows = [
+        [(_TITLE, 'Crucible'), ('', ' shell '), (_DIM, version)],
+        [('', f'Welcome, {first_name}.')],
+        [],
+        field('User', ('', user)),
+        field('API', ('', api_url or '?')),
+        field('Project', ('', project) if project else (_DIM, 'none')),
+        field('Access', ((_ELEVATED, ' elevated ' if term.color_enabled() else 'elevated')
+                         if elevated else ('', 'normal'))),
+    ]
+    pending = []
+    if deletions:
+        pending.append(f"{deletions} deletion review{'s' if deletions != 1 else ''}")
+    if joins:
+        pending.append(f"{joins} join request{'s' if joins != 1 else ''}")
+    if pending:
+        rows.append(field('Pending', ('', ' · '.join(pending))))
+    rows += [[], [(_DIM, "Type 'help' for commands, 'exit' to quit.")]]
+    return rows
+
+
+def _truncate(row, width):
+    """Clip a fragment row to width display columns, ending in an ellipsis."""
+    if sum(vlen(text) for _style, text in row) <= width:
+        return row
+    clipped, used = [], 0
+    for style, text in row:
+        for char in text:
+            if used + vlen(char) > width - 1:
+                return clipped + [('', '…')]
+            if clipped and clipped[-1][0] == style:
+                clipped[-1] = (style, clipped[-1][1] + char)
+            else:
+                clipped.append((style, char))
+            used += vlen(char)
+    return clipped
+
+
+def compose_welcome(logo_rows, text_rows, columns):
+    """Lay out the mark and text side by side, stacked, or as text alone.
+
+    Side by side needs room for the mark plus WELCOME_MIN_TEXT columns of
+    text; otherwise the text goes below the mark, and the mark is dropped
+    when even it does not fit. The shorter column is centered vertically.
+    """
+    margin = [('', ' ' * WELCOME_MARGIN)]
+    logo_width = max((sum(vlen(t) for _s, t in row) for row in logo_rows), default=0)
+    side_width = columns - WELCOME_MARGIN - logo_width - WELCOME_GAP
+
+    if logo_rows and side_width >= WELCOME_MIN_TEXT:
+        height = max(len(logo_rows), len(text_rows))
+        logo_top = (height - len(logo_rows)) // 2
+        text_top = (height - len(text_rows)) // 2
+        rows = []
+        for index in range(height):
+            logo_index, text_index = index - logo_top, index - text_top
+            logo = (logo_rows[logo_index] if 0 <= logo_index < len(logo_rows)
+                    else [('', ' ' * logo_width)])
+            text = (text_rows[text_index] if 0 <= text_index < len(text_rows)
+                    else [])
+            rows.append(margin + logo + [('', ' ' * WELCOME_GAP)]
+                        + _truncate(text, side_width))
+        return rows
+
+    text_width = max(columns - WELCOME_MARGIN, 1)
+    text = [margin + _truncate(row, text_width) for row in text_rows]
+    if logo_rows and columns >= WELCOME_MARGIN + logo_width:
+        return [margin + row for row in logo_rows] + [[]] + text
+    return text
+
+
+def print_welcome(text_rows, columns):
+    """Print the startup mark with the session summary beside it."""
     banner = load_shell_banner()
-    panel = shell_banner_panel(banner)
-    left_margin = shell_banner_left_margin(panel, columns)
+    if term.color_enabled():
+        logo_rows = shell_banner_row_fragments(banner)
+    else:
+        logo_rows = [[('', line)] for line in shell_banner_panel(banner).splitlines()]
+    rows = compose_welcome(logo_rows, text_rows, columns)
     if not term.color_enabled():
-        prefix = ' ' * left_margin
-        print('\n'.join(f'{prefix}{line}' for line in panel.splitlines()))
-        return True
+        print('\n'.join(''.join(text for _style, text in row).rstrip() for row in rows))
+        return
     from prompt_toolkit import print_formatted_text
-    print_formatted_text(
-        shell_banner_fragments(banner, left_margin=left_margin),
-        color_depth=shell_color_depth(),
-    )
-    return True
+    from prompt_toolkit.formatted_text import FormattedText
+
+    fragments = []
+    for index, row in enumerate(rows):
+        if index:
+            fragments.append(('', '\n'))
+        fragments.extend(row)
+    print_formatted_text(FormattedText(fragments), color_depth=shell_color_depth())

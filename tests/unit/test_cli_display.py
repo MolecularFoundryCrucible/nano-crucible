@@ -300,7 +300,8 @@ def test_shell_leaves_color_depth_automatic_without_true_color(monkeypatch):
 
 def test_shell_banner_is_packaged_and_uses_requested_colors():
     banner = shell_banner.load_shell_banner()
-    fragments = shell_banner.shell_banner_fragments('_%=.\n.=_%')
+    fragments = [fragment for row in shell_banner.shell_banner_row_fragments('_%=.\n.=_%')
+                 for fragment in row]
     styles = {style for style, _text in fragments}
 
     assert len(banner.splitlines()) == 16
@@ -343,20 +344,6 @@ def test_shell_banner_panel_has_requested_edge_padding():
     assert all(row.endswith('_') for row in rows)
 
 
-def test_shell_banner_is_centered_by_display_width():
-    panel = shell_banner.shell_banner_panel('%%')
-
-    assert shell_banner.shell_banner_left_margin(panel, 14) == 6
-    assert shell_banner.shell_banner_left_margin(panel, 7) == 2
-
-
-def test_shell_banner_centering_keeps_outer_margin_uncolored():
-    fragments = list(shell_banner.shell_banner_fragments('%%', left_margin=3))
-
-    assert fragments[0] == ('', '   ')
-    assert '#a8c4cd' in fragments[1][0]
-
-
 def test_shell_banner_pixel_material_counts_match_source_pattern():
     banner = shell_banner.load_shell_banner()
 
@@ -364,16 +351,6 @@ def test_shell_banner_pixel_material_counts_match_source_pattern():
     assert banner.count('=') == 18
     assert banner.count('.') == 9
     assert banner.count('_') == 102
-
-
-def test_shell_banner_is_skipped_on_narrow_terminals(monkeypatch):
-    monkeypatch.setattr(
-        shell_banner,
-        'load_shell_banner',
-        lambda: pytest.fail('Narrow terminals should not load the banner.'),
-    )
-
-    assert shell_banner.print_shell_banner(15) is False
 
 
 def test_shell_toolbar_marks_custom_api_and_debug(monkeypatch):

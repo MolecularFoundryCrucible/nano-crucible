@@ -20,7 +20,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from .. import term
 from ._common import PROMPT, shell_color_depth, shell_html, shell_style_rules, vlen
-from .banner import print_shell_banner
+from .banner import print_welcome, welcome_rows
 from .builtins import find_builtin
 
 try:
@@ -148,6 +148,28 @@ class CrucibleShell:
             if ((d.get('capabilities') or {}).get('can_review') is not False)
         ]
         return len(deletions), len(self.state.get('join_requests') or [])
+
+    def _welcome_rows(self, whoami_info):
+        """Session summary shown beside the mark at startup."""
+        from crucible import __version__
+        from crucible.config import config as _cfg
+
+        user = whoami_info.get('user_info') or {}
+        first_name = ((user.get('first_name') or '').strip()
+                      or (user.get('last_name') or '').strip()
+                      or whoami_info.get('access_group_name') or 'there')
+        deletions, joins = self._pending_counts()
+        return welcome_rows(
+            version=__version__,
+            first_name=first_name,
+            user_label=self.state.get('user_label') or '?',
+            platform_role=self.client.authorization.platform_role,
+            api_url=_cfg.api_url,
+            project=self.state.get('project'),
+            elevated=self.state.get('elevated', False),
+            deletions=deletions,
+            joins=joins,
+        )
 
     def _print_pending(self):
         """Mention pending reviews once, so they do not need a toolbar slot."""
@@ -478,22 +500,13 @@ class CrucibleShell:
         info = self._verify_connection()
         self._init_state(info)
 
-        print_shell_banner(shutil.get_terminal_size((80, 24)).columns)
-
-        _u     = info.get('user_info', {})
-        _first = _u.get('first_name', '').strip() or \
-                 _u.get('last_name', '').strip() or \
-                 info.get('access_group_name') or 'there'
-        print(f"\nWelcome to the Crucible interactive shell, {_first}.\n"
-              "(type 'help' for commands, 'exit' to quit)")
+        print_welcome(self._welcome_rows(info), shutil.get_terminal_size((80, 24)).columns)
         if self.state.get('project_source') == 'environment':
             from ..helpers import show_warning
             show_warning(
                 "CRUCIBLE_CURRENT_PROJECT is controlling the current project and is deprecated. "
                 "Use 'use PROJECT_ID' to save a selection after unsetting the environment variable."
             )
-
-        self._print_pending()
 
         self.completer = CrucibleCompleter(
             self.parser,

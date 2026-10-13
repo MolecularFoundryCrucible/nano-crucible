@@ -40,6 +40,7 @@
 - Project membership mutations send the username or ORCID straight into the `{user_ref}` path segment instead of looking it up first; email inputs still resolve to the canonical unique_id before the request.
 - `datasets.reassign_project()` and `samples.reassign_project()` accept `project_mfid` (preferred over `project_id`), and the result carries `resource_mfid`, `previous_project_mfid`, and `new_project_mfid`. `dataset reassign-project` and `sample reassign-project` send the MFID body when the target is an MFID.
 - `dataset list` and `sample list` print oldest to newest, follow `--sort`/`--direction` instead of re-sorting by name, and show a flat table unless `--group-by` is given; without a project and no current project they list every accessible project instead of failing, and `--all-projects` ignores the current project.
+- The interactive shell opens with a session summary beside the Crucible mark: version, user and platform role, API URL, current project, access mode, and pending reviews.
 - The interactive shell hides service-account commands from completion for callers who cannot manage them, and `refresh` now re-reads permissions.
 - Unrecognized dataset and sample list filters now raise a local `ValueError` naming the closest valid parameter instead of a server-side 422.
 - The minimum supported Python version is now 3.10.
