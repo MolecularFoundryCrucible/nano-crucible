@@ -12,6 +12,23 @@ from ...constants import PLATFORM_ROLES
 from ._common import ENTITY_ICONS, get_subparser_map, shell_html
 
 
+def fuzzy_values(prefix, candidates):
+    """Filter and rank value completions by fuzzy match, like xt -> xrd-titan.
+
+    Candidates use start_position 0; prompt_toolkit's FuzzyCompleter ranks
+    them by where and how tightly prefix matches, and highlights the match.
+    """
+    from prompt_toolkit.completion import Completer, FuzzyCompleter
+    from prompt_toolkit.document import Document
+
+    class _Candidates(Completer):
+        def get_completions(self, document, complete_event):
+            return iter(candidates)
+
+    completer = FuzzyCompleter(_Candidates(), WORD=True)
+    yield from completer.get_completions(Document(prefix), None)
+
+
 class CrucibleCompleter(Completer):
     """Three-level argparse completer: resource -> subcommand -> flags."""
 
@@ -110,31 +127,38 @@ class CrucibleCompleter(Completer):
         return results
 
     def _yield_project_completions(self, prefix, use_search=True, use_mfid=False):
+        """Server search results first, then fuzzy matches from the cached project list.
+
+        MFIDs stay prefix-matched from the server search only.
+        """
         if use_mfid and len(prefix) < 3:
             return
-        if (use_search or use_mfid) and len(prefix) >= 3:
-            candidates = self._search_projects(prefix)
-        else:
-            prefix_lower = prefix.lower()
-            candidates = [
-                (project_id, title, '')
-                for project_id, title in self._lazy_projects()
-                if project_id.lower().startswith(prefix_lower)
-            ]
-        for project_id, title, unique_id in candidates:
+        searched = (self._search_projects(prefix)
+                    if (use_search or use_mfid) and len(prefix) >= 3 else [])
+        seen = set()
+        for project_id, title, unique_id in searched:
             value = unique_id if use_mfid else project_id
-            if not value:
-                continue
-            metadata_id = project_id if use_mfid else unique_id
-            metadata = f'{title}  {metadata_id}' if metadata_id else title
-            yield Completion(
-                value + ' ',
-                start_position=-len(prefix),
-                display=shell_html(f'<b>{_html.escape(value)}</b>'),
-                display_meta=shell_html(
-                    f'<ansibrightblack>{_html.escape(metadata)}</ansibrightblack>'
-                ),
-            )
+            if value and value not in seen:
+                seen.add(value)
+                yield self._project_completion(value, title, project_id if use_mfid else unique_id,
+                                               -len(prefix))
+        if use_mfid:
+            return
+        local = [self._project_completion(project_id, title, '', 0)
+                 for project_id, title in self._lazy_projects() if project_id not in seen]
+        yield from fuzzy_values(prefix, local)
+
+    @staticmethod
+    def _project_completion(value, title, metadata_id, start_position):
+        metadata = f'{title}  {metadata_id}' if metadata_id else title
+        return Completion(
+            value + ' ',
+            start_position=start_position,
+            display=shell_html(f'<b>{_html.escape(value)}</b>'),
+            display_meta=shell_html(
+                f'<ansibrightblack>{_html.escape(metadata)}</ansibrightblack>'
+            ),
+        )
 
     def _search_instruments(self, query):
         if query in self._instrument_search_cache:
@@ -271,18 +295,16 @@ class CrucibleCompleter(Completer):
             project_id = None
         else:
             project_id = self._typed_project(words) or self._state.get('project')
-        lowered = prefix.lower()
+        candidates = []
         for value, label, count in self._facet_values(resource, field, project_id):
-            if not value.lower().startswith(lowered) and lowered not in value.lower():
-                continue
             text = shlex.quote(value) if any(c.isspace() for c in value) else value
             meta = f'{count}' if label == value else f'{label} | {count}'
-            yield Completion(
+            candidates.append(Completion(
                 text + ' ',
-                start_position=-len(prefix),
                 display=shell_html(f'<b>{_html.escape(value)}</b>'),
                 display_meta=shell_html(f'<ansibrightblack>{_html.escape(meta)}</ansibrightblack>'),
-            )
+            ))
+        yield from fuzzy_values(prefix, candidates)
 
     @staticmethod
     def _multiword_arg(text, num_preceding_words):

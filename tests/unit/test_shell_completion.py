@@ -394,3 +394,48 @@ def test_elevate_offers_on_and_off_and_commands():
     options = complete(completer, 'elevate o')
     assert 'on' in options and 'off' in options
     assert 'dataset' in complete(completer, 'elevate da')
+
+
+def _project_completer(search_results=()):
+    client = make_client()
+    client.projects.search = MagicMock(return_value=list(search_results))
+    completer = make_completer(client=client)
+    completer._projects = [('xrd-titan', 'XRD Titan'), ('alphafold-demo', 'Alphafold'),
+                           ('crucible-test', 'Test')]
+    return completer
+
+
+def test_project_values_match_fuzzily():
+    completer = _project_completer()
+
+    assert complete(completer, 'use xt') == ['xrd-titan']
+
+
+def test_fuzzy_matches_rank_closest_first():
+    completer = _project_completer()
+
+    assert complete(completer, 'use a')[0] == 'alphafold-demo'
+
+
+def test_server_search_results_come_before_local_fuzzy_matches():
+    completer = _project_completer(search_results=[
+        {'project_id': 'crucible-demo', 'title': 'Demo', 'unique_id': MFID}])
+
+    options = complete(completer, 'dataset list --project-id cru')
+
+    assert options[0] == 'crucible-demo'
+    assert 'crucible-test' in options
+    assert options.count('crucible-demo') == 1
+
+
+def test_commands_stay_prefix_matched():
+    completer = make_completer(client=make_client())
+
+    assert 'dataset' not in complete(completer, 'dt')
+
+
+def test_facet_values_match_fuzzily():
+    completer, _client = _facet_completer({'project': 'my-project'})
+
+    assert _texts(completer, 'dataset list -m xd') == ['XRD ']
+    assert _texts(completer, 'dataset list -m stm') == ['4D-STEM ']
