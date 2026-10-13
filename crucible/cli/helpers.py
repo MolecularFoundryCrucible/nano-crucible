@@ -80,6 +80,29 @@ def _error_details(error):
     return status, reason, details
 
 
+def _error_hint(error_type, status, details):
+    """A next step for common failures, or None."""
+    from ..config import config
+
+    if status == 401:
+        return "Your API key was not accepted. Set a new one with `crucible config init`."
+    if status == 403:
+        return ("Your account is not allowed to do this. `crucible whoami` shows your role; "
+                "administrators can retry with -E/--elevate.")
+    if status == 404:
+        return "Nothing was found for that identifier; check it, or try `crucible get ID`."
+    if status == 422 and any(item.get('type') == 'extra_forbidden' for item in details):
+        return (f"The server at {config.api_url} rejected an option it does not know; "
+                "it may run an older API version than this client.")
+    if error_type == 'timeout':
+        return ("The server took too long to answer. Raise the limit with "
+                "`crucible config set read_timeout 60`.")
+    if error_type == 'connection_error':
+        return (f"Could not reach {config.api_url}. Check the network or VPN, "
+                "and `crucible config get api_url`.")
+    return None
+
+
 def format_cli_error(action: str, error: Exception) -> dict:
     import requests
 
@@ -107,6 +130,9 @@ def format_cli_error(action: str, error: Exception) -> dict:
         result['status'] = status
     if reason:
         result['reason'] = str(reason)
+    hint = _error_hint(error_type, status, details)
+    if hint:
+        result['hint'] = hint
     return result
 
 
@@ -137,6 +163,10 @@ def print_cli_error(data: dict, as_json: bool = False) -> None:
                 print(f"  {label}  {message}", file=sys.stderr)
             else:
                 print(f"  {message}", file=sys.stderr)
+
+    if data.get('hint'):
+        print(file=sys.stderr)
+        print(term.dim(data['hint'], stream=sys.stderr), file=sys.stderr)
 
 
 def show_warning(message) -> None:

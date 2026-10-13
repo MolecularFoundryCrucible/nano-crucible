@@ -11,7 +11,6 @@ Available subcommands:
     completion  Install shell autocomplete
 """
 
-import argparse
 import sys
 import logging
 from crucible import __version__
@@ -140,7 +139,8 @@ def setup_logging(debug=False):
 
 def main():
     """Main entry point for the unified Crucible CLI."""
-    parser = argparse.ArgumentParser(
+    from .parser import SuggestingArgumentParser
+    parser = SuggestingArgumentParser(
         prog='crucible',
         description='Crucible API command-line interface',
         formatter_class=term.ColorHelpFormatter,

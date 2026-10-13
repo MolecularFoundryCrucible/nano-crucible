@@ -73,12 +73,14 @@ def test_connection_error_is_classified_without_http_status():
         requests.ConnectionError('Name resolution failed'),
     )
 
+    hint = data.pop('hint')
     assert data == {
         'type': 'connection_error',
         'message': 'Failed while connecting.',
         'details': [{'message': 'Name resolution failed'}],
         'reason': 'Connection failed',
     }
+    assert 'Could not reach' in hint
 
 
 def test_json_error_is_structured_and_uncolored(capsys):

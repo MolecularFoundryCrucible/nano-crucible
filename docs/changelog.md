@@ -46,6 +46,7 @@
 - Setting `pager` to `auto` opens listings taller than the terminal in a pager (`$CRUCIBLE_PAGER`, `$PAGER`, or `less -FRX`); it is off by default, and `--no-pager` skips it for one command.
 - List methods return a `ListResult`, a `list` that also carries `has_more`, the server's `total`, and `next_cursor` or `next_offset`; every list method accepts `cursor=` to resume from a previous result.
 - The interactive shell's `more` shows the next page of the last listing.
+- A mistyped command, subcommand, or flag ends with a "Did you mean ...?" suggestion, and API errors add a next step for rejected keys, missing permissions, unknown identifiers, options an older server does not know, timeouts, and unreachable servers.
 - The interactive shell hides service-account commands from completion for callers who cannot manage them, and `refresh` now re-reads permissions.
 - Unrecognized dataset and sample list filters now raise a local `ValueError` naming the closest valid parameter instead of a server-side 422.
 - The minimum supported Python version is now 3.10.
