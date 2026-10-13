@@ -8,7 +8,7 @@ Provides organized access to project-related API endpoints.
 
 import logging
 from typing import Any, Optional, List, Dict, Sequence, Union
-from .base import BaseResource
+from .base import BaseResource, ListResult
 from .capabilities import AccessControlMixin, OwnershipMixin
 from .users import _as_query_list
 from ..constants import DEFAULT_LIMIT, PROJECT_ACCESS_ROLES, PROJECT_MEMBER_ROLES, PROJECT_SORTS
@@ -271,7 +271,7 @@ class ProjectOperations(OwnershipMixin, AccessControlMixin, BaseResource):
             List[ProjectMember]: Project team members (excludes project lead)
         """
         raw = self._paginate(f'/projects/{project_id}/users', {}, limit, offset)
-        return [ProjectMember.model_validate(m) for m in raw]
+        return ListResult.like(raw, [ProjectMember.model_validate(m) for m in raw])
 
     def update(self, proj_id: str, **kwargs: Any) -> Dict:
         """Partially update a project record.

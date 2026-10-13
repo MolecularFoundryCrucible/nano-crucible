@@ -10,7 +10,7 @@ For admin operations on other users, use UserOperations (client.users).
 import logging
 from typing import Dict, List, Optional
 
-from .base import BaseResource
+from .base import BaseResource, ListResult
 from ..constants import DEFAULT_LIMIT
 from ..models import JoinRequest
 
@@ -109,4 +109,4 @@ class AccountOperations(BaseResource):
         if status is not None:
             params['status'] = status
         raw = self._paginate('/account/join_requests', params, limit, offset)
-        return [JoinRequest(**r).model_dump() for r in raw]
+        return ListResult.like(raw, [JoinRequest(**r).model_dump() for r in raw])

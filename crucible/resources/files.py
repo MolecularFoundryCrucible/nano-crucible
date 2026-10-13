@@ -10,7 +10,7 @@ see DatasetOperations (client.datasets.*).
 import logging
 from typing import Optional, List, Dict
 
-from .base import BaseResource
+from .base import BaseResource, ListResult
 from ..constants import DEFAULT_LIMIT
 from ..utils.io import storage_display_name
 
@@ -63,7 +63,8 @@ class FileOperations(BaseResource):
         params = {}
         if sha256_hash:
             params['sha256_hash'] = sha256_hash
-        return [self._parse(f) for f in self._paginate('/files', params, limit=limit)]
+        raw = self._paginate('/files', params, limit=limit)
+        return ListResult.like(raw, [self._parse(f) for f in raw])
 
     def download(self, file_id: str, output_dir: str = '.') -> str:
         """Download a single file by MFID to a local directory.

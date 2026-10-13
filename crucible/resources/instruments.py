@@ -8,7 +8,7 @@ Provides organized access to instrument-related API endpoints.
 
 import logging
 from typing import TYPE_CHECKING, Any, Optional, List, Dict, Sequence, Union
-from .base import BaseResource
+from .base import BaseResource, ListResult
 from .capabilities import AccessControlMixin, OwnershipMixin
 from ..constants import DEFAULT_LIMIT
 from ..utils.identifiers import (
@@ -91,7 +91,8 @@ class InstrumentOperations(OwnershipMixin, AccessControlMixin, BaseResource):
             params['status'] = self._instrument_status(status)
         params.update(self._affiliation_params(affiliation, INSTRUMENT_AFFILIATIONS))
         params.update(self._ordering_params(sort, direction, sorts=INSTRUMENT_SORTS))
-        return [self._parse(item) for item in self._paginate('/instruments', params, limit, offset)]
+        raw = self._paginate('/instruments', params, limit, offset)
+        return ListResult.like(raw, [self._parse(item) for item in raw])
 
     @staticmethod
     def _instrument_status(status: str) -> str:

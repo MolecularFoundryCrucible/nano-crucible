@@ -160,3 +160,55 @@ def test_offset_envelope_with_a_null_cursor_still_fetches_every_page():
     result = resource._paginate('/users/x/projects', {}, limit=None)
 
     assert result == records(0, API_PAGE_MAX + 5)
+
+
+def test_cursor_listing_reports_more_when_stopped_at_the_limit():
+    resource, request = make_resource()
+    request.return_value = {'items': records(0, 5), 'next_cursor': 'more', 'total': 40}
+
+    result = resource._paginate('/datasets', {}, limit=5)
+
+    assert result == records(0, 5)
+    assert result.has_more is True
+    assert result.total == 40
+
+
+def test_cursor_listing_without_a_cursor_has_no_more():
+    resource, request = make_resource()
+    request.return_value = {'items': records(0, 3), 'next_cursor': None}
+
+    result = resource._paginate('/datasets', {}, limit=5)
+
+    assert result.has_more is False
+    assert result.total is None
+
+
+@pytest.mark.parametrize('total, limit, has_more', [(50, 5, True), (5, 5, False), (3, 5, False)])
+def test_offset_listing_reports_more_from_the_total(total, limit, has_more):
+    resource, request = make_resource()
+    request.return_value = {'total': total, 'items': records(0, min(total, limit))}
+
+    result = resource._paginate('/users', {}, limit=limit)
+
+    assert result.has_more is has_more
+    assert result.total == total
+
+
+def test_list_result_like_keeps_the_metadata():
+    from crucible.resources.base import ListResult
+
+    result = ListResult.like(ListResult([1, 2], has_more=True, total=9), [str(n) for n in [1, 2]])
+
+    assert result == ['1', '2']
+    assert (result.has_more, result.total) == (True, 9)
+
+
+def test_dataset_list_keeps_list_metadata():
+    client = MagicMock()
+    client._request.return_value = {
+        'items': [{'unique_id': '0' * 26, 'dataset_name': 'a'}],
+        'next_cursor': 'more', 'total': 12}
+
+    result = DatasetOperations(client).list(limit=1)
+
+    assert result.has_more is True and result.total == 12

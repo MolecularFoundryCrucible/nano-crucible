@@ -9,7 +9,7 @@ Provides organized access to sample-related API endpoints.
 from datetime import date, datetime
 import logging
 from typing import Any, Optional, List, Dict, Sequence, Union
-from .base import BaseResource
+from .base import BaseResource, ListResult
 from .capabilities import AccessControlMixin, OwnershipMixin, ProjectAssignmentMixin
 from ..constants import DEFAULT_LIMIT, SAMPLE_FACET_FIELDS, VISIBILITIES
 from ..utils.deprecation import _deprecated, _deprecated_parameter
@@ -217,7 +217,7 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
                     DeprecationWarning, stacklevel=2,
                 )
         raw = self._paginate(endpoint, params, limit, offset)
-        return [self._parse(s) for s in raw]
+        return ListResult.like(raw, [self._parse(s) for s in raw])
 
     def facets(self, field: str, limit: int = 100,
                sort: Optional[str] = None, direction: Optional[str] = None,

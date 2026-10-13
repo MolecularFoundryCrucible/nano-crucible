@@ -9,7 +9,7 @@ POST /resources/{id}/delete, admins approve or reject them via /deletion_request
 
 from typing import Dict, List, Optional
 
-from .base import BaseResource
+from .base import BaseResource, ListResult
 from ..constants import (DEFAULT_LIMIT, DELETION_AUDIT_SCOPES,
                          DELETION_REQUEST_SCOPES, DELETION_REQUEST_SORTS,
                          SORT_DIRECTIONS)
@@ -78,7 +78,7 @@ class DeletionOperations(BaseResource):
                 if scope == 'reviewable' else None)
         raw = self._paginate("/deletion_requests", params, limit, offset,
                              privilege_mode=mode)
-        return [self._parse(r) for r in raw]
+        return ListResult.like(raw, [self._parse(r) for r in raw])
 
     def get(self, request_id: int) -> Dict:
         """Fetch a single deletion request by ID. Admin only.
@@ -172,7 +172,7 @@ class DeletionOperations(BaseResource):
                 if scope in (None, 'all') else None)
         raw = self._paginate('/deletion_audit', params, limit=limit,
                              privilege_mode=mode)
-        return [DeletionAuditLog(**r).model_dump() for r in raw]
+        return ListResult.like(raw, [DeletionAuditLog(**r).model_dump() for r in raw])
 
     def get_deleted(self, audit_id: int) -> Dict:
         """Get a single hard-deletion audit log entry by ID. Admin only.

@@ -10,7 +10,7 @@ Created and managed via /service_accounts — admin only.
 import logging
 from typing import Dict, List, Optional
 
-from .base import BaseResource
+from .base import BaseResource, ListResult
 from ..constants import DEFAULT_LIMIT, PLATFORM_ROLES
 from ..utils.identifiers import validate_mfid, validate_username
 
@@ -103,7 +103,7 @@ class ServiceAccountOperations(BaseResource):
             params['q'] = q
         raw = self._paginate('/service_accounts', params, limit, offset,
                              privilege_mode='elevated')
-        return [self._parse(record) for record in raw]
+        return ListResult.like(raw, [self._parse(record) for record in raw])
 
     def set_platform_role(self, service_account_mfid: str,
                           platform_role: str) -> Dict:

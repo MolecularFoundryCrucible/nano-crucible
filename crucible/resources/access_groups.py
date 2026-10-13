@@ -11,7 +11,7 @@ DeletionRequest, not a primary content resource.
 
 from typing import Dict, List, Optional
 
-from .base import BaseResource
+from .base import BaseResource, ListResult
 from ..constants import DEFAULT_LIMIT
 from ..models import JoinRequest
 
@@ -75,7 +75,7 @@ class AccessGroupOperations(BaseResource):
             params['requester_id'] = requester_id
         raw = self._paginate('/join_requests', params, limit, offset,
                              privilege_mode=privilege_mode)
-        return [self._parse(r) for r in raw]
+        return ListResult.like(raw, [self._parse(r) for r in raw])
 
     def get(self, request_id: int) -> Optional[Dict]:
         """Fetch a single join request by ID. Admin only.

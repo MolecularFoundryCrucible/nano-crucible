@@ -18,7 +18,7 @@ from typing import Optional, List, Dict, Sequence, Union
 import mfid
 
 # internal modules
-from .base import BaseResource
+from .base import BaseResource, ListResult
 from .capabilities import (
     AccessControlMixin, InstrumentAssignmentMixin, OwnershipMixin, ProjectAssignmentMixin)
 from ..constants import DATASET_FACET_FIELDS, DEFAULT_LIMIT, VISIBILITIES
@@ -234,7 +234,7 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
             )
         self._validate_filter_params(params, DATASET_LIST_PARAMS, '/datasets')
         raw = self._paginate('/datasets', params, limit, offset)
-        return [self._parse(d) for d in raw]
+        return ListResult.like(raw, [self._parse(d) for d in raw])
 
     def facets(self, field: str, limit: int = 100,
                sort: Optional[str] = None, direction: Optional[str] = None,
@@ -667,7 +667,7 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
             params['relationship_type'] = relationship_type
         raw = self._paginate(
             f"/datasets/{parent_mfid}/children", params, limit, offset)
-        return [self._parse(dataset) for dataset in raw]
+        return ListResult.like(raw, [self._parse(dataset) for dataset in raw])
 
     @_deprecated_parameter('child_dataset_id', 'child_mfid')
     @_deprecated_parameter('child_dataset_mfid', 'child_mfid')
@@ -692,7 +692,7 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
             params['relationship_type'] = relationship_type
         raw = self._paginate(
             f"/datasets/{child_mfid}/parents", params, limit, offset)
-        return [self._parse(dataset) for dataset in raw]
+        return ListResult.like(raw, [self._parse(dataset) for dataset in raw])
 
     # Special Processing Methods
     @_deprecated_parameter('dsid', 'dataset_mfid')

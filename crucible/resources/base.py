@@ -13,6 +13,26 @@ from typing import Optional, Sequence, Union
 from ..constants import DEFAULT_LIMIT
 from ..utils.deprecation import _deprecated, _deprecated_parameter
 
+class ListResult(list):
+    """A list of records that also says whether more matches exist.
+
+    ``has_more`` is True when the listing stopped at the requested limit
+    with further matches left. ``total`` is the full match count when the
+    server reported one, otherwise None.
+    """
+
+    def __init__(self, items=(), has_more: bool = False, total: Optional[int] = None):
+        super().__init__(items)
+        self.has_more = has_more
+        self.total = total
+
+    @classmethod
+    def like(cls, source, items) -> 'ListResult':
+        """Return items carrying source's has_more and total, if it has them."""
+        return cls(items, has_more=getattr(source, 'has_more', False),
+                   total=getattr(source, 'total', None))
+
+
 class BaseResource:
     """Base class for resource-specific operations.
 
@@ -302,7 +322,7 @@ class BaseResource:
         if limit is not None and limit < 0:
             raise ValueError("limit must be non-negative or None")
         if limit == 0:
-            return []
+            return ListResult()
 
         # Passed through only when set, so callers that never ask for a mode
         # keep emitting the exact same request as before.
@@ -330,12 +350,14 @@ class BaseResource:
                     break
                 items.extend(page)
                 cursor = resp.get('next_cursor')
-            return items if limit is None else items[:limit]
+            items = items if limit is None else items[:limit]
+            return ListResult(items, has_more=bool(cursor), total=first.get('total'))
 
         total = first['total']
         need = total - offset if limit is None else min(total - offset, limit)
+        has_more = offset + need < total
         if len(items) >= need:
-            return items[:need]
+            return ListResult(items[:need], has_more=has_more, total=total)
 
         remaining_offsets = range(offset + page_size, offset + need, API_PAGE_MAX)
 
@@ -350,7 +372,7 @@ class BaseResource:
             for page in pool.map(_fetch, remaining_offsets):
                 items.extend(page)
 
-        return items[:need]
+        return ListResult(items[:need], has_more=has_more, total=total)
 
     def search_metadata(self, q: str, limit: int = 20) -> list:
         """Full-text search across scientific metadata of all accessible resources.
