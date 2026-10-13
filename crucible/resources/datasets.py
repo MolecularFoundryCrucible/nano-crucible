@@ -390,7 +390,7 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
         scimd = None
         if scientific_metadata:
             logger.debug(f'Adding scientific metadata record for {dataset_mfid}')
-            scimd = self.update_scientific_metadata(dataset_mfid, scientific_metadata)
+            scimd = self._add_first_scientific_metadata(dataset_mfid, scientific_metadata)
 
 
         # add keywords

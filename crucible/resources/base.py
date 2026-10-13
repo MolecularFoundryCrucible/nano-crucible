@@ -434,6 +434,15 @@ class BaseResource:
             'post', f'/resources/{self._resource_mfid(resource_mfid)}/metadata',
             json=metadata, params={'overwrite': True})
 
+    def _add_first_scientific_metadata(self, resource_ref: str, metadata: dict) -> dict:
+        """Attach metadata to a record this client just created.
+
+        POST without overwrite needs only CREATE, so it works when the caller
+        created the record for someone else; a merging PATCH needs EDIT.
+        """
+        return self._request(
+            'post', f'/resources/{self._resource_mfid(resource_ref)}/metadata', json=metadata)
+
     @_deprecated_parameter('resource_id', 'resource_mfid')
     def update_scientific_metadata(self, resource_mfid: str, metadata: dict,
                                    overwrite: bool = False) -> dict:

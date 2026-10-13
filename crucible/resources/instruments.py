@@ -300,7 +300,7 @@ class InstrumentOperations(OwnershipMixin, AccessControlMixin, BaseResource):
 
         result = self._request('post', '/instruments', json=payload)
         if scientific_metadata:
-            self.update_scientific_metadata(result['unique_id'], scientific_metadata)
+            self._add_first_scientific_metadata(result['unique_id'], scientific_metadata)
         return self._parse(result)
 
     def update(self, unique_id: str, **kwargs: Any) -> Dict:

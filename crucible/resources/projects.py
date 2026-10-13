@@ -256,7 +256,8 @@ class ProjectOperations(OwnershipMixin, AccessControlMixin, BaseResource):
 
         result = self._request('post', "/projects", json=project_details)
         if scientific_metadata:
-            self.update_scientific_metadata(result['project_id'], scientific_metadata)
+            self._add_first_scientific_metadata(result.get('unique_id') or result['project_id'],
+                                                scientific_metadata)
         return result
 
     def get_users(self, project_id: str, limit: int = DEFAULT_LIMIT,

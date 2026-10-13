@@ -382,7 +382,7 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
             self._request('post', f"/samples/{sample_mfid}/children/{chd['unique_id']}")
 
         if scientific_metadata:
-            self.update_scientific_metadata(sample_mfid, scientific_metadata)
+            self._add_first_scientific_metadata(sample_mfid, scientific_metadata)
 
         return new_samp
 

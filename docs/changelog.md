@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Fixed
+
+- Creating a dataset, sample, project, or instrument with scientific metadata on someone else's behalf no longer fails with 403 for platform contributors.
+
 ## 3.3.0
 
 ### Added
