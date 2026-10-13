@@ -24,9 +24,20 @@ Commands that create projects, instruments, or service accounts check the caller
 
 Running `crucible` without a command starts the interactive shell. See the [CLI overview](index.md) for setup, shell completion, and interactive usage.
 
-List commands show 50 records by default, set by the `default_limit` config key; `--limit N` changes that for one command and `--all` fetches every match. The header shows how many matched (`Projects (50 of 6,770)`), and when records were left out a note below the table says how many and how to see them, suggesting filters and facets where they apply. With `--json` or when output is piped, that note goes to stderr so stdout stays valid data. Listings print directly by default. To open listings taller than the terminal in a pager instead, run `crucible config set pager auto`; the pager is `$CRUCIBLE_PAGER`, else `$PAGER`, else `less -FRX`, which keeps colors and clickable links. `--no-pager` (before the command) skips it for one command, and output that fits the screen, piped output, and `--json` are never paged. Search commands keep their own `--limit`, capped by the server, and suggest refining the query instead. In the interactive shell, `more` shows the next page of the last listing.
+### Listing
 
-Errors name what failed and, for common cases, the next step: a mistyped command or flag gets a "Did you mean ...?" suggestion, and API errors point to `crucible config init` for a rejected key, `crucible whoami` for missing permissions, or `read_timeout` for slow responses. With `--json`, the same hint appears as `error.hint`.
+- List commands show 50 records by default (the `default_limit` config key). `--limit N` changes that for one command, and `--all` fetches every match.
+- The header shows how many matched, for example `Projects (50 of 6,770)`. When records were left out, a note below the table says how many and how to see them.
+- With `--json` or piped output, that note goes to stderr, so stdout stays valid data.
+- In the interactive shell, `more` shows the next page of the last listing.
+- Search commands keep their own `--limit`, capped by the server.
+- Listings print directly. `crucible config set pager auto` opens long listings in `$CRUCIBLE_PAGER`, `$PAGER`, or `less -FRX`; `--no-pager` skips it for one command.
+
+### Errors
+
+- A mistyped command or flag ends with a "Did you mean ...?" suggestion.
+- API errors add a next step where one applies: `crucible config init` for a rejected key, `crucible whoami` for missing permissions, `read_timeout` for slow responses.
+- With `--json`, the hint appears as `error.hint`.
 
 `--json` is available for dataset, sample, and instrument `list` and `get`; project `list` and `get`; generic `get`; user `get`, `list`, and `search`; service-account `get` and `list`; account `show`; and dataset, sample, project, and instrument name or metadata searches. Collection and search commands return arrays, while singleton commands return objects.
 
@@ -83,7 +94,16 @@ crucible dataset create --project-id my-project --name "Planned experiment"
 
 Dataset creation accepts `--project-id` or `--project-mfid` and `--instrument-id` or `--instrument-mfid`. Matching ID and MFID forms may be supplied together. Interactive use remains ID-oriented, while MFID flags support integrations and automation.
 
-`sample create` and `dataset create` accept `--owner USER` (username, ORCID, MFID, or email) to create the record for someone else; platform contributors and administrators can name anyone, everyone else only themselves. `--ingestor` completes from the ingestion classes the API offers, cached for a day. Run on a terminal without `--input` or `--name`, `dataset create` prompts for the name, project (defaulting to the current project), measurement, session, and timestamp, like `sample create`; scripts and piped runs are not prompted. The `--type`, `--ingestor`, `--no-upload`, `--backend`, and `--access-note` options require at least one `--input` file. On a terminal, `dataset create` and `dataset add-file` show a progress line per file (percentage, size, rate, and time left) while it uploads. Uploads use signed multipart uploads and fall back to the legacy route when the server has them switched off. Both commands accept `--upload-protocol auto|signed|legacy` for one run (`crucible config set upload_protocol ...` changes the default) and `--no-ingest` to upload without requesting ingestion (request it later with `crucible file request-ingestion FILE_MFID`); `--no-ingest` cannot be combined with `--wait` or `--ingestor`. When a file already exists with different content, both ask whether to replace it on a terminal; `--replace` replaces without asking, and scripts without it fail with a message naming the file.
+### Creating records and uploading files
+
+- `sample create` and `dataset create` accept `--owner USER` (username, ORCID, MFID, or email). Platform contributors and administrators can name anyone; everyone else only themselves.
+- Run on a terminal without `--input` or `--name`, `dataset create` prompts for the name, project (default: the current project), measurement, session, and timestamp. Scripts are not prompted.
+- `--type`, `--ingestor`, `--no-upload`, `--backend`, `--access-note`, `--upload-protocol`, `--replace`, and `--no-ingest` require at least one `--input` file.
+- Uploads use signed multipart uploads, falling back to the legacy route when the server has them switched off. `--upload-protocol auto|signed|legacy` overrides the `upload_protocol` setting for one run.
+- On a terminal, `dataset create` and `dataset add-file` show a progress line per file.
+- `--no-ingest` uploads without requesting ingestion; request it later with `crucible file request-ingestion FILE_MFID`. It cannot be combined with `--wait` or `--ingestor`.
+- When a file exists with different content, both commands ask whether to replace it on a terminal. `--replace` replaces without asking; scripts without it fail.
+- `--ingestor` completes from the ingestion classes the API offers, cached for a day.
 
 Use `dataset list --project-id PROJECT --project-scope shared` to show resources shared with a project but assigned elsewhere or unassigned. Use `--project-scope all` to combine assigned and shared resources. `--project-mfid` accepts the canonical project MFID instead of a project ID. The interactive shell completes both identifiers through project search. Human-readable scoped results include the resource's actual project and its `assigned` or `shared` relation.
 

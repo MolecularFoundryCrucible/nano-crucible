@@ -6,72 +6,78 @@
 
 ### Added
 
-- User administration: `client.users.set_platform_role()` and `revoke_api_keys()` in Python, plus `user set-role` and `user revoke-keys` in the CLI for administrators, in any privilege mode. `user get` shows the platform role and API key status to administrators.
-- `client.users.list()` accepts `q`, `search_fields`, name, role, account-type, sort, and direction filters, and `user list` gains the matching options with Email and Platform role columns for administrators.
-- `client.projects.list()` accepts `sort`/`direction` and repeatable `member_ref` with `member_role`; `client.instruments.list()` accepts `sort`/`direction`.
-- `project list` gains `--sort`, `--direction`, `--member`, and `--member-role`; `instrument list` gains `--sort`/`--direction`.
-- Project and instrument lists and details show the caller's role, colored like the member tables (`owner` on instruments rather than the project-`lead` alias).
-- `user list-projects` shows the listed user's role in each project and gains `--role`, `--sort`, and `--direction`; `client.users.get_projects()` accepts the matching `role`, `sort`, `direction`, and `include_metadata`.
-- Dataset and sample lists accept sort, direction, visibility, affiliation, owner, and creation or modification time-range filters (a bare date covers the whole day, a time without an offset is UTC) in the Python client and CLI, plus `--name`, `--missing FIELD`, `--sample-mfid`/`--dataset-mfid`, `--description` (samples), and an `instrument_id` slug on dataset `list()`, `count()`, and `facets()` (`dataset facets --instrument-id` in the CLI).
-- `client.datasets.facets()`, `client.samples.facets()`, and the matching `dataset facets` and `sample facets` CLI commands group results by a field and return value counts, and accept the same filters as the list commands.
-- `client.datasets.assign_instrument()` assigns or reassigns a dataset's registered instrument by slug or MFID.
-- Service-account administration: `get_admin()`, `list_admin()`, and `set_platform_role()` in Python, plus `service-account show` and `service-account set-role` in the CLI.
-- Deletion request and audit lists accept scope, project, sort, and direction filters, deletion request details show whether the caller can review them, and `crucible deletion list` defaults to the `reviewable` scope for reviewers.
-- A `privilege_mode` client keyword, `privilege_mode` config key, and global `--elevate`/`-E` CLI flag select normal or elevated access; admin-only operations request elevation per call regardless. The default is unchanged (administrators run elevated) and will become `normal` in a future release.
-- The interactive shell toggles elevation with `elevate on|off`, runs one command elevated with `elevate COMMAND`, and shows an `ELEVATED` toolbar badge, and one-shot commands print a notice when elevation comes from configuration rather than the flag.
-- `client.authorization`, `client.capabilities`, and `client.can_elevate` expose the caller's platform role and account capabilities as typed models, read once from `/account/profile` and re-read with `client.refresh_profile()`.
-- `crucible whoami` shows the caller's platform role, privilege mode, and account capabilities.
+- User administration: `users.set_platform_role()`, `users.revoke_api_keys()`, `user set-role`, and `user revoke-keys`.
+- `users.list()` and `user list` filter by text, name, role, and account type, and sort.
+- Project and instrument lists sort with `sort`/`direction` (`--sort`/`--direction`).
+- Project lists filter by member with `member_ref`/`member_role` (`--member`/`--member-role`).
+- Project and instrument lists and details show the caller's role.
+- `user list-projects` shows the listed user's role and filters by `--role`.
+- Dataset and sample lists filter by visibility, owner, creation or modification time, missing fields, and linked records, and sort.
+- `datasets.facets()`, `samples.facets()`, `dataset facets`, and `sample facets` count records per field value.
+- Dataset lists, counts, and facets filter by instrument slug (`instrument_id`, `--instrument-id`).
+- `datasets.assign_instrument()` sets a dataset's instrument.
+- Instrument maintainers: `instruments.get_users()`, `add_user()`, `remove_user()`, `update_user_role()`, and the matching `instrument` commands.
+- Instrument lists filter by your role (`affiliation`, `--mine`) and by instrument fields.
 - `instrument update --instrument-id` renames an instrument.
-- Instrument maintainers: `client.instruments.get_users()`, `add_user()`, `remove_user()`, and `update_user_role()`, `get(..., include_members=True)` with a typed `members` field, and the `instrument list-users`, `add-user`, `remove-user`, and `update-user-role` commands.
-- `client.instruments.list()` and `search()` accept `affiliation` (`owner`, `maintainer`), `list()` accepts the exact-match instrument filters, and `instrument list` gains `--mine` and filter options.
-- `client.print.barcode()` and `crucible print barcode` publish label-printer jobs and confirm whether they printed, without local MQTT credentials.
-- `add_file()` and `create()` upload through the API's signed multipart flow, falling back to the legacy route when the server has it switched off; `upload_protocol` (`auto`, `signed`, `legacy`) chooses the route through the config key, `CRUCIBLE_UPLOAD_PROTOCOL`, a keyword, `client.upload_protocol`, or `--upload-protocol`.
-- Uploads report progress through a `progress` callback or `client.upload_progress`; `dataset create` and `dataset add-file` show a progress line per file and accept `--no-ingest` (or `client.request_ingestion = False`) to skip the ingestion request.
-- `client.files.replace()` and `crucible file replace` replace a file's content in place, keeping its MFID and filename, with an optional `etag` check; `add_file(replace=True)` and `--replace` on `dataset create` and `dataset add-file` replace a same-named file with different content, which the CLI otherwise asks about on a terminal.
-- `sample create` and `dataset create` accept `--owner USER` to create a record on someone else's behalf, and parsers pass an `owner` attribute through to the dataset.
-- `files.get_download_link()` and `datasets.get_download_links()` accept `disposition="inline"` for browser display.
-- List methods return a `ListResult`, a `list` that also carries `has_more`, the server's `total`, and `next_cursor` or `next_offset`, and accept `cursor=` to resume; the interactive shell's `more` shows the next page of the last listing.
-- Setting `pager` to `auto` opens listings taller than the terminal in a pager (`$CRUCIBLE_PAGER`, `$PAGER`, or `less -FRX`); it is off by default, and `--no-pager` skips it for one command.
-- A mistyped command, subcommand, or flag ends with a "Did you mean ...?" suggestion, and API errors add a next step for rejected keys, missing permissions, unknown identifiers, options an older server does not know, timeouts, and unreachable servers.
-- The interactive shell completes measurement, session, data format, and sample type values from facet counts in the current or typed project, facet field names, `--instrument-id`, `--sample-mfid`/`--dataset-mfid`, and the instrument member commands.
-- Shell completion matches project IDs and facet values fuzzily (`xt` offers `xrd-titan`), ranked by how closely they match; commands, flags, and MFIDs still complete by prefix.
-- `--ingestor` on `dataset create`, `dataset add-file`, and `file request-ingestion` completes from the ingestion classes the API offers, in the shell and with shell tab completion, cached for a day; the built-in `AVAILABLE_INGESTORS` fallback now matches the API's list.
-- The interactive shell lists pending deletion reviews and join requests at startup and on `refresh`.
-- Project, instrument, and service-account creation refuse up front when the caller's account capabilities do not allow it.
+- Service-account administration: `service_accounts.get_admin()`, `list_admin()`, `set_platform_role()`, and `service-account set-role`.
+- Deletion request and audit lists filter by scope and project, and sort.
+- `deletion list` shows reviewers their review queue by default.
+- Privilege mode: the `privilege_mode` keyword and config key, and the `--elevate`/`-E` flag. Administrators still run elevated by default; this becomes `normal` in a future release.
+- Shell: `elevate on|off`, `elevate COMMAND`, and an `ELEVATED` toolbar badge.
+- `client.authorization`, `client.capabilities`, `client.can_elevate`, and `client.refresh_profile()`.
+- `crucible whoami` shows your platform role, privilege mode, and capabilities.
+- `print.barcode()` and `crucible print barcode` print sample labels.
+- Uploads use the API's signed multipart flow, chosen with `upload_protocol` (`auto`, `signed`, `legacy`) or `--upload-protocol`.
+- Upload progress: a `progress` callback, `client.upload_progress`, and a progress line in the CLI.
+- `--no-ingest` on `dataset create` and `dataset add-file` uploads without requesting ingestion.
+- `files.replace()` and `crucible file replace` replace a file's content, keeping its MFID.
+- `add_file(replace=True)` and `--replace` replace a same-named file with different content.
+- `sample create` and `dataset create` accept `--owner USER`.
+- Download links accept `disposition="inline"`.
+- List methods return a `ListResult` with `has_more`, `total`, and a continuation, and accept `cursor=`.
+- Shell: `more` shows the next page of the last listing.
+- An optional pager for long listings (`config set pager auto`, `--no-pager`).
+- "Did you mean ...?" suggestions for mistyped commands and flags.
+- Next-step hints on common API errors.
+- Shell completion of facet values, facet fields, `--instrument-id`, and MFID flags.
+- Fuzzy shell completion of project IDs and facet values.
+- `--ingestor` completes from the API's ingestion classes.
+- The shell lists pending deletion reviews and join requests at startup.
+- Creating projects, instruments, and service accounts fails early without the capability.
 
 ### Changed
 
-- List commands show 50 records by default (the `default_limit` setting, previously 100), accept `--all`, show the total match count in the header, and say below the table how many records were left out and how to see them; the note goes to stderr with `--json` or piped output.
-- `dataset create` without `--input` or `--name` prompts for the dataset's fields on a terminal, like `sample create`, instead of creating an unnamed dataset.
-- `dataset list` and `sample list` print oldest to newest, follow `--sort`/`--direction` instead of re-sorting by name, and show a flat table unless `--group-by` is given; without a project and no current project they list every accessible project instead of failing, and `--all-projects` ignores the current project.
-- The interactive shell opens with a session summary beside the Crucible mark: version, user and platform role, API URL, current project, access mode, and pending reviews.
-- Interactive shell colors keep the brand dark blue on 256- and 16-color terminals instead of turning grey, and true color is detected from more terminals.
-- The `support` platform role is no longer offered or accepted: `service-account set-role` and `user set-role` accept only `none`, `contributor`, and `admin`.
-- `service-account list` shows each account's platform role and accepts `-q` to filter, using the administrator listing.
-- `service-account get` shows the platform role and API key status to administrators, `--groups` and `list-access-groups` name each group's project or instrument, and `show` is now an alias for `get`.
-- Identifying an instrument by display name is deprecated: `dataset create --instrument`, `crucible upload --instrument`, `dataset list --instrument`, and `instrument_name` alone in `datasets.create()` or `datasets.list()` warn. Use `--instrument-id`/`--instrument-mfid`, now also on `upload` and `dataset list`.
-- Instrument operations accept an instrument slug as well as an MFID.
-- Project membership mutations send the username or ORCID straight into the `{user_ref}` path segment instead of looking it up first; email inputs still resolve to the canonical unique_id before the request.
-- `datasets.reassign_project()` and `samples.reassign_project()` accept `project_mfid` (preferred over `project_id`), and the result carries `resource_mfid`, `previous_project_mfid`, and `new_project_mfid`. `dataset reassign-project` and `sample reassign-project` send the MFID body when the target is an MFID.
-- The interactive shell hides service-account commands from completion for callers who cannot manage them, and `refresh` now re-reads permissions.
-- Unrecognized dataset and sample list filters now raise a local `ValueError` naming the closest valid parameter instead of a server-side 422.
-- The minimum supported Python version is now 3.10.
-- The configuration file and its directory are now created with owner-only permissions, and existing files are restricted when a value is set or unset.
-- Installing the package no longer pulls in `ipywidgets` or `python-dotenv`.
+- List commands show 50 records by default (was 100), accept `--all`, and report how many were left out.
+- `dataset create` prompts for missing fields on a terminal instead of creating an unnamed dataset.
+- `dataset list` and `sample list` print oldest to newest and follow `--sort`.
+- `dataset list` and `sample list` without a project list every accessible project.
+- The shell opens with a session summary beside the Crucible mark.
+- Shell colors keep the brand blue on 256- and 16-color terminals.
+- The `support` platform role is removed.
+- `service-account list` and `get` show platform roles and key status to administrators; `show` is an alias for `get`.
+- Identifying instruments by display name is deprecated; use `--instrument-id` or `--instrument-mfid`.
+- Instrument operations accept a slug as well as an MFID.
+- `reassign_project()` accepts `project_mfid` and reports MFIDs.
+- The shell hides service-account commands from callers who cannot use them.
+- Unknown dataset and sample list filters raise a local `ValueError`.
+- Python 3.10 or newer is required.
+- The configuration file is readable only by its owner.
+- `ipywidgets` and `python-dotenv` are no longer dependencies.
 
 ### Fixed
 
-- The interactive shell's `reload` no longer crashes when the shell was started with `python -m crucible.cli` or through the Windows `crucible.exe` launcher, and restarts cleanly on Windows.
-- `edit` commands work on Windows without configuration: they default to Notepad instead of nano, recognize `code.cmd` and `.exe` editors when adding wait flags, start batch-file editors such as VS Code's, and add the flags Notepad++ needs to wait.
-- Project ownership transfer, access commands, and scientific metadata updates accept a project ID; they previously failed with 404 unless given the project MFID.
-- Renaming a project with `project update` or `project edit` updates the saved current project when it named the old ID.
-- Waiting for ingestion (`files.request_ingestion(wait_for_response=True)`, `add_file(wait_for_ingestion_response=True)`, and `create(wait_for_ingestion_response=True)`) returns the request in its final state instead of the initial `requested` record.
-- Listing calls that page by offset no longer stop at the first 1000 records when the server also reports an empty `next_cursor`.
-- Files uploaded through the multipart upload service show and download under their recorded filename instead of a storage path, and count as ingested regardless of bucket.
-- Downloads refuse file names that would write outside the target folder, and `dataset download` warns about files the server will not provide a link for instead of skipping them silently.
-- Errors for files with an invalid stored location, and for edits to the storage path, size, or checksum of GCS files, explain what happened.
-- The API reference now documents the ownership, access, and project-reassignment methods shared by datasets, samples, projects, and instruments.
-- The interactive shell no longer records `config set api_key` or `API_KEY=` lines in its history file, and keeps that file readable only by its owner.
+- Shell `reload` works when started with `python -m crucible.cli` and on Windows.
+- `edit` commands work on Windows without configuration.
+- Project ownership, access, and metadata commands accept a project ID.
+- Renaming a project updates the saved current project.
+- Waiting for ingestion returns the request's final state.
+- Offset-paged listings no longer stop at 1000 records.
+- Files from multipart uploads show and download under their filename.
+- Downloads refuse paths outside the target folder.
+- `dataset download` warns about files it cannot fetch.
+- Storage errors explain what happened.
+- The API reference documents shared ownership, access, and project methods.
+- The shell history no longer stores API keys.
 
 
 ## 3.2.1
