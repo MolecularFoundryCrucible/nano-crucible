@@ -74,6 +74,8 @@ def _error_details(error):
                 entry['field'] = '.'.join(location)
             if item.get('type'):
                 entry['type'] = str(item['type'])
+            if item.get('code'):
+                entry['code'] = str(item['code'])
             details.append(entry)
         else:
             details.append({'message': str(item)})
@@ -92,7 +94,7 @@ def _error_hint(error_type, status, details):
     if status == 404:
         return "Nothing was found for that identifier; check it, or try `crucible get ID`."
     messages = ' '.join(item.get('message', '') for item in details)
-    if status == 409 and 'storage location is not valid' in messages:
+    if status == 409 and any(item.get('code') == 'storage_location_invalid' for item in details):
         return ("The server will not serve this file because its stored location is not "
                 "valid. Ask a Crucible administrator to check the file record.")
     if status == 422 and ('assigned by the upload API' in messages

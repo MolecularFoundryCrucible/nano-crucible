@@ -161,8 +161,7 @@ def test_rejected_part_aborts_the_upload(source, storage):
     assert f'{BASE}/complete' not in api.paths('post')
 
 
-@pytest.mark.parametrize('error', [http_error(404, 'Not Found'),
-                                   http_error(503, 'New multipart uploads are disabled', '60')])
+@pytest.mark.parametrize('error', [http_error(503, 'New multipart uploads are disabled', '60')])
 def test_auto_falls_back_to_the_legacy_route(source, monkeypatch, error):
     api = FakeApi()
     api.fail('post', f'{BASE}/initiate', error)
@@ -176,9 +175,19 @@ def test_auto_falls_back_to_the_legacy_route(source, monkeypatch, error):
     assert api.paths('post').count(f'{BASE}/initiate') == 1
 
 
-def test_signed_protocol_does_not_fall_back(source, monkeypatch):
+def test_missing_route_is_an_error_not_a_fallback(source, monkeypatch):
     api = FakeApi()
     api.fail('post', f'{BASE}/initiate', http_error(404, 'Not Found'))
+    monkeypatch.setattr(dispatch, 'upload_file_gcs_multipart',
+                        lambda *a, **k: pytest.fail('fell back'))
+
+    with pytest.raises(requests.HTTPError):
+        dispatch.upload_file_gcs(api, DSID, source)
+
+
+def test_signed_protocol_does_not_fall_back(source, monkeypatch):
+    api = FakeApi()
+    api.fail('post', f'{BASE}/initiate', http_error(503, 'New multipart uploads are disabled', '60'))
     monkeypatch.setattr(dispatch, 'upload_file_gcs_multipart',
                         lambda *a, **k: pytest.fail('fell back'))
 
@@ -244,31 +253,6 @@ def test_progress_line_renders_only_on_a_terminal():
     out = tty.getvalue()
     assert 'data.bin' in out and ' 50%' in out and '100%' in out
     assert out.endswith('\n') and out.count('\n') == 1
-
-
-def _existing(api, sha):
-    api.fail('post', f'{BASE}/initiate', http_error(409, 'Filename already exists'))
-    api.datasets = SimpleNamespace(list_files=lambda dsid: [
-        {'mfid': 'old', 'filename': 'data.bin', 'size': len(DATA), 'sha256_hash': sha}])
-
-
-def test_same_file_again_returns_the_existing_record(source, storage):
-    import hashlib
-    api = FakeApi()
-    _existing(api, hashlib.sha256(DATA).hexdigest())
-
-    record, existing = sm.upload_file_signed_multipart(api, DSID, source)
-
-    assert existing is True and record['mfid'] == 'old'
-    assert storage.puts == []
-
-
-def test_same_name_with_new_content_is_refused(source, storage):
-    api = FakeApi()
-    _existing(api, 'f' * 64)
-
-    with pytest.raises(RuntimeError, match='different content'):
-        sm.upload_file_signed_multipart(api, DSID, source)
 
 
 def test_client_upload_protocol_overrides_the_setting(source, monkeypatch):
@@ -401,9 +385,9 @@ def test_replace_needs_signed_uploads(source, monkeypatch):
         dispatch.upload_file_gcs(FakeApi(), DSID, source, protocol='legacy', replace=True)
 
     api = FakeApi()
-    api.fail('post', f'{BASE}/initiate', http_error(404, 'Not Found'))
+    api.fail('post', f'{BASE}/initiate', http_error(503, 'New multipart uploads are disabled', '60'))
     monkeypatch.setattr(dispatch, 'upload_file_gcs_multipart', lambda *a, **k: pytest.fail('legacy'))
-    with pytest.raises(RuntimeError, match='cannot replace'):
+    with pytest.raises(RuntimeError, match='switched off'):
         dispatch.upload_file_gcs(api, DSID, source, replace=True)
 
 

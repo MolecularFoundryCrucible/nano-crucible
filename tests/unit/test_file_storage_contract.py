@@ -57,7 +57,8 @@ def http_error(status, detail):
 
 
 @pytest.mark.parametrize('status, detail, fragment', [
-    (409, 'File storage location is not valid: outside_dataset', 'stored location'),
+    (409, {'code': 'storage_location_invalid', 'reason': 'outside_dataset',
+           'message': 'File storage location is not valid: outside_dataset'}, 'stored location'),
     (422, 'storage_path is assigned by the upload API for GCS files', 'set by the upload'),
     (422, 'size and sha256_hash are determined by the stored object for GCS files',
      'set by the upload'),

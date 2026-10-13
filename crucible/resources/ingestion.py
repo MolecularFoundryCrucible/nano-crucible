@@ -40,13 +40,11 @@ class IngestionOperations(BaseResource):
         Returns:
             List[Dict]: IngestionRequest records
         """
-        # Servers that predate dataset_mfid/file_mfid ignore them, so the
-        # deprecated names are sent too until every deployment accepts the new ones.
         params = {}
         if dsid:
-            params['dataset_mfid'] = params['dataset_id'] = dsid
+            params['dataset_mfid'] = dsid
         if file_id:
-            params['file_mfid'] = params['file_id'] = file_id
+            params['file_mfid'] = file_id
         return self._paginate('/ingestion_requests', params, limit=limit, offset=offset, cursor=cursor)
 
     def get(self, request_id: str) -> Dict:

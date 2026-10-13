@@ -47,8 +47,8 @@ def upload_file_gcs(client, dsid: str, file_path: str,
         protocol:      "auto", "signed", or "legacy" for multipart uploads;
                        defaults to client.upload_protocol, then the
                        upload_protocol setting. "auto" falls
-                       back to the legacy token route when the server does
-                       not offer signed uploads.
+                       back to the legacy token route when the server has
+                       signed uploads switched off.
         progress:      Called as progress(filename, bytes_done, total) by
                        signed uploads; defaults to client.upload_progress.
         replace:       Replace the content of an existing file with this
@@ -74,8 +74,8 @@ def upload_file_gcs(client, dsid: str, file_path: str,
             return upload_file_signed_multipart(client, dsid, file_path, max_workers=max_workers,
                                                 progress=progress, replace=True)
         except SignedMultipartUnavailable as error:
-            raise RuntimeError("This server cannot replace files yet. Delete the old file "
-                               "and add the new one instead.") from error
+            raise RuntimeError("Signed multipart uploads are switched off on this server, "
+                               "and replacing a file needs them.") from error
     use_signed = protocol == 'signed' or (
         protocol == 'auto' and not getattr(client, '_signed_uploads_unavailable', False))
     if use_signed:

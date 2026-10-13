@@ -800,7 +800,7 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
             upload_protocol: "auto", "signed", or "legacy" for multipart uploads;
                 defaults to the upload_protocol setting. "auto" uses signed
                 upload URLs, falling back to the legacy token route when the
-                server does not offer them.
+                server has them switched off.
             progress: Called as progress(filename, bytes_done, total) while a
                 signed upload sends its parts.
             replace: If the dataset already has this filename with different

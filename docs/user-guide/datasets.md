@@ -228,7 +228,7 @@ old = next(f for f in client.datasets.list_files(dataset_mfid) if f["filename"] 
 client.files.replace(old["mfid"], "results.dat", etag=old["etag"])
 ```
 
-`add_file(..., replace=True)` does the same when the filename already exists with different content; without it, `add_file()` raises `FileExistsWithDifferentContent`, so nothing is ever replaced silently. Re-adding identical content returns the existing record. Replacing needs a server with signed multipart uploads; on other servers, delete the old file with `client.files.delete()` and add the new one. Ingestion is requested again after a replace unless `skip_ingestion=True`.
+`add_file(..., replace=True)` does the same when the filename already exists with different content; without it, `add_file()` raises `FileExistsWithDifferentContent`, so nothing is ever replaced silently. Re-adding identical content returns the existing record. Replacing needs signed multipart uploads, so it fails if the server has them switched off. Ingestion is requested again after a replace unless `skip_ingestion=True`.
 
 In the CLI, `crucible file replace FILE_MFID -i results.dat` asks for confirmation (skip it with `--yes`), and `dataset add-file` asks before replacing a file that exists with different content, or replaces without asking with `--replace`.
 
@@ -267,8 +267,8 @@ The `upload_protocol` setting chooses the route:
 
 | Value | Behavior |
 | --- | --- |
-| `auto` (default) | Signed multipart uploads, falling back to the legacy token-based route when the server does not offer them |
-| `signed` | Signed multipart uploads only; fails on a server without them |
+| `auto` (default) | Signed multipart uploads, falling back to the legacy token-based route when the server has them switched off |
+| `signed` | Signed multipart uploads only; fails when the server has them switched off |
 | `legacy` | The legacy token-based route only |
 
 Set it with `crucible config set upload_protocol legacy`, the `CRUCIBLE_UPLOAD_PROTOCOL` environment variable, `--upload-protocol` on `dataset create` and `dataset add-file`, `client.upload_protocol`, or `add_file(..., upload_protocol="legacy")`. `--no-ingest` (or `client.request_ingestion = False`) uploads without requesting ingestion. `multipart=False` keeps using the sequential resumable route. Pass `progress=callback` to `add_file()`, or set `client.upload_progress`, to receive `callback(filename, bytes_done, total)` while parts upload; the CLI uses it to show a progress line.

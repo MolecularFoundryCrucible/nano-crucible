@@ -37,7 +37,7 @@ Progress = Callable[[str, int, int], None]
 
 
 class SignedMultipartUnavailable(Exception):
-    """The server does not offer signed multipart uploads for this file."""
+    """Signed multipart uploads cannot be used: switched off, or an empty file."""
 
 
 class FileExistsWithDifferentContent(RuntimeError):
@@ -213,7 +213,7 @@ class _Upload:
             if existing.get('sha256_hash') == sha256_hash and existing.get('size') == self.size:
                 logger.info(f"{self.filename} already exists in the dataset, skipping upload")
                 return existing, True
-            file_mfid = taken.file_mfid or existing.get('mfid')
+            file_mfid = taken.file_mfid
             etag = taken.etag or existing.get('etag')
             if not self.replace:
                 raise FileExistsWithDifferentContent(self.filename, file_mfid, etag)
@@ -251,15 +251,12 @@ class _Upload:
             return _api(self.client, 'post', path, json=body, headers=headers)
         except requests.HTTPError as error:
             status = getattr(error.response, 'status_code', None)
-            if (status in (404, 405) and _detail(error) in ('', 'Not Found', 'Method Not Allowed')
-                    or _disabled(error)):
+            if _disabled(error):
                 raise SignedMultipartUnavailable(
-                    "This server does not offer signed multipart uploads.") from error
-            if status == 409 and (_detail_code(error) == 'filename_exists'
-                                  or 'filename already exists' in _detail(error).lower()):
+                    "Signed multipart uploads are switched off on this server.") from error
+            if status == 409 and _detail_code(error) == 'filename_exists':
                 detail = _detail_payload(error)
-                detail = detail if isinstance(detail, dict) else {}
-                raise _FilenameTaken(detail.get('file_mfid'), detail.get('etag')) from error
+                raise _FilenameTaken(detail['file_mfid'], detail.get('etag')) from error
             if status == 412 and _detail_code(error) == 'etag_mismatch':
                 raise RuntimeError(
                     f"{self.filename} changed since it was read; nothing was replaced. "
@@ -276,12 +273,7 @@ class _Upload:
         The server only deduplicates hashes it has verified, so an identical
         re-upload is recognized from this record, as the legacy route does.
         """
-        if taken.file_mfid:
-            return self.client.files.get(taken.file_mfid)
-        for record in self.client.datasets.list_files(self.dsid):
-            if record.get('filename') == self.filename:
-                return record
-        return {}
+        return self.client.files.get(taken.file_mfid)
 
     def _acknowledged_parts(self) -> set:
         acknowledged, marker = set(), None
@@ -380,7 +372,7 @@ def upload_file_signed_multipart(client, dsid: str, file_path: str,
         Tuple[Dict, bool]: (AssociatedFileRead, was_existing).
 
     Raises:
-        SignedMultipartUnavailable: The server lacks the flow, has it disabled,
+        SignedMultipartUnavailable: The server has signed uploads switched off,
             or the file is empty.
         FileExistsWithDifferentContent: The filename exists with other content
             and replace is False.
