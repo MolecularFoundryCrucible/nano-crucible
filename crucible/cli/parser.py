@@ -22,10 +22,29 @@ class SuggestingArgumentParser(argparse.ArgumentParser):
         return super().parse_known_args(args, namespace)
 
     def error(self, message):
+        unknown = self._unknown_command(message)
+        if unknown is not None:
+            suggestion = _closest(unknown, list(self._subcommands().choices))
+            tail = (f"Did you mean '{suggestion}'?" if suggestion
+                    else f"Run '{self.prog} --help' to see them.")
+            self.exit(2, f"{self.prog}: error: '{unknown}' is not a {self.prog} command. {tail}\n")
         suggestion = self._suggestion(message)
         if suggestion:
             message = f"{message}\nDid you mean '{suggestion}'?"
         super().error(message)
+
+    def _subcommands(self):
+        return next((action for action in self._actions
+                     if isinstance(action, argparse._SubParsersAction)), None)
+
+    def _unknown_command(self, message):
+        """The mistyped word when message rejects a subcommand name, else None."""
+        subcommands = self._subcommands()
+        match = _INVALID_CHOICE.search(message)
+        if subcommands is None or match is None:
+            return None
+        name = argparse._get_action_name(subcommands)
+        return match.group(1) if message.startswith(f"argument {name}:") else None
 
     def _suggestion(self, message):
         match = _INVALID_CHOICE.search(message)
@@ -47,8 +66,7 @@ class SuggestingArgumentParser(argparse.ArgumentParser):
         """The deepest subcommand parser reached by the remembered command line."""
         parser = self
         for token in getattr(self, '_argv', []):
-            subparsers = next((action for action in parser._actions
-                               if isinstance(action, argparse._SubParsersAction)), None)
+            subparsers = parser._subcommands()
             if subparsers is None:
                 break
             if token in subparsers.choices:

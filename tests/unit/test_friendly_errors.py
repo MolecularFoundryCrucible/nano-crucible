@@ -30,21 +30,39 @@ def error_for(argv, capsys):
 
 
 def test_mistyped_command_suggests_the_closest(capsys):
-    assert "Did you mean 'dataset'?" in error_for(['datset'], capsys)
+    err = error_for(['datset'], capsys)
+
+    assert err == "crucible: error: 'datset' is not a crucible command. Did you mean 'dataset'?\n"
 
 
 def test_mistyped_subcommand_suggests_the_closest(capsys):
-    assert "Did you mean 'list'?" in error_for(['dataset', 'lsit'], capsys)
+    err = error_for(['dataset', 'lsit'], capsys)
+
+    assert err == ("crucible dataset: error: 'lsit' is not a crucible dataset command. "
+                   "Did you mean 'list'?\n")
+
+
+def test_unknown_command_points_to_help(capsys):
+    err = error_for(['zzzzzz'], capsys)
+
+    assert err == ("crucible: error: 'zzzzzz' is not a crucible command. "
+                   "Run 'crucible --help' to see them.\n")
+
+
+def test_invalid_option_values_keep_their_choices(capsys):
+    parser = SuggestingArgumentParser(prog='crucible')
+    parser.add_argument('--scope', choices=['assigned', 'shared', 'all'])
+    with pytest.raises(SystemExit):
+        parser.parse_args(['--scope', 'shard'])
+
+    err = capsys.readouterr().err
+    assert "choose from" in err and "Did you mean 'shared'?" in err
 
 
 def test_mistyped_flag_suggests_one_from_that_command(capsys):
     err = error_for(['dataset', 'list', '--limt', '5'], capsys)
 
     assert "Did you mean '--limit'?" in err
-
-
-def test_unrelated_typo_gets_no_suggestion(capsys):
-    assert 'Did you mean' not in error_for(['zzzzzz'], capsys)
 
 
 def http_error(status, detail=None):
