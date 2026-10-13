@@ -41,11 +41,11 @@ class CrucibleCompleter(Completer):
     def _search_users(self, query):
         """Search users by name/username via the public search endpoint (no admin required).
 
-        Cached per exact query string for the session — cheap and avoids
+        Cached per exact query string for the session, cheap and avoids
         re-hitting the API on every keystroke once a prefix was searched.
 
         Returns [(identifier, name, orcid), ...] where identifier is the
-        username if set, else the ORCID (always present, server-assigned) —
+        username if set, else the ORCID (always present, server-assigned),
         so a matched user is never silently dropped just for lacking a
         username. Callers can tell which case they're in: identifier ==
         orcid means there's no username.
@@ -546,7 +546,7 @@ class CrucibleCompleter(Completer):
                         display_meta=shell_html(f'{icon} <ansibrightblack>{_html.escape(name)}</ansibrightblack>'),
                     )
             return True
-        # ID already filled — complete flags from the top-level parser
+        # ID already filled: complete flags from the top-level parser
         parser = self._top.get(resource)
         if parser:
             current_word = '' if trailing_space else words[-1]
@@ -560,7 +560,7 @@ class CrucibleCompleter(Completer):
         if len(words) < 2:
             return False
         # Complete the USER positional (ORCID/username/email) by username search.
-        # 'search' is included too — TERM is free text, but showing live
+        # 'search' is included too: TERM is free text, but showing live
         # matches while typing is useful preview, not just identifier lookup.
         _USER_SUBS = {'get', 'update', 'edit', 'add-access-group', 'remove-access-group',
                       'list-datasets', 'check-access', 'list-access-groups', 'list-projects',
@@ -715,7 +715,7 @@ class CrucibleCompleter(Completer):
             return False
         span = self._multiword_arg(text, 2)
         if span is None:
-            # Positional already filled (a flag followed) — fall through
+            # Positional already filled (a flag followed): fall through
             # to flag completion in _complete_generic().
             return False
         arg_text, query = span

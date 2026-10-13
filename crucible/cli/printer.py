@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Print subcommand — publish label-printer jobs.
+Print subcommand: publish label-printer jobs.
 """
 
 import sys
