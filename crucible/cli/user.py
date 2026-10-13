@@ -713,10 +713,10 @@ Examples:
 
 def _execute_set_role(args):
     from crucible.config import get_client
-    from .helpers import require_capability, resolve_user_id
+    from .helpers import require_elevation, resolve_user_id
     try:
         client = get_client()
-        require_capability(client, 'can_manage_users', 'change user platform roles')
+        require_elevation(client, 'change user platform roles')
         user_id = resolve_user_id(client, args.user)
         user = client.users.set_platform_role(user_id, args.platform_role)
         if getattr(args, 'json', False):
@@ -755,10 +755,10 @@ Examples:
 
 def _execute_revoke_keys(args):
     from crucible.config import get_client
-    from .helpers import prompt_confirm, require_capability, resolve_user_id
+    from .helpers import prompt_confirm, require_elevation, resolve_user_id
     try:
         client = get_client()
-        require_capability(client, 'can_manage_users', 'revoke user API keys')
+        require_elevation(client, 'revoke user API keys')
         user_id = resolve_user_id(client, args.user)
         confirmed = args.yes or prompt_confirm(
             f"Revoke every API key held by {args.user}?",

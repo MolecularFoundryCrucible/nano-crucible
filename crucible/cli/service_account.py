@@ -175,15 +175,10 @@ Examples:
 
 def _execute_create(args):
     from crucible.config import get_client
-    from .helpers import prompt_optional, prompt_username, require_capability
+    from .helpers import prompt_optional, prompt_username, require_elevation
     from ..utils.identifiers import validate_mfid, validate_username
 
-    # These calls always request elevation, so an administrator is permitted
-    # even without the standing capability.
-    gate = get_client()
-    if not gate.can_elevate:
-        require_capability(gate, 'can_manage_service_accounts',
-                           'manage service accounts')
+    require_elevation(get_client(), 'manage service accounts')
 
     username = getattr(args, 'username', None)
     unique_id = getattr(args, 'unique_id', None)
@@ -230,9 +225,11 @@ Examples:
 
 def _execute_rotate_key(args):
     from crucible.config import get_client
+    from .helpers import require_elevation
     try:
         unique_id, username, ambiguous = _resolve_sa_ref(args)
         client = get_client()
+        require_elevation(client, 'rotate service account API keys')
         sa = _resolve_sa(client, unique_id=unique_id, username=username, ambiguous=ambiguous)
         result = client.service_accounts.rotate_key(sa.get('unique_id'))
         _show_sa(result, key=result.get('api_key'))
@@ -388,8 +385,10 @@ Examples:
 
 def _execute_set_role(args):
     from crucible.config import get_client
+    from .helpers import require_elevation
     try:
         client = get_client()
+        require_elevation(client, 'change service account platform roles')
         sa = client.service_accounts.set_platform_role(
             args.sa, args.platform_role)
         if getattr(args, 'json', False):

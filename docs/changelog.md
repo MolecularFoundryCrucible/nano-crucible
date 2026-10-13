@@ -6,7 +6,7 @@
 
 ### Added
 
-- User administration: `client.users.set_platform_role()` and `revoke_api_keys()` in Python, plus `user set-role` and `user revoke-keys` in the CLI, gated on the `can_manage_users` capability. `user get` shows the platform role and API key status to administrators.
+- User administration: `client.users.set_platform_role()` and `revoke_api_keys()` in Python, plus `user set-role` and `user revoke-keys` in the CLI for administrators, in any privilege mode. `user get` shows the platform role and API key status to administrators.
 - `client.users.list()` accepts `q`, `search_fields`, name, role, account-type, sort, and direction filters, and `user list` gains the matching options with Email and Platform role columns for administrators.
 - `client.projects.list()` accepts `sort`/`direction` and repeatable `member_ref` with `member_role`; `client.instruments.list()` accepts `sort`/`direction`.
 - `project list` gains `--sort`, `--direction`, `--member`, and `--member-role`; `instrument list` gains `--sort`/`--direction`.

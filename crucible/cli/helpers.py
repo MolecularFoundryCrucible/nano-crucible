@@ -717,13 +717,32 @@ def require_capability(client, capability: str, action: str) -> None:
     form the server will reject. An unreadable profile leaves capabilities
     empty, in which case the attempt proceeds and the API decides.
     """
-    from . import term
-
     capabilities = getattr(client, 'capabilities', None)
     if getattr(capabilities, capability, None) is False:
-        print(term.red('Not permitted', stream=sys.stderr), file=sys.stderr)
-        print(f"Your account is not permitted to {action}.", file=sys.stderr)
-        sys.exit(1)
+        _not_permitted(action)
+
+
+def require_elevation(client, action: str) -> None:
+    """Exit early when the caller cannot run an always-elevated operation.
+
+    Administrator-only operations request elevation per call, so the
+    current privilege mode and its capabilities do not apply; only whether
+    the caller may elevate at all does. An unreadable profile lets the API
+    decide.
+    """
+    authorization = getattr(client, 'authorization', None)
+    if getattr(authorization, 'platform_role', None) is None:
+        return
+    if not authorization.can_elevate:
+        _not_permitted(action)
+
+
+def _not_permitted(action: str) -> None:
+    from . import term
+
+    print(term.red('Not permitted', stream=sys.stderr), file=sys.stderr)
+    print(f"Your account is not permitted to {action}.", file=sys.stderr)
+    sys.exit(1)
 
 
 def parse_user_ref(value: str) -> dict:

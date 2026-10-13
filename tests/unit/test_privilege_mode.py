@@ -1,5 +1,6 @@
 """Unit coverage for the Crucible-Privilege-Mode header."""
 
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -464,3 +465,45 @@ def test_permanent_profile_failure_is_cached(make_client):
         assert client.can_elevate is False
         assert client.can_elevate is False
     assert profile.call_count == 1
+
+
+def _admin_client(platform_role, can_elevate):
+    from crucible.models import AccountAuthorization, AccountCapabilities
+
+    return SimpleNamespace(
+        authorization=AccountAuthorization(platform_role=platform_role,
+                                           can_elevate=can_elevate),
+        capabilities=AccountCapabilities(can_manage_users=False,
+                                         can_manage_service_accounts=False),
+        users=SimpleNamespace(set_platform_role=MagicMock(return_value={'username': 'jane'})),
+    )
+
+
+def test_set_role_runs_for_an_admin_in_normal_mode(monkeypatch):
+    from crucible.cli import user as user_cli
+
+    client = _admin_client('admin', True)
+    monkeypatch.setattr('crucible.config.get_client', lambda: client)
+    monkeypatch.setattr('crucible.cli.helpers.resolve_user_id', lambda c, ref: 'U' * 26)
+    monkeypatch.setattr(user_cli, '_show_user', lambda user: None)
+
+    user_cli._execute_set_role(SimpleNamespace(user='jane', platform_role='contributor',
+                                               json=False, debug=False))
+
+    client.users.set_platform_role.assert_called_once_with('U' * 26, 'contributor')
+
+
+@pytest.mark.parametrize('platform_role, can_elevate, refused', [
+    ('none', False, True),
+    ('admin', True, False),
+    (None, False, False),
+])
+def test_require_elevation(platform_role, can_elevate, refused):
+    from crucible.cli.helpers import require_elevation
+
+    client = _admin_client(platform_role, can_elevate)
+    if refused:
+        with pytest.raises(SystemExit):
+            require_elevation(client, 'x')
+    else:
+        require_elevation(client, 'x')
