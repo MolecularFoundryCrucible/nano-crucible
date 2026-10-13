@@ -158,11 +158,19 @@ class CrucibleShell:
         first_name = ((user.get('first_name') or '').strip()
                       or (user.get('last_name') or '').strip()
                       or whoami_info.get('access_group_name') or 'there')
+        full_name = ' '.join(part for part in (
+            (user.get('first_name') or '').strip(),
+            (user.get('last_name') or '').strip()) if part)
+        username = user.get('username')
+        if full_name and username:
+            user_label = f'{full_name} (@{username})'
+        else:
+            user_label = full_name or (f'@{username}' if username else None)
         deletions, joins = self._pending_counts()
         return welcome_rows(
             version=__version__,
             first_name=first_name,
-            user_label=self.state.get('user_label') or '?',
+            user_label=user_label or self.state.get('user_label') or '?',
             platform_role=self.client.authorization.platform_role,
             api_url=_cfg.api_url,
             project=self.state.get('project'),

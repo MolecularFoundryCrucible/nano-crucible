@@ -103,3 +103,23 @@ def test_print_welcome_renders_logo_and_text(monkeypatch, capsys, color):
     out = capsys.readouterr().out
     assert 'Crucible shell 3.3.0' in out
     assert 'https://crucible.lbl.gov/api/v3' in out
+
+
+@pytest.mark.parametrize('user, expected', [
+    ({'first_name': 'Ada', 'last_name': 'Lovelace', 'username': 'ada'}, 'Ada Lovelace (@ada)'),
+    ({'first_name': 'Ada', 'last_name': 'Lovelace'}, 'Ada Lovelace'),
+    ({'username': 'ingest-bot'}, '@ingest-bot'),
+])
+def test_shell_welcome_names_the_user_with_their_username(user, expected):
+    from types import SimpleNamespace
+    from crucible.cli.shell import core
+    from crucible.models import AccountAuthorization
+
+    shell = core.CrucibleShell.__new__(core.CrucibleShell)
+    shell.state = {'user_label': 'fallback', 'project': None, 'elevated': False}
+    shell.client = SimpleNamespace(authorization=AccountAuthorization(platform_role='admin'))
+
+    text = rows_text(shell._welcome_rows({'user_info': user}))
+
+    user_line = next(line for line in text if line.startswith('User'))
+    assert user_line.split(None, 1)[1] == f'{expected} · admin'
