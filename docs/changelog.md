@@ -51,6 +51,7 @@
 - `files.get_download_link()` and `datasets.get_download_links()` accept `disposition="inline"` for browser display.
 - A mistyped command, subcommand, or flag ends with a "Did you mean ...?" suggestion, and API errors add a next step for rejected keys, missing permissions, unknown identifiers, options an older server does not know, timeouts, and unreachable servers.
 - Shell completion matches project IDs and facet values fuzzily (`xt` offers `xrd-titan`), ranked by how closely they match; commands, flags, and MFIDs still complete by prefix.
+- `dataset create` without `--input` or `--name` prompts for the dataset's fields on a terminal, like `sample create`, instead of creating an unnamed dataset.
 - The interactive shell hides service-account commands from completion for callers who cannot manage them, and `refresh` now re-reads permissions.
 - Unrecognized dataset and sample list filters now raise a local `ValueError` naming the closest valid parameter instead of a server-side 422.
 - The minimum supported Python version is now 3.10.

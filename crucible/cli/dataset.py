@@ -1988,6 +1988,50 @@ def _execute_get(args):
         fail("retrieving dataset", e, args)
 
 
+def _prompt_new_dataset(args, project_id, project_mfid, project_source):
+    """Ask for the fields of a record-only dataset, as sample create does.
+
+    Fills args in place and returns the (possibly prompted) project ID and
+    its source.
+    """
+    from crucible.config import get_client
+    from ..utils import parse_timestamp
+    from ..utils.identifiers import IdentifierNotFoundError, validate_slug
+    from .helpers import prompt_optional, prompt_required
+
+    term.header("Create Dataset")
+    print("")
+    client = get_client()
+
+    def validate_project_id(value):
+        value = validate_slug(value, 'project')
+        try:
+            project = client.projects.get(value)
+        except IdentifierNotFoundError as error:
+            raise ValueError(f"Project '{value}' was not found.") from error
+        return project.get('project_id') or value
+
+    args.dataset_name = prompt_required("Dataset name", option='--name')
+    if project_mfid is None:
+        if project_id:
+            chosen = prompt_optional("Project ID", default=project_id,
+                                     validator=validate_project_id, option='--project-id')
+        else:
+            chosen = prompt_required("Project ID", validator=validate_project_id,
+                                     option='--project-id')
+        if chosen != project_id:
+            project_id, project_source = chosen, 'argument'
+    if args.measurement is None:
+        args.measurement = prompt_optional("Measurement")
+    if args.session_name is None:
+        args.session_name = prompt_optional("Session")
+    if args.timestamp is None:
+        args.timestamp = prompt_optional("Timestamp", validator=lambda value: (
+            parse_timestamp(value) and value), hint="today or YYYY-MM-DD HH:MM")
+    print("")
+    return project_id, project_source
+
+
 def _execute_create(args):
     """Execute the 'dataset create' subcommand."""
     from crucible.parsers import get_parser, BaseParser
@@ -2020,6 +2064,12 @@ def _execute_create(args):
         project_id, project_source = resolve_project_context(args)
     else:
         project_source = 'argument'
+
+    from .helpers import _interactive_stdin
+    if not args.input and args.dataset_name is None and _interactive_stdin():
+        project_id, project_source = _prompt_new_dataset(args, project_id, project_mfid,
+                                                         project_source)
+
     if project_id is None and project_mfid is None:
         logger.error("Project required. Specify --project-id or --project-mfid, or set the current project.")
         sys.exit(1)
