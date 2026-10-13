@@ -11,7 +11,7 @@
 - `client.projects.list()` accepts `sort`/`direction` and repeatable `member_ref` with `member_role`; `client.instruments.list()` accepts `sort`/`direction`.
 - `project list` gains `--sort`, `--direction`, `--member`, and `--member-role`; `instrument list` gains `--sort`/`--direction`.
 - Project and instrument lists and details show the caller's role, colored like the member tables (`owner` on instruments rather than the project-`lead` alias).
-- `user list-projects` is sorted by project ID and shows the listed user's role in each project.
+- `user list-projects` shows the listed user's role in each project and gains `--role`, `--sort`, and `--direction`; `client.users.get_projects()` accepts the matching `role`, `sort`, `direction`, and `include_metadata`.
 - Dataset and sample lists accept sort, direction, visibility, affiliation, owner, and creation or modification time-range filters (a bare date covers the whole day, a time without an offset is UTC) in the Python client and CLI, plus `--name`, `--missing FIELD`, `--sample-mfid`/`--dataset-mfid`, and `--description` (samples).
 - `client.datasets.list()`, `count()`, and `facets()` accept an `instrument_id` slug, and `dataset facets` gains `--instrument-id`.
 - `client.datasets.assign_instrument()` assigns or reassigns a dataset's registered instrument by slug or MFID.

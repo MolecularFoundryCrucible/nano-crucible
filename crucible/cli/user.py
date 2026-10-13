@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 
 from . import term
 from ..config import config as _config
+from ..constants import PROJECT_ACCESS_ROLES, PROJECT_SORTS, SORT_DIRECTIONS
 
 
 def register_subcommand(subparsers):
@@ -846,10 +847,17 @@ def _register_list_projects(subparsers):
         epilog="""
 Examples:
     crucible user list-projects 0000-0002-1825-0097
-    crucible user list-projects fabrice
+    crucible user list-projects fabrice --role owner --role admin
+    crucible user list-projects fabrice --sort updated
 """
     )
     parser.add_argument('user', metavar='USER', help='ORCID, MFID, username, or email of the user')
+    parser.add_argument('--role', action='append', choices=PROJECT_ACCESS_ROLES, default=None,
+                        help="Only projects where the user holds this role (repeatable)")
+    parser.add_argument('--sort', choices=PROJECT_SORTS, default=None,
+                        help='Sort by project_id, title, created, or updated (default: project ID)')
+    parser.add_argument('--direction', choices=SORT_DIRECTIONS, default=None,
+                        help='Sort direction (dates default desc, everything else asc); requires --sort')
     parser.set_defaults(func=_execute_list_projects)
 
 
@@ -931,8 +939,12 @@ def _execute_list_projects(args):
     try:
         client = get_client()
         user_id = resolve_user_id(client, args.user)
-        projects = sorted(client.users.get_projects(user_id, limit=None),
-                          key=lambda p: (p.get('project_id') or '').lower())
+        sort = getattr(args, 'sort', None)
+        projects = client.users.get_projects(
+            user_id, limit=None, role=getattr(args, 'role', None),
+            sort=sort, direction=getattr(args, 'direction', None))
+        if sort is None:
+            projects = sorted(projects, key=lambda p: (p.get('project_id') or '').lower())
 
         term.header(f"Projects · {args.user} ({len(projects)})")
         if not projects:

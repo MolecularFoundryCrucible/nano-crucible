@@ -196,7 +196,7 @@ Most user-management commands require administrator permissions.
 | `user list-access-groups USER` | List a user's access groups |
 | `user add-access-group USER GROUP` | Deprecated; use the typed project or instrument membership command |
 | `user remove-access-group USER GROUP` | Deprecated; use the typed project or instrument membership command |
-| `user list-projects USER` | List the projects USER is a member of, with their role in each; backed by the sorted, cursor-paginated project listing, so projects pending deletion are hidden |
+| `user list-projects USER [--role ROLE] [--sort FIELD] [--direction DIR]` | List the projects USER is a member of with USER's role in each, optionally filtered by role (repeatable) and sorted by `project_id`, `title`, `created`, or `updated` |
 
 Human users require a username and may optionally supply an ORCID during creation.
 When the ORCID is omitted, the API assigns a canonical MFID.

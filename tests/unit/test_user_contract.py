@@ -222,3 +222,29 @@ def test_list_omits_unset_filters():
     operations.list()
 
     operations._paginate.assert_called_once_with('/users', {}, 100, 0)
+
+
+def test_get_projects_sends_the_target_user_filters():
+    from crucible.resources.users import UserOperations
+
+    client = MagicMock()
+    client._request.return_value = {'items': [], 'total': None, 'next_cursor': None}
+    users = UserOperations(client)
+
+    users.get_projects('U' * 26, limit=None, role=['owner', 'admin'],
+                       sort='title', direction='asc', include_metadata=True)
+
+    params = client._request.call_args.kwargs['params']
+    assert params['role'] == ['owner', 'admin']
+    assert params['sort'] == 'title' and params['direction'] == 'asc'
+    assert params['include_metadata'] is True
+    assert params['include_total'] is False
+
+
+def test_get_projects_rejects_unknown_roles_locally():
+    from crucible.resources.users import UserOperations
+
+    client = MagicMock()
+    with pytest.raises(ValueError, match='role must be one of'):
+        UserOperations(client).get_projects('U' * 26, role='member')
+    client._request.assert_not_called()

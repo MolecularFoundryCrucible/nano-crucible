@@ -343,7 +343,26 @@ def test_list_projects_shows_the_users_role(monkeypatch, capsys):
 
     _execute_list_projects(SimpleNamespace(user='alice', json=False, debug=False))
 
-    client.users.get_projects.assert_called_once_with('U' * 26, limit=None)
+    client.users.get_projects.assert_called_once_with(
+        'U' * 26, limit=None, role=None, sort=None, direction=None)
     output = capsys.readouterr().out
     assert 'contributor' in output
     assert output.index('Alpha') < output.index('zeta')
+
+
+def test_list_projects_keeps_the_server_order_for_an_explicit_sort(monkeypatch, capsys):
+    client = SimpleNamespace(users=SimpleNamespace())
+    client.users.get_projects = MagicMock(return_value=[
+        {'project_id': 'zeta', 'title': 'Zeta', 'role': 'owner'},
+        {'project_id': 'Alpha', 'title': 'Alpha', 'role': 'owner'},
+    ])
+    monkeypatch.setattr('crucible.config.get_client', lambda: client)
+    monkeypatch.setattr('crucible.cli.helpers.resolve_user_id', lambda c, ref: 'U' * 26)
+
+    _execute_list_projects(SimpleNamespace(user='alice', role=['owner'], sort='updated',
+                                           direction='desc', json=False, debug=False))
+
+    client.users.get_projects.assert_called_once_with(
+        'U' * 26, limit=None, role=['owner'], sort='updated', direction='desc')
+    output = capsys.readouterr().out
+    assert output.index('zeta') < output.index('Alpha')

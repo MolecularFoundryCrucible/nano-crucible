@@ -9,7 +9,8 @@ Provides organized access to user-related API endpoints.
 import logging
 from typing import TYPE_CHECKING, Any, Optional, Dict, List, Sequence, Union
 from .base import BaseResource
-from ..constants import DEFAULT_LIMIT, PLATFORM_ROLES
+from ..constants import (
+    DEFAULT_LIMIT, PLATFORM_ROLES, PROJECT_ACCESS_ROLES, PROJECT_SORTS)
 from ..utils.deprecation import _deprecated, _deprecated_parameter
 from ..utils.identifiers import (
     classify_user_reference,
@@ -437,18 +438,42 @@ class UserOperations(BaseResource):
 
     @_deprecated_parameter('orcid', 'user_unique_id')
     def get_projects(self, user_unique_id: str, limit: int = DEFAULT_LIMIT,
-                     offset: int = 0) -> List[Dict]:
-        """List projects associated with a user.
+                     offset: int = 0,
+                     role: Optional[Union[str, Sequence[str]]] = None,
+                     sort: Optional[str] = None,
+                     direction: Optional[str] = None,
+                     include_metadata: bool = False) -> List[Dict]:
+        """List the projects a user is a member of, with that user's role.
+
+        Unlike ``client.projects.list(member_ref=...)``, whose ``role`` is the
+        caller's, each project's ``role`` here is the listed user's.
 
         Args:
             user_unique_id (str): Canonical user ORCID or MFID
-            limit (int): Maximum number of results to return (default: 100)
+            limit (int): Maximum number of results to return (default: 100).
+                Pass None to fetch all.
             offset (int): Starting position in the full result set (default: 0)
+            role: Only projects where the user holds one of these roles,
+                from crucible.constants.PROJECT_ACCESS_ROLES.
+            sort: One of crucible.constants.PROJECT_SORTS.
+            direction: asc or desc. Requires sort.
+            include_metadata: Include each project's scientific metadata.
 
         Returns:
-            List[Dict]: Project objects the user is associated with
+            List[Dict]: Project objects the user is a member of
         """
-        return self._paginate(f'/users/{user_unique_id}/projects', {}, limit, offset)
+        roles = _as_query_list(role)
+        invalid = [r for r in (roles or []) if r not in PROJECT_ACCESS_ROLES]
+        if invalid:
+            raise ValueError(
+                f"role must be one of: {', '.join(PROJECT_ACCESS_ROLES)}.")
+        params = {'include_total': False}
+        if roles:
+            params['role'] = roles
+        if include_metadata:
+            params['include_metadata'] = True
+        params.update(self._ordering_params(sort, direction, sorts=PROJECT_SORTS))
+        return self._paginate(f'/users/{user_unique_id}/projects', params, limit, offset)
 
     @_deprecated_parameter('orcid', 'user_unique_id')
     def update(self, user_unique_id: str, **kwargs: Any) -> Dict:
