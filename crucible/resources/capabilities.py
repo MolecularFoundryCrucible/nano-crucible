@@ -153,7 +153,7 @@ class InstrumentAssignmentMixin:
         instrument, so the server always overwrites it.
 
         Args:
-            mfid: Dataset MFID.
+            dataset_mfid: Dataset MFID.
             instrument_id: Registered instrument slug.
             instrument_mfid: Canonical instrument MFID. If both are given they
                 must identify the same instrument (422 otherwise).

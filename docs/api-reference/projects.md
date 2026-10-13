@@ -4,6 +4,7 @@ Access via `client.projects`.
 
 ::: crucible.resources.projects.ProjectOperations
     options:
+      inherited_members: true
       members:
         - get
         - list

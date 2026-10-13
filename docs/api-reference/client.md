@@ -59,6 +59,11 @@ A flag the profile did not report is `None`, so check for an explicit `False` be
         - health
         - live
         - whoami
+        - authorization
+        - capabilities
+        - can_elevate
+        - is_elevated
+        - refresh_profile
         - get
         - get_resource_type
         - get_links

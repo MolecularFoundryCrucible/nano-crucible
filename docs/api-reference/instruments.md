@@ -8,6 +8,7 @@ An instrument's owner and maintainers manage the instrument record (`get_users()
 
 ::: crucible.resources.instruments.InstrumentOperations
     options:
+      inherited_members: true
       members:
         - list
         - get

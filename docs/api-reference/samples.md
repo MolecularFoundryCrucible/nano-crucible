@@ -4,6 +4,7 @@ Access via `client.samples`.
 
 ::: crucible.resources.samples.SampleOperations
     options:
+      inherited_members: true
       members:
         - get
         - list
