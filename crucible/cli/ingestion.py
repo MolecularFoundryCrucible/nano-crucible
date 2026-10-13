@@ -10,7 +10,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 from . import term
-from .helpers import add_limit_arguments, count_label, print_more_hint, resolve_limit
+from .helpers import add_limit_arguments, count_label, print_more_hint, resolve_limit, page_kwargs
 
 
 def register_subcommand(subparsers):
@@ -55,7 +55,7 @@ def _execute_list(args):
         client = get_client()
         reqs   = client.ingestions.list(dsid=args.dataset_id,
                                         file_id=args.file_id,
-                                        limit=resolve_limit(args))
+                                        limit=resolve_limit(args), **page_kwargs(args))
 
         scope = args.dataset_id or args.file_id or 'all'
         term.header(f"Ingestion Requests · {scope} ({count_label(reqs)})")

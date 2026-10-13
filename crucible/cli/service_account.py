@@ -11,7 +11,7 @@ import json
 import sys
 import logging
 from . import term
-from .helpers import add_limit_arguments, count_label, print_more_hint, resolve_limit
+from .helpers import add_limit_arguments, count_label, print_more_hint, resolve_limit, page_kwargs
 
 logger = logging.getLogger(__name__)
 
@@ -316,9 +316,9 @@ def _execute_list(args):
         client = get_client()
         q = getattr(args, 'q', None)
         if client.can_elevate:
-            accounts = client.service_accounts.list_admin(q=q, limit=resolve_limit(args))
+            accounts = client.service_accounts.list_admin(q=q, limit=resolve_limit(args), **page_kwargs(args))
         else:
-            accounts = client.users.list(limit=resolve_limit(args), q=q, is_service_account=True)
+            accounts = client.users.list(limit=resolve_limit(args), **page_kwargs(args), q=q, is_service_account=True)
         if getattr(args, 'json', False):
             print_more_hint(accounts, resolve_limit(args), args)
             print(json.dumps(accounts, indent=2, default=str))

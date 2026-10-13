@@ -33,6 +33,7 @@ def _help(shell, line):
         ('debug on|off',  'toggle debug logging'),
         ('elevate on|off', 'toggle platform-administrator elevation'),
         ('elevate COMMAND', 'run one command with platform-administrator elevation'),
+        ('more', 'show the next page of the last listing'),
         ('v',             'toggle verbose view for last fetched resource'),
         ('! CMD',         'run a shell command'),
         ('ls [PATH]',     'list directory'),
@@ -159,6 +160,15 @@ def _reload(shell, line):
     os.execv(sys.executable, command)
 
 
+def _more(shell, line):
+    listing = shell.state.get('last_listing')
+    if not listing:
+        print("Nothing to continue: the last listing showed every match.")
+        return True
+    command, page = listing
+    return shell._dispatch(command, page=page)
+
+
 def _bang(shell, line):
     import subprocess
     cmd = line[1:].strip()
@@ -282,6 +292,7 @@ BUILTINS = {
     'unuse': (_unuse, False),
     'refresh': (_refresh, False),
     'reload': (_reload, False),
+    'more': (_more, False),
     '!': (_bang, True),
     'pwd': (_pwd, False),
     'ls': (_ls, True),

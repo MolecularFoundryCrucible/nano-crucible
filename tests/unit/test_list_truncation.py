@@ -92,3 +92,97 @@ def test_sort_like_keeps_list_metadata():
 
     assert result == [1, 2, 3]
     assert (result.has_more, result.total) == (True, 9)
+
+
+@pytest.fixture
+def fresh_page():
+    helpers.begin_page(0)
+    yield
+    helpers.begin_page(0)
+
+
+def test_more_hint_records_where_the_next_page_starts(monkeypatch, capsys, fresh_page):
+    _tty(monkeypatch, True)
+    records = ListResult([1] * 50, has_more=True, total=120, next_cursor='c2')
+
+    helpers.print_more_hint(records, 50, SimpleNamespace(json=False, _shell_state={}))
+
+    assert helpers.next_page() == {'cursor': 'c2', 'offset': None, 'start': 50, 'total': 120}
+    assert "type 'more'" in capsys.readouterr().out
+
+
+def test_later_pages_are_labelled_by_position(monkeypatch, capsys, fresh_page):
+    _tty(monkeypatch, True)
+    helpers.begin_page(50)
+    records = ListResult([1] * 50, has_more=True, total=120, next_offset=100)
+
+    assert helpers.count_label(records) == '51-100 of 120'
+    helpers.print_more_hint(records, 50, SimpleNamespace(json=False))
+    assert '20 more not shown' in capsys.readouterr().out
+    assert helpers.next_page()['start'] == 100
+
+
+@pytest.mark.parametrize('page, expected', [
+    (None, {}),
+    ({'cursor': 'c2', 'offset': None, 'start': 50}, {'cursor': 'c2'}),
+    ({'cursor': None, 'offset': 100, 'start': 100}, {'offset': 100}),
+])
+def test_page_kwargs(page, expected):
+    assert helpers.page_kwargs(SimpleNamespace(page=page)) == expected
+
+
+def _shell():
+    from crucible.cli.shell import core
+    shell = core.CrucibleShell.__new__(core.CrucibleShell)
+    from crucible.models import AccountCapabilities
+    shell.state = {'debug': False}
+    shell.client = SimpleNamespace(privilege_mode=None, can_elevate=False,
+                                   capabilities=AccountCapabilities())
+    shell.completer = None
+    return shell
+
+
+def test_shell_more_continues_the_last_listing(monkeypatch, fresh_page):
+    from crucible.cli.shell import builtins
+    seen = []
+
+    def run(args):
+        seen.append(getattr(args, 'page', None))
+        helpers.print_more_hint(
+            ListResult([1] * 2, has_more=True, total=9, next_cursor=f'c{len(seen) + 1}'),
+            2, args)
+
+    parser = argparse.ArgumentParser()
+    parser.set_defaults(func=run, pageable=True)
+    shell = _shell()
+    shell.parser = parser
+    monkeypatch.setattr('crucible.cli.helpers.fetch_project_context', lambda: (None, None))
+
+    shell._dispatch('')
+    assert builtins._more(shell, 'more') is True
+    shell._dispatch(' ')
+    shell.parser.parse_args = lambda argv: argparse.Namespace(func=run, pageable=True)
+    shell._dispatch('dataset list')
+    builtins._more(shell, 'more')
+    builtins._more(shell, 'more')
+
+    assert seen == [None, {'cursor': 'c2', 'offset': None, 'start': 2, 'total': 9},
+                    {'cursor': 'c3', 'offset': None, 'start': 4, 'total': 9}]
+
+
+def test_shell_more_without_a_listing(capsys):
+    from crucible.cli.shell import builtins
+
+    builtins._more(_shell(), 'more')
+
+    assert 'Nothing to continue' in capsys.readouterr().out
+
+
+def test_continued_pages_keep_the_first_total(monkeypatch, capsys, fresh_page):
+    _tty(monkeypatch, True)
+    helpers.begin_page(2, total=9)
+    records = ListResult([1, 1], has_more=True, next_cursor='c3')
+
+    assert helpers.count_label(records) == '3-4 of 9'
+    helpers.print_more_hint(records, 2, SimpleNamespace(json=False))
+    assert '5 more not shown' in capsys.readouterr().out

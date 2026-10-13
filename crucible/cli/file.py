@@ -10,7 +10,7 @@ live under 'crucible dataset'. Operations that take a file MFID live here.
 import sys
 import logging
 from . import term
-from .helpers import add_limit_arguments, count_label, print_more_hint, resolve_limit
+from .helpers import add_limit_arguments, count_label, print_more_hint, resolve_limit, page_kwargs
 from ..utils.io import storage_display_name
 
 logger = logging.getLogger(__name__)
@@ -83,7 +83,7 @@ def _execute_list(args):
         if dsid:
             files = client.datasets.list_files(dsid)
         else:
-            files = client.files.list(limit=limit, sha256_hash=args.sha256)
+            files = client.files.list(limit=limit, sha256_hash=args.sha256, **page_kwargs(args))
         fetched = files
 
         sha256_filter = getattr(args, 'sha256', None)

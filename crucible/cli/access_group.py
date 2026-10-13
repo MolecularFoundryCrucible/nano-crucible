@@ -11,7 +11,7 @@ lets admins/leads review the request. Accessible as both
 import sys
 import logging
 from . import term
-from .helpers import add_limit_arguments, count_label, print_more_hint, resolve_limit
+from .helpers import add_limit_arguments, count_label, print_more_hint, resolve_limit, page_kwargs
 
 logger = logging.getLogger(__name__)
 
@@ -136,7 +136,7 @@ def _execute_list(args):
         status = None if args.status == 'all' else args.status
         records = client.access_groups.list_join_requests(
             group_name=args.group_name, status=status,
-            requester_id=args.requester_id, limit=resolve_limit(args),
+            requester_id=args.requester_id, limit=resolve_limit(args), **page_kwargs(args),
             privilege_mode=(None if args.group_name else client._admin_mode()),
         )
         term.header(f"Join Requests — {args.status} ({count_label(records)})")
@@ -177,7 +177,7 @@ def _execute_mine(args):
     try:
         client = get_client()
         status = None if args.status == 'all' else args.status
-        records = client.account.join_requests(status=status, limit=resolve_limit(args))
+        records = client.account.join_requests(status=status, limit=resolve_limit(args), **page_kwargs(args))
         term.header(f"My Join Requests — {args.status} ({count_label(records)})")
         if not records:
             print(f"  {term.dim('No join requests found.')}")

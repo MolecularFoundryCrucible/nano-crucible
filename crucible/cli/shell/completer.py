@@ -367,7 +367,7 @@ class CrucibleCompleter(Completer):
 
         if not words or (len(words) == 1 and not trailing_space):
             prefix = words[0] if words else ''
-            candidates = list(self._top) + ['use', 'unuse', 'refresh', 'reload', 'debug', 'elevate', 'cd', 'ls', 'pwd']
+            candidates = list(self._top) + ['use', 'unuse', 'refresh', 'reload', 'debug', 'elevate', 'more', 'cd', 'ls', 'pwd']
             for name in candidates:
                 if name in self.hidden:
                     continue

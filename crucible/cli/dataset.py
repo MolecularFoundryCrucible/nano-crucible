@@ -15,7 +15,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 from . import term
-from .helpers import add_limit_arguments, count_label, print_more_hint, resolve_limit, sort_like
+from .helpers import add_limit_arguments, count_label, print_more_hint, resolve_limit, sort_like, page_kwargs
 from ..constants import GCS_BUCKET_PREFIX
 from ..utils.io import storage_display_name
 
@@ -1858,7 +1858,7 @@ def _execute_list(args):
             filters['instrument_name'] = args.instrument_name
         filters.update(listing_filter_kwargs(args))
         limit = resolve_limit(args)
-        fetched = client.datasets.list(limit=limit, **filters)
+        fetched = client.datasets.list(limit=limit, **page_kwargs(args), **filters)
         datasets = fetched
 
         # Client-side glob filtering on name
@@ -2290,7 +2290,7 @@ def _execute_list_parents(args):
     try:
         client = get_client()
         parents = sort_like(client.datasets.list_parents(
-            args.dataset_id, limit=resolve_limit(args),
+            args.dataset_id, limit=resolve_limit(args), **page_kwargs(args),
             relationship_type=args.relationship_type),
                          key=lambda ds: (ds.get('dataset_name') or '').lower())
 
@@ -2315,7 +2315,7 @@ def _execute_list_children(args):
     try:
         client = get_client()
         children = sort_like(client.datasets.list_children(
-            args.dataset_id, limit=resolve_limit(args),
+            args.dataset_id, limit=resolve_limit(args), **page_kwargs(args),
             relationship_type=args.relationship_type),
                           key=lambda ds: (ds.get('dataset_name') or '').lower())
 
@@ -2339,7 +2339,7 @@ def _execute_list_samples(args):
     from crucible.config import get_client
     try:
         client = get_client()
-        samples = sort_like(client.samples.list(dataset_mfid=args.dataset_id, limit=resolve_limit(args)),
+        samples = sort_like(client.samples.list(dataset_mfid=args.dataset_id, limit=resolve_limit(args), **page_kwargs(args)),
                          key=lambda s: (s.get('sample_name') or '').lower())
 
         term.header(f"Samples · {args.dataset_id} ({count_label(samples)})")

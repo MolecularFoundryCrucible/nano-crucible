@@ -405,8 +405,12 @@ class CrucibleShell:
         print(f"Using project: {label} (remembered)")
         return True
 
-    def _dispatch(self, line):
-        """Parse and execute one command line. Returns False to signal exit."""
+    def _dispatch(self, line, page=None):
+        """Parse and execute one command line. Returns False to signal exit.
+
+        page continues a listing from where the previous one stopped, as
+        recorded by helpers.next_page().
+        """
         from .. import _remap_deprecated, setup_logging
 
         line = line.strip()
@@ -432,11 +436,18 @@ class CrucibleShell:
                 self.client.privilege_mode = 'elevated'
                 self.client.refresh_profile()
             if hasattr(args, 'func'):
+                from ..helpers import begin_page, next_page
                 args._shell_state = self.state
+                if page:
+                    args.page = page
+                begin_page(page['start'], page.get('total')) if page else begin_page()
                 try:
                     from ..pager import paged
                     with paged(args):
                         args.func(args)
+                    if getattr(args, 'pageable', False):
+                        upcoming = next_page()
+                        self.state['last_listing'] = (line, upcoming) if upcoming else None
                 finally:
                     if inline_elevated:
                         self.state['elevated'] = session_elevated

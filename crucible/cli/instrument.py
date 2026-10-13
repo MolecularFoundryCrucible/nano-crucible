@@ -13,7 +13,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 from . import term
-from .helpers import add_limit_arguments, count_label, print_more_hint, resolve_limit
+from .helpers import add_limit_arguments, count_label, print_more_hint, resolve_limit, page_kwargs
 from ..config import config as _config
 from ..constants import INSTRUMENT_SORTS, SORT_DIRECTIONS
 
@@ -448,7 +448,7 @@ def _execute_list(args):
         if getattr(args, 'mine', False):
             filters['affiliation'] = ['owner', 'maintainer']
         instruments = client.instruments.list(
-            limit=resolve_limit(args),
+            limit=resolve_limit(args), **page_kwargs(args),
             include_metadata=getattr(args, 'include_metadata', False) or _config.include_metadata,
             include_owner=True,
             status=getattr(args, 'status', None),

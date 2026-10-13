@@ -13,7 +13,7 @@ import json
 logger = logging.getLogger(__name__)
 
 from . import term
-from .helpers import add_limit_arguments, count_label, print_more_hint, resolve_limit
+from .helpers import add_limit_arguments, count_label, print_more_hint, resolve_limit, page_kwargs
 from ..constants import PROJECT_ACCESS_ROLES, PROJECT_SORTS, SORT_DIRECTIONS
 
 
@@ -636,7 +636,7 @@ def _execute_list(args):
         if getattr(args, 'exact', False):
             kwargs['permissive'] = False
         kwargs = {k: v for k, v in kwargs.items() if v is not None}
-        users = client.users.list(limit=resolve_limit(args), **kwargs)
+        users = client.users.list(limit=resolve_limit(args), **page_kwargs(args), **kwargs)
 
         if getattr(args, 'json', False):
             print_more_hint(users, resolve_limit(args), args)
@@ -862,7 +862,7 @@ def _execute_list_datasets(args):
         limit = resolve_limit(args)
         datasets = client.datasets.list(
             accessible_to_user=args.user,
-            limit=limit,
+            limit=limit, **page_kwargs(args),
         )
         dataset_ids = [dataset['unique_id'] for dataset in datasets]
 

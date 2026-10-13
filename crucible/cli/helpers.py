@@ -288,6 +288,38 @@ def add_limit_arguments(parser, noun: str = 'results', short: bool = False) -> N
     parser.set_defaults(pageable=True)
 
 
+_PAGE = {'start': 0, 'total': None, 'next': None}
+
+
+def begin_page(start: int = 0, total=None) -> None:
+    """Reset paging state before a list command.
+
+    start is the first record's position; total carries the first page's
+    match count, since continued cursor pages do not report it.
+    """
+    _PAGE.update(start=start, total=total, next=None)
+
+
+def _known_total(records):
+    total = getattr(records, 'total', None)
+    return _PAGE['total'] if total is None else total
+
+
+def next_page():
+    """Where the last listing stopped, as {'cursor', 'offset', 'start'}, or None."""
+    return _PAGE['next']
+
+
+def page_kwargs(args) -> dict:
+    """List-method keywords that resume the listing args.page points at."""
+    page = getattr(args, 'page', None) or {}
+    if page.get('cursor'):
+        return {'cursor': page['cursor']}
+    if page.get('offset'):
+        return {'offset': page['offset']}
+    return {}
+
+
 def resolve_limit(args):
     """Return the record limit for a list command, or None for --all."""
     from ..config import config
@@ -306,9 +338,13 @@ def sort_like(records, key=None, reverse=False):
 
 
 def count_label(records, shown=None) -> str:
-    """Header count such as "50 of 1,234", "50+", or "50"."""
+    """Header count such as "50 of 1,234", "51-100 of 1,234", "50+", or "50"."""
     shown = len(records) if shown is None else shown
-    total = getattr(records, 'total', None)
+    total = _known_total(records)
+    start = _PAGE['start']
+    if start:
+        position = f"{start + 1:,}-{start + shown:,}"
+        return f"{position} of {total:,}" if total is not None else position
     if total is not None and total > shown:
         return f"{shown:,} of {total:,}"
     if getattr(records, 'has_more', False):
@@ -330,14 +366,24 @@ def print_more_hint(records, limit, args=None, hint=None, allow_all=True) -> Non
         limit is not None and len(records) >= limit)
     if not truncated:
         return
-    total = getattr(records, 'total', None)
-    if total is not None and total > len(records):
-        lead = f"{total - len(records):,} more not shown"
+    start = _PAGE['start']
+    next_cursor = getattr(records, 'next_cursor', None)
+    next_offset = getattr(records, 'next_offset', None)
+    can_continue = bool(next_cursor) or next_offset is not None
+    total = _known_total(records)
+    if can_continue:
+        _PAGE['next'] = {'cursor': next_cursor, 'offset': next_offset,
+                         'start': start + len(records), 'total': total}
+    remaining = None if total is None else total - start - len(records)
+    if remaining is not None and remaining > 0:
+        lead = f"{remaining:,} more not shown"
     elif has_more is None:
         lead = f"Showing the first {len(records):,}; there may be more"
     else:
         lead = "More results not shown"
     tips = ([hint] if hint else []) + ['raise --limit N'] + (['use --all'] if allow_all else [])
+    if can_continue and hasattr(args, '_shell_state'):
+        tips.insert(0, "type 'more' for the next page")
     if len(tips) == 1:
         tips.insert(0, 'refine the query')
     message = f"{lead}. To see them, {', '.join(tips[:-1])}, or {tips[-1]}."

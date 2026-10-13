@@ -15,7 +15,7 @@ import warnings
 logger = logging.getLogger(__name__)
 
 from . import term
-from .helpers import add_limit_arguments, count_label, print_more_hint, resolve_limit
+from .helpers import add_limit_arguments, count_label, print_more_hint, resolve_limit, page_kwargs
 from ..config import config as _config
 from ..constants import PROJECT_ACCESS_ROLES, PROJECT_MEMBER_ROLES, PROJECT_SORTS, SORT_DIRECTIONS
 
@@ -387,7 +387,7 @@ def _execute_list(args):
     from crucible.config import get_client
     try:
         client = get_client()
-        projects = client.projects.list(limit=resolve_limit(args),
+        projects = client.projects.list(limit=resolve_limit(args), **page_kwargs(args),
                                         include_metadata=getattr(args, 'include_metadata', False),
                                         sort=getattr(args, 'sort', None),
                                         direction=getattr(args, 'direction', None),
@@ -610,7 +610,7 @@ def _execute_list_users(args):
     from .helpers import sort_members
     try:
         client = get_client()
-        users = sort_members(client.projects.get_users(args.project_id, limit=resolve_limit(args)))
+        users = sort_members(client.projects.get_users(args.project_id, limit=resolve_limit(args), **page_kwargs(args)))
 
         term.header(f"Users · {args.project_id} ({count_label(users)})")
         if not users:
@@ -960,7 +960,7 @@ def _execute_list_join_requests(args):
     try:
         client = get_client()
         records = client.projects.list_join_requests(args.project_id, status=args.status,
-                                                      limit=resolve_limit(args))
+                                                      limit=resolve_limit(args), **page_kwargs(args))
         term.header(f"Join Requests · {args.project_id} ({count_label(records)})")
         if not records:
             print(f"  {term.dim('No join requests found.')}")

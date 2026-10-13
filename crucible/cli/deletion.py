@@ -13,7 +13,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 from . import term
-from .helpers import add_limit_arguments, count_label, print_more_hint, resolve_limit
+from .helpers import add_limit_arguments, count_label, print_more_hint, resolve_limit, page_kwargs
 
 
 def register_subcommand(subparsers):
@@ -273,7 +273,7 @@ def _execute_list_deleted(args):
             resource_id=args.resource_id,
             requester_id=args.requester_id,
             reviewer_id=args.reviewer_id,
-            limit=resolve_limit(args),
+            limit=resolve_limit(args), **page_kwargs(args),
             scope=args.scope,
             project_id=args.project_id,
             project_mfid=args.project_mfid,

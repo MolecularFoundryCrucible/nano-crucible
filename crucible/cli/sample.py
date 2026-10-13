@@ -14,7 +14,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 from . import term
-from .helpers import add_limit_arguments, count_label, print_more_hint, resolve_limit, sort_like
+from .helpers import add_limit_arguments, count_label, print_more_hint, resolve_limit, sort_like, page_kwargs
 
 try:
     import argcomplete
@@ -737,7 +737,7 @@ def _execute_list(args):
         filters.update(listing_filter_kwargs(args))
         limit = resolve_limit(args)
         fetched = client.samples.list(
-            limit=limit,
+            limit=limit, **page_kwargs(args),
             include_metadata=getattr(args, 'include_metadata', False) or _config.include_metadata,
             **filters)
         samples = fetched
@@ -1103,7 +1103,7 @@ def _execute_list_parents(args):
     try:
         client = get_client()
         parents = sort_like(client.samples.list_parents(
-            args.sample_id, limit=resolve_limit(args),
+            args.sample_id, limit=resolve_limit(args), **page_kwargs(args),
             relationship_type=args.relationship_type),
                          key=lambda s: (s.get('sample_name') or '').lower())
         term.header(f"Parent Samples · {args.sample_id} ({count_label(parents)})")
@@ -1126,7 +1126,7 @@ def _execute_list_children(args):
     try:
         client = get_client()
         children = sort_like(client.samples.list_children(
-            args.sample_id, limit=resolve_limit(args),
+            args.sample_id, limit=resolve_limit(args), **page_kwargs(args),
             relationship_type=args.relationship_type),
                           key=lambda s: (s.get('sample_name') or '').lower())
         term.header(f"Child Samples · {args.sample_id} ({count_label(children)})")
@@ -1148,7 +1148,7 @@ def _execute_list_datasets(args):
     from crucible.config import get_client
     try:
         client = get_client()
-        datasets = sort_like(client.datasets.list(sample_mfid=args.sample_id, limit=resolve_limit(args)),
+        datasets = sort_like(client.datasets.list(sample_mfid=args.sample_id, limit=resolve_limit(args), **page_kwargs(args)),
                           key=lambda ds: (ds.get('dataset_name') or '').lower())
         term.header(f"Datasets · {args.sample_id} ({count_label(datasets)})")
         if not datasets:
