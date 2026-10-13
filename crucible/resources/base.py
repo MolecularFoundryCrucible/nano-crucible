@@ -275,11 +275,12 @@ class BaseResource:
         Supports both pagination styles transparently, detected from the first
         response:
 
-        * Keyset (cursor) pagination — used by '/datasets' and '/samples'. The
-          response carries a 'next_cursor' token; pages are followed
+        * Keyset (cursor) pagination: the response carries a non-null
+          'next_cursor' token, or no 'total' to page by; pages are followed
           sequentially until the cursor is exhausted.
-        * Offset pagination — every other endpoint. The first response carries
-          'total'; remaining pages are fetched in parallel by offset.
+        * Offset pagination: the first response carries 'total' and a null or
+          absent 'next_cursor'; remaining pages are fetched in parallel by
+          offset.
 
         Args:
             endpoint: API path (e.g. '/datasets')
@@ -314,8 +315,7 @@ class BaseResource:
         first = self._request('get', endpoint, params=first_params, **mode)
         items = list(first['items'])
 
-        # Keyset (cursor) pagination — '/datasets' and '/samples'.
-        if 'next_cursor' in first:
+        if first.get('next_cursor') or first.get('total') is None:
             cursor = first.get('next_cursor')
             while cursor and (limit is None or len(items) < limit):
                 request_limit = (
@@ -332,7 +332,6 @@ class BaseResource:
                 cursor = resp.get('next_cursor')
             return items if limit is None else items[:limit]
 
-        # Offset pagination — all other endpoints.
         total = first['total']
         need = total - offset if limit is None else min(total - offset, limit)
         if len(items) >= need:

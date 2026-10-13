@@ -144,3 +144,19 @@ def test_relationship_filters_follow_collection_cursors(
         ),
     ]
     assert len(result) == API_PAGE_MAX + 1
+
+
+def test_offset_envelope_with_a_null_cursor_still_fetches_every_page():
+    resource, request = make_resource()
+
+    def respond(method, endpoint, params):
+        start = params.get('offset', 0)
+        return {'total': API_PAGE_MAX + 5, 'limit': params['limit'], 'offset': start,
+                'next_cursor': None,
+                'items': records(start, min(params['limit'], API_PAGE_MAX + 5 - start))}
+
+    request.side_effect = respond
+
+    result = resource._paginate('/users/x/projects', {}, limit=None)
+
+    assert result == records(0, API_PAGE_MAX + 5)
