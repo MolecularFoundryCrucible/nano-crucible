@@ -212,3 +212,62 @@ def test_dataset_list_keeps_list_metadata():
     result = DatasetOperations(client).list(limit=1)
 
     assert result.has_more is True and result.total == 12
+
+
+def test_cursor_listing_can_start_from_a_cursor_and_reports_the_next_one():
+    resource, request = make_resource()
+    request.return_value = {'items': records(5, 5), 'next_cursor': 'page-3', 'total': 40}
+
+    result = resource._paginate('/datasets', {}, limit=5, cursor='page-2')
+
+    request.assert_called_once_with('get', '/datasets', params={'limit': 5, 'cursor': 'page-2'})
+    assert result.next_cursor == 'page-3'
+    assert result.next_offset is None
+
+
+def test_offset_listing_reports_the_next_offset():
+    resource, request = make_resource()
+    request.return_value = {'total': 40, 'items': records(10, 5)}
+
+    result = resource._paginate('/users', {}, limit=5, offset=10)
+
+    assert result.next_offset == 15
+    assert result.start == 10
+    assert result.next_cursor is None
+
+
+def test_finished_listings_have_no_continuation():
+    resource, request = make_resource()
+    request.return_value = {'total': 3, 'items': records(0, 3)}
+
+    result = resource._paginate('/users', {}, limit=5)
+
+    assert result.next_offset is None and result.next_cursor is None
+
+
+def test_every_paginating_method_accepts_a_cursor():
+    import ast
+    import pathlib
+
+    import crucible.resources as package
+    root = pathlib.Path(package.__file__).parent
+    missing = []
+    for path in root.glob('*.py'):
+        for node in ast.walk(ast.parse(path.read_text())):
+            if isinstance(node, ast.FunctionDef) and node.name != '_paginate' and any(
+                    isinstance(call, ast.Call) and getattr(call.func, 'attr', '') == '_paginate'
+                    for call in ast.walk(node)):
+                names = [a.arg for a in node.args.args + node.args.kwonlyargs]
+                if 'cursor' not in names:
+                    missing.append(f'{path.name}:{node.name}')
+    assert missing == []
+
+
+def test_last_page_after_a_cursor_does_not_switch_to_offsets():
+    resource, request = make_resource()
+    request.return_value = {'items': records(0, 2), 'next_cursor': None, 'total': 40}
+
+    result = resource._paginate('/datasets', {}, limit=5, cursor='last')
+
+    assert request.call_count == 1
+    assert result.has_more is False and result.next_cursor is None

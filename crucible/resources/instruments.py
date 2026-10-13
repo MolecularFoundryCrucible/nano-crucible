@@ -55,6 +55,7 @@ class InstrumentOperations(OwnershipMixin, AccessControlMixin, BaseResource):
              status: Optional[str] = None,
              affiliation: Optional[Union[str, Sequence[str]]] = None,
              sort: Optional[str] = None, direction: Optional[str] = None,
+             cursor: Optional[str] = None,
              **filters: Any) -> List[Dict]:
         """List instruments, defaulting to the active lifecycle state.
 
@@ -62,6 +63,8 @@ class InstrumentOperations(OwnershipMixin, AccessControlMixin, BaseResource):
             include_metadata (bool): Include scientific metadata in results
             limit (int): Maximum number of results to return
             offset (int): Starting position in the full result set (default: 0)
+            cursor (str, optional): Continuation token from a previous
+                result's next_cursor; the listing resumes there.
             include_owner (bool): Resolve owner_orcid into a public-safe user object
             status (str, optional): Filter by active, maintenance, or decommissioned.
                                     When omitted, the API defaults to active
@@ -91,7 +94,7 @@ class InstrumentOperations(OwnershipMixin, AccessControlMixin, BaseResource):
             params['status'] = self._instrument_status(status)
         params.update(self._affiliation_params(affiliation, INSTRUMENT_AFFILIATIONS))
         params.update(self._ordering_params(sort, direction, sorts=INSTRUMENT_SORTS))
-        raw = self._paginate('/instruments', params, limit, offset)
+        raw = self._paginate('/instruments', params, limit, offset, cursor=cursor)
         return ListResult.like(raw, [self._parse(item) for item in raw])
 
     @staticmethod

@@ -18,19 +18,32 @@ class ListResult(list):
 
     ``has_more`` is True when the listing stopped at the requested limit
     with further matches left. ``total`` is the full match count when the
-    server reported one, otherwise None.
+    server reported one, otherwise None. To continue, pass ``next_cursor``
+    as ``cursor=`` (cursor-paged collections) or ``next_offset`` as
+    ``offset=`` (offset-paged ones) to the same list method; the other is
+    None. ``start`` is the offset of the first record, when known.
     """
 
-    def __init__(self, items=(), has_more: bool = False, total: Optional[int] = None):
+    _META = ('has_more', 'total', 'next_cursor', 'next_offset', 'start')
+
+    def __init__(self, items=(), has_more: bool = False, total: Optional[int] = None,
+                 next_cursor: Optional[str] = None, next_offset: Optional[int] = None,
+                 start: int = 0):
         super().__init__(items)
         self.has_more = has_more
         self.total = total
+        self.next_cursor = next_cursor
+        self.next_offset = next_offset
+        self.start = start
 
     @classmethod
     def like(cls, source, items) -> 'ListResult':
-        """Return items carrying source's has_more and total, if it has them."""
-        return cls(items, has_more=getattr(source, 'has_more', False),
-                   total=getattr(source, 'total', None))
+        """Return items carrying source's list metadata, if it has any."""
+        result = cls(items)
+        for name in cls._META:
+            if hasattr(source, name):
+                setattr(result, name, getattr(source, name))
+        return result
 
 
 class BaseResource:
@@ -289,7 +302,8 @@ class BaseResource:
 
     def _paginate(self, endpoint: str, params: dict,
                   limit: int = DEFAULT_LIMIT, offset: int = 0,
-                  privilege_mode: Optional[str] = None) -> list:
+                  privilege_mode: Optional[str] = None,
+                  cursor: Optional[str] = None) -> 'ListResult':
         """Fetch all matching records from a paginated envelope endpoint.
 
         Supports both pagination styles transparently, detected from the first
@@ -309,6 +323,8 @@ class BaseResource:
             offset:   Starting position in the full result set. Ignored by keyset
                       endpoints, which no longer accept an offset.
             privilege_mode: Per-call privilege mode applied to every page.
+            cursor:   Continuation token from a previous ListResult.next_cursor;
+                      the listing resumes there instead of at offset.
 
         Returns:
             list: Raw item dicts, up to limit items (or all items if limit is None)
@@ -330,12 +346,14 @@ class BaseResource:
 
         page_size = API_PAGE_MAX if limit is None else min(API_PAGE_MAX, limit)
         first_params = {**params, 'limit': page_size}
-        if offset:
+        if cursor:
+            first_params['cursor'] = cursor
+        elif offset:
             first_params['offset'] = offset
         first = self._request('get', endpoint, params=first_params, **mode)
         items = list(first['items'])
 
-        if first.get('next_cursor') or first.get('total') is None:
+        if cursor or first.get('next_cursor') or first.get('total') is None:
             cursor = first.get('next_cursor')
             while cursor and (limit is None or len(items) < limit):
                 request_limit = (
@@ -351,13 +369,16 @@ class BaseResource:
                 items.extend(page)
                 cursor = resp.get('next_cursor')
             items = items if limit is None else items[:limit]
-            return ListResult(items, has_more=bool(cursor), total=first.get('total'))
+            return ListResult(items, has_more=bool(cursor), total=first.get('total'),
+                              next_cursor=cursor or None)
 
         total = first['total']
         need = total - offset if limit is None else min(total - offset, limit)
         has_more = offset + need < total
+        next_offset = offset + need if has_more else None
         if len(items) >= need:
-            return ListResult(items[:need], has_more=has_more, total=total)
+            return ListResult(items[:need], has_more=has_more, total=total,
+                              next_offset=next_offset, start=offset)
 
         remaining_offsets = range(offset + page_size, offset + need, API_PAGE_MAX)
 
@@ -372,7 +393,8 @@ class BaseResource:
             for page in pool.map(_fetch, remaining_offsets):
                 items.extend(page)
 
-        return ListResult(items[:need], has_more=has_more, total=total)
+        return ListResult(items[:need], has_more=has_more, total=total,
+                          next_offset=next_offset, start=offset)
 
     def search_metadata(self, q: str, limit: int = 20) -> list:
         """Full-text search across scientific metadata of all accessible resources.

@@ -125,6 +125,7 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
              creation_time_lte: Optional[Union[str, date, datetime]] = None,
              modification_time_gte: Optional[Union[str, date, datetime]] = None,
              modification_time_lte: Optional[Union[str, date, datetime]] = None,
+             cursor: Optional[str] = None,
              **kwargs: Any) -> List[Dict]:
         """List samples with optional filtering and automatic pagination.
 
@@ -140,6 +141,8 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
             offset (int): Deprecated for the /samples collection, which uses
                           keyset pagination and ignores offset. Still honored for
                           the parent-child sub-listing.
+            cursor (str, optional): Continuation token from a previous
+                result's next_cursor; the listing resumes there.
             accessible_to_user: User reference or references whose effective access
                                 must include every result
             accessible_to_project: Project reference or references whose direct access
@@ -216,7 +219,7 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
                     "pagination; results start from the newest sample.",
                     DeprecationWarning, stacklevel=2,
                 )
-        raw = self._paginate(endpoint, params, limit, offset)
+        raw = self._paginate(endpoint, params, limit, offset, cursor=cursor)
         return ListResult.like(raw, [self._parse(s) for s in raw])
 
     def facets(self, field: str, limit: int = 100,
@@ -260,6 +263,7 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
     @_deprecated_parameter('sample_mfid', 'child_mfid')
     def list_parents(self, child_mfid: str, limit: int = DEFAULT_LIMIT,
                      offset: int = 0, relationship_type: Optional[str] = None,
+                     cursor: Optional[str] = None,
                      **kwargs: Any) -> List[Dict]:
         """List the parents of a given sample with optional filtering.
 
@@ -267,6 +271,8 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
             child_mfid (str): Child sample MFID
             limit (int): Maximum number of results to return (default: 100)
             offset (int): Starting position in the full result set (default: 0)
+            cursor (str, optional): Continuation token from a previous
+                result's next_cursor; the listing resumes there.
             relationship_type (str, optional): Only return parents linked with
                 this kind of link, one of crucible.constants.RELATIONSHIP_TYPES.
             **kwargs: Query parameters for filtering samples
@@ -277,12 +283,13 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
         params = {k: v for k, v in kwargs.items() if v is not None}
         if relationship_type is not None:
             params['relationship_type'] = relationship_type
-        return self._paginate(f"/samples/{child_mfid}/parents", params, limit, offset)
+        return self._paginate(f"/samples/{child_mfid}/parents", params, limit, offset, cursor=cursor)
 
     @_deprecated_parameter('sample_id', 'parent_mfid')
     @_deprecated_parameter('sample_mfid', 'parent_mfid')
     def list_children(self, parent_mfid: str, limit: int = DEFAULT_LIMIT,
                       offset: int = 0, relationship_type: Optional[str] = None,
+                      cursor: Optional[str] = None,
                       **kwargs: Any) -> List[Dict]:
         """List the children of a given sample with optional filtering.
 
@@ -290,6 +297,8 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
             parent_mfid (str): Parent sample MFID
             limit (int): Maximum number of results to return (default: 100)
             offset (int): Starting position in the full result set (default: 0)
+            cursor (str, optional): Continuation token from a previous
+                result's next_cursor; the listing resumes there.
             relationship_type (str, optional): Only return children linked with
                 this kind of link, one of crucible.constants.RELATIONSHIP_TYPES.
             **kwargs: Query parameters for filtering samples
@@ -300,7 +309,7 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
         params = {k: v for k, v in kwargs.items() if v is not None}
         if relationship_type is not None:
             params['relationship_type'] = relationship_type
-        return self._paginate(f"/samples/{parent_mfid}/children", params, limit, offset)
+        return self._paginate(f"/samples/{parent_mfid}/children", params, limit, offset, cursor=cursor)
 
     def create(self, sample=None, scientific_metadata: Optional[Dict] = None,
                parents: Optional[List[Dict]] = None,

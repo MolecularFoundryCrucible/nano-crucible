@@ -46,7 +46,8 @@ class DeletionOperations(BaseResource):
              offset: int = 0, scope: Optional[str] = None,
              project_mfid: Optional[str] = None,
              sort: Optional[str] = None,
-             direction: Optional[str] = None) -> List[Dict]:
+             direction: Optional[str] = None,
+             cursor: Optional[str] = None) -> List[Dict]:
         """List deletion requests.
 
         Args:
@@ -54,6 +55,8 @@ class DeletionOperations(BaseResource):
                     Omit to return all requests.
             limit (int): Maximum number of results to return (default: 100)
             offset (int): Starting position in the full result set (default: 0)
+            cursor (str, optional): Continuation token from a previous
+                result's next_cursor; the listing resumes there.
             scope: One of crucible.constants.DELETION_REQUEST_SCOPES. The
                    server defaults to "accessible"; "submitted" returns only
                    the caller's own requests and "reviewable" only those the
@@ -77,7 +80,7 @@ class DeletionOperations(BaseResource):
         mode = (self._client._admin_mode()
                 if scope == 'reviewable' else None)
         raw = self._paginate("/deletion_requests", params, limit, offset,
-                             privilege_mode=mode)
+                             privilege_mode=mode, cursor=cursor)
         return ListResult.like(raw, [self._parse(r) for r in raw])
 
     def get(self, request_id: int) -> Dict:
@@ -128,7 +131,9 @@ class DeletionOperations(BaseResource):
                    scope: Optional[str] = None,
                    project_id: Optional[str] = None,
                    project_mfid: Optional[str] = None,
-                   direction: Optional[str] = None) -> List[Dict]:
+                   direction: Optional[str] = None,
+                   offset: int = 0,
+                   cursor: Optional[str] = None) -> List[Dict]:
         """List hard-deletion audit log entries.
 
         Returns a permanent record of every resource that was hard-deleted,
@@ -140,6 +145,9 @@ class DeletionOperations(BaseResource):
             requester_id: Filter by the ORCID of who requested deletion.
             reviewer_id: Filter by the ORCID of who approved deletion.
             limit: Maximum number of results.
+            offset: Starting position in the full result set (default: 0).
+            cursor: Continuation token from a previous result's next_cursor;
+                the listing resumes there.
             scope: One of crucible.constants.DELETION_AUDIT_SCOPES. Defaults to
                    "all" (the platform-wide administrator audit) for callers
                    who can elevate and "submitted" (the caller's own
@@ -171,7 +179,7 @@ class DeletionOperations(BaseResource):
         mode = (self._client._admin_mode()
                 if scope in (None, 'all') else None)
         raw = self._paginate('/deletion_audit', params, limit=limit,
-                             privilege_mode=mode)
+                             privilege_mode=mode, offset=offset, cursor=cursor)
         return ListResult.like(raw, [DeletionAuditLog(**r).model_dump() for r in raw])
 
     def get_deleted(self, audit_id: int) -> Dict:

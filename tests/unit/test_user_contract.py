@@ -195,7 +195,7 @@ def test_list_passes_explicit_filters_with_scalar_normalization():
         'platform_role': ['admin'],
         'search_fields': ['username'],
         'is_service_account': False,
-    }, 100, 0)
+    }, 100, 0, cursor=None)
 
 
 def test_list_rejects_unknown_platform_role():
@@ -221,7 +221,7 @@ def test_list_omits_unset_filters():
 
     operations.list()
 
-    operations._paginate.assert_called_once_with('/users', {}, 100, 0)
+    operations._paginate.assert_called_once_with('/users', {}, 100, 0, cursor=None)
 
 
 def test_get_projects_sends_the_target_user_filters():

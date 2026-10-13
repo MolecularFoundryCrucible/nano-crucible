@@ -137,7 +137,8 @@ class ProjectOperations(OwnershipMixin, AccessControlMixin, BaseResource):
              accessible_to_project: Optional[Union[str, Sequence[str]]] = None,
              sort: Optional[str] = None, direction: Optional[str] = None,
              member_ref: Optional[Union[str, Sequence[str]]] = None,
-             member_role: Optional[Union[str, Sequence[str]]] = None) -> List[Dict]:
+             member_role: Optional[Union[str, Sequence[str]]] = None,
+             cursor: Optional[str] = None) -> List[Dict]:
         """List all accessible projects.
 
         Each project dict includes a ``lead`` key with the project lead's
@@ -150,6 +151,8 @@ class ProjectOperations(OwnershipMixin, AccessControlMixin, BaseResource):
             include_metadata (bool): Include scientific metadata in results
             limit (int): Maximum number of results to return (default: 100)
             offset (int): Starting position in the full result set (default: 0)
+            cursor (str, optional): Continuation token from a previous
+                result's next_cursor; the listing resumes there.
             accessible_to_user: User reference or references whose effective access
                                 must include every result
             accessible_to_project: Project reference or references whose direct access
@@ -194,7 +197,7 @@ class ProjectOperations(OwnershipMixin, AccessControlMixin, BaseResource):
             if member_roles:
                 params['member_role'] = member_roles
         endpoint = f'/users/{orcid}/projects' if orcid else '/projects'
-        return self._paginate(endpoint, params, limit, offset)
+        return self._paginate(endpoint, params, limit, offset, cursor=cursor)
 
     def create(self, project: Union[Project, Dict],
                scientific_metadata: Optional[Dict] = None) -> Dict:
@@ -257,7 +260,8 @@ class ProjectOperations(OwnershipMixin, AccessControlMixin, BaseResource):
         return result
 
     def get_users(self, project_id: str, limit: int = DEFAULT_LIMIT,
-                  offset: int = 0) -> List[ProjectMember]:
+                  offset: int = 0,
+                  cursor: Optional[str] = None) -> List[ProjectMember]:
         """Get users associated with a project.
 
         **Requires admin permissions.**
@@ -266,11 +270,13 @@ class ProjectOperations(OwnershipMixin, AccessControlMixin, BaseResource):
             project_id (str): Unique project identifier
             limit (int): Maximum number of results to return (default: 100)
             offset (int): Starting position in the full result set (default: 0)
+            cursor (str, optional): Continuation token from a previous
+                result's next_cursor; the listing resumes there.
 
         Returns:
             List[ProjectMember]: Project team members (excludes project lead)
         """
-        raw = self._paginate(f'/projects/{project_id}/users', {}, limit, offset)
+        raw = self._paginate(f'/projects/{project_id}/users', {}, limit, offset, cursor=cursor)
         return ListResult.like(raw, [ProjectMember.model_validate(m) for m in raw])
 
     def update(self, proj_id: str, **kwargs: Any) -> Dict:

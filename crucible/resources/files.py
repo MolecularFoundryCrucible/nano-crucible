@@ -49,12 +49,17 @@ class FileOperations(BaseResource):
         return self._parse(self._request('get', f'/files/{file_id}'))
 
     def list(self, limit: int = DEFAULT_LIMIT,
-             sha256_hash: Optional[str] = None) -> List[Dict]:
+             sha256_hash: Optional[str] = None,
+             offset: int = 0,
+             cursor: Optional[str] = None) -> List[Dict]:
         """List files across all accessible datasets.
 
         Args:
             limit: Maximum number of results
             sha256_hash: Filter by SHA-256 hex digest
+            offset: Starting position in the full result set (default: 0).
+            cursor: Continuation token from a previous result's next_cursor;
+                the listing resumes there.
 
         Returns:
             List[Dict]: File records (mfid, filename, storage_path, storage_backend,
@@ -63,7 +68,7 @@ class FileOperations(BaseResource):
         params = {}
         if sha256_hash:
             params['sha256_hash'] = sha256_hash
-        raw = self._paginate('/files', params, limit=limit)
+        raw = self._paginate('/files', params, limit=limit, offset=offset, cursor=cursor)
         return ListResult.like(raw, [self._parse(f) for f in raw])
 
     def download(self, file_id: str, output_dir: str = '.') -> str:

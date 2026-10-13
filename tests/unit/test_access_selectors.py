@@ -200,6 +200,7 @@ def test_sample_relationship_filter_accepts_access_selectors():
         {'accessible_to_user': ['alice'], 'dataset_mfid': 'dataset'},
         100,
         0,
+        cursor=None,
     )
 
 
@@ -243,6 +244,7 @@ def test_dataset_relationship_filter_accepts_instrument_and_access_filters():
         },
         100,
         0,
+        cursor=None,
     )
 
 
@@ -269,6 +271,7 @@ def test_resource_lists_send_typed_project_scope(
         {**selector, 'project_scope': scope},
         100,
         0,
+        cursor=None,
     )
 
 
@@ -307,6 +310,7 @@ def test_project_scope_accepts_matching_selector_pair_for_server_validation(
         },
         100,
         0,
+        cursor=None,
     )
 
 

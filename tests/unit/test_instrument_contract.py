@@ -33,7 +33,7 @@ def test_list_preserves_positional_limit_and_offset():
 
     operations.list(False, 5, 2)
 
-    operations._paginate.assert_called_once_with('/instruments', {}, 5, 2)
+    operations._paginate.assert_called_once_with('/instruments', {}, 5, 2, cursor=None)
 
 
 def test_list_requests_owner_and_status_filters():
@@ -60,6 +60,7 @@ def test_list_requests_owner_and_status_filters():
         },
         7,
         0,
+        cursor=None,
     )
     assert result[0]['owner_orcid'] == USER_MFID
 

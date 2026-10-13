@@ -141,6 +141,7 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
              creation_time_lte: Optional[Union[str, date, datetime]] = None,
              modification_time_gte: Optional[Union[str, date, datetime]] = None,
              modification_time_lte: Optional[Union[str, date, datetime]] = None,
+             cursor: Optional[str] = None,
              **kwargs) -> List[Dict]:
         """List datasets with optional filtering and automatic pagination.
 
@@ -152,6 +153,8 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
             offset (int): Deprecated. The /datasets collection uses keyset
                           pagination and ignores offset, including when filtered
                           by sample_mfid.
+            cursor (str, optional): Continuation token from a previous
+                result's next_cursor; the listing resumes there.
             include_metadata (bool): Include scientific metadata in results
             include_links (bool): Include linked resources (parents, children, associated) per dataset
             include_owner (bool): Resolve owner_orcid into a public-safe user object per dataset
@@ -233,7 +236,7 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
                 DeprecationWarning, stacklevel=2,
             )
         self._validate_filter_params(params, DATASET_LIST_PARAMS, '/datasets')
-        raw = self._paginate('/datasets', params, limit, offset)
+        raw = self._paginate('/datasets', params, limit, offset, cursor=cursor)
         return ListResult.like(raw, [self._parse(d) for d in raw])
 
     def facets(self, field: str, limit: int = 100,
@@ -648,6 +651,7 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
     @_deprecated_parameter('parent_dataset_mfid', 'parent_mfid')
     def list_children(self, parent_mfid: str, limit: int = DEFAULT_LIMIT,
                       offset: int = 0, relationship_type: Optional[str] = None,
+                      cursor: Optional[str] = None,
                       **kwargs) -> List[Dict]:
         """List the children of a given dataset with optional filtering.
 
@@ -655,6 +659,8 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
             parent_mfid (str): Parent dataset MFID
             limit (int): Maximum number of results to return
             offset (int): Starting position in the full result set (default: 0)
+            cursor (str, optional): Continuation token from a previous
+                result's next_cursor; the listing resumes there.
             relationship_type (str, optional): Only return children linked with
                 this kind of link, one of crucible.constants.RELATIONSHIP_TYPES.
             **kwargs (Any): Query parameters for filtering datasets
@@ -666,13 +672,14 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
         if relationship_type is not None:
             params['relationship_type'] = relationship_type
         raw = self._paginate(
-            f"/datasets/{parent_mfid}/children", params, limit, offset)
+            f"/datasets/{parent_mfid}/children", params, limit, offset, cursor=cursor)
         return ListResult.like(raw, [self._parse(dataset) for dataset in raw])
 
     @_deprecated_parameter('child_dataset_id', 'child_mfid')
     @_deprecated_parameter('child_dataset_mfid', 'child_mfid')
     def list_parents(self, child_mfid: str, limit: int = DEFAULT_LIMIT,
                      offset: int = 0, relationship_type: Optional[str] = None,
+                     cursor: Optional[str] = None,
                      **kwargs) -> List[Dict]:
         """List the parents of a given dataset with optional filtering.
 
@@ -680,6 +687,8 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
             child_mfid (str): Child dataset MFID
             limit (int): Maximum number of results to return
             offset (int): Starting position in the full result set (default: 0)
+            cursor (str, optional): Continuation token from a previous
+                result's next_cursor; the listing resumes there.
             relationship_type (str, optional): Only return parents linked with
                 this kind of link, one of crucible.constants.RELATIONSHIP_TYPES.
             **kwargs (Any): Query parameters for filtering datasets
@@ -691,7 +700,7 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
         if relationship_type is not None:
             params['relationship_type'] = relationship_type
         raw = self._paginate(
-            f"/datasets/{child_mfid}/parents", params, limit, offset)
+            f"/datasets/{child_mfid}/parents", params, limit, offset, cursor=cursor)
         return ListResult.like(raw, [self._parse(dataset) for dataset in raw])
 
     # Special Processing Methods

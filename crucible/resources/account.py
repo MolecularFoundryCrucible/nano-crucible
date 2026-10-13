@@ -94,13 +94,17 @@ class AccountOperations(BaseResource):
         return self._request('post', '/account/sync-projects')
 
     def join_requests(self, status: Optional[str] = None,
-                      limit: int = DEFAULT_LIMIT, offset: int = 0) -> List[Dict]:
+                      limit: int = DEFAULT_LIMIT,
+                      offset: int = 0,
+                      cursor: Optional[str] = None) -> List[Dict]:
         """Return the caller's own join-request history, across all groups.
 
         Args:
             status: Filter by "pending", "approved", or "rejected".
             limit: Maximum number of results.
             offset: Starting position in the full result set.
+            cursor (str, optional): Continuation token from a previous
+                result's next_cursor; the listing resumes there.
 
         Returns:
             List[Dict]: JoinRequest records where requester_id == caller.
@@ -108,5 +112,5 @@ class AccountOperations(BaseResource):
         params = {}
         if status is not None:
             params['status'] = status
-        raw = self._paginate('/account/join_requests', params, limit, offset)
+        raw = self._paginate('/account/join_requests', params, limit, offset, cursor=cursor)
         return ListResult.like(raw, [JoinRequest(**r).model_dump() for r in raw])

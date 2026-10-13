@@ -87,13 +87,17 @@ class ServiceAccountOperations(BaseResource):
         return self._parse(raw)
 
     def list_admin(self, q: Optional[str] = None,
-                   limit: int = DEFAULT_LIMIT, offset: int = 0) -> List[Dict]:
+                   limit: int = DEFAULT_LIMIT,
+                   offset: int = 0,
+                   cursor: Optional[str] = None) -> List[Dict]:
         """List service accounts with their administrative records. Admin only.
 
         Args:
             q: Optional search string, at least 3 characters.
             limit: Maximum number of results.
             offset: Starting position in the full result set.
+            cursor (str, optional): Continuation token from a previous
+                result's next_cursor; the listing resumes there.
 
         Returns:
             List of service account records including platform_role.
@@ -102,7 +106,7 @@ class ServiceAccountOperations(BaseResource):
         if q is not None:
             params['q'] = q
         raw = self._paginate('/service_accounts', params, limit, offset,
-                             privilege_mode='elevated')
+                             privilege_mode='elevated', cursor=cursor)
         return ListResult.like(raw, [self._parse(record) for record in raw])
 
     def set_platform_role(self, service_account_mfid: str,

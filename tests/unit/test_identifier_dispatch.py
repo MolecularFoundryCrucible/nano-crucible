@@ -289,7 +289,7 @@ class TestDeprecatedParameterCompatibility:
             ops.list(dataset_id=MFID)
 
         ops._paginate.assert_called_once_with(
-            '/samples', {'dataset_mfid': MFID}, 100, 0)
+            '/samples', {'dataset_mfid': MFID}, 100, 0, cursor=None)
 
     def test_dataset_sample_filter_preserves_old_keyword(self):
         ops = make_ops(DatasetOperations)
@@ -299,7 +299,7 @@ class TestDeprecatedParameterCompatibility:
             ops.list(sample_id=MFID)
 
         ops._paginate.assert_called_once_with(
-            '/datasets', {'sample_mfid': MFID}, 100, 0)
+            '/datasets', {'sample_mfid': MFID}, 100, 0, cursor=None)
 
     @pytest.mark.parametrize(
         ('operations_class', 'method_name', 'verb', 'resource'),

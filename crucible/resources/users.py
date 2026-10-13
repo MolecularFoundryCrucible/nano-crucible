@@ -242,6 +242,7 @@ class UserOperations(BaseResource):
              sort: Optional[str] = None,
              direction: Optional[str] = None,
              include_total: Optional[bool] = None,
+             cursor: Optional[str] = None,
              **kwargs: Any) -> List[Dict]:
         """List users visible to the authenticated caller.
 
@@ -257,6 +258,8 @@ class UserOperations(BaseResource):
         Args:
             limit (int): Maximum number of results to return (default: 100)
             offset (int): Starting position in the full result set (default: 0)
+            cursor (str, optional): Continuation token from a previous
+                result's next_cursor; the listing resumes there.
             q (str, optional): Case-insensitive substring search across the
                 fields named in search_fields, or name, username, and unique_id
             search_fields (list or str, optional): Fields searched by q. One or
@@ -314,7 +317,7 @@ class UserOperations(BaseResource):
         }
         params = {k: v for k, v in params.items() if v is not None}
         params.update({k: v for k, v in kwargs.items() if v is not None})
-        return self._paginate('/users', params, limit, offset)
+        return self._paginate('/users', params, limit, offset, cursor=cursor)
 
     def create(self, user: Union['User', Dict],
                project_ids: Optional[Sequence[str]] = None) -> Dict:
@@ -442,7 +445,8 @@ class UserOperations(BaseResource):
                      role: Optional[Union[str, Sequence[str]]] = None,
                      sort: Optional[str] = None,
                      direction: Optional[str] = None,
-                     include_metadata: bool = False) -> List[Dict]:
+                     include_metadata: bool = False,
+                     cursor: Optional[str] = None) -> List[Dict]:
         """List the projects a user is a member of, with that user's role.
 
         Unlike ``client.projects.list(member_ref=...)``, whose ``role`` is the
@@ -453,6 +457,8 @@ class UserOperations(BaseResource):
             limit (int): Maximum number of results to return (default: 100).
                 Pass None to fetch all.
             offset (int): Starting position in the full result set (default: 0)
+            cursor (str, optional): Continuation token from a previous
+                result's next_cursor; the listing resumes there.
             role: Only projects where the user holds one of these roles,
                 from crucible.constants.PROJECT_ACCESS_ROLES.
             sort: One of crucible.constants.PROJECT_SORTS.
@@ -473,7 +479,7 @@ class UserOperations(BaseResource):
         if include_metadata:
             params['include_metadata'] = True
         params.update(self._ordering_params(sort, direction, sorts=PROJECT_SORTS))
-        return self._paginate(f'/users/{user_unique_id}/projects', params, limit, offset)
+        return self._paginate(f'/users/{user_unique_id}/projects', params, limit, offset, cursor=cursor)
 
     @_deprecated_parameter('orcid', 'user_unique_id')
     def update(self, user_unique_id: str, **kwargs: Any) -> Dict:
