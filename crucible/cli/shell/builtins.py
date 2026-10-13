@@ -149,8 +149,11 @@ def _reload(shell, line):
     if os.name == 'nt':
         # os.execv on Windows spawns a new process and exits this one, so the
         # console regains control and fights the new shell for input. Run the
-        # restart as a child and pass its exit status through instead.
+        # restart as a child and pass its exit status through instead. The
+        # console sends Ctrl+C to both processes, so only the child handles it.
+        import signal
         import subprocess
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
         sys.exit(subprocess.call(command))
     os.execv(sys.executable, command)
 

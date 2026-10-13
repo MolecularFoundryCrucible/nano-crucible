@@ -370,8 +370,11 @@ def test_reload_waits_for_a_child_on_windows(monkeypatch):
     monkeypatch.setattr(builtins.sys, 'orig_argv', ['python', '-m', 'crucible.cli'], raising=False)
     monkeypatch.setattr('subprocess.call', lambda cmd: calls.setdefault('cmd', cmd) and 0)
     monkeypatch.setattr(builtins.os, 'execv', lambda *a: pytest.fail('execv on Windows'))
+    monkeypatch.setattr('signal.signal', lambda sig, handler: calls.setdefault('signal', (sig, handler)))
 
     with pytest.raises(SystemExit):
         builtins._reload(None, 'reload')
 
+    import signal
     assert calls['cmd'][1:] == ['-m', 'crucible.cli']
+    assert calls['signal'] == (signal.SIGINT, signal.SIG_IGN)
