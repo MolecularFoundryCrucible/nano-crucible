@@ -52,6 +52,7 @@
 - `edit` commands work on Windows without configuration: they default to Notepad instead of nano, recognize `code.cmd` and `.exe` editors when adding wait flags, start batch-file editors such as VS Code's, and add the flags Notepad++ needs to wait.
 - Project ownership transfer, access commands, and scientific metadata updates accept a project ID; they previously failed with 404 unless given the project MFID.
 - Renaming a project with `project update` or `project edit` updates the saved current project when it named the old ID.
+- The API reference now documents the ownership, access, and project-reassignment methods shared by datasets, samples, projects, and instruments.
 - The interactive shell no longer records `config set api_key` or `API_KEY=` lines in its history file, and keeps that file readable only by its owner.
 
 ## 3.2.1
@@ -98,7 +99,6 @@
 
 ### Fixed
 
-- The interactive shell no longer records `config set api_key` or `API_KEY=` lines in its history file, and keeps that file readable only by its owner.
 - `crucible file delete` now requires interactive confirmation or an explicit `--yes` before permanently deleting a file.
 - Dataset file guidance now documents the API v3 record-first workflow, recursive uploads, additions, deletion-based replacement, and re-uploading.
 - Documentation navigation tabs now remain visible while scrolling using MkDocs Material's native sticky-tabs behavior.
