@@ -96,7 +96,11 @@ def test_compose_drops_the_logo_when_it_cannot_fit():
 
 @pytest.mark.parametrize('color', [True, False])
 def test_print_welcome_renders_logo_and_text(monkeypatch, capsys, color):
+    import prompt_toolkit
+
     monkeypatch.setattr(term, 'color_enabled', lambda: color)
+    monkeypatch.setattr(prompt_toolkit, 'print_formatted_text', lambda text, **kw: print(
+        ''.join(fragment[1] for fragment in text)))
 
     shell_banner.print_welcome(info(), columns=100)
 

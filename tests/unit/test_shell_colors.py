@@ -79,3 +79,17 @@ def test_without_true_color_the_depth_is_concrete(color_env, term_name, expected
     color_env.setenv('TERM', term_name)
 
     assert shell_common.shell_color_depth() == expected
+
+
+@pytest.mark.parametrize('term_name, expected', [
+    ('', ColorDepth.DEPTH_4_BIT),
+    ('xterm-256color', ColorDepth.DEPTH_8_BIT),
+])
+def test_windows_follows_term_when_set(color_env, monkeypatch, term_name, expected):
+    monkeypatch.setattr(shell_common.sys, 'platform', 'win32')
+    if term_name:
+        color_env.setenv('TERM', term_name)
+    else:
+        color_env.delenv('TERM', raising=False)
+
+    assert shell_common.shell_color_depth() == expected

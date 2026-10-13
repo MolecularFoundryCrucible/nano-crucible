@@ -114,6 +114,6 @@ def shell_color_depth():
     terminal = os.environ.get('TERM', '')
     if terminal == 'dumb':
         return ColorDepth.DEPTH_1_BIT
-    if terminal in ('linux', 'eterm-color') or sys.platform == 'win32':
+    if terminal in ('linux', 'eterm-color') or (sys.platform == 'win32' and not terminal):
         return ColorDepth.DEPTH_4_BIT
     return ColorDepth.DEPTH_8_BIT
