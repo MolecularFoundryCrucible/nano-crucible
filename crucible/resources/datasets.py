@@ -128,6 +128,7 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
              accessible_to_user: Optional[Union[str, Sequence[str]]] = None,
              accessible_to_project: Optional[Union[str, Sequence[str]]] = None,
              instrument_mfid: Optional[str] = None,
+             instrument_id: Optional[str] = None,
              project_id: Optional[str] = None,
              project_mfid: Optional[str] = None,
              project_scope: Optional[str] = None,
@@ -159,6 +160,8 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
             accessible_to_project: Project reference or references whose direct access
                                    must include every result
             instrument_mfid: Canonical instrument MFID assigned to every result
+            instrument_id: Instrument slug (any casing), resolved to its MFID.
+                May accompany a matching instrument_mfid.
             project_id: Project slug used to scope results by project relationship
             project_mfid: Canonical project MFID used to scope results by project relationship
             project_scope: Project relationship to include: assigned, shared, or all.
@@ -214,6 +217,9 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
             params['sample_mfid'] = sample_mfid
         if instrument_mfid is not None:
             params['instrument_mfid'] = instrument_mfid
+        if instrument_id is not None:
+            params['instrument_id'] = instrument_id
+        self._resolve_instrument_filter(params)
         if include_metadata:
             params['include_metadata'] = True
         if include_links:
@@ -244,13 +250,15 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
             direction: Bucket ordering direction, asc or desc (default: asc).
             cursor: Continuation cursor from a previous response's next_cursor.
             **filters (Any): Any dataset list filter, restricting which datasets
-                       contribute to the counts.
+                       contribute to the counts, including instrument_id.
 
         Returns:
             Dict: field, items (buckets with value, label, count, and a typed
                   owner/project/instrument reference where applicable), limit,
                   and next_cursor.
         """
+        filters = {k: v for k, v in filters.items() if v is not None}
+        self._resolve_instrument_filter(filters)
         return self._facets('/datasets/facets', field, DATASET_FACET_FIELDS,
                             DATASET_FACET_PARAMS, limit=limit, sort=sort,
                             direction=direction, cursor=cursor, filters=filters)
@@ -262,9 +270,26 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
         params = {k: v for k, v in kwargs.items() if v is not None}
         params.update(self._project_scope_params(
             project_id, project_mfid, project_scope))
+        self._resolve_instrument_filter(params)
+        self._normalize_time_filters(params)
         self._validate_filter_params(params, DATASET_LIST_PARAMS, '/datasets')
         result = self._request('get', '/datasets', params={**params, 'limit': 1})
         return result['total']
+
+    def _resolve_instrument_filter(self, params: Dict) -> None:
+        """Replace an instrument_id slug filter with its instrument_mfid in place."""
+        slug = params.pop('instrument_id', None)
+        if slug is None:
+            return
+        instrument = self._client.instruments.get(instrument_id=slug, include_owner=False)
+        if not instrument:
+            raise ValueError(f"Instrument '{slug}' not found.")
+        mfid = instrument['unique_id']
+        if params.get('instrument_mfid') not in (None, mfid):
+            raise ValueError(
+                f"instrument_id '{slug}' and instrument_mfid "
+                f"'{params['instrument_mfid']}' identify different instruments.")
+        params['instrument_mfid'] = mfid
 
 
     def create(self, dataset, scientific_metadata: Optional[Dict] = None,

@@ -336,10 +336,6 @@ Examples:
         help='Filter by data type (exact match)'
     )
     parser.add_argument(
-        '--instrument-id', default=None, dest='instrument_id', metavar='ID',
-        help='Filter by instrument ID (slug, any casing)'
-    )
-    parser.add_argument(
         '--instrument', default=None, dest='instrument_name', metavar='NAME',
         help='Deprecated: filter by instrument display name; use --instrument-id'
     )
@@ -1859,12 +1855,6 @@ def _execute_list(args):
             value = getattr(args, name, None)
             if value:
                 filters[name] = value
-        if getattr(args, 'instrument_id', None):
-            if filters.get('instrument_mfid'):
-                logger.error("Error: Specify either --instrument-id or --instrument-mfid, not both.")
-                sys.exit(1)
-            filters['instrument_mfid'] = client.instruments.get(
-                instrument_id=args.instrument_id, include_owner=False)['unique_id']
         if getattr(args, 'instrument_name', None):
             from .helpers import show_warning
             show_warning("--instrument NAME is deprecated; use --instrument-id.")

@@ -167,13 +167,12 @@ def test_groups_follow_chronology_with_newest_group_last(capsys):
     assert [[r['n'] for r in rows] for _, rows in groups] == [[1, 3], [2, 4]]
 
 
-def test_instrument_id_filter_resolves_to_mfid_across_projects(monkeypatch):
+def test_instrument_id_filter_is_passed_through_across_projects(monkeypatch):
     from types import SimpleNamespace
     from unittest.mock import MagicMock
 
     operation = SimpleNamespace(list=MagicMock(return_value=[]))
-    instruments = SimpleNamespace(get=MagicMock(return_value={'unique_id': 'I' * 26}))
-    client = SimpleNamespace(datasets=operation, instruments=instruments)
+    client = SimpleNamespace(datasets=operation)
     monkeypatch.setattr('crucible.config.get_client', lambda: client)
     monkeypatch.setattr('crucible.config.config._data', {'current_project': 'p'})
     args = make_parser(dataset).parse_args(['dataset', 'list', '--instrument-id', 'TITAN'])
@@ -181,9 +180,15 @@ def test_instrument_id_filter_resolves_to_mfid_across_projects(monkeypatch):
     args.func(args)
 
     kwargs = operation.list.call_args.kwargs
-    assert kwargs['instrument_mfid'] == 'I' * 26
+    assert kwargs['instrument_id'] == 'TITAN'
     assert 'project_id' not in kwargs
-    instruments.get.assert_called_once_with(instrument_id='TITAN', include_owner=False)
+
+
+def test_dataset_facets_accepts_instrument_id():
+    args = make_parser(dataset).parse_args(
+        ['dataset', 'facets', 'measurement', '--instrument-id', 'titan'])
+
+    assert args.instrument_id == 'titan'
 
 
 def test_instrument_name_filter_warns(monkeypatch, capsys):

@@ -206,11 +206,11 @@ def add_scope_filters(parser, resource: str) -> None:
     )
     parser.add_argument(
         '--created-after', dest='creation_time_gte', default=None, metavar='WHEN',
-        help='Created at or after this time (ISO 8601 or YYYY-MM-DD)'
+        help='Created at or after this time (ISO 8601 or YYYY-MM-DD, UTC unless an offset is given)'
     )
     parser.add_argument(
         '--created-before', dest='creation_time_lte', default=None, metavar='WHEN',
-        help='Created at or before this time'
+        help='Created at or before this time (a bare date includes the whole day)'
     )
     parser.add_argument(
         '--modified-after', dest='modification_time_gte', default=None, metavar='WHEN',
@@ -218,7 +218,7 @@ def add_scope_filters(parser, resource: str) -> None:
     )
     parser.add_argument(
         '--modified-before', dest='modification_time_lte', default=None, metavar='WHEN',
-        help='Modified at or before this time'
+        help='Modified at or before this time (a bare date includes the whole day)'
     )
     for flags, dest, metavar, text in _RESOURCE_FILTERS[resource]:
         parser.add_argument(*flags, dest=dest, default=None, metavar=metavar,
@@ -240,6 +240,8 @@ _RESOURCE_FILTERS = {
          'Filter by measurement (exact match)'),
         (('--session',), 'session_name', 'NAME', 'Filter by session name (exact match)'),
         (('--data-format',), 'data_format', 'FORMAT', 'Filter by data format (exact match)'),
+        (('--instrument-id',), 'instrument_id', 'ID',
+         'Filter by instrument slug (any casing)'),
         (('--instrument-mfid',), 'instrument_mfid', 'MFID',
          'Filter by canonical instrument MFID'),
         (('--sample-mfid',), 'sample_mfid', 'MFID',
