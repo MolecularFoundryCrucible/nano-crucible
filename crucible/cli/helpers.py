@@ -310,6 +310,55 @@ _EMPTY_FIELD_PARAMS = {
 }
 
 
+_INGESTOR_CACHE_SECONDS = 24 * 3600
+_ingestor_names = None
+
+
+def ingestor_names(client=None) -> list:
+    """Ingestion classes the API offers, for --ingestor completion.
+
+    Read from the API at most once a day per API URL and kept in the cache
+    folder, since command-line completion starts a new process on every Tab.
+    Falls back to the built-in list when the API cannot be reached.
+    """
+    import hashlib
+    import time
+    from ..config import config
+    from ..constants import AVAILABLE_INGESTORS
+
+    global _ingestor_names
+    if _ingestor_names is not None:
+        return _ingestor_names
+    try:
+        key = hashlib.sha256((config.api_url or '').encode()).hexdigest()[:12]
+        cache = config.cache_dir / f'ingestors-{key}.json'
+    except Exception:
+        cache = None
+    try:
+        if cache is not None and time.time() - cache.stat().st_mtime < _INGESTOR_CACHE_SECONDS:
+            _ingestor_names = json.loads(cache.read_text())
+            return _ingestor_names
+    except (OSError, ValueError):
+        pass
+    try:
+        if client is None:
+            from ..config import get_client
+            client = get_client()
+        names = sorted(client._request('get', '/ingestors', timeout=(3, 5)))
+        if cache is not None:
+            cache.parent.mkdir(parents=True, exist_ok=True)
+            cache.write_text(json.dumps(names))
+        _ingestor_names = names
+    except Exception:
+        _ingestor_names = list(AVAILABLE_INGESTORS)
+    return _ingestor_names
+
+
+def complete_ingestors(**kwargs):
+    """argcomplete completer for --ingestor."""
+    return ingestor_names()
+
+
 def add_upload_arguments(parser) -> None:
     """Add --upload-protocol and --no-ingest to a command that uploads files."""
     from ..constants import UPLOAD_PROTOCOLS
@@ -321,7 +370,8 @@ def add_upload_arguments(parser) -> None:
     )
     parser.add_argument(
         '--no-ingest', dest='no_ingest', action='store_true', default=False,
-        help='Upload without requesting ingestion'
+        help='Upload without requesting ingestion; request it later with '
+             '"crucible file request-ingestion FILE_MFID"'
     )
 
 

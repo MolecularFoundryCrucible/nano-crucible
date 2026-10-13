@@ -927,6 +927,12 @@ class CrucibleCompleter(Completer):
                                                      current_word)
             return
 
+        if prev == '--ingestor' and (not current_word or not current_word.startswith('-')):
+            from ..helpers import ingestor_names
+            yield from fuzzy_values(current_word, [
+                Completion(name + ' ') for name in ingestor_names(self._client)])
+            return
+
         if current_word and not current_word.startswith('-'):
             # Mid-typing a flag value.
             if prev in _USER_FLAGS:

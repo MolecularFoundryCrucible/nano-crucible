@@ -555,6 +555,12 @@ Examples:
         help='Session name for grouping related datasets'
     )
 
+    parser.add_argument(
+        '--owner', default=None, metavar='USER',
+        help='Create it for this user (username, ORCID, MFID, or email). '
+             'Platform contributors and admins can name anyone; others only themselves'
+    )
+
     # Public flag
     parser.add_argument(
         '--public',
@@ -611,7 +617,6 @@ Examples:
     )
 
     # Ingestor
-    from crucible.constants import AVAILABLE_INGESTORS
     ingestor_arg = parser.add_argument(
         '--ingestor',
         dest='ingestor',
@@ -621,7 +626,8 @@ Examples:
              'Run "crucible dataset ingestors" to see all available options.'
     )
     if ARGCOMPLETE_AVAILABLE:
-        ingestor_arg.completer = lambda **kwargs: AVAILABLE_INGESTORS
+        from .helpers import complete_ingestors
+        ingestor_arg.completer = complete_ingestors
 
     # Dry run flag
     parser.add_argument(
@@ -1314,12 +1320,15 @@ Examples:
         metavar='FILE',
         help='File(s) to upload (supports glob patterns like *.csv)'
     )
-    parser.add_argument(
+    ingestor_arg = parser.add_argument(
         '--ingestor',
         default=None,
         metavar='CLASS',
-        help='Ingestion class to use (default: auto-detected from file format)'
+        help='Ingestion class to use (default: auto-detected from file format). '
+             'Run "crucible dataset ingestors" to see them.'
     )
+    from .helpers import complete_ingestors
+    ingestor_arg.completer = complete_ingestors
     parser.add_argument(
         '--wait',
         action='store_true',
@@ -2194,6 +2203,7 @@ def _execute_create(args):
 
         if args.ingestor is not None and args.measurement is None:
             parser.measurement = None
+        parser.owner = args.owner
 
         dataset_record = parser.to_dataset()
         record_metadata = parser.scientific_metadata
@@ -2214,6 +2224,7 @@ def _execute_create(args):
             instrument_mfid=instrument_mfid,
             data_format=args.data_format,
             data_type=args.data_type,
+            owner=args.owner,
         )
         record_metadata = metadata_dict or {}
         record_keywords = keywords_list or []
@@ -2238,6 +2249,8 @@ def _execute_create(args):
     _p("Session",     dataset_record.session_name)
     _p("Timestamp",   dataset_record.timestamp)
     _p("Public",      term.fmt_bool(dataset_record.public))
+    if dataset_record.owner:
+        _p("Owner",       dataset_record.owner)
     _p("Instrument",  dataset_record.instrument_id or dataset_record.instrument_mfid or dataset_record.instrument_name)
     _p("MFID",        dataset_mfid or term.dim("(server assigns)"))
     if input_files and args.no_upload:

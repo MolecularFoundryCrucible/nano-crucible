@@ -263,6 +263,12 @@ Examples:
     )
 
     parser.add_argument(
+        '--owner', default=None, metavar='USER',
+        help='Create it for this user (username, ORCID, MFID, or email). '
+             'Platform contributors and admins can name anyone; others only themselves'
+    )
+
+    parser.add_argument(
         '--public',
         action='store_true',
         default=False,
@@ -1069,6 +1075,7 @@ def _execute_create(args):
                 sample_type=sample_type,
                 timestamp=timestamp,
                 public=True if args.public else None,
+                owner=getattr(args, 'owner', None),
             ),
             scientific_metadata=metadata_dict,
         )

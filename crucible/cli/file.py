@@ -321,17 +321,20 @@ Examples:
 """,
     )
     parser.add_argument('file_id', metavar='FILE_ID', help='File MFID')
-    parser.add_argument(
+    ingestor_arg = parser.add_argument(
         '--ingestor',
         default=None,
         metavar='CLASS',
-        help='Ingestion class to use (default: auto-detected from file format)'
+        help='Ingestion class to use (default: auto-detected from file format). '
+             'Run "crucible dataset ingestors" to see them.'
     )
     parser.add_argument(
         '--wait',
         action='store_true',
         help='Wait for ingestion to complete before returning'
     )
+    from .helpers import complete_ingestors
+    ingestor_arg.completer = complete_ingestors
     parser.set_defaults(func=_execute_request_ingestion)
 
 
