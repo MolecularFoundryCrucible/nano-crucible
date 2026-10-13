@@ -1,8 +1,8 @@
 """Startup welcome: the Crucible mark in half-block pixels beside a session summary."""
 
 from .. import term
-from ._common import (BANNER_PIXEL_COLORS, BRAND_OFF_WHITE, BRAND_ORANGE,
-                      shell_color_depth, vlen)
+from ._common import (BANNER_PIXELS, brand_colors, shell_color_depth,
+                      shell_style_rules, vlen)
 
 
 def load_shell_banner():
@@ -41,19 +41,20 @@ WELCOME_MARGIN = 2
 WELCOME_GAP = 4
 WELCOME_MIN_TEXT = 40
 
-_DIM = 'fg:ansibrightblack'
-_TITLE = f'bold fg:{BRAND_ORANGE}'
-_ELEVATED = f'bold bg:#b00020 fg:{BRAND_OFF_WHITE}'
+_DIM = 'class:welcome-dim'
+_TITLE = 'class:welcome-title'
+_ELEVATED = 'class:welcome-elevated'
 
 
-def shell_banner_row_fragments(banner):
+def shell_banner_row_fragments(banner, depth=None):
     """Return the colored mark as one list of (style, text) fragments per row."""
+    colors = brand_colors(depth)
     rows = []
     for upper_row, lower_row in shell_banner_row_pairs(banner):
         row = []
         for upper, lower in zip(upper_row, lower_row):
-            upper_color = BANNER_PIXEL_COLORS[upper]
-            lower_color = BANNER_PIXEL_COLORS[lower]
+            upper_color = colors[BANNER_PIXELS[upper]]
+            lower_color = colors[BANNER_PIXELS[lower]]
             if upper_color == lower_color:
                 style, text = f'bg:{lower_color}', ' '
             else:
@@ -148,8 +149,9 @@ def compose_welcome(logo_rows, text_rows, columns):
 def print_welcome(text_rows, columns):
     """Print the startup mark with the session summary beside it."""
     banner = load_shell_banner()
+    depth = shell_color_depth()
     if term.color_enabled():
-        logo_rows = shell_banner_row_fragments(banner)
+        logo_rows = shell_banner_row_fragments(banner, depth)
     else:
         logo_rows = [[('', line)] for line in shell_banner_panel(banner).splitlines()]
     rows = compose_welcome(logo_rows, text_rows, columns)
@@ -158,10 +160,12 @@ def print_welcome(text_rows, columns):
         return
     from prompt_toolkit import print_formatted_text
     from prompt_toolkit.formatted_text import FormattedText
+    from prompt_toolkit.styles import Style
 
     fragments = []
     for index, row in enumerate(rows):
         if index:
             fragments.append(('', '\n'))
         fragments.extend(row)
-    print_formatted_text(FormattedText(fragments), color_depth=shell_color_depth())
+    print_formatted_text(FormattedText(fragments), style=Style.from_dict(shell_style_rules(depth)),
+                         color_depth=depth)

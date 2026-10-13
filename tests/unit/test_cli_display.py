@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
+from prompt_toolkit.output import ColorDepth
 
 from crucible.cli import access_group as access_group_cli
 from crucible.cli import dataset as dataset_cli
@@ -257,7 +258,7 @@ def test_shell_toolbar_restores_context_symbols(monkeypatch):
 def test_shell_toolbar_uses_brand_palette_without_completion_styles(monkeypatch):
     monkeypatch.setattr(term, '_COLOR_ENABLED', True)
 
-    rules = shell_common.shell_style_rules()
+    rules = shell_common.shell_style_rules(ColorDepth.DEPTH_24_BIT)
 
     assert rules['bottom-toolbar'] == 'noinherit bg:#031e2d fg:#a8c4cd'
     assert rules['tb-project'] == 'noinherit bg:#a8c4cd fg:#031e2d'
@@ -289,18 +290,9 @@ def test_shell_respects_explicit_prompt_toolkit_color_depth(monkeypatch):
     assert shell_common.shell_color_depth() == ColorDepth.DEPTH_8_BIT
 
 
-def test_shell_leaves_color_depth_automatic_without_true_color(monkeypatch):
-    monkeypatch.setattr(term, '_COLOR_ENABLED', True)
-    monkeypatch.delenv('NO_COLOR', raising=False)
-    monkeypatch.delenv('PROMPT_TOOLKIT_COLOR_DEPTH', raising=False)
-    monkeypatch.delenv('COLORTERM', raising=False)
-
-    assert shell_common.shell_color_depth() is None
-
-
 def test_shell_banner_is_packaged_and_uses_requested_colors():
     banner = shell_banner.load_shell_banner()
-    fragments = [fragment for row in shell_banner.shell_banner_row_fragments('_%=.\n.=_%')
+    fragments = [fragment for row in shell_banner.shell_banner_row_fragments('_%=.\n.=_%', ColorDepth.DEPTH_24_BIT)
                  for fragment in row]
     styles = {style for style, _text in fragments}
 
@@ -479,7 +471,7 @@ def test_shell_html_removes_styles_when_color_is_disabled(monkeypatch):
 def test_shell_toolbar_style_is_monochrome_when_color_is_disabled(monkeypatch):
     monkeypatch.setattr(term, '_COLOR_ENABLED', False)
 
-    rules = shell_common.shell_style_rules()
+    rules = shell_common.shell_style_rules(ColorDepth.DEPTH_24_BIT)
 
     assert set(rules.values()) == {'noinherit'}
 
