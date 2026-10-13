@@ -673,15 +673,17 @@ def _execute_update(args):
 
     try:
         client = get_client()
+        target = args.unique_id
 
         if fields:
             result = client.instruments.update(args.unique_id, **fields)
             term.success("Instrument updated", args)
             _show_instrument(result)
+            target = result.get('unique_id') or target
 
         if metadata_dict is not None:
             overwrite = getattr(args, 'overwrite', False)
-            client.instruments.update_scientific_metadata(args.unique_id, metadata_dict, overwrite=overwrite)
+            client.instruments.update_scientific_metadata(target, metadata_dict, overwrite=overwrite)
             action = "replaced" if overwrite else "updated"
             term.success(f"Scientific metadata {action} for instrument {args.unique_id}", args)
 
