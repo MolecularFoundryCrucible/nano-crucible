@@ -276,7 +276,7 @@ The `upload_protocol` setting chooses the route:
 
 | Value | Behavior |
 | --- | --- |
-| `auto` (default) | Signed multipart uploads, falling back to the legacy token-based route when the server does not offer them |
+| `auto` (default) | Signed multipart uploads, falling back to the legacy token-based route when the server does not offer them. Until the ingestion workers can read signed uploads, files that request ingestion use the legacy route |
 | `signed` | Signed multipart uploads only; fails on a server without them |
 | `legacy` | The legacy token-based route only |
 

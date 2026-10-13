@@ -32,7 +32,8 @@ def upload_file_gcs(client, dsid: str, file_path: str,
                     chunk_size_mb: Optional[int] = None,
                     max_workers: Optional[int] = None,
                     protocol: Optional[str] = None,
-                    progress: Optional[Progress] = None) -> Tuple[Dict, bool]:
+                    progress: Optional[Progress] = None,
+                    for_ingestion: bool = False) -> Tuple[Dict, bool]:
     """Dispatch to a multipart or resumable upload.
 
     Args:
@@ -49,6 +50,9 @@ def upload_file_gcs(client, dsid: str, file_path: str,
                        not offer signed uploads.
         progress:      Called as progress(filename, bytes_done, total) by
                        signed uploads; defaults to client.upload_progress.
+        for_ingestion: The caller will request ingestion of this file. "auto"
+                       then uses the legacy route, because the ingestion
+                       consumers cannot read signed-upload objects yet.
 
     Returns:
         Tuple[Dict, bool]: (AssociatedFileRead record, was_existing).
@@ -60,8 +64,10 @@ def upload_file_gcs(client, dsid: str, file_path: str,
     progress = progress or getattr(client, 'upload_progress', None)
     if protocol not in UPLOAD_PROTOCOLS:
         raise ValueError(f"protocol must be one of: {', '.join(UPLOAD_PROTOCOLS)}.")
-    if protocol == 'signed' or (protocol == 'auto'
-                                and not getattr(client, '_signed_uploads_unavailable', False)):
+    use_signed = protocol == 'signed' or (
+        protocol == 'auto' and not for_ingestion
+        and not getattr(client, '_signed_uploads_unavailable', False))
+    if use_signed:
         try:
             return upload_file_signed_multipart(client, dsid, file_path,
                                                 max_workers=max_workers, progress=progress)

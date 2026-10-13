@@ -83,7 +83,7 @@ crucible dataset create --project-id my-project --name "Planned experiment"
 
 Dataset creation accepts `--project-id` or `--project-mfid` and `--instrument-id` or `--instrument-mfid`. Matching ID and MFID forms may be supplied together. Interactive use remains ID-oriented, while MFID flags support integrations and automation.
 
-The `--type`, `--ingestor`, `--no-upload`, `--backend`, and `--access-note` options require at least one `--input` file. On a terminal, `dataset create` and `dataset add-file` show a progress line per file (percentage, size, rate, and time left) while it uploads. Uploads use signed multipart uploads and fall back to the legacy route on servers without them; `crucible config set upload_protocol auto|signed|legacy` chooses.
+The `--type`, `--ingestor`, `--no-upload`, `--backend`, and `--access-note` options require at least one `--input` file. On a terminal, `dataset create` and `dataset add-file` show a progress line per file (percentage, size, rate, and time left) while it uploads. Uploads use signed multipart uploads and fall back to the legacy route on servers without them or when ingestion is requested, until the ingestion workers support signed uploads; `crucible config set upload_protocol auto|signed|legacy` chooses.
 
 Use `dataset list --project-id PROJECT --project-scope shared` to show resources shared with a project but assigned elsewhere or unassigned. Use `--project-scope all` to combine assigned and shared resources. `--project-mfid` accepts the canonical project MFID instead of a project ID. The interactive shell completes both identifiers through project search. Human-readable scoped results include the resource's actual project and its `assigned` or `shared` relation.
 

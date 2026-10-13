@@ -796,9 +796,11 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
             skip_ingestion: Upload the file without requesting ingestion. Request it
                 later with client.files.request_ingestion(mfid).
             upload_protocol: "auto", "signed", or "legacy" for multipart uploads;
-                defaults to the upload_protocol setting ("auto": signed upload
-                URLs, falling back to the legacy token route when the server
-                does not offer them).
+                defaults to the upload_protocol setting. "auto" uses signed
+                upload URLs, falling back to the legacy token route when the
+                server does not offer them; while the ingestion consumers
+                cannot read signed uploads, it also uses the legacy route
+                whenever ingestion is requested.
             progress: Called as progress(filename, bytes_done, total) while a
                 signed upload sends its parts.
 
@@ -814,7 +816,8 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
                                                     chunk_size_mb=chunk_size_mb,
                                                     max_workers=max_workers,
                                                     protocol=upload_protocol,
-                                                    progress=progress)
+                                                    progress=progress,
+                                                    for_ingestion=not skip_ingestion)
         file_record = self._client.files._parse(file_record)
 
         stored_filename = file_record.get('filename', filename)
