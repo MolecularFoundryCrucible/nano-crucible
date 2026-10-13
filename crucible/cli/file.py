@@ -208,9 +208,9 @@ def _execute_download(args):
         except _requests.exceptions.HTTPError as e:
             if e.response is not None and e.response.status_code == 404:
                 logger.error(f"File {args.file_id} is not yet available for download")
-            else:
-                logger.error(f"Failed to download: {e}")
-            sys.exit(1)
+                sys.exit(1)
+            from .helpers import fail
+            fail("downloading file", e, args)
 
         term.success(f"Downloaded {output_path}", args)
 
