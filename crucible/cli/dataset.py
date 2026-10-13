@@ -656,6 +656,8 @@ Examples:
         help="Free-text note on how to access --no-upload files (e.g. 'request via NERSC allocation X')."
     )
 
+    from .helpers import add_upload_arguments
+    add_upload_arguments(parser)
     parser.set_defaults(func=_execute_create)
 
 
@@ -1323,6 +1325,8 @@ Examples:
         action='store_true',
         help='Wait for ingestion to complete before returning'
     )
+    from .helpers import add_upload_arguments
+    add_upload_arguments(parser)
     parser.set_defaults(func=_execute_add_file)
 
 
@@ -1356,12 +1360,14 @@ def _execute_add_file(args):
 
         ingestor = getattr(args, 'ingestor', None)
         wait     = getattr(args, 'wait', False)
+        if args.no_ingest and (wait or ingestor):
+            logger.error("--no-ingest cannot be combined with --wait or --ingestor.")
+            sys.exit(1)
 
         term.header(f"Add Files  {dsid}")
         rows = []
-        from .helpers import UploadProgress
-        client.upload_progress = UploadProgress()
-        try:
+        from .helpers import upload_session
+        with upload_session(client, args):
             for fpath in files:
                 print(f"  Uploading {fpath.name} ...", flush=True)
                 client.datasets.add_file(dsid, str(fpath),
@@ -1369,8 +1375,6 @@ def _execute_add_file(args):
                                          wait_for_ingestion_response=wait)
                 rows.append((fpath.name, term.fmt_size(fpath.stat().st_size),
                              term.status_marker('success')))
-        finally:
-            client.upload_progress = None
 
         print()
         term.table(rows, ['File', 'Size', ''], max_widths=[60, 10, 4])
@@ -2045,6 +2049,8 @@ def _execute_create(args):
                 ('--no-upload', args.no_upload),
                 ('--backend', args.backend is not None),
                 ('--access-note', args.access_note is not None),
+                ('--upload-protocol', args.upload_protocol is not None),
+                ('--no-ingest', args.no_ingest),
             )
             if enabled
         ]
@@ -2296,16 +2302,13 @@ def _execute_create(args):
                         files=[],
                     )
                 else:
-                    from .helpers import UploadProgress
-                    parser.client.upload_progress = UploadProgress()
-                    try:
+                    from .helpers import upload_session
+                    with upload_session(parser.client, args):
                         result = parser.upload_dataset(
                             ingestor=args.ingestor,
                             verbose=getattr(args, 'debug', False),
-                            wait_for_ingestion_response=True
+                            wait_for_ingestion_response=not args.no_ingest
                         )
-                    finally:
-                        parser.client.upload_progress = None
 
             term.success("Dataset created" if parser is None else "Upload completed", args)
             created = result.get('created_record', {}) if result else {}

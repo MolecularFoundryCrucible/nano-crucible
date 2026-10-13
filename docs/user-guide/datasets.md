@@ -280,7 +280,7 @@ The `upload_protocol` setting chooses the route:
 | `signed` | Signed multipart uploads only; fails on a server without them |
 | `legacy` | The legacy token-based route only |
 
-Set it with `crucible config set upload_protocol legacy`, the `CRUCIBLE_UPLOAD_PROTOCOL` environment variable, or `add_file(..., upload_protocol="legacy")`. `multipart=False` keeps using the sequential resumable route. Pass `progress=callback` to `add_file()`, or set `client.upload_progress`, to receive `callback(filename, bytes_done, total)` while parts upload; the CLI uses it to show a progress line.
+Set it with `crucible config set upload_protocol legacy`, the `CRUCIBLE_UPLOAD_PROTOCOL` environment variable, `--upload-protocol` on `dataset create` and `dataset add-file`, `client.upload_protocol`, or `add_file(..., upload_protocol="legacy")`. `--no-ingest` (or `client.request_ingestion = False`) uploads without requesting ingestion. `multipart=False` keeps using the sequential resumable route. Pass `progress=callback` to `add_file()`, or set `client.upload_progress`, to receive `callback(filename, bytes_done, total)` while parts upload; the CLI uses it to show a progress line.
 
 If no ingestion class exists for your data type, reach out on [Discord](https://discord.gg/Wrepphsgbx) or contribute to the [crucible-ingestion](https://github.com/MolecularFoundryCrucible/crucible-ingestion) repository.
 

@@ -794,7 +794,8 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
             chunk_size_mb: Override chunk size in MiB (uses config/default if None).
             max_workers: Override number of upload threads (uses config/default if None).
             skip_ingestion: Upload the file without requesting ingestion. Request it
-                later with client.files.request_ingestion(mfid).
+                later with client.files.request_ingestion(mfid). Also implied
+                when client.request_ingestion is False.
             upload_protocol: "auto", "signed", or "legacy" for multipart uploads;
                 defaults to the upload_protocol setting. "auto" uses signed
                 upload URLs, falling back to the legacy token route when the
@@ -808,6 +809,7 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
             Dict: {'associated_file': AssociatedFileRead, 'ingestion_request': IngestionRequest}
         """
         filename = os.path.basename(file_path)
+        skip_ingestion = skip_ingestion or not getattr(self._client, 'request_ingestion', True)
 
         file_record, was_existing = upload_file_gcs(self._client,
                                                     dataset_mfid,

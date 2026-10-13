@@ -45,7 +45,8 @@ def upload_file_gcs(client, dsid: str, file_path: str,
                        uploads use the server's part size.
         max_workers:   Upload threads — overrides config if provided.
         protocol:      "auto", "signed", or "legacy" for multipart uploads;
-                       defaults to the upload_protocol setting. "auto" falls
+                       defaults to client.upload_protocol, then the
+                       upload_protocol setting. "auto" falls
                        back to the legacy token route when the server does
                        not offer signed uploads.
         progress:      Called as progress(filename, bytes_done, total) by
@@ -60,7 +61,8 @@ def upload_file_gcs(client, dsid: str, file_path: str,
     """
     if not multipart:
         return upload_file_gcs_resumable(client, dsid, file_path)
-    protocol = protocol or client._config.upload_protocol
+    protocol = (protocol or getattr(client, 'upload_protocol', None)
+                or client._config.upload_protocol)
     progress = progress or getattr(client, 'upload_progress', None)
     if protocol not in UPLOAD_PROTOCOLS:
         raise ValueError(f"protocol must be one of: {', '.join(UPLOAD_PROTOCOLS)}.")

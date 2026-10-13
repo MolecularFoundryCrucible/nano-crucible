@@ -310,6 +310,50 @@ _EMPTY_FIELD_PARAMS = {
 }
 
 
+def add_upload_arguments(parser) -> None:
+    """Add --upload-protocol and --no-ingest to a command that uploads files."""
+    from ..constants import UPLOAD_PROTOCOLS
+
+    parser.add_argument(
+        '--upload-protocol', choices=UPLOAD_PROTOCOLS, default=None, metavar='MODE',
+        help=f"Upload route: {', '.join(UPLOAD_PROTOCOLS)} "
+             "(default: the upload_protocol setting, normally auto)"
+    )
+    parser.add_argument(
+        '--no-ingest', dest='no_ingest', action='store_true', default=False,
+        help='Upload without requesting ingestion'
+    )
+
+
+class upload_session:
+    """Apply a command's upload options and progress line to the shared client.
+
+    Restores the previous values afterwards, since the shell keeps one client.
+    """
+
+    def __init__(self, client, args):
+        self.client = client
+        self.values = {
+            'upload_progress': UploadProgress(),
+            'upload_protocol': getattr(args, 'upload_protocol', None),
+            'request_ingestion': not getattr(args, 'no_ingest', False),
+        }
+
+    _DEFAULTS = {'upload_progress': None, 'upload_protocol': None, 'request_ingestion': True}
+
+    def __enter__(self):
+        self.saved = {name: getattr(self.client, name, self._DEFAULTS[name])
+                      for name in self.values}
+        for name, value in self.values.items():
+            setattr(self.client, name, value)
+        return self.client
+
+    def __exit__(self, *exc):
+        for name, value in self.saved.items():
+            setattr(self.client, name, value)
+        return False
+
+
 class UploadProgress:
     """One self-updating stderr line per uploading file: bar, percent, size, rate, time left.
 

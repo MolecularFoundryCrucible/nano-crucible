@@ -47,6 +47,7 @@
 - List methods return a `ListResult`, a `list` that also carries `has_more`, the server's `total`, and `next_cursor` or `next_offset`; every list method accepts `cursor=` to resume from a previous result.
 - The interactive shell's `more` shows the next page of the last listing.
 - `add_file()` and `create()` upload through the API's signed multipart flow, with `upload_protocol` (`auto`, `signed`, `legacy`; config key, environment variable, and keyword) choosing the route; `auto`, the default, falls back to the legacy route when the server does not offer it, and uses the legacy route for files that request ingestion until the ingestion workers can read signed uploads.
+- `dataset create` and `dataset add-file` accept `--upload-protocol` and `--no-ingest`, and `client.upload_protocol` and `client.request_ingestion` set the same defaults for every upload, including those made through parsers.
 - Uploads report progress through a `progress` callback or `client.upload_progress`, and `dataset create` and `dataset add-file` show a progress line per file.
 - `files.get_download_link()` and `datasets.get_download_links()` accept `disposition="inline"` for browser display.
 - A mistyped command, subcommand, or flag ends with a "Did you mean ...?" suggestion, and API errors add a next step for rejected keys, missing permissions, unknown identifiers, options an older server does not know, timeouts, and unreachable servers.

@@ -302,3 +302,59 @@ def test_add_file_routes_by_whether_it_requests_ingestion(monkeypatch):
     datasets.add_file(DSID, 'x', skip_ingestion=True)
 
     assert seen == [True, False]
+
+
+def test_client_upload_protocol_overrides_the_setting(source, monkeypatch):
+    api = FakeApi()
+    api.upload_protocol = 'legacy'
+    legacy = MagicMock(return_value=(RECORD, False))
+    monkeypatch.setattr(dispatch, 'upload_file_gcs_multipart', legacy)
+
+    dispatch.upload_file_gcs(api, DSID, source)
+
+    assert legacy.called and api.calls == []
+
+
+def test_client_request_ingestion_false_skips_ingestion(monkeypatch):
+    from crucible.resources.datasets import DatasetOperations
+    seen = []
+    monkeypatch.setattr('crucible.resources.datasets.upload_file_gcs',
+                        lambda client, dsid, path, **kw: (seen.append(kw['for_ingestion'])
+                                                          or ({'mfid': 'f1', 'filename': 'x'}, False)))
+    client = MagicMock(request_ingestion=False)
+    client.files._parse = lambda record: record
+    client.files._skip_ingestion = MagicMock(return_value=None)
+
+    DatasetOperations(client).add_file(DSID, "x")
+
+    assert seen == [False]
+    client.files._skip_ingestion.assert_called_once()
+    assert not client.files.request_ingestion.called
+
+
+def test_upload_session_applies_and_restores_options():
+    from crucible.cli.helpers import upload_session
+
+    client = SimpleNamespace()
+    args = SimpleNamespace(upload_protocol='signed', no_ingest=True)
+    with upload_session(client, args):
+        assert (client.upload_protocol, client.request_ingestion) == ('signed', False)
+        assert client.upload_progress is not None
+
+    assert (client.upload_protocol, client.request_ingestion, client.upload_progress) == (
+        None, True, None)
+
+
+def test_add_file_cli_rejects_no_ingest_with_wait(tmp_path, monkeypatch, capsys):
+    import argparse
+    from crucible.cli import dataset as dataset_cli
+
+    path = tmp_path / 'a.bin'
+    path.write_bytes(b'x')
+    parser = argparse.ArgumentParser()
+    dataset_cli.register_subcommand(parser.add_subparsers(dest='command'))
+    args = parser.parse_args(['dataset', 'add-file', DSID, '-i', str(path), '--no-ingest', '--wait'])
+    monkeypatch.setattr('crucible.config.get_client', lambda: MagicMock())
+
+    with pytest.raises(SystemExit):
+        args.func(args)
