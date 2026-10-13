@@ -332,19 +332,18 @@ def test_grid_fills_columns_top_to_bottom(capsys):
     assert capsys.readouterr().out.splitlines() == ['a  d', 'b  e', 'c']
 
 
-def test_list_projects_uses_member_ref_route(monkeypatch, capsys):
-    client = SimpleNamespace(projects=SimpleNamespace())
-    client.projects.list = MagicMock(return_value=[{
-        'project_id': 'project-one',
-        'title': 'Project One',
-        'organization': 'LBL',
-        'role': 'contributor',
-    }])
+def test_list_projects_shows_the_users_role(monkeypatch, capsys):
+    client = SimpleNamespace(users=SimpleNamespace())
+    client.users.get_projects = MagicMock(return_value=[
+        {'project_id': 'zeta', 'title': 'Zeta', 'organization': 'LBL', 'role': 'viewer'},
+        {'project_id': 'Alpha', 'title': 'Alpha', 'organization': 'LBL', 'role': 'contributor'},
+    ])
     monkeypatch.setattr('crucible.config.get_client', lambda: client)
+    monkeypatch.setattr('crucible.cli.helpers.resolve_user_id', lambda c, ref: 'U' * 26)
 
     _execute_list_projects(SimpleNamespace(user='alice', json=False, debug=False))
 
-    client.projects.list.assert_called_once_with(member_ref='alice')
+    client.users.get_projects.assert_called_once_with('U' * 26, limit=None)
     output = capsys.readouterr().out
-    assert 'project-one' in output
     assert 'contributor' in output
+    assert output.index('Alpha') < output.index('zeta')
