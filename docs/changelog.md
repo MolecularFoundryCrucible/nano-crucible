@@ -13,6 +13,8 @@
 - Project and instrument lists and details show the caller's role, colored like the member tables (`owner` on instruments rather than the project-`lead` alias).
 - `user list-projects` output is sorted and hides projects pending deletion.
 - Dataset and sample lists accept sort, direction, visibility, affiliation, owner, and creation or modification time-range filters in the Python client and CLI, plus `--name`, `--missing FIELD`, `--sample-mfid`/`--dataset-mfid`, and `--description` (samples).
+- Time-range filters treat a bare date as the whole day and a datetime without a timezone as UTC.
+- `client.datasets.list()`, `count()`, and `facets()` accept an `instrument_id` slug, and `dataset facets` gains `--instrument-id`.
 - `client.datasets.facets()`, `client.samples.facets()`, and the matching `dataset facets` and `sample facets` CLI commands group results by a field and return value counts, and accept the same filters as the list commands.
 - Service-account administration: `get_admin()`, `list_admin()`, and `set_platform_role()` in Python, plus `service-account show` and `service-account set-role` in the CLI.
 - Deletion request and audit lists accept scope, project, sort, and direction filters, deletion request details show whether the caller can review them, and `crucible deletion list` defaults to the `reviewable` scope for reviewers.
