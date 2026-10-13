@@ -42,6 +42,8 @@
 - `dataset list` and `sample list` print oldest to newest, follow `--sort`/`--direction` instead of re-sorting by name, and show a flat table unless `--group-by` is given; without a project and no current project they list every accessible project instead of failing, and `--all-projects` ignores the current project.
 - The interactive shell opens with a session summary beside the Crucible mark: version, user and platform role, API URL, current project, access mode, and pending reviews.
 - Interactive shell colors keep the brand dark blue on 256- and 16-color terminals instead of turning grey, and true color is detected from more terminals.
+- List commands show 50 records by default (the `default_limit` setting, previously 100), accept `--all`, show the total match count in the header, and say below the table how many records were left out and how to see them; the note goes to stderr with `--json` or piped output.
+- List methods return a `ListResult`, a `list` that also carries `has_more` and the server's `total`.
 - The interactive shell hides service-account commands from completion for callers who cannot manage them, and `refresh` now re-reads permissions.
 - Unrecognized dataset and sample list filters now raise a local `ValueError` naming the closest valid parameter instead of a server-side 422.
 - The minimum supported Python version is now 3.10.

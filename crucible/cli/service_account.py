@@ -11,6 +11,7 @@ import json
 import sys
 import logging
 from . import term
+from .helpers import add_limit_arguments, count_label, print_more_hint, resolve_limit
 
 logger = logging.getLogger(__name__)
 
@@ -301,7 +302,7 @@ def _register_list(subparsers):
         help='List all service accounts',
         formatter_class=term.ColorHelpFormatter,
     )
-    parser.add_argument('--limit', type=int, default=100, metavar='N')
+    add_limit_arguments(parser, 'service accounts')
     parser.add_argument('--search', '-q', dest='q', default=None, metavar='TEXT',
                         help='Filter by username or name (at least 3 characters)')
     parser.add_argument('--json', action='store_true', default=False,
@@ -315,13 +316,14 @@ def _execute_list(args):
         client = get_client()
         q = getattr(args, 'q', None)
         if client.can_elevate:
-            accounts = client.service_accounts.list_admin(q=q, limit=args.limit)
+            accounts = client.service_accounts.list_admin(q=q, limit=resolve_limit(args))
         else:
-            accounts = client.users.list(limit=args.limit, q=q, is_service_account=True)
+            accounts = client.users.list(limit=resolve_limit(args), q=q, is_service_account=True)
         if getattr(args, 'json', False):
+            print_more_hint(accounts, resolve_limit(args), args)
             print(json.dumps(accounts, indent=2, default=str))
             return
-        term.header(f"Service Accounts ({len(accounts)})")
+        term.header(f"Service Accounts ({count_label(accounts)})")
         if not accounts:
             print(f"  {term.dim('No service accounts found.')}")
             return
@@ -341,6 +343,7 @@ def _execute_list(args):
         headers = ['Username'] + (['Name'] if show_names else []) + ['MFID', 'Platform role']
         max_widths = [30] + ([25] if show_names else []) + [26, 13]
         term.table(rows, headers, max_widths=max_widths)
+        print_more_hint(accounts, resolve_limit(args), args)
     except Exception as e:
         from .helpers import fail
         fail("", e, args)

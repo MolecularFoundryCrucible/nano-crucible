@@ -10,6 +10,7 @@ live under 'crucible dataset'. Operations that take a file MFID live here.
 import sys
 import logging
 from . import term
+from .helpers import add_limit_arguments, count_label, print_more_hint, resolve_limit
 from ..utils.io import storage_display_name
 
 logger = logging.getLogger(__name__)
@@ -64,10 +65,7 @@ Examples:
         '--dataset', '-d', metavar='DSID', default=None,
         help='Scope to a specific dataset (faster than global list)',
     )
-    parser.add_argument(
-        '--limit', type=int, default=100, metavar='N',
-        help='Maximum number of files to return (default: 100)',
-    )
+    add_limit_arguments(parser, 'files')
     parser.add_argument(
         '--sha256', metavar='HASH',
         help='Filter by SHA-256 hex digest',
@@ -81,16 +79,19 @@ def _execute_list(args):
     try:
         client = get_client()
         dsid = getattr(args, 'dataset', None)
+        limit = None if dsid else resolve_limit(args)
         if dsid:
             files = client.datasets.list_files(dsid)
         else:
-            files = client.files.list(limit=args.limit, sha256_hash=args.sha256)
+            files = client.files.list(limit=limit, sha256_hash=args.sha256)
+        fetched = files
 
         sha256_filter = getattr(args, 'sha256', None)
         if sha256_filter and dsid:
             files = [f for f in files if f.get('sha256_hash', '').startswith(sha256_filter)]
 
-        header = f"Files · {dsid} ({len(files)})" if dsid else f"Files ({len(files)})"
+        count = count_label(fetched, len(files))
+        header = f"Files · {dsid} ({count})" if dsid else f"Files ({count})"
         term.header(header)
         if not files:
             print(f"  {term.dim('No files found.')}")
@@ -111,6 +112,7 @@ def _execute_list(args):
             max_widths=[40, 10, 26, 26, 10],
             min_widths=[4, 4, 26, 26, 6],
         )
+        print_more_hint(fetched, limit, args)
 
     except Exception as e:
         from .helpers import fail

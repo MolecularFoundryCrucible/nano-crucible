@@ -13,7 +13,7 @@ import json
 logger = logging.getLogger(__name__)
 
 from . import term
-from ..config import config as _config
+from .helpers import add_limit_arguments, count_label, print_more_hint, resolve_limit
 from ..constants import PROJECT_ACCESS_ROLES, PROJECT_SORTS, SORT_DIRECTIONS
 
 
@@ -198,13 +198,7 @@ Examples:
 """
     )
 
-    parser.add_argument(
-        '--limit',
-        type=int,
-        default=_config.default_limit,
-        metavar='N',
-        help=f'Maximum number of users to return (default: {_config.default_limit})'
-    )
+    add_limit_arguments(parser, 'users')
 
     parser.add_argument('-u', '--username', metavar='USERNAME', default=None,
                         help='Filter by exact username')
@@ -642,13 +636,14 @@ def _execute_list(args):
         if getattr(args, 'exact', False):
             kwargs['permissive'] = False
         kwargs = {k: v for k, v in kwargs.items() if v is not None}
-        users = client.users.list(limit=args.limit, **kwargs)
+        users = client.users.list(limit=resolve_limit(args), **kwargs)
 
         if getattr(args, 'json', False):
+            print_more_hint(users, resolve_limit(args), args)
             print(json.dumps(users, indent=2, default=str))
             return
 
-        term.header(f"Users ({len(users)})")
+        term.header(f"Users ({count_label(users)})")
 
         if not users:
             print(f"  {term.dim('No users found.')}")
@@ -682,6 +677,7 @@ def _execute_list(args):
             max_widths.append(13)
             min_widths.append(13)
         term.table(rows, headers, max_widths=max_widths, min_widths=min_widths)
+        print_more_hint(users, resolve_limit(args), args)
 
     except Exception as e:
         from .helpers import fail
@@ -795,10 +791,7 @@ Examples:
 """
     )
     parser.add_argument('user', metavar='USER', help='ORCID, MFID, username, or email of the user')
-    parser.add_argument(
-        '--limit', type=int, default=_config.default_limit, metavar='N',
-        help=f'Maximum number of datasets to return (default: {_config.default_limit})',
-    )
+    add_limit_arguments(parser, 'datasets')
     parser.set_defaults(func=_execute_list_datasets)
 
 
@@ -866,18 +859,20 @@ def _execute_list_datasets(args):
     from crucible.config import get_client
     try:
         client = get_client()
+        limit = resolve_limit(args)
         datasets = client.datasets.list(
             accessible_to_user=args.user,
-            limit=args.limit,
+            limit=limit,
         )
         dataset_ids = [dataset['unique_id'] for dataset in datasets]
 
-        term.header(f"Datasets · {args.user} ({len(dataset_ids)})")
+        term.header(f"Datasets · {args.user} ({count_label(datasets)})")
         if not dataset_ids:
             print(f"  {term.dim('No datasets found.')}")
             return
         for dsid in dataset_ids:
             print(f"  {term.cyan(dsid)}")
+        print_more_hint(datasets, limit, args)
 
     except ValueError as e:
         logger.error(str(e))

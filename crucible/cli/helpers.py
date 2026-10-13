@@ -272,6 +272,80 @@ _EMPTY_FIELD_PARAMS = {
 }
 
 
+def add_limit_arguments(parser, noun: str = 'results', short: bool = False) -> None:
+    """Add --limit and --all, defaulting to the default_limit setting."""
+    from ..config import config
+
+    parser.add_argument(
+        *(('--limit', '-l') if short else ('--limit',)), type=int, default=None, metavar='N',
+        help=f'Maximum number of {noun} to show (default: {config.default_limit}, '
+             f'from the default_limit setting)'
+    )
+    parser.add_argument(
+        '--all', dest='all_results', action='store_true', default=False,
+        help=f'Show every matching {noun}'
+    )
+
+
+def resolve_limit(args):
+    """Return the record limit for a list command, or None for --all."""
+    from ..config import config
+
+    if getattr(args, 'all_results', False):
+        return None
+    limit = getattr(args, 'limit', None)
+    return config.default_limit if limit is None else limit
+
+
+def sort_like(records, key=None, reverse=False):
+    """sorted() that keeps a list result's has_more and total."""
+    from ..resources.base import ListResult
+
+    return ListResult.like(records, sorted(records, key=key, reverse=reverse))
+
+
+def count_label(records, shown=None) -> str:
+    """Header count such as "50 of 1,234", "50+", or "50"."""
+    shown = len(records) if shown is None else shown
+    total = getattr(records, 'total', None)
+    if total is not None and total > shown:
+        return f"{shown:,} of {total:,}"
+    if getattr(records, 'has_more', False):
+        return f"{shown:,}+"
+    return f"{shown:,}"
+
+
+def print_more_hint(records, limit, args=None, hint=None, allow_all=True) -> None:
+    """Say when a listing stopped short of every match, and how to see more.
+
+    A list result that reports has_more is trusted; a plain list is assumed
+    truncated when it reached the limit. Script output (--json or a pipe)
+    gets the note on stderr so stdout stays pure data.
+    """
+    from . import term
+
+    has_more = getattr(records, 'has_more', None)
+    truncated = has_more if has_more is not None else (
+        limit is not None and len(records) >= limit)
+    if not truncated:
+        return
+    total = getattr(records, 'total', None)
+    if total is not None and total > len(records):
+        lead = f"{total - len(records):,} more not shown"
+    elif has_more is None:
+        lead = f"Showing the first {len(records):,}; there may be more"
+    else:
+        lead = "More results not shown"
+    tips = ([hint] if hint else []) + ['raise --limit N'] + (['use --all'] if allow_all else [])
+    if len(tips) == 1:
+        tips.insert(0, 'refine the query')
+    message = f"{lead}. To see them, {', '.join(tips[:-1])}, or {tips[-1]}."
+    if getattr(args, 'json', False) or not sys.stdout.isatty():
+        print(message, file=sys.stderr)
+    else:
+        print(f"  {term.dim(chr(8230) + ' ' + message)}")
+
+
 def add_listing_filters(parser) -> None:
     """Add the list-only ordering options."""
     from ..constants import RESOURCE_SORTS, SORT_DIRECTIONS
@@ -1142,7 +1216,7 @@ def sort_members(members) -> list:
         name = term.fmt_name(d, default='') or ''
         return (-rank, name.lower())
 
-    return sorted(members, key=key)
+    return sort_like(members, key=key)
 
 
 def show_reassign_project(result, confirm: bool) -> None:

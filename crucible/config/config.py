@@ -270,12 +270,12 @@ class Config:
 
     @property
     def default_limit(self) -> int:
-        """Default maximum results per list/search request (default 100)."""
+        """Default number of records the CLI lists and searches show (default 50)."""
         raw = self._data.get('default_limit')
         try:
             return int(raw)
         except (TypeError, ValueError):
-            return 100
+            return 50
 
     @property
     def upload_chunk_size_mb(self) -> int:

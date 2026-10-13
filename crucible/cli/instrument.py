@@ -13,6 +13,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 from . import term
+from .helpers import add_limit_arguments, count_label, print_more_hint, resolve_limit
 from ..config import config as _config
 from ..constants import INSTRUMENT_SORTS, SORT_DIRECTIONS
 
@@ -185,13 +186,7 @@ def _register_list(subparsers):
         description='List instruments (active by default)'
     )
 
-    parser.add_argument(
-        '--limit',
-        type=int,
-        default=_config.default_limit,
-        metavar='N',
-        help=f'Maximum number of results to return (default: {_config.default_limit})'
-    )
+    add_limit_arguments(parser, 'instruments')
 
     parser.add_argument(
         '--include-metadata',
@@ -453,7 +448,7 @@ def _execute_list(args):
         if getattr(args, 'mine', False):
             filters['affiliation'] = ['owner', 'maintainer']
         instruments = client.instruments.list(
-            limit=args.limit,
+            limit=resolve_limit(args),
             include_metadata=getattr(args, 'include_metadata', False) or _config.include_metadata,
             include_owner=True,
             status=getattr(args, 'status', None),
@@ -463,11 +458,12 @@ def _execute_list(args):
         )
 
         if getattr(args, 'json', False):
+            print_more_hint(instruments, resolve_limit(args), args)
             print(json.dumps(instruments, indent=2, default=str))
             return
 
         scope = ' · mine' if getattr(args, 'mine', False) else ''
-        term.header(f"Instruments{scope} ({len(instruments)})")
+        term.header(f"Instruments{scope} ({count_label(instruments)})")
         if not instruments:
             print(f"  {term.dim('No instruments found.')}")
         else:
@@ -490,6 +486,7 @@ def _execute_list(args):
             term.table(rows, ['Name', 'Instrument ID', 'Owner', 'Status', 'My role'],
                        max_widths=[24, 25, 25, 12, 13],
                        min_widths=[4, 25, 5, 6, 4])
+            print_more_hint(instruments, resolve_limit(args), args)
 
     except Exception as e:
         from .helpers import fail
@@ -1013,9 +1010,10 @@ def _execute_search(args):
         results = client.instruments.search(
             args.query, limit=args.limit, status=getattr(args, 'status', None))
         if getattr(args, 'json', False):
+            print_more_hint(results, args.limit, args, allow_all=False)
             print(json.dumps(results, indent=2, default=str))
             return
-        term.header(f"Instruments matching '{args.query}' ({len(results)})")
+        term.header(f"Instruments matching '{args.query}' ({count_label(results)})")
         if not results:
             print(f"  {term.dim('No results found.')}")
             return
@@ -1034,6 +1032,7 @@ def _execute_search(args):
         term.table(rows, ['Name', 'Instrument ID', 'Type', 'MFID'],
                    max_widths=[25, 25, 20, 26],
                    min_widths=[4, 25, 4, 26])
+        print_more_hint(results, args.limit, args, allow_all=False)
     except Exception as e:
         from .helpers import fail
         fail("", e, args)

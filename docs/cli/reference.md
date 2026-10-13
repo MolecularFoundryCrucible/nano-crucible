@@ -23,6 +23,8 @@ Commands that create projects, instruments, or service accounts check the caller
 
 Running `crucible` without a command starts the interactive shell. See the [CLI overview](index.md) for setup, shell completion, and interactive usage.
 
+List commands show 50 records by default, set by the `default_limit` config key; `--limit N` changes that for one command and `--all` fetches every match. The header shows how many matched (`Projects (50 of 6,770)`), and when records were left out a note below the table says how many and how to see them, suggesting filters and facets where they apply. With `--json` or when output is piped, that note goes to stderr so stdout stays valid data. Search commands keep their own `--limit`, capped by the server, and suggest refining the query instead.
+
 `--json` is available for dataset, sample, and instrument `list` and `get`; project `list` and `get`; generic `get`; user `get`, `list`, and `search`; service-account `get` and `list`; account `show`; and dataset, sample, project, and instrument name or metadata searches. Collection and search commands return arrays, while singleton commands return objects.
 
 ## Dataset commands
@@ -191,7 +193,7 @@ Most user-management commands require administrator permissions.
 | `user edit USER` | Edit a user record interactively |
 | `user set-role USER ROLE` | Change a human user's platform role (`none`, `contributor`, `admin`); human platform admins only |
 | `user revoke-keys USER [--yes]` | Revoke every API key held by a user; admin only |
-| `user list-datasets USER [--limit N]` | List datasets accessible to a user |
+| `user list-datasets USER [--limit N\|--all]` | List datasets accessible to a user |
 | `user check-access USER DATASET_MFID` | Show a user's effective dataset access role |
 | `user list-access-groups USER` | List a user's access groups |
 | `user add-access-group USER GROUP` | Deprecated; use the typed project or instrument membership command |

@@ -13,6 +13,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 from . import term
+from .helpers import add_limit_arguments, count_label, print_more_hint, resolve_limit
 
 
 def register_subcommand(subparsers):
@@ -241,8 +242,7 @@ Examples:
                         help='Filter by project MFID captured at deletion time')
     parser.add_argument('--direction', choices=list(SORT_DIRECTIONS), default=None,
                         help='Sort direction on deletion time')
-    parser.add_argument('--limit', type=int, default=50, metavar='N',
-                        help='Maximum number of results (default: 50)')
+    add_limit_arguments(parser)
     parser.set_defaults(func=_execute_list_deleted)
 
 
@@ -273,14 +273,14 @@ def _execute_list_deleted(args):
             resource_id=args.resource_id,
             requester_id=args.requester_id,
             reviewer_id=args.reviewer_id,
-            limit=args.limit,
+            limit=resolve_limit(args),
             scope=args.scope,
             project_id=args.project_id,
             project_mfid=args.project_mfid,
             direction=args.direction,
         )
 
-        term.header(f"Deleted Resources ({len(records)})")
+        term.header(f"Deleted Resources ({count_label(records)})")
         if not records:
             print(f"  {term.dim('No deleted resources found.')}")
             return
@@ -304,6 +304,7 @@ def _execute_list_deleted(args):
         ]
         term.table(rows, ['ID', 'Resource ID', 'Type', 'Name', 'Deleted At', 'Requester'],
                    max_widths=[6, 26, 10, 20, 12, 25])
+        print_more_hint(records, resolve_limit(args), args)
 
     except Exception as e:
         from .helpers import fail

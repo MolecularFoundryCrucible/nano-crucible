@@ -15,6 +15,7 @@ import warnings
 logger = logging.getLogger(__name__)
 
 from . import term
+from .helpers import add_limit_arguments, count_label, print_more_hint, resolve_limit
 from ..config import config as _config
 from ..constants import PROJECT_ACCESS_ROLES, PROJECT_MEMBER_ROLES, PROJECT_SORTS, SORT_DIRECTIONS
 
@@ -87,13 +88,7 @@ def _register_list(subparsers):
         description='List all projects'
     )
 
-    parser.add_argument(
-        '--limit',
-        type=int,
-        default=_config.default_limit,
-        metavar='N',
-        help=f'Maximum number of results to return (default: {_config.default_limit})'
-    )
+    add_limit_arguments(parser, 'projects')
 
     parser.add_argument(
         '--include-metadata',
@@ -275,8 +270,7 @@ def _register_list_users(subparsers):
         pid_arg = p.add_argument('project_id', metavar='PROJECT_ID', help='Project ID')
         if ARGCOMPLETE_AVAILABLE:
             pid_arg.completer = argcomplete.completers.SuppressCompleter()
-        p.add_argument('--limit', type=int, default=_config.default_limit, metavar='N',
-                       help=f'Maximum number of results to return (default: {_config.default_limit})')
+        add_limit_arguments(p, 'members')
 
     parser = subparsers.add_parser(
         'list-users',
@@ -393,7 +387,7 @@ def _execute_list(args):
     from crucible.config import get_client
     try:
         client = get_client()
-        projects = client.projects.list(limit=args.limit,
+        projects = client.projects.list(limit=resolve_limit(args),
                                         include_metadata=getattr(args, 'include_metadata', False),
                                         sort=getattr(args, 'sort', None),
                                         direction=getattr(args, 'direction', None),
@@ -401,10 +395,11 @@ def _execute_list(args):
                                         member_role=getattr(args, 'member_role', None))
 
         if getattr(args, 'json', False):
+            print_more_hint(projects, resolve_limit(args), args)
             print(json.dumps(projects, indent=2, default=str))
             return
 
-        term.header(f"Projects ({len(projects)})")
+        term.header(f"Projects ({count_label(projects)})")
         if not projects:
             print(f"  {term.dim('No projects found.')}")
         else:
@@ -424,6 +419,7 @@ def _execute_list(args):
             term.table(rows, ['Project ID', 'Title', 'Organization', 'Lead', 'Role'],
                        max_widths=[25, 30, 20, 25, 13],
                        min_widths=[25, 5, 12, 4, 4])
+            print_more_hint(projects, resolve_limit(args), args)
 
     except Exception as e:
         from .helpers import fail
@@ -614,9 +610,9 @@ def _execute_list_users(args):
     from .helpers import sort_members
     try:
         client = get_client()
-        users = sort_members(client.projects.get_users(args.project_id, limit=args.limit))
+        users = sort_members(client.projects.get_users(args.project_id, limit=resolve_limit(args)))
 
-        term.header(f"Users · {args.project_id} ({len(users)})")
+        term.header(f"Users · {args.project_id} ({count_label(users)})")
         if not users:
             print(f"  {term.dim('No users found.')}")
         else:
@@ -631,6 +627,7 @@ def _execute_list_users(args):
                 role     = term.role_label(u.role)
                 rows.append((username, name, role))
             term.table(rows, ['Username', 'Name', 'Role'], max_widths=[25, 25, 12])
+            print_more_hint(users, resolve_limit(args), args)
 
     except Exception as e:
         from .helpers import fail
@@ -952,7 +949,7 @@ Examples:
     parser.add_argument('project_id', metavar='PROJECT_ID', help='Project ID')
     parser.add_argument('--status', choices=['pending', 'approved', 'rejected'], default=None,
                         help='Filter by status')
-    parser.add_argument('--limit', type=int, default=100, metavar='N')
+    add_limit_arguments(parser, 'requests')
     parser.set_defaults(func=_execute_list_join_requests)
 
 
@@ -963,14 +960,15 @@ def _execute_list_join_requests(args):
     try:
         client = get_client()
         records = client.projects.list_join_requests(args.project_id, status=args.status,
-                                                      limit=args.limit)
-        term.header(f"Join Requests · {args.project_id} ({len(records)})")
+                                                      limit=resolve_limit(args))
+        term.header(f"Join Requests · {args.project_id} ({count_label(records)})")
         if not records:
             print(f"  {term.dim('No join requests found.')}")
             return
         term.table(_table_rows(records, client=client),
                   ['ID', 'Group', 'Status', 'Requester', 'Requested'],
                   max_widths=[6, 25, 10, 25, 12])
+        print_more_hint(records, resolve_limit(args), args)
     except Exception as e:
         from .helpers import fail
         fail("", e, args)
@@ -1099,9 +1097,10 @@ def _execute_search(args):
         client  = get_client()
         results = client.projects.search(args.query, limit=args.limit)
         if getattr(args, 'json', False):
+            print_more_hint(results, args.limit, args, allow_all=False)
             print(json.dumps(results, indent=2, default=str))
             return
-        term.header(f"Projects matching '{args.query}' ({len(results)})")
+        term.header(f"Projects matching '{args.query}' ({count_label(results)})")
         if not results:
             print(f"  {term.dim('No results found.')}")
             return
@@ -1122,6 +1121,7 @@ def _execute_search(args):
             max_widths=[25, 30, 20],
             min_widths=[25, 5, 12],
         )
+        print_more_hint(results, args.limit, args, allow_all=False)
     except Exception as e:
         from .helpers import fail
         fail("", e, args)

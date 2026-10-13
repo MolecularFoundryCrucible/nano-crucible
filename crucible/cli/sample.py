@@ -14,6 +14,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 from . import term
+from .helpers import add_limit_arguments, count_label, print_more_hint, resolve_limit, sort_like
 
 try:
     import argcomplete
@@ -115,10 +116,7 @@ Examples:
         '--exclude', nargs='+', metavar='PATTERN',
         help='Exclude samples whose name matches any glob pattern'
     )
-    parser.add_argument(
-        '--limit', type=int, default=_config.default_limit, metavar='N',
-        help=f'Maximum number of results to return (default: {_config.default_limit})'
-    )
+    add_limit_arguments(parser)
     parser.add_argument(
         '--include-metadata', action='store_true', dest='include_metadata',
         help='Include scientific metadata in results'
@@ -645,8 +643,7 @@ Examples:
 """
     )
     parser.add_argument('sample_id', metavar='SAMPLE_MFID', help='Sample MFID')
-    parser.add_argument('--limit', type=int, default=_config.default_limit, metavar='N',
-                        help=f'Maximum number of results (default: {_config.default_limit})')
+    add_limit_arguments(parser)
     from .helpers import add_relationship_type_filter
     add_relationship_type_filter(parser)
     parser.set_defaults(func=_execute_list_parents)
@@ -666,8 +663,7 @@ Examples:
 """
     )
     parser.add_argument('sample_id', metavar='SAMPLE_MFID', help='Sample MFID')
-    parser.add_argument('--limit', type=int, default=_config.default_limit, metavar='N',
-                        help=f'Maximum number of results (default: {_config.default_limit})')
+    add_limit_arguments(parser)
     from .helpers import add_relationship_type_filter
     add_relationship_type_filter(parser)
     parser.set_defaults(func=_execute_list_children)
@@ -710,8 +706,7 @@ Examples:
 """
     )
     parser.add_argument('sample_id', metavar='SAMPLE_MFID', help='Sample MFID')
-    parser.add_argument('--limit', type=int, default=_config.default_limit, metavar='N',
-                        help=f'Maximum number of results (default: {_config.default_limit})')
+    add_limit_arguments(parser)
     parser.set_defaults(func=_execute_list_datasets)
 
 
@@ -740,10 +735,12 @@ def _execute_list(args):
         if getattr(args, 'description', None):
             filters['description'] = args.description
         filters.update(listing_filter_kwargs(args))
-        samples = client.samples.list(
-            limit=args.limit,
+        limit = resolve_limit(args)
+        fetched = client.samples.list(
+            limit=limit,
             include_metadata=getattr(args, 'include_metadata', False) or _config.include_metadata,
             **filters)
+        samples = fetched
 
         if type_pattern:
             samples = [s for s in samples if fnmatch.fnmatch(
@@ -760,8 +757,10 @@ def _execute_list(args):
                 for p in args.exclude
             )]
 
+        more_hint = 'narrow with filters such as --mine, --type TYPE, or --created-after (see "sample facets")'
         if getattr(args, 'json', False):
             import json
+            print_more_hint(fetched, limit, args, hint=more_hint)
             print(json.dumps(samples, indent=2, default=str))
             return
 
@@ -769,8 +768,9 @@ def _execute_list(args):
         project_scope = filters.get('project_scope')
         project_label = project_id or filters.get('project_mfid')
         scope_label = f" · {project_scope}" if project_scope else ''
-        title = (f"Samples · {project_label}{scope_label} ({len(samples)})" if project_label
-                 else f"Samples · all projects ({len(samples)})")
+        count = count_label(fetched, len(samples))
+        title = (f"Samples · {project_label}{scope_label} ({count})" if project_label
+                 else f"Samples · all projects ({count})")
         term.header(title)
         if filters:
             logger.info(f"Filters: {', '.join(f'{k}={v}' for k, v in filters.items())}")
@@ -817,11 +817,12 @@ def _execute_list(args):
         if not group_by:
             term.table([_make_row(s) for s in ordered], headers,
                        max_widths=max_widths, min_widths=min_widths)
-            return
-        for key, group in group_records(ordered, group_by):
-            term.subheader(f"{key or '(none)'} ({len(group)})")
-            term.table([_make_row(s) for s in group], headers,
-                       max_widths=max_widths, min_widths=min_widths)
+        else:
+            for key, group in group_records(ordered, group_by):
+                term.subheader(f"{key or '(none)'} ({len(group)})")
+                term.table([_make_row(s) for s in group], headers,
+                           max_widths=max_widths, min_widths=min_widths)
+        print_more_hint(fetched, limit, args, hint=more_hint)
 
     except Exception as e:
         from .helpers import fail
@@ -1101,11 +1102,11 @@ def _execute_list_parents(args):
     from crucible.config import get_client
     try:
         client = get_client()
-        parents = sorted(client.samples.list_parents(
-            args.sample_id, limit=args.limit,
+        parents = sort_like(client.samples.list_parents(
+            args.sample_id, limit=resolve_limit(args),
             relationship_type=args.relationship_type),
                          key=lambda s: (s.get('sample_name') or '').lower())
-        term.header(f"Parent Samples · {args.sample_id} ({len(parents)})")
+        term.header(f"Parent Samples · {args.sample_id} ({count_label(parents)})")
         if not parents:
             print(f"  {term.dim('No parent samples found.')}")
             return
@@ -1113,6 +1114,7 @@ def _execute_list_parents(args):
                  term.cyan(s.get('unique_id')) if s.get('unique_id') else '-',
                  s.get('sample_type') or '-') for s in parents]
         term.table(rows, ['Name', 'MFID', 'Type'], max_widths=[35, 26, 20])
+        print_more_hint(parents, resolve_limit(args), args)
     except Exception as e:
         from .helpers import fail
         fail("listing parent samples", e, args)
@@ -1123,11 +1125,11 @@ def _execute_list_children(args):
     from crucible.config import get_client
     try:
         client = get_client()
-        children = sorted(client.samples.list_children(
-            args.sample_id, limit=args.limit,
+        children = sort_like(client.samples.list_children(
+            args.sample_id, limit=resolve_limit(args),
             relationship_type=args.relationship_type),
                           key=lambda s: (s.get('sample_name') or '').lower())
-        term.header(f"Child Samples · {args.sample_id} ({len(children)})")
+        term.header(f"Child Samples · {args.sample_id} ({count_label(children)})")
         if not children:
             print(f"  {term.dim('No child samples found.')}")
             return
@@ -1135,6 +1137,7 @@ def _execute_list_children(args):
                  term.cyan(s.get('unique_id')) if s.get('unique_id') else '-',
                  s.get('sample_type') or '-') for s in children]
         term.table(rows, ['Name', 'MFID', 'Type'], max_widths=[35, 26, 20])
+        print_more_hint(children, resolve_limit(args), args)
     except Exception as e:
         from .helpers import fail
         fail("listing child samples", e, args)
@@ -1145,9 +1148,9 @@ def _execute_list_datasets(args):
     from crucible.config import get_client
     try:
         client = get_client()
-        datasets = sorted(client.datasets.list(sample_mfid=args.sample_id, limit=args.limit),
+        datasets = sort_like(client.datasets.list(sample_mfid=args.sample_id, limit=resolve_limit(args)),
                           key=lambda ds: (ds.get('dataset_name') or '').lower())
-        term.header(f"Datasets · {args.sample_id} ({len(datasets)})")
+        term.header(f"Datasets · {args.sample_id} ({count_label(datasets)})")
         if not datasets:
             print(f"  {term.dim('No datasets linked.')}")
             return
@@ -1155,6 +1158,7 @@ def _execute_list_datasets(args):
                  term.cyan(ds.get('unique_id')) if ds.get('unique_id') else '-',
                  ds.get('measurement') or '-') for ds in datasets]
         term.table(rows, ['Name', 'MFID', 'Measurement'], max_widths=[35, 26, 15])
+        print_more_hint(datasets, resolve_limit(args), args)
     except Exception as e:
         from .helpers import fail
         fail("listing datasets", e, args)
@@ -1284,9 +1288,10 @@ def _execute_search(args):
         results    = client.samples.search(args.query, project_id=project_id,
                                            limit=args.limit)
         if getattr(args, 'json', False):
+            print_more_hint(results, args.limit, args, allow_all=False)
             print(json.dumps(results, indent=2, default=str))
             return
-        term.header(f"Samples matching '{args.query}' ({len(results)})")
+        term.header(f"Samples matching '{args.query}' ({count_label(results)})")
         if not results:
             print(f"  {term.dim('No results found.')}")
             return
@@ -1302,6 +1307,7 @@ def _execute_search(args):
                 r.get('sample_type') or '-',
             ))
         term.table(rows, ['Name', 'MFID', 'Type'], max_widths=[35, 26, 20])
+        print_more_hint(results, args.limit, args, allow_all=False)
     except Exception as e:
         from .helpers import fail
         fail("", e, args)
