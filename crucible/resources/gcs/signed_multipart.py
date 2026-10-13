@@ -186,8 +186,9 @@ class _Upload:
 
     def __init__(self, client, dsid: str, file_path: str, filename: str,
                  workers: int, progress: Optional[Progress], replace: bool = False,
-                 target: Optional[Tuple[str, str]] = None):
+                 target: Optional[Tuple[str, str]] = None, current: Optional[Dict] = None):
         self.client = client
+        self.current = current
         self.replace = replace
         self.target = target
         self.dsid = dsid
@@ -206,11 +207,14 @@ class _Upload:
 
     def run(self) -> Tuple[Dict, bool]:
         sha256_hash, crc32c, self.part_checksums = scan_file(self.file_path, PART_SIZE)
+        if self._holds(self.current, sha256_hash):
+            logger.info(f"{self.filename} already holds this content, nothing to upload")
+            return self.current, True
         try:
             status = self._initiate(sha256_hash)
         except _FilenameTaken as taken:
             existing = self._existing_record(taken)
-            if existing.get('sha256_hash') == sha256_hash and existing.get('size') == self.size:
+            if self._holds(existing, sha256_hash):
                 logger.info(f"{self.filename} already exists in the dataset, skipping upload")
                 return existing, True
             file_mfid = taken.file_mfid
@@ -266,6 +270,11 @@ class _Upload:
                     f"Another replace of {self.filename} is in progress; try again once it "
                     "finishes.") from error
             raise
+
+    def _holds(self, record: Optional[Dict], sha256_hash: str) -> bool:
+        """Whether a file record already has this content, by its size and SHA-256."""
+        return bool(record) and (record.get('sha256_hash') == sha256_hash
+                                 and record.get('size') == self.size)
 
     def _existing_record(self, taken) -> Dict:
         """The record that already holds this filename.
@@ -412,5 +421,5 @@ def replace_file_signed_multipart(client, file_mfid: str, file_path: str,
     upload = _Upload(client, record['dataset_mfid'], file_path,
                      record.get('filename') or os.path.basename(file_path),
                      max_workers or PART_WORKERS, progress, replace=True,
-                     target=(file_mfid, etag or '*'))
+                     target=(file_mfid, etag or '*'), current=record)
     return upload.run()

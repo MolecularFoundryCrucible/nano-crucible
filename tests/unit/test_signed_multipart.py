@@ -482,3 +482,14 @@ def test_auto_uses_signed_uploads_when_ingestion_is_requested(source, storage):
 
     assert f'{BASE}/initiate' in api.paths('post')
     api.files.request_ingestion.assert_called_once()
+
+
+def test_replace_with_identical_content_uploads_nothing(source, storage):
+    import hashlib
+    api = FakeApi()
+    _structured_conflict(api, hashlib.sha256(DATA).hexdigest())
+
+    record, unchanged = sm.replace_file_signed_multipart(api, 'old', source)
+
+    assert unchanged is True and record['mfid'] == 'old'
+    assert storage.puts == [] and api.calls == []
