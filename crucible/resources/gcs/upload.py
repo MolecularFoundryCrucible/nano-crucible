@@ -33,7 +33,6 @@ def upload_file_gcs(client, dsid: str, file_path: str,
                     max_workers: Optional[int] = None,
                     protocol: Optional[str] = None,
                     progress: Optional[Progress] = None,
-                    for_ingestion: bool = False,
                     replace: bool = False) -> Tuple[Dict, bool]:
     """Dispatch to a multipart or resumable upload.
 
@@ -52,9 +51,6 @@ def upload_file_gcs(client, dsid: str, file_path: str,
                        not offer signed uploads.
         progress:      Called as progress(filename, bytes_done, total) by
                        signed uploads; defaults to client.upload_progress.
-        for_ingestion: The caller will request ingestion of this file. "auto"
-                       then uses the legacy route, because the ingestion
-                       consumers cannot read signed-upload objects yet.
         replace:       Replace the content of an existing file with this
                        filename. Needs signed uploads, so it never uses the
                        legacy route.
@@ -81,8 +77,7 @@ def upload_file_gcs(client, dsid: str, file_path: str,
             raise RuntimeError("This server cannot replace files yet. Delete the old file "
                                "and add the new one instead.") from error
     use_signed = protocol == 'signed' or (
-        protocol == 'auto' and not for_ingestion
-        and not getattr(client, '_signed_uploads_unavailable', False))
+        protocol == 'auto' and not getattr(client, '_signed_uploads_unavailable', False))
     if use_signed:
         try:
             return upload_file_signed_multipart(client, dsid, file_path,

@@ -30,7 +30,7 @@ class IngestionOperations(BaseResource):
         """List ingestion requests, optionally filtered by dataset or file.
 
         Args:
-            dsid: Filter by dataset ID
+            dsid: Filter by dataset MFID
             file_id: Filter by file MFID
             limit: Maximum number of results
             offset: Starting position in the full result set (default: 0).
@@ -40,11 +40,13 @@ class IngestionOperations(BaseResource):
         Returns:
             List[Dict]: IngestionRequest records
         """
+        # Servers that predate dataset_mfid/file_mfid ignore them, so the
+        # deprecated names are sent too until every deployment accepts the new ones.
         params = {}
         if dsid:
-            params['dataset_id'] = dsid
+            params['dataset_mfid'] = params['dataset_id'] = dsid
         if file_id:
-            params['file_id'] = file_id
+            params['file_mfid'] = params['file_id'] = file_id
         return self._paginate('/ingestion_requests', params, limit=limit, offset=offset, cursor=cursor)
 
     def get(self, request_id: str) -> Dict:

@@ -271,42 +271,6 @@ def test_same_name_with_new_content_is_refused(source, storage):
         sm.upload_file_signed_multipart(api, DSID, source)
 
 
-def test_auto_uses_the_legacy_route_when_ingestion_is_requested(source, monkeypatch):
-    api = FakeApi()
-    legacy = MagicMock(return_value=(RECORD, False))
-    monkeypatch.setattr(dispatch, 'upload_file_gcs_multipart', legacy)
-
-    dispatch.upload_file_gcs(api, DSID, source, for_ingestion=True)
-
-    assert legacy.called and api.calls == []
-
-
-def test_signed_protocol_is_honored_even_for_ingestion(source, storage):
-    api = FakeApi()
-
-    assert dispatch.upload_file_gcs(api, DSID, source, protocol='signed',
-                                    for_ingestion=True) == (RECORD, False)
-
-
-def test_add_file_routes_by_whether_it_requests_ingestion(monkeypatch):
-    from crucible.resources.datasets import DatasetOperations
-    seen = []
-
-    def fake_upload(client, dsid, path, **kwargs):
-        seen.append(kwargs['for_ingestion'])
-        return {'mfid': 'f1', 'filename': 'x'}, True
-
-    monkeypatch.setattr('crucible.resources.datasets.upload_file_gcs', fake_upload)
-    client = MagicMock()
-    client.files._parse = lambda record: record
-    datasets = DatasetOperations(client)
-
-    datasets.add_file(DSID, 'x')
-    datasets.add_file(DSID, 'x', skip_ingestion=True)
-
-    assert seen == [True, False]
-
-
 def test_client_upload_protocol_overrides_the_setting(source, monkeypatch):
     api = FakeApi()
     api.upload_protocol = 'legacy'
@@ -322,7 +286,7 @@ def test_client_request_ingestion_false_skips_ingestion(monkeypatch):
     from crucible.resources.datasets import DatasetOperations
     seen = []
     monkeypatch.setattr('crucible.resources.datasets.upload_file_gcs',
-                        lambda client, dsid, path, **kw: (seen.append(kw['for_ingestion'])
+                        lambda client, dsid, path, **kw: (seen.append(kw)
                                                           or ({'mfid': 'f1', 'filename': 'x'}, False)))
     client = MagicMock(request_ingestion=False)
     client.files._parse = lambda record: record
@@ -330,7 +294,7 @@ def test_client_request_ingestion_false_skips_ingestion(monkeypatch):
 
     DatasetOperations(client).add_file(DSID, "x")
 
-    assert seen == [False]
+    assert len(seen) == 1
     client.files._skip_ingestion.assert_called_once()
     assert not client.files.request_ingestion.called
 
@@ -522,3 +486,15 @@ def test_shell_completes_input_paths(tmp_path, monkeypatch):
     options = [c.text for c in completer.get_completions(Document('dataset add-file X -i r'), None)]
 
     assert options == ['aw/', 'esults.dat ']
+
+
+def test_auto_uses_signed_uploads_when_ingestion_is_requested(source, storage):
+    from crucible.resources.datasets import DatasetOperations
+
+    api = FakeApi()
+    api.files = SimpleNamespace(_parse=lambda record: record,
+                                request_ingestion=MagicMock(return_value={'status': 'requested'}))
+    DatasetOperations(api).add_file(DSID, source)
+
+    assert f'{BASE}/initiate' in api.paths('post')
+    api.files.request_ingestion.assert_called_once()

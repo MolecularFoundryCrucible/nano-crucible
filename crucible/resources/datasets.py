@@ -800,9 +800,7 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
             upload_protocol: "auto", "signed", or "legacy" for multipart uploads;
                 defaults to the upload_protocol setting. "auto" uses signed
                 upload URLs, falling back to the legacy token route when the
-                server does not offer them; while the ingestion consumers
-                cannot read signed uploads, it also uses the legacy route
-                whenever ingestion is requested.
+                server does not offer them.
             progress: Called as progress(filename, bytes_done, total) while a
                 signed upload sends its parts.
             replace: If the dataset already has this filename with different
@@ -826,7 +824,6 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
                                                     max_workers=max_workers,
                                                     protocol=upload_protocol,
                                                     progress=progress,
-                                                    for_ingestion=not skip_ingestion,
                                                     replace=replace)
         file_record = self._client.files._parse(file_record)
 
