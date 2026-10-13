@@ -123,7 +123,7 @@ Examples:
     parser.add_argument('--status', choices=['pending', 'approved', 'rejected', 'all'],
                         default='pending', help='Filter by status (default: pending)')
     parser.add_argument('--scope', choices=list(DELETION_REQUEST_SCOPES), default=None,
-                        help='Requests to select (default: accessible)')
+                        help='Requests to select (default: reviewable for administrators listing pending requests, otherwise accessible)')
     parser.add_argument('--project-mfid', metavar='MFID', dest='project_mfid', default=None,
                         help='Limit to resources in this project MFID')
     parser.add_argument('--sort', choices=list(DELETION_REQUEST_SORTS), default=None,
@@ -234,7 +234,7 @@ Examples:
     parser.add_argument('--reviewer',  metavar='ORCID', dest='reviewer_id',  default=None,
                         help='Filter by reviewer ORCID')
     parser.add_argument('--scope', choices=list(DELETION_AUDIT_SCOPES), default=None,
-                        help='Entries to select (default: all)')
+                        help='Entries to select (default: all for administrators, otherwise submitted)')
     parser.add_argument('--project-id', metavar='ID', dest='project_id', default=None,
                         help='Filter by project slug captured at deletion time')
     parser.add_argument('--project-mfid', metavar='MFID', dest='project_mfid', default=None,
@@ -358,11 +358,9 @@ def _execute_list(args):
         client = get_client()
 
         status = None if args.status == 'all' else args.status
-        # A reviewer's queue is the point of this command, and "accessible" no
-        # longer includes other people's requests now that reads default to
-        # normal mode.
         scope = args.scope
-        if scope is None and client.can_elevate:
+        # The server only counts pending requests as reviewable.
+        if scope is None and status == 'pending' and client.can_elevate:
             scope = 'reviewable'
         records = client.deletions.list(
             status=status,
@@ -371,7 +369,7 @@ def _execute_list(args):
             sort=args.sort,
             direction=args.direction,
         )
-        if args.sort is None:
+        if args.sort is None and args.direction is None:
             records = sorted(records, key=lambda r: r.get('id') or 0)
 
         term.header(f"Deletion Requests — {args.status} ({len(records)})")

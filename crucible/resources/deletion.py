@@ -140,9 +140,10 @@ class DeletionOperations(BaseResource):
             requester_id: Filter by the ORCID of who requested deletion.
             reviewer_id: Filter by the ORCID of who approved deletion.
             limit: Maximum number of results.
-            scope: One of crucible.constants.DELETION_AUDIT_SCOPES. The server
-                   defaults to "all" (the platform-wide administrator audit);
-                   "submitted" returns only the caller's own deletions.
+            scope: One of crucible.constants.DELETION_AUDIT_SCOPES. Defaults to
+                   "all" (the platform-wide administrator audit) for callers
+                   who can elevate and "submitted" (the caller's own
+                   deletions) for everyone else.
             project_id: Project slug captured at deletion time.
             project_mfid: Project MFID captured at deletion time. Entries
                           predating project MFID snapshots will not match.
@@ -162,6 +163,8 @@ class DeletionOperations(BaseResource):
             params['project_id'] = project_id
         if project_mfid is not None:
             params['project_mfid'] = project_mfid
+        if scope is None and not self._client.can_elevate:
+            scope = 'submitted'
         params.update(self._choice_params(
             scope=(scope, DELETION_AUDIT_SCOPES),
             direction=(direction, SORT_DIRECTIONS)))
