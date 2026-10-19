@@ -35,6 +35,13 @@ DELETION_REQUEST_SORTS = ('request_time', 'resource_name', 'project_id',
                           'requester_name', 'status')
 DELETION_AUDIT_SCOPES = ('all', 'submitted')
 
+# Join request workflow.
+JOIN_REQUEST_STATUSES = ('pending', 'approved', 'rejected', 'withdrawn')
+JOIN_REQUEST_SCOPES = ('accessible', 'submitted', 'reviewable')
+JOIN_REQUEST_SORTS = ('request_time', 'review_time', 'status', 'project',
+                      'requester_name')
+JOIN_REQUEST_FACET_FIELDS = ('status', 'project', 'requester')
+
 # Platform-wide roles a human user or service account may hold.
 PLATFORM_ROLES = ('none', 'contributor', 'admin')
 

@@ -24,6 +24,7 @@ client = CrucibleClient(api_key="your-key")
 | `client.ingestions` | `IngestionOperations` | Ingestion request management |
 | `client.graphs` | `GraphOperations` | Entity graph traversal |
 | `client.deletions` | `DeletionOperations` | Deletion request management |
+| `client.access_groups` | `AccessGroupOperations` | Project join requests |
 
 ## Privilege mode
 

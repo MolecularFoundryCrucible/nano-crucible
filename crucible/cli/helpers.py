@@ -1143,10 +1143,10 @@ def fetch_deletions(client):
 
 
 def fetch_join_requests(client):
-    """Return pending join requests, or None if the user lacks permission."""
+    """Return pending join requests the user may review, or None on failure."""
     try:
         return client.access_groups.list_join_requests(
-            status='pending', privilege_mode=client._admin_mode())
+            status='pending', scope='reviewable')
     except Exception:
         return None
 

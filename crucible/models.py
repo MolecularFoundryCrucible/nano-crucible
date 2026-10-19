@@ -365,18 +365,33 @@ class DeletionRequest(BaseModel):
     model_config = ConfigDict(from_attributes=True, populate_by_name=True, extra='allow')
 
 
+class JoinRequestCapabilities(BaseModel):
+    '''What the calling user may do with a join request.'''
+
+    can_review: Optional[bool] = None
+    can_withdraw: Optional[bool] = None
+
+    model_config = ConfigDict(from_attributes=True, extra='allow')
+
+
 class JoinRequest(BaseModel):
-    '''A pending or resolved request to join an access group (currently always a project).'''
+    '''A pending or closed request to join a project.'''
 
     id: Optional[int] = None
-    group_name: Optional[str] = None
+    status: Optional[str] = None          # "pending" | "approved" | "rejected" | "withdrawn"
+    project_mfid: Optional[str] = None
+    project: Optional[Dict] = None        # {unique_id, project_id, title}; None if the project is gone
     requester_id: Optional[str] = None
+    requester: Optional[Dict] = None
     reason: Optional[str] = None
-    status: Optional[str] = None          # "pending" | "approved" | "rejected"
     request_time: Optional[str] = None
-    review_time: Optional[str] = None
     reviewer_id: Optional[str] = None
+    reviewer: Optional[Dict] = None
+    review_time: Optional[str] = None
     reviewer_notes: Optional[str] = None
+    granted_role: Optional[str] = None
+    capabilities: Optional[JoinRequestCapabilities] = None
+    group_name: Optional[str] = None      # deprecated server alias of project.project_id
 
     model_config = ConfigDict(from_attributes=True, populate_by_name=True, extra='allow')
 

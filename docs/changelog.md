@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+### Added
+
+- Join requests: `access_groups.withdraw_join_request()`, `join_request_facets()`, `role` on `approve_join_request()`, and `ag withdraw` and `ag approve --role`.
+- Join request lists filter by scope, several statuses, project, reviewer, time, and requester text, and sort (`ag list --scope/--project/--search/--sort`).
+- Join requests carry the project, requester and reviewer, the granted role, and capabilities.
+- `account verify` shows when the key was last used.
+
+### Changed
+
+- Join requests use the project routes: `request_join()` posts to `/projects/{ref}/join_requests`, `access_groups.get()` reads one request directly and works for requesters and reviewers, and `account.join_requests()` lists the `submitted` scope.
+- `ag list` shows the requests you may review, including project editors' queues, and the shell's pending count follows it.
+- `access_groups.request_join(group_name=...)`, `list_join_requests(group_name=...)`, and `ag list --group` are deprecated; use `project_ref`, `project_mfid`, and `--project`.
+
 ### Fixed
 
 - Creating a dataset, sample, project, or instrument with scientific metadata on someone else's behalf no longer fails with 403 for platform contributors.

@@ -153,9 +153,9 @@ class BaseResource:
         """Normalize time bounds into timezone-aware ISO 8601 query parameters.
 
         The API requires an explicit offset. A bare date covers the whole day,
-        so it starts at midnight for a ``_gte`` bound and ends at the last
-        microsecond for a ``_lte`` bound. A datetime without a timezone is
-        taken as UTC.
+        so it starts at midnight for a ``_gte``/``_after`` bound and ends at
+        the last microsecond for a ``_lte``/``_before`` bound. A datetime
+        without a timezone is taken as UTC.
         """
         from datetime import date, datetime, time, timezone
 
@@ -180,7 +180,7 @@ class BaseResource:
                     value = value.replace(tzinfo=timezone.utc)
                 params[name] = value.isoformat()
             elif isinstance(value, date):
-                bound = time.max if name.endswith('_lte') else time.min
+                bound = time.max if name.endswith(('_lte', '_before')) else time.min
                 params[name] = datetime.combine(
                     value, bound, tzinfo=timezone.utc).isoformat()
             else:

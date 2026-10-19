@@ -84,6 +84,7 @@ nav:
     - Datasets: api-reference/datasets.md
     - Samples: api-reference/samples.md
     - Projects: api-reference/projects.md
+    - Join requests: api-reference/join-requests.md
     - Instruments: api-reference/instruments.md
     - Users: api-reference/users.md
     - Files: api-reference/files.md

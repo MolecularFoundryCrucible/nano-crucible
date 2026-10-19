@@ -106,12 +106,14 @@ def _execute_verify(args):
     from crucible.config import get_client
     try:
         info = get_client().account.verify()
-        _p = term.field_printer(10)
+        _p = term.field_printer(11)
         term.header("API Key")
         valid = info.get('valid', False)
         _p("Valid",   term.green("yes") if valid else term.red("no"))
         _p("Created", term.fmt_ts(info.get('created_at')))
         _p("Expires", term.fmt_ts(info.get('expires_at')))
+        if info.get('last_used_at'):
+            _p("Last used", term.fmt_ts(info.get('last_used_at')))
     except _req.exceptions.HTTPError as e:
         if e.response is not None and e.response.status_code == 404:
             logger.error("No API key found for this account.")

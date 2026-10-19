@@ -34,12 +34,13 @@ MFID = '0tkn2knjast3h0008nyq9zps2c'
     ),
     (
         access_group_cli._execute_list,
-        SimpleNamespace(status='pending', group_name=None, requester_id=None, limit=100),
+        SimpleNamespace(status=None, project=None, scope='reviewable', requester_id=None,
+                        q=None, sort=None, direction=None, limit=100),
         'No join requests found.',
     ),
     (
         access_group_cli._execute_mine,
-        SimpleNamespace(status='pending', limit=100),
+        SimpleNamespace(status=None, limit=100),
         'No join requests found.',
     ),
     (

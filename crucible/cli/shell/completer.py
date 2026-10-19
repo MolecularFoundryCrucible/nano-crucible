@@ -463,7 +463,8 @@ class CrucibleCompleter(Completer):
                 jid = str(jr.get('id', ''))
                 if jid in already or not jid.startswith(prefix):
                     continue
-                group  = jr.get('group_name') or ''
+                group  = ((jr.get('project') or {}).get('project_id')
+                          or jr.get('group_name') or '')
                 reason = (jr.get('reason') or '')[:24]
                 parts  = []
                 if group:

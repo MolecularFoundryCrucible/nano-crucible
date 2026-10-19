@@ -10,3 +10,4 @@ Access via `client.account`. Self-service operations — no admin required.
         - update_profile
         - api_key
         - verify
+        - join_requests

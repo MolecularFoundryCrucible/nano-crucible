@@ -271,16 +271,19 @@ Service-account creation uses the same username rules and interactive validation
 
 ## Access-group commands
 
-`ag` is an alias for `access-group`.
+`ag` is an alias for `access-group`. Project editors and above review join requests to their projects; platform administrators review all of them.
 
 | Command | Description |
 |---|---|
-| `ag request GROUP` | Request to join an access group or project |
+| `ag request PROJECT` | Request to join a project |
 | `ag mine` | List the current user's join requests |
-| `ag list` | List join requests for review |
+| `ag list` | List join requests you may review; `--scope`, `--project`, `--status` (repeatable), `--search`, `--sort` |
 | `ag get ID` | Show a join request |
-| `ag approve ID...` | Approve pending join requests |
+| `ag approve ID...` | Approve pending join requests; `--role` sets the granted role (default contributor) |
 | `ag reject ID...` | Reject pending join requests |
+| `ag withdraw ID...` | Withdraw your own pending join requests |
+
+`ag list --group` is deprecated; use `--project`.
 
 ## Account commands
 

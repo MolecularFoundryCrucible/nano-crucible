@@ -37,3 +37,7 @@ from crucible.models import Dataset, Sample, Project, Instrument, InstrumentRefe
 ::: crucible.models.DeletionRequest
 
 ::: crucible.models.DeletionRequestCapabilities
+
+::: crucible.models.JoinRequest
+
+::: crucible.models.JoinRequestCapabilities

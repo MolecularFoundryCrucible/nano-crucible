@@ -443,7 +443,7 @@ class ProjectOperations(OwnershipMixin, AccessControlMixin, BaseResource):
         list/approve/reject operations on join requests.
 
         Args:
-            project_id: Unique project identifier.
+            project_id: Project slug or MFID.
             reason: Optional explanation for the request.
 
         Returns:
@@ -451,27 +451,36 @@ class ProjectOperations(OwnershipMixin, AccessControlMixin, BaseResource):
 
         Raises:
             HTTPError 404: Project doesn't exist.
-            HTTPError 409: Already a member, or already has a pending request.
+            HTTPError 409: Already a member, already has a pending request,
+                or the project is pending deletion.
         """
         return self._client.access_groups.request_join(project_id, reason=reason)
 
     def list_join_requests(self, project_id: str, status: Optional[str] = None,
-                           limit: int = DEFAULT_LIMIT, offset: int = 0) -> List[Dict]:
-        """List join requests for this project. Admin or the project lead only.
+                           limit: int = DEFAULT_LIMIT, offset: int = 0,
+                           **filters) -> List[Dict]:
+        """List join requests for this project visible to the caller.
 
-        Delegates to client.access_groups.list_join_requests(group_name=project_id).
+        Project editors and above (and platform admins) see every request;
+        others see only their own. Delegates to
+        client.access_groups.list_join_requests(project_mfid=...), which
+        takes the other filters and sorts.
 
         Args:
-            project_id: Unique project identifier.
-            status: Filter by "pending", "approved", or "rejected".
+            project_id: Project slug or MFID.
+            status: One status or a list of them, from
+                crucible.constants.JOIN_REQUEST_STATUSES.
             limit: Maximum number of results.
             offset: Starting position in the full result set.
+            **filters: Any other list_join_requests() keyword, such as
+                scope, sort, direction, or cursor.
 
         Returns:
             List[Dict]: Matching JoinRequest records, most recent first.
         """
         return self._client.access_groups.list_join_requests(
-            group_name=project_id, status=status, limit=limit, offset=offset)
+            project_mfid=self._resource_mfid(project_id), status=status,
+            limit=limit, offset=offset, **filters)
 
     def get_or_create(self, project_id: str, get_project_info_function=_build_project_from_args,
                      **kwargs) -> Dict:

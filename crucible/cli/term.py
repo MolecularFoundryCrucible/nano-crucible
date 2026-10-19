@@ -422,13 +422,18 @@ _STATUS_COLORS = {
     'ingested': green,
     'rejected': red,
     'failed':   red,
+    'withdrawn': dim,
+    'requested': yellow,
+    'running':  yellow,
+    'completed': green,
 }
 
 
 def status_label(status: str) -> str:
     """Colorize a status string using the shared request/ingestion status palette.
 
-    Covers: pending (yellow), approved/complete/ingested (green), rejected/failed (red).
+    Covers: pending/requested/running (yellow), approved/complete/completed/ingested
+    (green), rejected/failed (red), withdrawn (dim).
     Unrecognized statuses are returned unstyled. Returns '-' for falsy input.
     """
     if not status:

@@ -10,9 +10,8 @@ For admin operations on other users, use UserOperations (client.users).
 import logging
 from typing import Dict, List, Optional
 
-from .base import BaseResource, ListResult
+from .base import BaseResource
 from ..constants import DEFAULT_LIMIT
-from ..models import JoinRequest
 
 logger = logging.getLogger(__name__)
 
@@ -76,10 +75,13 @@ class AccountOperations(BaseResource):
         return result['api_key']
 
     def verify(self) -> Dict:
-        """Return the validity and expiry info for the caller's API key.
+        """Return the validity and expiry info for the presented API key.
+
+        With a Hub session instead of a key, describes the newest key, with
+        valid False once it has expired.
 
         Returns:
-            Dict: {valid: bool, created_at: str, expires_at: str}
+            Dict: {valid: bool, created_at: str, expires_at: str, last_used_at: str | None}
         """
         return self._request('get', '/account/verify')
 
@@ -97,10 +99,14 @@ class AccountOperations(BaseResource):
                       limit: int = DEFAULT_LIMIT,
                       offset: int = 0,
                       cursor: Optional[str] = None) -> List[Dict]:
-        """Return the caller's own join-request history, across all groups.
+        """Return the caller's own join-request history, across all projects.
+
+        Same as client.access_groups.list_join_requests(scope='submitted'),
+        which also takes the other filters and sorts.
 
         Args:
-            status: Filter by "pending", "approved", or "rejected".
+            status: One status or a list of them, from
+                crucible.constants.JOIN_REQUEST_STATUSES.
             limit: Maximum number of results.
             offset: Starting position in the full result set.
             cursor (str, optional): Continuation token from a previous
@@ -109,8 +115,6 @@ class AccountOperations(BaseResource):
         Returns:
             List[Dict]: JoinRequest records where requester_id == caller.
         """
-        params = {}
-        if status is not None:
-            params['status'] = status
-        raw = self._paginate('/account/join_requests', params, limit, offset, cursor=cursor)
-        return ListResult.like(raw, [JoinRequest(**r).model_dump() for r in raw])
+        return self._client.access_groups.list_join_requests(
+            scope='submitted', status=status, limit=limit, offset=offset,
+            cursor=cursor)

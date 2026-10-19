@@ -17,7 +17,8 @@ logger = logging.getLogger(__name__)
 from . import term
 from .helpers import add_limit_arguments, count_label, print_more_hint, resolve_limit, page_kwargs
 from ..config import config as _config
-from ..constants import PROJECT_ACCESS_ROLES, PROJECT_MEMBER_ROLES, PROJECT_SORTS, SORT_DIRECTIONS
+from ..constants import (JOIN_REQUEST_STATUSES, PROJECT_ACCESS_ROLES, PROJECT_MEMBER_ROLES,
+                         PROJECT_SORTS, SORT_DIRECTIONS)
 
 try:
     import argcomplete
@@ -937,8 +938,9 @@ def _register_list_join_requests(subparsers):
     """Register the 'project list-join-requests' subcommand."""
     parser = subparsers.add_parser(
         'list-join-requests',
-        help='List join requests for a project (admin or project lead)',
-        description='List join requests for a project. Requires admin or project lead permissions.',
+        help='List join requests for a project',
+        description='List join requests for a project. Project editors and above (and admins) '
+                    'see every request; others see only their own.',
         formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
@@ -946,9 +948,9 @@ Examples:
     crucible project list-join-requests my-project --status pending
 """
     )
-    parser.add_argument('project_id', metavar='PROJECT_ID', help='Project ID')
-    parser.add_argument('--status', choices=['pending', 'approved', 'rejected'], default=None,
-                        help='Filter by status')
+    parser.add_argument('project_id', metavar='PROJECT_ID', help='Project ID or MFID')
+    parser.add_argument('--status', choices=list(JOIN_REQUEST_STATUSES), action='append', default=None,
+                        help='Filter by status; repeatable')
     add_limit_arguments(parser, 'requests')
     parser.set_defaults(func=_execute_list_join_requests)
 
@@ -966,7 +968,7 @@ def _execute_list_join_requests(args):
             print(f"  {term.dim('No join requests found.')}")
             return
         term.table(_table_rows(records, client=client),
-                  ['ID', 'Group', 'Status', 'Requester', 'Requested'],
+                  ['ID', 'Project', 'Status', 'Requester', 'Requested'],
                   max_widths=[6, 25, 10, 25, 12])
         print_more_hint(records, resolve_limit(args), args)
     except Exception as e:
