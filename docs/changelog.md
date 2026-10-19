@@ -5,6 +5,7 @@
 ### Fixed
 
 - Creating a dataset, sample, project, or instrument with scientific metadata on someone else's behalf no longer fails with 403 for platform contributors.
+- The CLI shows UTC timestamps ending in `Z` in local time on Python 3.10, and table dates use the local day.
 
 ## 3.3.0
 

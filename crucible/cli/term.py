@@ -336,6 +336,21 @@ def _rel(delta) -> str:
     return f"{days // 365}y ago"
 
 
+def _local_datetime(text: str) -> datetime:
+    """Parse an API ISO 8601 timestamp (UTC when it has no offset) into local time.
+
+    A bare date has no instant to convert, so it stays on the same calendar day.
+    """
+    if text[-1:] in ('Z', 'z'):
+        text = text[:-1] + '+00:00'
+    dt = datetime.fromisoformat(text)
+    if len(text) == 10:
+        return dt.astimezone()
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone()
+
+
 def fmt_ts(ts) -> str | None:
     """
     Format a timestamp for display.
@@ -357,10 +372,7 @@ def fmt_ts(ts) -> str | None:
 
     # ── Strategy 1: ISO 8601 ─────────────────────────────────────────────────
     try:
-        dt = datetime.fromisoformat(s)
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
-        dt = dt.astimezone()  # convert to local timezone
+        dt = _local_datetime(s)
         abs_str = dt.strftime('%Y-%m-%d %H:%M')
     except (ValueError, TypeError):
         pass
@@ -395,8 +407,7 @@ def fmt_date(ts) -> str:
     if not ts:
         return '-'
     try:
-        dt = datetime.fromisoformat(str(ts).strip())
-        return dt.strftime('%Y-%m-%d')
+        return _local_datetime(str(ts).strip()).strftime('%Y-%m-%d')
     except (ValueError, TypeError):
         return str(ts)
 
