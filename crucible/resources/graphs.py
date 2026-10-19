@@ -37,7 +37,10 @@ class GraphOperations(BaseResource):
                 of the raw node-link dict. Requires networkx to be installed.
 
         Returns:
-            dict | networkx.DiGraph: Node-link graph data.
+            dict | networkx.DiGraph: Node-link graph data. Each link carries
+                source, target, and relationship_type (None for
+                dataset-sample associations); in a DiGraph it is an edge
+                attribute.
         """
         params = {"recursive": recursive} if recursive else {}
         data = self._request(
