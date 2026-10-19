@@ -77,6 +77,10 @@ Running `crucible` without a command starts the interactive shell. See the [CLI 
 | `dataset set-private MFID` | Remove public access from a dataset |
 | `dataset parsers` | List installed client-side parsers |
 | `dataset ingestors` | List server-advertised ingestion classes |
+| `dataset pipelines` | List postprocessing pipelines and their parameters |
+| `dataset postprocess MFID PIPELINE` | Queue a postprocessing run; `--param KEY=VALUE` (repeatable), `--params JSON`, `--idempotency-key` |
+| `dataset list-runs [MFID]` | List postprocessing runs; `--pipeline`, `--status` |
+| `dataset get-run ID` | Show a postprocessing run |
 
 Common creation example:
 

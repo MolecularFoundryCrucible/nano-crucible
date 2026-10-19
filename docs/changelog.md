@@ -8,12 +8,14 @@
 - Join request lists filter by scope, several statuses, project, reviewer, time, and requester text, and sort (`ag list --scope/--project/--search/--sort`).
 - Join requests carry the project, requester and reviewer, the granted role, and capabilities.
 - `account verify` shows when the key was last used.
+- Postprocessing: `datasets.postprocess()` with an optional idempotency key, `client.postprocessing` for pipelines and runs, and `dataset postprocess`, `pipelines`, `list-runs`, and `get-run`.
 
 ### Changed
 
 - Join requests use the project routes: `request_join()` posts to `/projects/{ref}/join_requests`, `access_groups.get()` reads one request directly and works for requesters and reviewers, and `account.join_requests()` lists the `submitted` scope.
 - `ag list` shows the requests you may review, including project editors' queues, and the shell's pending count follows it.
 - `access_groups.request_join(group_name=...)`, `list_join_requests(group_name=...)`, and `ag list --group` are deprecated; use `project_ref`, `project_mfid`, and `--project`.
+- `datasets.request_carrier_segmentation()`, `request_insitu_aggregation()`, `request_rga_analysis()`, and `request_mosaic_stitch()` are deprecated; they now start a run through `datasets.postprocess()` and return it.
 
 ### Fixed
 

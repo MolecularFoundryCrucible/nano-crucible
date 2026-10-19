@@ -41,3 +41,7 @@ from crucible.models import Dataset, Sample, Project, Instrument, InstrumentRefe
 ::: crucible.models.JoinRequest
 
 ::: crucible.models.JoinRequestCapabilities
+
+::: crucible.models.Pipeline
+
+::: crucible.models.PostprocessingRun

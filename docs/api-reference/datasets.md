@@ -46,4 +46,5 @@ File operations are also available via `client.files` (by MFID) and ingestion vi
         - transfer_ownership
         - reassign_project
         - assign_instrument
+        - postprocess
         - graph

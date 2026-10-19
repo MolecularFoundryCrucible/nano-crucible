@@ -108,7 +108,7 @@ class CrucibleClient:
         from .resources import FileOperations, DatasetOperations, SampleOperations, \
         ProjectOperations, UserOperations, InstrumentOperations, DeletionOperations, \
         GraphOperations, AccountOperations, IngestionOperations, ServiceAccountOperations, \
-        AccessGroupOperations, PrintOperations
+        AccessGroupOperations, PostprocessingOperations, PrintOperations
 
         self.files = FileOperations(self)
         self.datasets = DatasetOperations(self)
@@ -122,6 +122,7 @@ class CrucibleClient:
         self.ingestions = IngestionOperations(self)
         self.service_accounts = ServiceAccountOperations(self)
         self.access_groups = AccessGroupOperations(self)
+        self.postprocessing = PostprocessingOperations(self)
         self.print = PrintOperations(self)
         self._authorization = None
         self._capabilities = None

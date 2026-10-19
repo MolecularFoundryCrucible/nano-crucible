@@ -19,10 +19,11 @@ from .graphs import GraphOperations
 from .account import AccountOperations
 from .service_accounts import ServiceAccountOperations
 from .access_groups import AccessGroupOperations
+from .postprocessing import PostprocessingOperations
 from .printer import PrintOperations
 
 __all__ = ['FileOperations', 'DatasetOperations', 'IngestionOperations',
            'SampleOperations', 'ProjectOperations',
            'UserOperations', 'InstrumentOperations', 'DeletionOperations', 'GraphOperations',
            'AccountOperations', 'ServiceAccountOperations', 'AccessGroupOperations',
-           'PrintOperations']
+           'PostprocessingOperations', 'PrintOperations']

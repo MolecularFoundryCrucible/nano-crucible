@@ -726,7 +726,7 @@ class CrucibleCompleter(Completer):
         # every subcommand except the handful that don't take one.
         _NO_ID_SUBS = {
             'list', 'create', 'search', 'search-metadata', 'search-md',
-            'link', 'parsers', 'ingestors', 'facets',
+            'link', 'parsers', 'ingestors', 'facets', 'pipelines', 'get-run',
         }
         if words[1] in _NO_ID_SUBS:
             return False

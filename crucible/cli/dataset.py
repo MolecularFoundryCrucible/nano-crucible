@@ -290,6 +290,8 @@ def register_subcommand(subparsers):
     _register_facets(dataset_subparsers)
     _register_parsers(dataset_subparsers)
     _register_ingestors(dataset_subparsers)
+    from .postprocess import register as register_postprocess_commands
+    register_postprocess_commands(dataset_subparsers)
 
 
 def _register_list(subparsers):

@@ -42,6 +42,9 @@ JOIN_REQUEST_SORTS = ('request_time', 'review_time', 'status', 'project',
                       'requester_name')
 JOIN_REQUEST_FACET_FIELDS = ('status', 'project', 'requester')
 
+# Postprocessing run states.
+POSTPROCESSING_RUN_STATUSES = ('requested', 'running', 'completed', 'failed')
+
 # Platform-wide roles a human user or service account may hold.
 PLATFORM_ROLES = ('none', 'contributor', 'admin')
 

@@ -22,6 +22,7 @@ client = CrucibleClient(api_key="your-key")
 | `client.files` | `FileOperations` | File lookup, download, and ingestion by MFID |
 | `client.account` | `AccountOperations` | Self-service profile, API key, verification |
 | `client.ingestions` | `IngestionOperations` | Ingestion request management |
+| `client.postprocessing` | `PostprocessingOperations` | Postprocessing pipelines and runs |
 | `client.graphs` | `GraphOperations` | Entity graph traversal |
 | `client.deletions` | `DeletionOperations` | Deletion request management |
 | `client.access_groups` | `AccessGroupOperations` | Project join requests |

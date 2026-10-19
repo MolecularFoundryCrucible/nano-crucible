@@ -396,6 +396,33 @@ class JoinRequest(BaseModel):
     model_config = ConfigDict(from_attributes=True, populate_by_name=True, extra='allow')
 
 
+class Pipeline(BaseModel):
+    '''A postprocessing pipeline that can run on a dataset.'''
+
+    name: Optional[str] = None
+    description: Optional[str] = None
+    parameters_schema: Optional[Dict] = None
+
+    model_config = ConfigDict(from_attributes=True, extra='allow')
+
+
+class PostprocessingRun(BaseModel):
+    '''One run of a postprocessing pipeline on a dataset.'''
+
+    run_id: Optional[int] = None
+    dataset_mfid: Optional[str] = None
+    pipeline: Optional[str] = None
+    parameters: Optional[Dict] = None
+    status: Optional[str] = None          # "requested" | "running" | "completed" | "failed"
+    error: Optional[str] = None
+    requested_by: Optional[str] = None
+    requested_at: Optional[str] = None
+    started_at: Optional[str] = None
+    finished_at: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True, extra='allow')
+
+
 class ResourceSearchResult(BaseModel):
     """A single result from search_metadata() (GET /resources/metadata/search).
 

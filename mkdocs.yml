@@ -90,6 +90,7 @@ nav:
     - Files: api-reference/files.md
     - Account: api-reference/account.md
     - Ingestion: api-reference/ingestion.md
+    - Postprocessing: api-reference/postprocessing.md
     - Graphs: api-reference/graphs.md
     - Print: api-reference/printer.md
     - Models: api-reference/models.md

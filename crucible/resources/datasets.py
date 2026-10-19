@@ -704,60 +704,62 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
             f"/datasets/{child_mfid}/parents", params, limit, offset, cursor=cursor)
         return ListResult.like(raw, [self._parse(dataset) for dataset in raw])
 
-    # Special Processing Methods
+    def postprocess(self, dataset_mfid: str, pipeline: str,
+                    parameters: Optional[Dict] = None,
+                    idempotency_key: Optional[str] = None) -> Dict:
+        """Queue a postprocessing pipeline on a dataset. Requires contributor access.
+
+        Each call starts a new run unless it repeats an idempotency key: the
+        same key, caller, and dataset return the original run, so a retried
+        request cannot start a second one. Follow the run with
+        client.postprocessing.get(run_id).
+
+        Args:
+            dataset_mfid (str): Dataset MFID.
+            pipeline (str): Pipeline name from client.postprocessing.pipelines().
+            parameters (dict, optional): Pipeline parameters, validated by the
+                server against the pipeline's parameters_schema.
+            idempotency_key (str, optional): Up to 128 characters identifying
+                this request, e.g. f"{flow_run_id}:{pipeline}:{dataset_mfid}".
+
+        Returns:
+            Dict: The PostprocessingRun record (status "requested" for a new run).
+
+        Raises:
+            HTTPError 422: Unknown pipeline or invalid parameters.
+        """
+        from ..models import PostprocessingRun
+
+        headers = {'Idempotency-Key': idempotency_key} if idempotency_key else None
+        raw = self._request(
+            'post', f"/datasets/{dataset_mfid}/postprocess",
+            json={'pipeline': pipeline, 'parameters': parameters or {}},
+            headers=headers, retry=idempotency_key is not None)
+        return PostprocessingRun(**raw).model_dump()
+
+    @_deprecated("client.datasets.postprocess(dataset_mfid, 'carrier_segmentation')")
     @_deprecated_parameter('dsid', 'dataset_mfid')
     def request_carrier_segmentation(self, dataset_mfid: str) -> Dict:
-        """Request carrier segmentation for a dataset.
+        """Deprecated: queue the carrier_segmentation pipeline; use postprocess()."""
+        return self.postprocess(dataset_mfid, 'carrier_segmentation')
 
-        Args:
-            dataset_mfid (str): Dataset MFID
-
-        Returns:
-            Dict: Carrier segmentation request information
-        """
-        result = self._request(
-            'post', f"/datasets/{dataset_mfid}/carrier_segmentation")
-        return result
-
+    @_deprecated("client.datasets.postprocess(dataset_mfid, 'insitu_aggregation')")
     @_deprecated_parameter('dsid', 'dataset_mfid')
     def request_insitu_aggregation(self, dataset_mfid: str) -> Dict:
-        """Request insitu spectroscopy data aggregation for a dataset.
+        """Deprecated: queue the insitu_aggregation pipeline; use postprocess()."""
+        return self.postprocess(dataset_mfid, 'insitu_aggregation')
 
-        Args:
-            dataset_mfid (str): Dataset MFID
-
-        Returns:
-            Dict: Data processing request information
-        """
-        result = self._request(
-            'post', f"/datasets/{dataset_mfid}/insitu_spec_aggregation")
-        return result
-
+    @_deprecated("client.datasets.postprocess(dataset_mfid, 'rga_analysis')")
     @_deprecated_parameter('dsid', 'dataset_mfid')
     def request_rga_analysis(self, dataset_mfid: str) -> Dict:
-        """Request RGA analysis for a dataset.
+        """Deprecated: queue the rga_analysis pipeline; use postprocess()."""
+        return self.postprocess(dataset_mfid, 'rga_analysis')
 
-        Args:
-            dataset_mfid (str): Dataset MFID
-
-        Returns:
-            Dict: RGA analysis request information
-        """
-        result = self._request('post', f"/datasets/{dataset_mfid}/rga_analysis")
-        return result
-
+    @_deprecated("client.datasets.postprocess(dataset_mfid, 'mosaic_stitch')")
     @_deprecated_parameter('dsid', 'dataset_mfid')
     def request_mosaic_stitch(self, dataset_mfid: str) -> Dict:
-        """Request mosaic stitch processing for a dataset.
-
-        Args:
-            dataset_mfid (str): Dataset MFID
-
-        Returns:
-            Dict: Mosaic stitch request information
-        """
-        result = self._request('post', f"/datasets/{dataset_mfid}/mosaic_stitch")
-        return result
+        """Deprecated: queue the mosaic_stitch pipeline; use postprocess()."""
+        return self.postprocess(dataset_mfid, 'mosaic_stitch')
 
     @_deprecated("client.graphs.get")
     @_deprecated_parameter('dataset_id', 'dataset_mfid')
