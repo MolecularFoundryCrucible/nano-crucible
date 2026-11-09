@@ -48,6 +48,8 @@ def register_subcommand(subparsers):
     _register_set_role(user_subparsers)
     _register_list_keys(user_subparsers)
     _register_revoke_keys(user_subparsers)
+    _register_approve(user_subparsers)
+    _register_reject(user_subparsers)
     _register_list_datasets(user_subparsers)
     _register_check_access(user_subparsers)
     _register_list_access_groups(user_subparsers)
@@ -200,6 +202,7 @@ Examples:
     crucible user list --limit 50
     crucible user list --q fabrice
     crucible user list --sort username --direction desc
+    crucible user list --pending
 """
     )
 
@@ -236,6 +239,8 @@ Examples:
                         help='Sort direction (default: asc)')
     parser.add_argument('--exact', action='store_true', default=False,
                         help='Match --first-name and --last-name exactly instead of by substring')
+    parser.add_argument('--pending', action='store_true', default=False,
+                        help='Only accounts waiting for approval; admin only')
 
     parser.add_argument('--json', action='store_true', default=False,
                         help='Output as JSON array')
@@ -258,6 +263,10 @@ def _show_user(user):
         _p("Email", email)
     if user.get('is_service_account'):
         _p("Type", "service account")
+    if user.get('pending_at'):
+        _p("Status", term.yellow(f"waiting for approval since {term.fmt_date(user['pending_at'])}"))
+    if user.get('sign_in_methods'):
+        _p("Signs in with", ', '.join(user['sign_in_methods']))
     caps = user.get('user_capabilities') or {}
     role = user.get('platform_role')
     status = user.get('api_key_status')
@@ -547,11 +556,20 @@ def _execute_list(args):
         if getattr(args, 'exact', False):
             kwargs['permissive'] = False
         kwargs = {k: v for k, v in kwargs.items() if v is not None}
+        pending = getattr(args, 'pending', False)
+        if pending:
+            from .helpers import require_elevation
+            require_elevation(client, 'list accounts waiting for approval')
+            kwargs['pending'] = True
         users = client.users.list(limit=resolve_limit(args), **page_kwargs(args), **kwargs)
 
         if getattr(args, 'json', False):
             print_more_hint(users, resolve_limit(args), args)
             print(json.dumps(users, indent=2, default=str))
+            return
+
+        if pending:
+            _print_pending(users, args)
             return
 
         term.header(f"Users ({count_label(users)})")
@@ -593,6 +611,103 @@ def _execute_list(args):
     except Exception as e:
         from .helpers import fail
         fail("listing users", e, args)
+
+
+def _print_pending(users, args):
+    term.header(f"Accounts waiting for approval ({count_label(users)})")
+    if not users:
+        print(f"  {term.dim('No accounts are waiting.')}")
+        return
+    rows = [(
+        user.get('username') or '-',
+        term.fmt_name(user, default='-', fallback_username=False),
+        term.cyan(user.get('unique_id')) if user.get('unique_id') else '-',
+        user.get('email') or '-',
+        ', '.join(user.get('sign_in_methods') or []) or '-',
+        term.fmt_date(user.get('pending_at')),
+    ) for user in users]
+    term.table(rows, ['Username', 'Name', 'ID', 'Email', 'Signs in with', 'Waiting since'],
+               max_widths=[24, 25, 26, 28, 16, 16], min_widths=[8, 4, 26, 6, 6, 13])
+    print_more_hint(users, resolve_limit(args), args)
+    print(term.dim("  Decide with 'crucible user approve USER' or 'crucible user reject USER'."))
+
+
+def _register_approve(subparsers):
+    parser = subparsers.add_parser(
+        'approve',
+        help='Let in an account waiting for approval (admin only)',
+        description='Approve an account waiting for approval, listed by '
+                    '`crucible user list --pending`.',
+        formatter_class=term.ColorHelpFormatter,
+        epilog="""
+Examples:
+    crucible user list --pending
+    crucible user approve jdoe
+"""
+    )
+    parser.add_argument('user', metavar='USER', help='ORCID, MFID, or username of the waiting account')
+    parser.add_argument('--json', action='store_true', default=False,
+                        help='Output as JSON object')
+    parser.set_defaults(func=_execute_approve)
+
+
+def _execute_approve(args):
+    from crucible.config import get_client
+    from .helpers import require_elevation
+    try:
+        client = get_client()
+        require_elevation(client, 'approve accounts')
+        user = client.users.approve(args.user)
+        if getattr(args, 'json', False):
+            print(json.dumps(user, indent=2, default=str))
+            return
+        term.success(f"Approved {user.get('username') or args.user}", args)
+        _show_user(user)
+    except ValueError as e:
+        logger.error(str(e))
+        sys.exit(1)
+    except Exception as e:
+        from .helpers import fail
+        fail("approving the account", e, args)
+
+
+def _register_reject(subparsers):
+    parser = subparsers.add_parser(
+        'reject',
+        help='Delete an account waiting for approval (admin only)',
+        description='Reject an account waiting for approval: the account is deleted and '
+                    'its username and login are freed. Approved accounts are never deleted.',
+        formatter_class=term.ColorHelpFormatter,
+        epilog="""
+Examples:
+    crucible user reject jdoe
+    crucible user reject jdoe --yes
+"""
+    )
+    parser.add_argument('user', metavar='USER', help='ORCID, MFID, or username of the waiting account')
+    parser.add_argument('--yes', action='store_true', default=False,
+                        help='Skip the confirmation prompt')
+    parser.set_defaults(func=_execute_reject)
+
+
+def _execute_reject(args):
+    from crucible.config import get_client
+    from .helpers import prompt_confirm, require_elevation
+    try:
+        client = get_client()
+        require_elevation(client, 'reject accounts')
+        question = f"Reject and delete the waiting account {args.user}?"
+        if not (args.yes or prompt_confirm(question, option='--yes')):
+            logger.info("Aborted.")
+            return
+        client.users.reject(args.user)
+        term.success(f"Rejected {args.user}; the account is deleted", args)
+    except ValueError as e:
+        logger.error(str(e))
+        sys.exit(1)
+    except Exception as e:
+        from .helpers import fail
+        fail("rejecting the account", e, args)
 
 
 def _register_set_role(subparsers):

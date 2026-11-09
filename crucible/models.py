@@ -199,6 +199,8 @@ class User(BaseModel):
     last_name: Optional[str] = None
     email: Optional[str] = None
     is_service_account: Optional[bool] = None
+    pending_at: Optional[str] = None
+    sign_in_methods: Optional[List[str]] = None
 
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 

@@ -388,7 +388,7 @@ def test_pending_summary_is_silent_when_nothing_waits(capsys):
     assert capsys.readouterr().out == ''
 
 
-_ADMIN_USER_SUBS = {'user set-role', 'user list-keys', 'user revoke-keys'}
+_ADMIN_USER_SUBS = {'user set-role', 'user list-keys', 'user revoke-keys', 'user approve', 'user reject'}
 
 
 @pytest.mark.parametrize('can_manage, can_elevate, hidden', [

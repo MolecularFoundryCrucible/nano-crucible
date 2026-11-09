@@ -24,6 +24,7 @@
 - Shell completion reaches nested commands such as `account keys list` and fixed-choice arguments such as `config get KEY`, and leaves out removed commands and administrator-only `user` commands you cannot use.
 - Administrators list and revoke single API keys with `users.list_api_keys()` and `users.revoke_api_key()`, `user list-keys`, and `user revoke-keys --key`.
 - `ingestions.list()` takes `dataset_mfid` and `file_mfid`; `dsid` and `file_id` still work.
+- Administrators review accounts waiting for approval with `users.list(pending=True)`, `users.approve()`, and `users.reject()`, and `user list --pending`, `user approve`, and `user reject`; `user get` shows a waiting account's status and sign-in methods.
 
 ### Removed
 

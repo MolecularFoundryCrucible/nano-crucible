@@ -211,13 +211,15 @@ Most user-management commands require administrator permissions.
 |---|---|
 | `user get USER` | Show a user by ORCID, MFID, username, or email |
 | `user search QUERY` | Search names and usernames |
-| `user list [--q QUERY] [--first-name NAME] [--last-name NAME] [--username USERNAME] [--email EMAIL] [--platform-role ROLE] [--service-account\\|--human] [--sort FIELD] [--direction DIR] [--exact]` | List users; administrators see email and platform roles |
+| `user list [--q QUERY] [--first-name NAME] [--last-name NAME] [--username USERNAME] [--email EMAIL] [--platform-role ROLE] [--service-account\\|--human] [--sort FIELD] [--direction DIR] [--exact] [--pending]` | List users; administrators see email and platform roles, and `--pending` lists accounts waiting for approval |
 | `user create` | Create a user |
 | `user update USER` | Update a user record |
 | `user edit USER` | Edit a user record interactively |
 | `user set-role USER ROLE` | Change a human user's platform role (`none`, `contributor`, `admin`); human platform admins only |
 | `user list-keys USER [--inactive]` | List a user's API keys, never the keys themselves; admin only |
 | `user revoke-keys USER [--key ID] [--yes]` | Revoke every API key held by a user, or one with `--key`; admin only |
+| `user approve USER` | Let in an account waiting for approval; admin only |
+| `user reject USER [--yes]` | Delete an account waiting for approval, freeing its username and login; admin only |
 | `user list-datasets USER [--limit N\|--all]` | List datasets accessible to a user |
 | `user check-access USER DATASET_MFID` | Show a user's effective dataset access role |
 | `user list-access-groups USER` | List a user's access groups |

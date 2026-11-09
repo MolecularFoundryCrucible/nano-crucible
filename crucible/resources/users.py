@@ -29,6 +29,14 @@ logger = logging.getLogger(__name__)
 _EXACT_FILTER_MAX = 100
 
 
+def _waiting_ref(user_ref):
+    kind, normalized = classify_user_reference(user_ref)
+    if kind == 'email':
+        raise ValueError("Name a waiting account by ORCID, MFID, or username, "
+                         "as shown by users.list(pending=True).")
+    return normalized
+
+
 def _as_query_list(value):
     """Normalize a scalar or sequence into a list for a repeatable query parameter."""
     if value is None:
@@ -271,6 +279,7 @@ class UserOperations(BaseResource):
              direction: Optional[str] = None,
              include_total: Optional[bool] = None,
              cursor: Optional[str] = None,
+             pending: bool = False,
              **kwargs: Any) -> List[Dict]:
         """List users visible to the authenticated caller.
 
@@ -313,6 +322,8 @@ class UserOperations(BaseResource):
             direction (str, optional): asc (default) or desc
             include_total (bool, optional): True always computes the total,
                 False omits it, None preserves the API default
+            pending (bool): List only accounts waiting for approval, with
+                pending_at and sign_in_methods. Platform administrators only
 
         Returns:
             List[Dict]: User records in the API's requested order
@@ -347,7 +358,45 @@ class UserOperations(BaseResource):
         }
         params = {k: v for k, v in params.items() if v is not None}
         params.update({k: v for k, v in kwargs.items() if v is not None})
+        if pending:
+            params['pending'] = True
+            return self._paginate('/users', params, limit, offset, cursor=cursor,
+                                  privilege_mode='elevated')
         return self._paginate('/users', params, limit, offset, cursor=cursor)
+
+    def approve(self, user_ref: str) -> Dict:
+        """Let in an account that waits for approval. Platform administrators only.
+
+        Args:
+            user_ref: ORCID, MFID, or username of the waiting account, as
+                listed by list(pending=True)
+
+        Returns:
+            Dict: The approved UserRead
+
+        Raises:
+            HTTPError 404: No such account.
+            HTTPError 409: not_pending, the account is not waiting.
+        """
+        return self._request('post', f'/users/{_waiting_ref(user_ref)}/approve',
+                             privilege_mode='elevated')
+
+    def reject(self, user_ref: str) -> None:
+        """Delete an account that waits for approval, freeing its username and login. Platform administrators only.
+
+        Approved accounts are never deleted.
+
+        Args:
+            user_ref: ORCID, MFID, or username of the waiting account, as
+                listed by list(pending=True)
+
+        Raises:
+            HTTPError 404: No such account.
+            HTTPError 409: not_pending, or still_referenced when other
+                records point at the account.
+        """
+        self._request('post', f'/users/{_waiting_ref(user_ref)}/reject',
+                      privilege_mode='elevated')
 
     def create(self, user: Union['User', Dict],
                project_ids: Optional[Sequence[str]] = None) -> Dict:
