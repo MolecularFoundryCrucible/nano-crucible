@@ -10,8 +10,8 @@ Provides shared functionality for all resource operation classes.
 from typing import Optional, Sequence, Union
 
 # internal modules
-from ..constants import DEFAULT_LIMIT
-from ..utils.deprecation import _deprecated, _deprecated_parameter
+from ..constants import DEFAULT_LIMIT, MFID_FILTER_MAX
+from ..utils.deprecation import _removed, _removed_parameter
 
 class ListResult(list):
     """A list of records that also says whether more matches exist.
@@ -194,6 +194,20 @@ class BaseResource:
             **{k: params.pop(k) for k in self._TIME_BOUNDS if k in params}))
 
     @staticmethod
+    def _apply_mfid_filter(params: dict, mfid=None) -> None:
+        """Set the repeatable mfid filter in place, mapping the deprecated unique_id filter to it."""
+        legacy = params.pop('unique_id', None)
+        if legacy is not None:
+            from ..errors import RemovedError
+            from ..utils.deprecation import removed_message
+            raise RemovedError(removed_message("The 'unique_id' list filter", "use 'mfid' instead."))
+        if mfid is not None:
+            values = [mfid] if isinstance(mfid, str) else list(mfid)
+            if not 1 <= len(values) <= MFID_FILTER_MAX:
+                raise ValueError(f"mfid takes 1 to {MFID_FILTER_MAX} values.")
+            params['mfid'] = values
+
+    @staticmethod
     def _choice_params(**choices) -> dict:
         """Validate single-choice query parameters against their allowed values.
 
@@ -303,7 +317,8 @@ class BaseResource:
     def _paginate(self, endpoint: str, params: dict,
                   limit: int = DEFAULT_LIMIT, offset: int = 0,
                   privilege_mode: Optional[str] = None,
-                  cursor: Optional[str] = None) -> 'ListResult':
+                  cursor: Optional[str] = None,
+                  page_max: Optional[int] = None) -> 'ListResult':
         """Fetch all matching records from a paginated envelope endpoint.
 
         Supports both pagination styles transparently, detected from the first
@@ -325,6 +340,7 @@ class BaseResource:
             privilege_mode: Per-call privilege mode applied to every page.
             cursor:   Continuation token from a previous ListResult.next_cursor;
                       the listing resumes there instead of at offset.
+            page_max: Largest page the endpoint accepts, when below API_PAGE_MAX.
 
         Returns:
             list: Raw item dicts, up to limit items (or all items if limit is None)
@@ -334,6 +350,7 @@ class BaseResource:
         """
         from concurrent.futures import ThreadPoolExecutor
         from ..constants import API_PAGE_MAX
+        page_cap = API_PAGE_MAX if page_max is None else min(API_PAGE_MAX, page_max)
 
         if limit is not None and limit < 0:
             raise ValueError("limit must be non-negative or None")
@@ -344,7 +361,7 @@ class BaseResource:
         # keep emitting the exact same request as before.
         mode = {} if privilege_mode is None else {'privilege_mode': privilege_mode}
 
-        page_size = API_PAGE_MAX if limit is None else min(API_PAGE_MAX, limit)
+        page_size = page_cap if limit is None else min(page_cap, limit)
         first_params = {**params, 'limit': page_size}
         if cursor:
             first_params['cursor'] = cursor
@@ -357,8 +374,8 @@ class BaseResource:
             cursor = first.get('next_cursor')
             while cursor and (limit is None or len(items) < limit):
                 request_limit = (
-                    API_PAGE_MAX if limit is None
-                    else min(API_PAGE_MAX, limit - len(items))
+                    page_cap if limit is None
+                    else min(page_cap, limit - len(items))
                 )
                 resp = self._request('get', endpoint,
                                      params={**params, 'limit': request_limit,
@@ -380,10 +397,10 @@ class BaseResource:
             return ListResult(items[:need], has_more=has_more, total=total,
                               next_offset=next_offset, start=offset)
 
-        remaining_offsets = range(offset + page_size, offset + need, API_PAGE_MAX)
+        remaining_offsets = range(offset + page_size, offset + need, page_cap)
 
         def _fetch(off):
-            request_limit = min(API_PAGE_MAX, offset + need - off)
+            request_limit = min(page_cap, offset + need - off)
             r = self._request('get', endpoint,
                               params={**params, 'limit': request_limit, 'offset': off},
                               **mode)
@@ -417,17 +434,16 @@ class BaseResource:
             return resp['items']
         return resp or []
 
-    @_deprecated("search_metadata()")
-    def search_scientific_metadata(self, q: str, limit: int = 50) -> list:
-        """Deprecated: use search_metadata() instead."""
-        return self.search_metadata(q, limit=limit)
+    @_removed("use search_metadata() instead.")
+    def search_scientific_metadata(self, *args, **kwargs):
+        """Removed in 4.0.0: use search_metadata() instead."""
 
-    @_deprecated_parameter('resource_id', 'resource_mfid')
+    @_removed_parameter('resource_id', 'resource_mfid')
     def get_scientific_metadata(self, resource_mfid: str) -> dict:
         """Get scientific metadata for a resource."""
         return self._request('get', f'/resources/{self._resource_mfid(resource_mfid)}/metadata')
 
-    @_deprecated_parameter('resource_id', 'resource_mfid')
+    @_removed_parameter('resource_id', 'resource_mfid')
     def replace_scientific_metadata(self, resource_mfid: str, metadata: dict) -> dict:
         """Create new scientific metadata entry for a resource."""
         return self._request(
@@ -443,7 +459,7 @@ class BaseResource:
         return self._request(
             'post', f'/resources/{self._resource_mfid(resource_ref)}/metadata', json=metadata)
 
-    @_deprecated_parameter('resource_id', 'resource_mfid')
+    @_removed_parameter('resource_id', 'resource_mfid')
     def update_scientific_metadata(self, resource_mfid: str, metadata: dict,
                                    overwrite: bool = False) -> dict:
         """Add or Update scientific metadata for a resource.

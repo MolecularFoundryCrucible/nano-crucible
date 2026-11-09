@@ -15,7 +15,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 from . import term
-from .helpers import add_limit_arguments, count_label, print_more_hint, resolve_limit, sort_like, page_kwargs
+from .helpers import RemovedOptionAction, add_limit_arguments, count_label, print_more_hint, resolve_limit, sort_like, page_kwargs
 from ..utils.io import gcs_object_parts, storage_display_name
 
 
@@ -283,8 +283,9 @@ def register_subcommand(subparsers):
     _register_search_metadata(dataset_subparsers)
     _register_add_keyword(dataset_subparsers)
     _register_list_keywords(dataset_subparsers)
-    _register_list_access_groups(dataset_subparsers)
-    _register_add_access_group(dataset_subparsers)
+    from .helpers import add_removed_command
+    add_removed_command(dataset_subparsers, 'list-access-groups', "'crucible dataset access list MFID'")
+    add_removed_command(dataset_subparsers, 'add-access-group', "'crucible dataset access grant MFID ...'")
     from ._access import register_access_commands
     register_access_commands(dataset_subparsers, 'datasets', id_metavar='DATASET_MFID')
     _register_facets(dataset_subparsers)
@@ -336,8 +337,8 @@ Examples:
         help='Filter by data type (exact match)'
     )
     parser.add_argument(
-        '--instrument', default=None, dest='instrument_name', metavar='NAME',
-        help='Deprecated: filter by instrument display name; use --instrument-id'
+        '--instrument', default=None, dest='instrument_name', action=RemovedOptionAction,
+        replacement='--instrument-id or --instrument-mfid'
     )
     parser.add_argument(
         '--group-by', dest='group_by', default=None,
@@ -473,7 +474,7 @@ Examples:
         type_arg.completer = lambda **kwargs: sorted(PARSER_REGISTRY.keys())
 
     # Project ID
-    from .helpers import DeprecatedAliasAction
+    from .helpers import RemovedOptionAction
     parser.add_argument(
         '--project-id', '-p',
         required=False,
@@ -490,8 +491,8 @@ Examples:
     )
     parser.add_argument(
         '-pid',
-        action=DeprecatedAliasAction,
-        deprecated_options={'-pid'},
+        action=RemovedOptionAction,
+        removed_options={'-pid'},
         replacement='--project-id',
         dest='project_id',
         default=argparse.SUPPRESS,
@@ -575,8 +576,8 @@ Examples:
         '--instrument',
         dest='instrument_name',
         default=None,
-        metavar='NAME',
-        help='Deprecated: identifies the instrument by its display name; use --instrument-id'
+        action=RemovedOptionAction,
+        replacement='--instrument-id or --instrument-mfid'
     )
     parser.add_argument(
         '--instrument-id',
@@ -1534,7 +1535,7 @@ def _execute_ingestion(args):
     from crucible.config import get_client
     try:
         client = get_client()
-        reqs = client.ingestions.list(dsid=args.dataset_id)
+        reqs = client.ingestions.list(dataset_mfid=args.dataset_id)
 
         term.header(f"Ingestion Requests · {args.dataset_id} ({len(reqs)})")
         if not reqs:
@@ -1573,7 +1574,7 @@ Examples:
 """,
     )
     parser.add_argument('query', metavar='QUERY', help='Search term (min 3 chars)')
-    from .helpers import DeprecatedAliasAction
+    from .helpers import RemovedOptionAction
     parser.add_argument(
         '--project-id', '-p',
         dest='project_id',
@@ -1583,8 +1584,8 @@ Examples:
     )
     parser.add_argument(
         '--project', '-pid',
-        action=DeprecatedAliasAction,
-        deprecated_options={'--project', '-pid'},
+        action=RemovedOptionAction,
+        removed_options={'--project', '-pid'},
         replacement='--project-id',
         dest='project_id',
         default=argparse.SUPPRESS,
@@ -1778,71 +1779,6 @@ def _execute_facets(args):
     execute_facets_command(args, 'dataset')
 
 
-def _register_list_access_groups(subparsers):
-    parser = subparsers.add_parser(
-        'list-access-groups',
-        help='Deprecated: use dataset access list',
-        description='Deprecated compatibility command. Use dataset access list.',
-        formatter_class=term.ColorHelpFormatter,
-        epilog="""
-Examples:
-    crucible dataset list-access-groups DATASET_MFID
-""",
-    )
-    parser.add_argument('dataset_id', metavar='DATASET_MFID', help='Dataset MFID')
-    parser.set_defaults(func=_execute_list_access_groups)
-
-
-def _execute_list_access_groups(args):
-    """Execute 'crucible dataset list-access-groups'."""
-    from crucible.config import get_client
-    try:
-        client = get_client()
-        groups = client.datasets.get_access_groups(args.dataset_id)
-        term.header(f"Access Groups · {args.dataset_id} ({len(groups)})")
-        if not groups:
-            print(f"  {term.dim('No access groups found.')}")
-        else:
-            for g in groups:
-                print(f"  {g}")
-    except Exception as e:
-        from .helpers import fail
-        fail("", e, args)
-
-
-def _register_add_access_group(subparsers):
-    parser = subparsers.add_parser(
-        'add-access-group',
-        help='Deprecated: use dataset access grant',
-        description='Deprecated compatibility command. Use dataset access grant.',
-        formatter_class=term.ColorHelpFormatter,
-        epilog="""
-Examples:
-    crucible dataset add-access-group DATASET_MFID my-group
-    crucible dataset add-access-group DATASET_MFID my-group --write
-""",
-    )
-    parser.add_argument('dataset_id', metavar='DATASET_MFID', help='Dataset MFID')
-    parser.add_argument('group_name', metavar='GROUP',      help='Access group name')
-    parser.add_argument('--write', action='store_true', default=False,
-                        help='Also grant write access (read access is always granted)')
-    parser.set_defaults(func=_execute_add_access_group)
-
-
-def _execute_add_access_group(args):
-    """Execute 'crucible dataset add-access-group'."""
-    from crucible.config import get_client
-    try:
-        client = get_client()
-        client.datasets.add_access_group(args.dataset_id, args.group_name,
-                                         read=True, write=args.write)
-        perms = 'read+write' if args.write else 'read'
-        term.success(f"Access group '{args.group_name}' added to {args.dataset_id} ({perms})", args)
-    except Exception as e:
-        from .helpers import fail
-        fail("", e, args)
-
-
 def _register_parsers(subparsers):
     """Register the 'dataset parsers' subcommand."""
     parser = subparsers.add_parser(
@@ -1879,10 +1815,6 @@ def _execute_list(args):
             value = getattr(args, name, None)
             if value:
                 filters[name] = value
-        if getattr(args, 'instrument_name', None):
-            from .helpers import show_warning
-            show_warning("--instrument NAME is deprecated; use --instrument-id.")
-            filters['instrument_name'] = args.instrument_name
         filters.update(listing_filter_kwargs(args))
         limit = resolve_limit(args)
         fetched = client.datasets.list(limit=limit, **page_kwargs(args), **filters)
@@ -2070,7 +2002,6 @@ def _execute_create(args):
                 ('--no-upload', args.no_upload),
                 ('--backend', args.backend is not None),
                 ('--access-note', args.access_note is not None),
-                ('--upload-protocol', args.upload_protocol is not None),
                 ('--no-ingest', args.no_ingest),
                 ('--replace', args.replace),
             )
@@ -2084,10 +2015,6 @@ def _execute_create(args):
     project_mfid = getattr(args, 'project_mfid', None)
     instrument_id = getattr(args, 'instrument_id', None)
     instrument_mfid = getattr(args, 'instrument_mfid', None)
-    if args.instrument_name and not (instrument_id or instrument_mfid):
-        from .helpers import show_warning
-        show_warning("--instrument NAME is deprecated: instrument names may repeat. "
-                     "Use --instrument-id or --instrument-mfid.")
     if project_id is None and project_mfid is None:
         project_id, project_source = resolve_project_context(args)
     else:
@@ -2203,7 +2130,6 @@ def _execute_create(args):
                 dataset_name=args.dataset_name,
                 session_name=args.session_name,
                 public=args.public,
-                instrument_name=args.instrument_name,
                 instrument_id=instrument_id,
                 instrument_mfid=instrument_mfid,
                 data_format=args.data_format,
@@ -2232,7 +2158,6 @@ def _execute_create(args):
             session_name=args.session_name,
             timestamp=timestamp,
             public=args.public,
-            instrument_name=args.instrument_name,
             instrument_id=instrument_id,
             instrument_mfid=instrument_mfid,
             data_format=args.data_format,
@@ -2303,21 +2228,20 @@ def _execute_create(args):
             if args.no_upload:
                 from crucible.config import get_client
                 from crucible.models import AssociatedFile
-                remote_files = [
-                    AssociatedFile(
-                        filename=Path(f).name,
-                        storage_path=str(Path(f).resolve()),
-                        storage_backend=args.backend or 'local',
-                        access_note=args.access_note,
-                    )
-                    for f in parser.files_to_upload
-                ]
-                result = get_client().datasets.create(
-                    parser.to_dataset(),
-                    scientific_metadata=parser.scientific_metadata,
-                    keywords=parser.keywords,
-                    files=remote_files,
+                remote_files = AssociatedFile.from_local_files(
+                    parser.files_to_upload,
+                    storage_backend=args.backend or 'local',
+                    access_note=args.access_note,
                 )
+                from .helpers import upload_session
+                client = get_client()
+                with upload_session(client, args):
+                    result = client.datasets.create(
+                        parser.to_dataset(),
+                        scientific_metadata=parser.scientific_metadata,
+                        keywords=parser.keywords,
+                        files=remote_files,
+                    )
             else:
                 if parser is None:
                     from crucible.config import get_client

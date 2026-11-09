@@ -107,30 +107,51 @@ def test_update_rejects_service_account_conversion():
     operations._request.assert_not_called()
 
 
-def test_update_keeps_orcid_keyword_as_deprecated_alias():
-    operations = make_ops({'unique_id': USER_MFID, 'username': 'test-user-one'})
-
-    with pytest.warns(DeprecationWarning, match='user_unique_id'):
-        operations.update(orcid=USER_MFID, username='updated-user')
-
-    operations._request.assert_called_once_with(
-        'patch', f'/users/{USER_MFID}', json={'username': 'updated-user'})
 
 
-def test_batch_resolve_uses_canonical_user_ids_with_legacy_wire_field():
-    operations = make_ops({USER_MFID: {'unique_id': USER_MFID}})
-
-    operations.resolve(user_unique_ids=[USER_MFID])
-
-    operations._request.assert_called_once_with(
-        'post', '/users/resolve', json={'orcids': [USER_MFID]})
+def make_resolving_ops(pages):
+    operations = UserOperations(MagicMock())
+    operations._paginate = MagicMock(side_effect=pages)
+    return operations
 
 
-def test_batch_resolve_keeps_orcids_keyword_as_deprecated_alias():
-    operations = make_ops({USER_MFID: {'unique_id': USER_MFID}})
+def test_batch_resolve_uses_exact_list_filters_and_merges_by_unique_id():
+    other = '0000-0002-1825-0097'
+    operations = make_resolving_ops([
+        [{'unique_id': USER_MFID, 'username': 'one'}],
+        [{'unique_id': USER_MFID, 'username': 'one'}, {'unique_id': other, 'username': 'two'}],
+        [],
+    ])
 
-    with pytest.warns(DeprecationWarning, match='user_unique_ids'):
-        operations.resolve(orcids=[USER_MFID])
+    result = operations.resolve(user_unique_ids=[USER_MFID, USER_MFID],
+                                usernames=['one', 'two'], emails=['x@lbl.gov'])
+
+    calls = [c.args[:2] for c in operations._paginate.call_args_list]
+    assert calls == [
+        ('/users', {'unique_id': [USER_MFID]}),
+        ('/users', {'username': ['one', 'two']}),
+        ('/users', {'email': 'x@lbl.gov'}),
+    ]
+    assert set(result) == {USER_MFID, other}
+
+
+def test_batch_resolve_splits_more_than_100_values():
+    ids = [f'0000-0000-0000-{i:04d}' for i in range(150)]
+    operations = make_resolving_ops([[], []])
+
+    operations.resolve(user_unique_ids=ids)
+
+    sizes = [len(c.args[1]['unique_id']) for c in operations._paginate.call_args_list]
+    assert sizes == [100, 50]
+
+
+def test_batch_resolve_with_nothing_sends_no_request():
+    operations = make_resolving_ops([])
+
+    assert operations.resolve() == {}
+    operations._paginate.assert_not_called()
+
+
 
 
 def test_account_update_rejects_service_account_conversion():
@@ -191,7 +212,7 @@ def test_list_passes_explicit_filters_with_scalar_normalization():
 
     operations._paginate.assert_called_once_with('/users', {
         'q': 'ali',
-        'username': 'alice',
+        'username': ['alice'],
         'platform_role': ['admin'],
         'search_fields': ['username'],
         'is_service_account': False,
@@ -248,3 +269,18 @@ def test_get_projects_rejects_unknown_roles_locally():
     with pytest.raises(ValueError, match='role must be one of'):
         UserOperations(client).get_projects('U' * 26, role='member')
     client._request.assert_not_called()
+
+
+def test_get_passes_unrecognized_references_to_the_api():
+    operations = make_ops({'unique_id': USER_MFID})
+
+    assert operations.get('ab')['unique_id'] == USER_MFID
+    operations._request.assert_called_once_with('get', '/users/ab')
+
+
+def test_user_model_keeps_linked_orcid():
+    user = User.model_validate({'unique_id': USER_MFID, 'orcid': '0000-0002-1825-0097',
+                                'orcid_verified': False})
+
+    assert user.orcid == '0000-0002-1825-0097'
+    assert user.orcid_verified is False

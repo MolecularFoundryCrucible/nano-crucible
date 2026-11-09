@@ -146,4 +146,4 @@ crucible
 
 The shell validates the project and saves the selection for future commands and shell sessions. Run `unuse` to clear it. An explicit `--project-id` applies only to that command and does not change the saved selection.
 
-`CRUCIBLE_CURRENT_PROJECT` remains available temporarily for compatibility, but it is deprecated because it can silently override the saved selection. Prefer an explicit `--project-id` in automation.
+`CRUCIBLE_CURRENT_PROJECT` was removed in 4.0.0 because it could silently override the saved selection; the CLI stops if it is set. Use an explicit `--project-id` in automation.

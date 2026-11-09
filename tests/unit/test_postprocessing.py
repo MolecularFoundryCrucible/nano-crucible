@@ -52,20 +52,6 @@ def test_postprocess_with_idempotency_key_sends_header_and_may_retry():
     assert kwargs['retry'] is True
 
 
-@pytest.mark.parametrize(('method', 'pipeline'), [
-    ('request_carrier_segmentation', 'carrier_segmentation'),
-    ('request_insitu_aggregation', 'insitu_aggregation'),
-    ('request_rga_analysis', 'rga_analysis'),
-    ('request_mosaic_stitch', 'mosaic_stitch'),
-])
-def test_legacy_request_methods_warn_and_use_postprocess(method, pipeline):
-    resource, request = datasets()
-
-    with pytest.warns(DeprecationWarning, match='postprocess'):
-        getattr(resource, method)(DATASET)
-
-    assert request.call_args.args == ('post', f'/datasets/{DATASET}/postprocess')
-    assert request.call_args.kwargs['json']['pipeline'] == pipeline
 
 
 def runs(response=None):

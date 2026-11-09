@@ -11,6 +11,7 @@ import logging
 from typing import Dict, List, Optional
 
 from .base import BaseResource, ListResult
+from ..utils.deprecation import _removed
 from ..constants import DEFAULT_LIMIT, PLATFORM_ROLES
 from ..utils.identifiers import validate_mfid, validate_username
 
@@ -149,13 +150,10 @@ class ServiceAccountOperations(BaseResource):
         if len(provided) != 1:
             raise ValueError("Provide exactly one service-account identifier.")
         if unique_id is not None:
-            import warnings
-            warnings.warn(
-                "The unique_id keyword is deprecated; use service_account_mfid instead.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-            service_account_mfid = unique_id
+            from ..errors import RemovedError
+            from ..utils.deprecation import removed_message
+            raise RemovedError(removed_message(
+                "The 'unique_id' keyword", "use 'service_account_mfid' instead."))
         if service_account_mfid is not None:
             return self._client.users.get(user_unique_id=service_account_mfid)
         return self._client.users.get(username=username)
@@ -194,20 +192,10 @@ class ServiceAccountOperations(BaseResource):
         """
         return self._client.users.list_access_groups(unique_id)
 
-    def add_to_access_group(self, unique_id: str, group_name: str) -> Dict:
-        """Add a service account to an access group.
+    @_removed("use client.instruments.bind_service_account() or client.projects.add_user() instead.")
+    def add_to_access_group(self, *args, **kwargs):
+        """Removed in 4.0.0: use client.instruments.bind_service_account() or client.projects.add_user() instead."""
 
-        Args:
-            unique_id: Service account MFID.
-            group_name: Name of the access group.
-        """
-        return self._client.users.add_to_access_group(unique_id, group_name)
-
-    def remove_from_access_group(self, unique_id: str, group_name: str) -> Dict:
-        """Remove a service account from an access group.
-
-        Args:
-            unique_id: Service account MFID.
-            group_name: Name of the access group.
-        """
-        return self._client.users.remove_from_access_group(unique_id, group_name)
+    @_removed("use client.instruments.unbind_service_account() or client.projects.remove_user() instead.")
+    def remove_from_access_group(self, *args, **kwargs):
+        """Removed in 4.0.0: use client.instruments.unbind_service_account() or client.projects.remove_user() instead."""

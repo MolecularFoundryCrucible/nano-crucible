@@ -8,19 +8,57 @@
 - Join request lists filter by scope, several statuses, project, reviewer, time, and requester text, and sort (`ag list --scope/--project/--search/--sort`).
 - Join requests carry the project, requester and reviewer, the granted role, and capabilities.
 - `account verify` shows when the key was last used.
+- `datasets.add_remote_file(replace=True)` (and `client.replace_existing`, `dataset create --no-upload --replace`) updates a cataloged file whose filename already exists with different content.
+- `AssociatedFile.from_local_files()` builds hashed catalog records named by their path relative to the files' common folder.
+- Dataset, sample, project, and instrument lists filter by up to 100 MFIDs with `mfid`; unreadable or missing ones are left out.
+- `users.list()` takes several `unique_id` or `username` values at once.
+- Access grants from `list_access()`, and instrument service accounts and project members, carry `capabilities` (`EntryCapabilities`: `can_remove`, `can_change_role`, `assignable_roles`).
+- Resource capabilities declare `can_view_access`, `can_delete`, and `can_request_deletion`.
 - Postprocessing: `datasets.postprocess()` with an optional idempotency key, `client.postprocessing` for pipelines and runs, and `dataset postprocess`, `pipelines`, `list-runs`, and `get-run`.
+- `User` and project members carry `orcid` and `orcid_verified`, and `whoami`, `account show` and `user get` show the linked ORCID separately from the user ID.
+- Sign in with a browser: `crucible login` (`--device` for SSH and headless machines), `crucible logout`, and `client.login()`/`logout()`; tokens go in the OS keyring, or a private file where none is available (`auth_store`).
+- Actions that need a recent sign-in, such as creating an API key, offer a browser sign-in in the CLI and retry.
+- `whoami` and `status` show whether the client uses an API key or a sign-in, and from where.
+- Named API keys: `account.create_api_key()`, `list_api_keys()`, `rename_api_key()`, and `revoke_api_key()`, with `account keys list|create|rename|revoke`.
+- `hub_url` setting (`CRUCIBLE_HUB_URL`, default `https://crucible.lbl.gov/hub`); `config init` and sign-in hints point to the Hub to create keys.
+- Shell completion reaches nested commands such as `account keys list` and fixed-choice arguments such as `config get KEY`, and leaves out removed commands and administrator-only `user` commands you cannot use.
+- Administrators list and revoke single API keys with `users.list_api_keys()` and `users.revoke_api_key()`, `user list-keys`, and `user revoke-keys --key`.
+- `ingestions.list()` takes `dataset_mfid` and `file_mfid`; `dsid` and `file_id` still work.
+
+### Removed
+
+- Everything deprecated before 4.0.0. Calling a removed method, keyword, or setting raises `crucible.RemovedError` (a `TypeError`) naming the replacement, and removed CLI commands and options stop with the one to use; the CLI reference lists them under "Removed in 4.0.0".
+- Removed settings (`graph_explorer_url`, `current_session`, `upload_protocol`, `upload_chunk_size_mb`) are ignored in old config files; `config show` lists them and `config unset` removes them. `get_graph_explorer_url()` is replaced by `get_hub_url()`.
+- `CRUCIBLE_CURRENT_PROJECT` stops the CLI; use `--project-id`.
 
 ### Changed
 
+- Python 3.11 or later is required.
+- API errors raise `crucible.CrucibleAPIError`, a `requests.HTTPError` with `status`, `code`, `detail`, and `request_id`; CLI errors show the request ID.
+- POST and PATCH requests without an `Idempotency-Key` are no longer retried after a 502, 503, 504, or lost response, which could duplicate records; 429 and failed connections are still retried.
+- Requests send a `nano-crucible/<version>` User-Agent.
+- Calls to routes the API marks deprecated raise a `DeprecationWarning` once per route, with the date, sunset, and link the API gives.
+- Uploads always use signed multipart; the legacy GCS upload routes and the fallback to them are gone, empty files upload through signed multipart, and `google-cloud-storage` is no longer a dependency.
+- `upload_max_workers` now sets how many parts upload at once.
+- User references are no longer shape-checked: `users.get()` and the CLI pass any value they cannot classify to the API.
+- Owner and lead fields show as "Owner ID" and "Lead ID", and the owner shown comes from the owner object when present.
 - Join requests use the project routes: `request_join()` posts to `/projects/{ref}/join_requests`, `access_groups.get()` reads one request directly and works for requesters and reviewers, and `account.join_requests()` lists the `submitted` scope.
 - `ag list` shows the requests you may review, including project editors' queues, and the shell's pending count follows it.
-- `access_groups.request_join(group_name=...)`, `list_join_requests(group_name=...)`, and `ag list --group` are deprecated; use `project_ref`, `project_mfid`, and `--project`.
-- `datasets.request_carrier_segmentation()`, `request_insitu_aggregation()`, `request_rga_analysis()`, and `request_mosaic_stitch()` are deprecated; they now start a run through `datasets.postprocess()` and return it.
+- `users.resolve()` uses the exact filters of `GET /users` instead of the deprecated `POST /users/resolve`; its result is unchanged.
+- `users.search()` reads the paginated `items` response.
+- `keyring` is a new dependency, and the package ships type information (`py.typed`).
+- Resource, project, instrument, and user links, `crucible open`, and Alt+O go to the Crucible Hub (`hub_url`) instead of the Graph Explorer.
 
 ### Fixed
 
+- Datasets whose files have an absolute legacy filename, such as `/mnt/gcs/api-uploads/scan.h5`, download instead of being skipped.
+- `datasets.create(upload_files=False)` and `dataset create --no-upload` send each file's size and SHA-256, which the server requires, and name files by relative path so files sharing a basename in different folders stay separate.
+- `add_remote_file()` sets `storage_path` in the create request, and updates it when re-adding an existing file at a new location.
 - Creating a dataset, sample, project, or instrument with scientific metadata on someone else's behalf no longer fails with 403 for platform contributors.
 - The CLI shows UTC timestamps ending in `Z` in local time on Python 3.10, and table dates use the local day.
+- `project add-user` accepts user and service-account MFIDs and any other user ID instead of failing with an invalid ORCID error.
+- Downloads no longer send the API key to the storage host serving a signed URL.
+- A refusal that needs a recent Hub sign-in (`hub_session_required`) points to the Hub instead of suggesting `--elevate`.
 
 ## 3.3.0
 

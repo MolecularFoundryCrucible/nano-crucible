@@ -47,14 +47,6 @@ def test_request_join_posts_to_the_project_route():
     assert record['capabilities'] == {'can_review': True, 'can_withdraw': False}
 
 
-def test_request_join_group_name_keyword_is_deprecated():
-    resource, client = make(RECORD)
-
-    with pytest.warns(DeprecationWarning, match='group_name'):
-        resource.request_join(group_name='thin-films')
-
-    assert client._request.call_args.args[1] == '/projects/thin-films/join_requests'
-    assert client._request.call_args.kwargs['json'] == {}
 
 
 def test_list_forwards_filters_and_sort():
@@ -79,17 +71,6 @@ def test_list_forwards_filters_and_sort():
     assert 'group_name' not in params
 
 
-def test_list_group_name_resolves_to_project_mfid():
-    resource, client = make()
-    client.projects._resource_mfid.return_value = 'mf-1'
-
-    with pytest.warns(DeprecationWarning, match='group_name'):
-        resource.list_join_requests(group_name='thin-films')
-
-    client.projects._resource_mfid.assert_called_once_with('thin-films')
-    params = client._request.call_args.kwargs['params']
-    assert params['project_mfid'] == 'mf-1'
-    assert 'group_name' not in params
 
 
 @pytest.mark.parametrize('kwargs', [
@@ -221,20 +202,6 @@ def test_cli_list_defaults_to_pending_review_queue(monkeypatch, capsys):
     assert 'ehwong' in out
 
 
-def test_cli_list_project_and_deprecated_group(monkeypatch, capsys):
-    client = MagicMock()
-    client.projects.list_join_requests.return_value = []
-    monkeypatch.setattr('crucible.config.get_client', lambda: client)
-    parser = access_group_cli.argparse.ArgumentParser()
-    access_group_cli.register_subcommand(parser.add_subparsers())
-
-    args = parser.parse_args(['ag', 'list', '--group', 'thin-films', '--status', 'all'])
-    args.func(args)
-
-    assert 'deprecated' in capsys.readouterr().err
-    call = client.projects.list_join_requests.call_args
-    assert call.args == ('thin-films',)
-    assert call.kwargs['status'] is None
 
 
 def test_cli_approve_passes_role(monkeypatch):

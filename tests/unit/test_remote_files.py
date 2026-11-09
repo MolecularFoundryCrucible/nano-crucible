@@ -5,9 +5,10 @@ test (AssociatedFile.storage_backend/access_note) is new server-side and may
 not be deployed everywhere tests/integration/ points at.
 """
 
-import warnings
+import hashlib
 
 import pytest
+import requests
 from unittest.mock import MagicMock
 
 from crucible.models import AssociatedFile, Dataset
@@ -73,19 +74,100 @@ class TestAddRemoteFile:
         dataset_ops._client.files.update.assert_not_called()
         assert result == {'mfid': 'mf-1'}
 
-    def test_with_storage_path_posts_then_patches(self, dataset_ops):
-        dataset_ops._request = MagicMock(return_value={'mfid': 'mf-1'})
-        dataset_ops._client.files.update = MagicMock(
+    def test_with_storage_path_posts_once(self, dataset_ops):
+        dataset_ops._request = MagicMock(
             return_value={'mfid': 'mf-1', 'storage_path': 'https://globus/x'})
         af = AssociatedFile(filename='x.dat', storage_backend='globus',
                             storage_path='https://globus/x')
 
         result = dataset_ops.add_remote_file('ds-1', af)
 
-        assert 'storage_path' not in dataset_ops._request.call_args.kwargs['json']
-        dataset_ops._client.files.update.assert_called_once_with(
-            'mf-1', storage_path='https://globus/x')
+        assert dataset_ops._request.call_args.kwargs['json']['storage_path'] == 'https://globus/x'
+        dataset_ops._client.files.update.assert_not_called()
         assert result['storage_path'] == 'https://globus/x'
+
+    def test_repeat_with_new_location_patches_the_path(self, dataset_ops):
+        dataset_ops._request = MagicMock(
+            return_value={'mfid': 'mf-1', 'storage_path': 'https://globus/old'})
+        dataset_ops._client.files.update = MagicMock(
+            return_value={'mfid': 'mf-1', 'storage_path': 'https://globus/new'})
+        af = AssociatedFile(filename='x.dat', storage_backend='globus',
+                            storage_path='https://globus/new')
+
+        result = dataset_ops.add_remote_file('ds-1', af)
+
+        dataset_ops._client.files.update.assert_called_once_with(
+            'mf-1', storage_path='https://globus/new')
+        assert result['storage_path'] == 'https://globus/new'
+
+    @staticmethod
+    def _conflict(code='filename_exists'):
+        response = MagicMock(status_code=409)
+        response.json.return_value = {'detail': {
+            'code': code, 'file_mfid': 'mf-old', 'etag': '"e"', 'message': 'Filename already exists'}}
+        return requests.exceptions.HTTPError('409 Conflict', response=response)
+
+    def test_conflict_raises_without_replace(self, dataset_ops):
+        dataset_ops._client.replace_existing = False
+        dataset_ops._request = MagicMock(side_effect=self._conflict())
+        af = AssociatedFile(filename='x.dat', storage_backend='globus', size=3, sha256_hash='b')
+
+        with pytest.raises(requests.exceptions.HTTPError):
+            dataset_ops.add_remote_file('ds-1', af)
+
+        dataset_ops._client.files.update.assert_not_called()
+
+    @pytest.mark.parametrize('flag', ['argument', 'client'])
+    def test_conflict_with_replace_updates_the_existing_record(self, dataset_ops, flag):
+        dataset_ops._client.replace_existing = flag == 'client'
+        dataset_ops._request = MagicMock(side_effect=self._conflict())
+        dataset_ops._client.files.update = MagicMock(return_value={'mfid': 'mf-old'})
+        af = AssociatedFile(filename='x.dat', storage_backend='globus', size=3,
+                            sha256_hash='b', storage_path='https://globus/x',
+                            access_note='ask')
+
+        result = dataset_ops.add_remote_file('ds-1', af, replace=flag == 'argument')
+
+        dataset_ops._client.files.update.assert_called_once_with(
+            'mf-old', storage_path='https://globus/x', storage_backend='globus',
+            access_note='ask', size=3, sha256_hash='b')
+        assert result == {'mfid': 'mf-old'}
+
+    def test_replace_does_not_swallow_other_conflicts(self, dataset_ops):
+        dataset_ops._request = MagicMock(side_effect=self._conflict('something_else'))
+        af = AssociatedFile(filename='x.dat', storage_backend='globus')
+
+        with pytest.raises(requests.exceptions.HTTPError):
+            dataset_ops.add_remote_file('ds-1', af, replace=True)
+
+
+class TestFromLocalFiles:
+    def test_names_files_relative_to_their_common_folder(self, tmp_path):
+        for folder in ('freq_001', 'freq_002'):
+            (tmp_path / folder).mkdir()
+            (tmp_path / folder / 'kpoints.json').write_text(folder)
+
+        records = AssociatedFile.from_local_files(
+            [str(tmp_path / 'freq_001' / 'kpoints.json'),
+             str(tmp_path / 'freq_002' / 'kpoints.json')],
+            storage_backend='nersc', access_note='ask')
+
+        assert [r.filename for r in records] == ['freq_001/kpoints.json', 'freq_002/kpoints.json']
+        assert records[0].storage_path == str((tmp_path / 'freq_001' / 'kpoints.json').resolve())
+        assert records[0].size == len('freq_001')
+        assert records[0].sha256_hash == hashlib.sha256(b'freq_001').hexdigest()
+        assert {r.storage_backend for r in records} == {'nersc'}
+        assert {r.access_note for r in records} == {'ask'}
+
+    def test_a_single_file_is_named_by_its_basename(self, tmp_path):
+        f = tmp_path / 'data.csv'
+        f.write_text('a')
+
+        assert AssociatedFile.from_local_files([str(f)])[0].filename == 'data.csv'
+
+    def test_missing_file_raises(self, tmp_path):
+        with pytest.raises(FileNotFoundError):
+            AssociatedFile.from_local_files([str(tmp_path / 'missing.dat')])
 
 
 class TestCreateFilesDispatch:
@@ -112,7 +194,7 @@ class TestCreateFilesDispatch:
         dataset_ops.add_remote_file.assert_called_once_with('ds-1', af)
         assert result['files'] == [{'mfid': 'mf-2'}]
 
-    def test_str_upload_false_catalogs_by_absolute_path(self, dataset_ops, tmp_path):
+    def test_str_upload_false_catalogs_with_hash_and_relative_name(self, dataset_ops, tmp_path):
         f = tmp_path / 'data.csv'
         f.write_text('a,b,c')
         dataset_ops._request = MagicMock(return_value={'unique_id': 'ds-1'})
@@ -124,9 +206,20 @@ class TestCreateFilesDispatch:
         dataset_ops.add_file.assert_not_called()
         dataset_ops.add_remote_file.assert_called_once()
         _, remote = dataset_ops.add_remote_file.call_args.args
+        assert remote.filename == 'data.csv'
         assert remote.storage_backend == 'local'
         assert remote.storage_path == str(f.resolve())
         assert remote.size == f.stat().st_size
+        assert remote.sha256_hash == hashlib.sha256(b'a,b,c').hexdigest()
+
+    def test_str_upload_false_missing_file_fails_before_creating(self, dataset_ops, tmp_path):
+        dataset_ops._request = MagicMock()
+
+        with pytest.raises(FileNotFoundError):
+            dataset_ops.create(Dataset(dataset_name='t'),
+                               files=[str(tmp_path / 'missing.csv')], upload_files=False)
+
+        dataset_ops._request.assert_not_called()
 
     def test_mixed_str_and_associated_file(self, dataset_ops):
         dataset_ops._request = MagicMock(return_value={'unique_id': 'ds-1'})
@@ -141,20 +234,7 @@ class TestCreateFilesDispatch:
             {'mfid': 'mf-remote'},
         ]
 
-    def test_files_to_upload_still_works_with_deprecation_warning(self, dataset_ops):
-        dataset_ops._request = MagicMock(return_value={'unique_id': 'ds-1'})
-        dataset_ops.add_file = MagicMock(return_value={'associated_file': {}})
 
-        with warnings.catch_warnings(record=True) as caught:
-            warnings.simplefilter('always')
-            dataset_ops.create(Dataset(dataset_name='t'), files_to_upload=['a.dat'])
-
-        assert any(issubclass(w.category, DeprecationWarning) for w in caught)
-        dataset_ops.add_file.assert_called_once()
-
-    def test_files_and_files_to_upload_together_raises(self, dataset_ops):
-        with pytest.raises(ValueError):
-            dataset_ops.create(Dataset(dataset_name='t'), files=['a'], files_to_upload=['b'])
 
 
 class TestFileDownloadNonGcs:
@@ -183,29 +263,5 @@ class TestFileDownloadNonGcs:
             file_ops.download('mf-1')
 
 
-def test_create_warns_when_only_instrument_name_identifies_the_instrument():
-    import warnings
-    from unittest.mock import MagicMock
-    from crucible.models import Dataset
-    from crucible.resources.datasets import DatasetOperations
-
-    ops = DatasetOperations(MagicMock())
-    ops._request = MagicMock(return_value={'unique_id': 'D' * 26})
-    with warnings.catch_warnings(record=True) as caught:
-        warnings.simplefilter('always')
-        ops.create(Dataset(dataset_name='x', instrument_name='Titan'))
-        ops.create(Dataset(dataset_name='y', instrument_name='Titan', instrument_id='titan'))
-
-    messages = [str(w.message) for w in caught if issubclass(w.category, DeprecationWarning)]
-    assert sum('instrument_name' in m for m in messages) == 1
 
 
-def test_list_warns_on_instrument_name_filter():
-    import pytest
-    from unittest.mock import MagicMock
-    from crucible.resources.datasets import DatasetOperations
-
-    ops = DatasetOperations(MagicMock())
-    ops._paginate = MagicMock(return_value=[])
-    with pytest.warns(DeprecationWarning, match='instrument_name'):
-        ops.list(instrument_name='Titan')

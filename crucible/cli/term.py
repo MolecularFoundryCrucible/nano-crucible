@@ -121,7 +121,7 @@ def orcid_link(orcid: str) -> str | None:
 
 
 def user_id_link(user_id: str) -> str | None:
-    """Render a canonical user ID linked to its Crucible Explorer profile."""
+    """Render a canonical user ID linked to its Crucible Hub profile."""
     if not user_id:
         return None
     from .helpers import user_explorer_url
@@ -129,7 +129,7 @@ def user_id_link(user_id: str) -> str | None:
 
 
 def user_link(label: str, user_id: str) -> str | None:
-    """Link a user label to its Crucible Explorer profile."""
+    """Link a user label to its Crucible Hub profile."""
     if not label:
         return None
     from .helpers import user_explorer_url
@@ -139,6 +139,23 @@ def user_link(label: str, user_id: str) -> str | None:
 def user_id_label(user_id: str) -> str:
     """Return the display label for a canonical user identifier."""
     return "ORCID" if is_orcid(user_id) else "User ID"
+
+
+def print_user_ids(printer, user: dict) -> None:
+    """Print a person's unique_id and, separately, their linked ORCID.
+
+    Servers that predate the ``orcid`` field get one row labelled by the
+    unique_id's shape instead.
+    """
+    uid = user.get('unique_id')
+    if 'orcid' not in user:
+        printer(user_id_label(uid), user_id_link(uid))
+        return
+    printer("User ID", user_id_link(uid))
+    orcid = user.get('orcid')
+    if orcid:
+        verified = f"  {dim('(verified)')}" if user.get('orcid_verified') else ''
+        printer("ORCID", orcid_link(orcid) + verified)
 
 
 def fmt_name(person: dict, default: str | None = None, fallback_username: bool = True) -> str | None:
@@ -166,11 +183,11 @@ def fmt_owner(resource: dict) -> str | None:
     """Format the owner of a resource.
 
     If include_owner was used and the owner object is present, returns
-    'F. Lastname (@username)' linked to the Crucible Explorer profile. Falls
+    'F. Lastname (@username)' linked to the Crucible Hub profile. Falls
     back to the canonical owner identifier.
     """
     owner = resource.get('owner')
-    owner_id = resource.get('owner_orcid')
+    owner_id = (owner or {}).get('unique_id') or resource.get('owner_orcid')
     if owner:
         name = fmt_name(owner, default=owner_id or '-')
         uname = owner.get('username')

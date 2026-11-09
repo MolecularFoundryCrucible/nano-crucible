@@ -32,10 +32,10 @@ class Config:
         # [crucible] – API connection
         'api_key':            {'env': 'CRUCIBLE_API_KEY',            'ini': 'api_key',            'section': 'crucible'},
         'api_url':            {'env': 'CRUCIBLE_API_URL',            'ini': 'api_url',            'section': 'crucible'},
-        'graph_explorer_url': {'env': 'CRUCIBLE_GRAPH_EXPLORER_URL', 'ini': 'graph_explorer_url', 'section': 'crucible'},
-        'current_project':    {'env': 'CRUCIBLE_CURRENT_PROJECT',    'ini': 'current_project',    'section': 'crucible'},
-        'current_session':    {'env': 'CRUCIBLE_CURRENT_SESSION',    'ini': 'current_session',    'section': 'crucible'},
+        'hub_url':            {'env': 'CRUCIBLE_HUB_URL',            'ini': 'hub_url',            'section': 'crucible'},
+        'current_project':    {'env': None,                          'ini': 'current_project',    'section': 'crucible'},
         'privilege_mode':     {'env': 'CRUCIBLE_PRIVILEGE_MODE',     'ini': 'privilege_mode',     'section': 'crucible'},
+        'auth_store':         {'env': 'CRUCIBLE_AUTH_STORE',         'ini': 'auth_store',         'section': 'crucible'},
         # [cache]
         'cache_dir':          {'env': 'CRUCIBLE_CACHE_DIR',          'ini': 'cache_dir',          'section': 'cache'},
         # [display] – UI preferences
@@ -50,10 +50,39 @@ class Config:
         'read_timeout':       {'env': 'CRUCIBLE_READ_TIMEOUT',       'ini': 'read_timeout',       'section': 'network'},
         'default_limit':      {'env': 'CRUCIBLE_DEFAULT_LIMIT',      'ini': 'default_limit',      'section': 'network'},
         # [upload] – multipart upload tuning
-        'upload_chunk_size_mb': {'env': 'CRUCIBLE_UPLOAD_CHUNK_SIZE_MB', 'ini': 'chunk_size_mb', 'section': 'upload'},
         'upload_max_workers':   {'env': 'CRUCIBLE_UPLOAD_MAX_WORKERS',   'ini': 'max_workers',   'section': 'upload'},
-        'upload_protocol':      {'env': 'CRUCIBLE_UPLOAD_PROTOCOL',      'ini': 'protocol',      'section': 'upload'},
     }
+
+    # Settings removed in 4.0.0: name -> (section, ini key, env var, what to do instead).
+    # Old config files still load; these entries are ignored and `config show` lists them.
+    REMOVED_SETTINGS = {
+        'graph_explorer_url': ('crucible', 'graph_explorer_url', 'CRUCIBLE_GRAPH_EXPLORER_URL',
+                               'links go to the Crucible Hub; set hub_url instead'),
+        'current_session': ('crucible', 'current_session', 'CRUCIBLE_CURRENT_SESSION',
+                            'the shell no longer uses it; remove it'),
+        'upload_protocol': ('upload', 'protocol', 'CRUCIBLE_UPLOAD_PROTOCOL',
+                            'every upload uses signed multipart; remove it'),
+        'upload_chunk_size_mb': ('upload', 'chunk_size_mb', 'CRUCIBLE_UPLOAD_CHUNK_SIZE_MB',
+                                 'the server sets the part size; remove it'),
+    }
+    REMOVED_ENVIRONMENT = {
+        'CRUCIBLE_CURRENT_PROJECT': 'it could silently redirect commands to another project; '
+                                    "pass --project-id, or save one with 'use PROJECT' in the shell",
+    }
+
+    def removed_in_use(self):
+        """[(where, name, instead)] for removed settings still present in the
+        config file or the environment."""
+        found = []
+        for name, (section, ini_key, env, instead) in self.REMOVED_SETTINGS.items():
+            if os.environ.get(env) is not None:
+                found.append(('environment', env, instead))
+            if self._file_keys.get((section, ini_key)) or self._file_keys.get(('crucible', ini_key)):
+                found.append(('config file', name, instead))
+        for env, instead in self.REMOVED_ENVIRONMENT.items():
+            if os.environ.get(env) is not None:
+                found.append(('environment', env, instead))
+        return found
 
     def __init__(self):
         """Initialize and load configuration."""
@@ -66,16 +95,19 @@ class Config:
         """Load configuration from all available sources."""
         # 1. Load from environment variables (highest priority)
         for key, mapping in self._CONFIG_MAP.items():
-            env_value = os.environ.get(mapping['env'])
+            env_value = os.environ.get(mapping['env']) if mapping['env'] else None
             if env_value is not None:
                 self._data[key] = env_value
                 self._sources[key] = 'environment'
 
         # 2. Load from INI config file
         config_file = self.config_file_path
+        self._file_keys = {}
         if config_file.exists():
             parser = configparser.ConfigParser()
             parser.read(config_file)
+            self._file_keys = {(section, key): True for section in parser.sections()
+                               for key in parser[section]}
 
             for key, mapping in self._CONFIG_MAP.items():
                 if key in self._data:
@@ -163,42 +195,44 @@ class Config:
 
         return cache_path
 
+    DEFAULT_HUB_URL = 'https://crucible.lbl.gov/hub'
+
+    @property
+    def hub_url(self):
+        """The Crucible Hub address, where people sign in and manage API keys."""
+        return self._data.get('hub_url', self.DEFAULT_HUB_URL).rstrip('/')
+
     @property
     def graph_explorer_url(self):
-        """
-        Get the Crucible Graph Explorer URL.
-
-        Returns:
-            str: The graph explorer URL
-        """
-        default_url = 'https://crucible.lbl.gov/explore'
-        return self._data.get('graph_explorer_url', default_url)
+        """Removed in 4.0.0."""
+        from ..errors import RemovedError
+        from ..utils.deprecation import removed_message
+        raise RemovedError(removed_message("The 'graph_explorer_url' setting", self.REMOVED_SETTINGS['graph_explorer_url'][3] + '.'))
 
     @property
     def current_project(self):
         """
-        Get the current project ID.
+        Get the current project ID saved in the config file.
 
         Returns:
             str or None: The current project ID if configured, None otherwise
+
+        Raises:
+            RemovedError: CRUCIBLE_CURRENT_PROJECT is set; it was removed in 4.0.0.
         """
+        if os.environ.get('CRUCIBLE_CURRENT_PROJECT') is not None:
+            from ..errors import RemovedError
+            from ..utils.deprecation import removed_message
+            raise RemovedError(removed_message(
+                'CRUCIBLE_CURRENT_PROJECT', self.REMOVED_ENVIRONMENT['CRUCIBLE_CURRENT_PROJECT'] + '; unset it.'))
         return self._data.get('current_project')
 
     @property
     def current_session(self):
-        """
-        Return the deprecated default session name.
-
-        Returns:
-            str or None: The current session name if configured, None otherwise
-        """
-        import warnings
-        warnings.warn(
-            "'current_session' is deprecated and is no longer used by the interactive shell.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        return self._data.get('current_session') or None
+        """Removed in 4.0.0."""
+        from ..errors import RemovedError
+        from ..utils.deprecation import removed_message
+        raise RemovedError(removed_message("The 'current_session' setting", self.REMOVED_SETTINGS['current_session'][3] + '.'))
 
     @property
     def privilege_mode(self):
@@ -213,6 +247,16 @@ class Config:
         if value is not None and value not in PRIVILEGE_MODES:
             raise ValueError(
                 f"privilege_mode must be one of: {', '.join(PRIVILEGE_MODES)}.")
+        return value
+
+    @property
+    def auth_store(self):
+        """Where `crucible login` keeps tokens: auto (OS keyring, else a file), keyring, file, or memory."""
+        from ..auth.store import AUTH_STORES
+
+        value = self._data.get('auth_store') or 'auto'
+        if value not in AUTH_STORES:
+            raise ValueError(f"auth_store must be one of: {', '.join(AUTH_STORES)}.")
         return value
 
     @property
@@ -286,18 +330,15 @@ class Config:
             return 50
 
     @property
-    def upload_chunk_size_mb(self) -> int:
-        """Multipart upload chunk size in MiB (default 64)."""
-        from ..constants import UPLOAD_CHUNK_SIZE_MB
-        raw = self._data.get('upload_chunk_size_mb')
-        try:
-            return int(raw)
-        except (TypeError, ValueError):
-            return UPLOAD_CHUNK_SIZE_MB
+    def upload_chunk_size_mb(self):
+        """Removed in 4.0.0."""
+        from ..errors import RemovedError
+        from ..utils.deprecation import removed_message
+        raise RemovedError(removed_message("The 'upload_chunk_size_mb' setting", self.REMOVED_SETTINGS['upload_chunk_size_mb'][3] + '.'))
 
     @property
     def upload_max_workers(self) -> int:
-        """Concurrent upload threads for multipart upload (default 8)."""
+        """Upload parts sent in parallel (default 8)."""
         from ..constants import UPLOAD_MAX_WORKERS
         raw = self._data.get('upload_max_workers')
         try:
@@ -306,20 +347,11 @@ class Config:
             return UPLOAD_MAX_WORKERS
 
     @property
-    def upload_protocol(self) -> str:
-        """How multipart uploads reach storage: "auto" (default), "signed", or "legacy".
-
-        "auto" uses the signed multipart flow and falls back to the legacy
-        token route when the server has it switched off; "signed" never falls
-        back; "legacy" always uses the token route.
-        """
-        from ..constants import UPLOAD_PROTOCOLS
-
-        value = (self._data.get('upload_protocol') or 'auto').lower()
-        if value not in UPLOAD_PROTOCOLS:
-            raise ValueError(
-                f"upload_protocol must be one of: {', '.join(UPLOAD_PROTOCOLS)}.")
-        return value
+    def upload_protocol(self):
+        """Removed in 4.0.0."""
+        from ..errors import RemovedError
+        from ..utils.deprecation import removed_message
+        raise RemovedError(removed_message("The 'upload_protocol' setting", self.REMOVED_SETTINGS['upload_protocol'][3] + '.'))
 
     @property
     def client(self):
@@ -332,7 +364,7 @@ class Config:
         if self._client is None:
             # Import here to avoid circular imports
             from crucible import CrucibleClient
-            self._client = CrucibleClient(self.api_url, self.api_key)
+            self._client = CrucibleClient(self.api_url)
         return self._client
 
     # Settings a CrucibleClient is built from; changing one invalidates it.
@@ -409,19 +441,26 @@ def get_cache_dir():
     return config.cache_dir
 
 
-def get_graph_explorer_url():
+def get_hub_url():
     """
-    Get the Crucible Graph Explorer URL from configuration.
+    Get the Crucible Hub URL from configuration.
 
     Priority order:
-    1. CRUCIBLE_GRAPH_EXPLORER_URL environment variable
-    2. graph_explorer_url from ~/.config/nano-crucible/config.ini
-    3. Default: https://crucible.lbl.gov/explore
+    1. CRUCIBLE_HUB_URL environment variable
+    2. hub_url from ~/.config/nano-crucible/config.ini
+    3. Default: https://crucible.lbl.gov/hub
 
     Returns:
-        str: The graph explorer URL
+        str: The Hub URL, without a trailing slash
     """
-    return config.graph_explorer_url
+    return config.hub_url
+
+
+def get_graph_explorer_url():
+    """Removed in 4.0.0: use get_hub_url()."""
+    from ..errors import RemovedError
+    from ..utils.deprecation import removed_message
+    raise RemovedError(removed_message("get_graph_explorer_url()", "use get_hub_url() instead."))
 
 
 def get_current_project():
@@ -466,7 +505,7 @@ def restrict_config_permissions(config_file):
 
 
 def create_config_file(api_key, api_url=None, cache_dir=None,
-                       graph_explorer_url=None, current_project=None,
+                       current_project=None, hub_url=None,
                        editor=None, connect_timeout=None, read_timeout=None,
                        default_limit=None, **kwargs):
     """
@@ -486,7 +525,7 @@ def create_config_file(api_key, api_url=None, cache_dir=None,
         api_key (str): The API key to store
         api_url (str, optional): Custom API URL
         cache_dir (str, optional): Custom cache directory path
-        graph_explorer_url (str, optional): Graph Explorer URL
+        hub_url (str, optional): Crucible Hub URL
         current_project (str, optional): Current project ID
         editor (str, optional): Preferred editor command
         connect_timeout (int, optional): TCP connect timeout in seconds
@@ -496,6 +535,12 @@ def create_config_file(api_key, api_url=None, cache_dir=None,
     Returns:
         Path: Path to the created config file
     """
+    removed = [name for name in kwargs if name in Config.REMOVED_SETTINGS]
+    if removed:
+        from ..errors import RemovedError
+        from ..utils.deprecation import removed_message
+        name = removed[0]
+        raise RemovedError(removed_message(f"The '{name}' setting", Config.REMOVED_SETTINGS[name][3] + '.'))
     config_dir = Path(user_config_dir("nano-crucible"))
     config_dir.mkdir(parents=True, exist_ok=True)
     try:
@@ -505,7 +550,6 @@ def create_config_file(api_key, api_url=None, cache_dir=None,
     config_file = config_dir / "config.ini"
 
     default_cache_dir           = str(user_cache_dir("nano-crucible"))
-    default_graph_explorer_url  = 'https://crucible.lbl.gov/explore'
 
     with open(config_file, 'w') as f:
 
@@ -521,8 +565,11 @@ def create_config_file(api_key, api_url=None, cache_dir=None,
         else:
             f.write(f"# api_url = {Config.DEFAULT_API_URL}\n\n")
 
-        f.write("# Crucible Graph Explorer URL\n")
-        f.write(f"graph_explorer_url = {graph_explorer_url or default_graph_explorer_url}\n\n")
+        f.write("# Crucible Hub URL: resource links, sign-in and API keys\n")
+        if hub_url:
+            f.write(f"hub_url = {hub_url}\n\n")
+        else:
+            f.write(f"# hub_url = {Config.DEFAULT_HUB_URL}\n\n")
 
         f.write("# Current project ID (leave commented out to prompt each time)\n")
         if current_project is not None:

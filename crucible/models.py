@@ -43,6 +43,24 @@ class ResourceCapabilities(BaseModel):
     can_change_status: bool
     can_transfer: bool
     max_grant_role: Optional[Literal['viewer', 'contributor', 'editor', 'admin']] = None
+    can_view_access: Optional[bool] = None
+    can_delete: Optional[bool] = None
+    can_request_deletion: Optional[bool] = None
+
+    model_config = ConfigDict(from_attributes=True, extra='allow')
+
+
+class EntryCapabilities(BaseModel):
+    """What the caller may do to one access entry or group member.
+
+    can_remove: the matching DELETE would succeed. can_change_role: a role
+    change would succeed for at least one other role, listed in
+    assignable_roles. All are false for callers who can only view access.
+    """
+
+    can_remove: Optional[bool] = None
+    can_change_role: Optional[bool] = None
+    assignable_roles: List[str] = []
 
     model_config = ConfigDict(from_attributes=True, extra='allow')
 
@@ -175,6 +193,8 @@ class Project(BaseModel):
 class User(BaseModel):
     unique_id: Optional[str] = None
     username: Optional[str] = None
+    orcid: Optional[str] = None
+    orcid_verified: Optional[bool] = None
     first_name: Optional[str] = None
     last_name: Optional[str] = None
     email: Optional[str] = None
@@ -187,6 +207,7 @@ class ProjectMember(User):
     '''A project member's profile plus their standing role in the project.'''
 
     role: str
+    capabilities: Optional[EntryCapabilities] = None
 
 
 class AccessGrant(BaseModel):
@@ -199,6 +220,7 @@ class AccessGrant(BaseModel):
     permission: Literal['viewer', 'contributor', 'editor', 'admin', 'owner']
     slug: Optional[str] = None
     display_name: Optional[str] = None
+    capabilities: Optional[EntryCapabilities] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -283,6 +305,39 @@ class AssociatedFile(BaseModel):
 
     model_config = ConfigDict(from_attributes=True, populate_by_name=True, extra='allow')
 
+    @classmethod
+    def from_local_files(cls, paths: List[str], storage_backend: str = 'local',
+                         access_note: Optional[str] = None) -> List['AssociatedFile']:
+        '''Build catalog-only records for local files, hashing each one.
+
+        Each filename is the file's path relative to the deepest directory
+        containing all of them, so files sharing a basename in different
+        folders keep distinct names. storage_path is the absolute path.
+
+        Raises:
+            FileNotFoundError: A path is not an existing file.
+        '''
+        import os
+        from pathlib import Path
+        from .utils.io import hash_file
+
+        resolved = [Path(p).resolve() for p in paths]
+        for path in resolved:
+            if not path.is_file():
+                raise FileNotFoundError(f"Not a file: {path}")
+        if not resolved:
+            return []
+        root = Path(os.path.commonpath([p.parent for p in resolved]))
+        return [
+            cls(filename=path.relative_to(root).as_posix(),
+                storage_path=str(path),
+                storage_backend=storage_backend,
+                access_note=access_note,
+                size=path.stat().st_size,
+                sha256_hash=hash_file(str(path))[0])
+            for path in resolved
+        ]
+
 
 class ServiceAccountKeyStatus(BaseModel):
     '''Issue and expiry state of a service account's current API key.'''
@@ -292,6 +347,28 @@ class ServiceAccountKeyStatus(BaseModel):
     valid: Optional[bool] = None
 
     model_config = ConfigDict(from_attributes=True, extra='allow')
+
+
+class ApiKeyInfo(BaseModel):
+    '''One of a person's API keys, without the key itself.'''
+
+    id: Optional[int] = None
+    name: Optional[str] = None
+    last4: Optional[str] = None
+    status: Optional[str] = None
+    created_at: Optional[str] = None
+    last_used_at: Optional[str] = None
+    expires_at: Optional[str] = None
+    revoked_at: Optional[str] = None
+    older_routes: Optional[bool] = None
+
+    model_config = ConfigDict(from_attributes=True, extra='allow')
+
+
+class ApiKeyCreated(ApiKeyInfo):
+    '''A new API key. api_key is returned only once, at creation.'''
+
+    api_key: Optional[str] = None
 
 
 class ServiceAccountAdmin(BaseModel):

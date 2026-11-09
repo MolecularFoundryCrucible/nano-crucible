@@ -6,7 +6,7 @@ Crucible CLI - Unified command-line interface for Crucible operations.
 Available subcommands:
     config      Manage crucible configuration
     upload      Parse and upload datasets to Crucible
-    open        Open resources in Crucible Graph Explorer
+    open        Open resources in the Crucible Hub
     link        Link resources (datasets, samples)
     completion  Install shell autocomplete
 """
@@ -19,7 +19,7 @@ from crucible import __version__
 _DEPRECATED_SUBCOMMANDS = {
     ('dataset', 'update-metadata'): 'update',
     ('dataset', 'get-keywords'):    'list-keywords',
-    ('sample',  'link-dataset'):    'add-dataset',   # note: args changed to: SAMPLE_ID -d DATASET_ID
+    ('sample',  'link-dataset'):    'add-dataset SAMPLE_ID -d DATASET_ID',
     ('user',    'get-access-groups'): 'list-access-groups',
     ('user',    'get-projects'):    'list-projects',
     ('project', 'get-users'):       'list-users',
@@ -35,25 +35,22 @@ _DEPRECATED_SUBCOMMANDS = {
 
 
 def _remap_deprecated(argv):
-    """Remap deprecated subcommand names, warning the user."""
+    """Stop on a subcommand name removed in 4.0.0, naming the one to use."""
     args = list(argv)
-    # Find the resource command (first non-flag arg)
     resource_idx = next((i for i, a in enumerate(args) if not a.startswith('-')), None)
     if resource_idx is None:
         return args
     resource = args[resource_idx]
-    # Find the subcommand (first non-flag arg after resource)
     sub_idx = next((i for i, a in enumerate(args[resource_idx+1:], resource_idx+1)
                     if not a.startswith('-')), None)
     if sub_idx is None:
         return args
     key = (resource, args[sub_idx])
     if key in _DEPRECATED_SUBCOMMANDS:
-        new_name = _DEPRECATED_SUBCOMMANDS[key]
-        warning = term.yellow('Warning:', stream=sys.stderr)
-        print(f"{warning} '{resource} {args[sub_idx]}' is deprecated, "
-              f"use '{resource} {new_name}' instead.", file=sys.stderr)
-        args[sub_idx] = new_name
+        error = term.red('Error:', stream=sys.stderr)
+        print(f"{error} 'crucible {resource} {args[sub_idx]}' was removed in nano-crucible 4.0.0; "
+              f"use 'crucible {resource} {_DEPRECATED_SUBCOMMANDS[key]}' instead.", file=sys.stderr)
+        sys.exit(2)
     return args
 
 try:
@@ -221,7 +218,7 @@ Examples:
     from . import (
         dataset, sample, project, instrument, user, file as file_cmd, ingestion,  # Resource commands
         service_account, access_group,
-        upload, completion, config as config_cmd, open as open_cmd, link, unlink, whoami, account, cache, download, get, edit, status, deletion, tree, cast, qr, printer  # Utility commands
+        upload, completion, config as config_cmd, open as open_cmd, link, unlink, whoami, login, account, cache, download, get, edit, status, deletion, tree, cast, qr, printer  # Utility commands
     )
 
     # Register resource commands (new structure)
@@ -243,6 +240,7 @@ Examples:
     link.register_subcommand(subparsers)
     unlink.register_subcommand(subparsers)
     whoami.register_subcommand(subparsers)
+    login.register_subcommand(subparsers)
     account.register_subcommand(subparsers)
     cache.register_subcommand(subparsers)
     download.register_subcommand(subparsers)
@@ -268,6 +266,14 @@ Examples:
 
     # Parse arguments
     args = parser.parse_args(argv)
+
+    import os as _os
+    if _os.environ.get('CRUCIBLE_CURRENT_PROJECT') is not None:
+        from ..config.config import Config as _Config
+        print(f"{term.red('Error:', stream=sys.stderr)} CRUCIBLE_CURRENT_PROJECT was removed in "
+              f"nano-crucible 4.0.0: {_Config.REMOVED_ENVIRONMENT['CRUCIBLE_CURRENT_PROJECT']}. "
+              "Unset it to continue.", file=sys.stderr)
+        sys.exit(2)
 
     # Configure logging once for the entire CLI
     setup_logging(debug=getattr(args, 'debug', False))
@@ -309,6 +315,8 @@ Examples:
     try:
         if hasattr(args, 'func'):
             from .pager import paged
+            from .stepup import install_for
+            install_for(args)
             with paged(args):
                 args.func(args)
         else:

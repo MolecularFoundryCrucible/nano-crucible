@@ -9,7 +9,7 @@ Provides access to entity graph traversal endpoints.
 import logging
 from typing import Any
 from .base import BaseResource
-from ..utils.deprecation import _deprecated_parameter
+from ..utils.deprecation import _removed_parameter
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +21,7 @@ class GraphOperations(BaseResource):
     client.samples.graph() / client.datasets.graph().
     """
 
-    @_deprecated_parameter('entity_id', 'resource_mfid')
+    @_removed_parameter('entity_id', 'resource_mfid')
     def get(self, resource_mfid: str, recursive: bool = False,
             as_networkx: bool = False) -> Any:
         """Return the graph of entities connected to a dataset or sample MFID.

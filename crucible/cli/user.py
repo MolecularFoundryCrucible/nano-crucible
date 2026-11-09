@@ -13,6 +13,7 @@ import json
 logger = logging.getLogger(__name__)
 
 from . import term
+from .helpers import RemovedOptionAction
 from .helpers import add_limit_arguments, count_label, print_more_hint, resolve_limit, page_kwargs
 from ..constants import PROJECT_ACCESS_ROLES, PROJECT_SORTS, SORT_DIRECTIONS
 
@@ -45,12 +46,16 @@ def register_subcommand(subparsers):
     _register_edit(user_subparsers)
     _register_list(user_subparsers)
     _register_set_role(user_subparsers)
+    _register_list_keys(user_subparsers)
     _register_revoke_keys(user_subparsers)
     _register_list_datasets(user_subparsers)
     _register_check_access(user_subparsers)
     _register_list_access_groups(user_subparsers)
-    _register_add_access_group(user_subparsers)
-    _register_remove_access_group(user_subparsers)
+    from .helpers import add_removed_command
+    add_removed_command(user_subparsers, 'add-access-group',
+                        "'crucible project add-user PROJECT --user USER' or 'crucible instrument bind-sa'")
+    add_removed_command(user_subparsers, 'remove-access-group',
+                        "'crucible project remove-user PROJECT --user USER' or 'crucible instrument unbind-sa'")
     _register_list_projects(user_subparsers)
 
 
@@ -77,9 +82,9 @@ Examples:
                         help='ORCID, MFID, username, or email of the user')
 
     group = parser.add_mutually_exclusive_group()
-    group.add_argument('--orcid',    metavar='ORCID',    help='(deprecated, use positional USER)')
-    group.add_argument('-u', '--username', metavar='USERNAME',  help='(deprecated, use positional USER)')
-    group.add_argument('--email',    metavar='EMAIL',     help='(deprecated, use positional USER)')
+    group.add_argument('--orcid', action=RemovedOptionAction, replacement='the USER argument', default=None)
+    group.add_argument('-u', '--username', action=RemovedOptionAction, replacement='the USER argument', default=None)
+    group.add_argument('--email', action=RemovedOptionAction, replacement='the USER argument', default=None)
 
     parser.add_argument('--json', action='store_true', default=False, help='Output as JSON')
 
@@ -243,12 +248,11 @@ def _show_user(user):
     _p = term.field_printer(16)
 
     full_name = term.fmt_name(user, fallback_username=False)
-    uid = user.get('unique_id')
 
     term.header("User")
     _p("Username", user.get('username') or term.dim('(not set)'))
     _p("Name",     full_name)
-    _p(term.user_id_label(uid), term.user_id_link(uid))
+    term.print_user_ids(_p, user)
     if 'email' in user:
         email = term.dim('(not set)') if user['email'] is None else user['email']
         _p("Email", email)
@@ -276,22 +280,9 @@ def _execute_get(args):
     """Execute the 'user get' subcommand."""
     from crucible.config import get_client
     from .helpers import parse_user_ref
-    import warnings
-
-    orcid    = getattr(args, 'orcid', None)
-    username = getattr(args, 'username', None)
-    email    = getattr(args, 'email', None)
     user_ref = getattr(args, 'user', None)
 
-    if orcid or username or email:
-        warnings.warn(
-            "--orcid/--username/--email are deprecated; pass the identifier "
-            "positionally instead: crucible user get USER",
-            DeprecationWarning, stacklevel=2,
-        )
-        ref_kwargs = {'orcid': orcid, 'username': username, 'email': email}
-        identifier = orcid or username or email
-    elif user_ref:
+    if user_ref:
         ref_kwargs = parse_user_ref(user_ref)
         identifier = user_ref
     else:
@@ -472,9 +463,9 @@ Examples:
                         help='ORCID, MFID, username, or email of the user')
 
     group = parser.add_mutually_exclusive_group()
-    group.add_argument('--orcid',    '-o', metavar='ORCID',    help='(deprecated, use positional USER)')
-    group.add_argument('--username', '-u', metavar='USERNAME', help='(deprecated, use positional USER)')
-    group.add_argument('--email',    '-e', metavar='EMAIL',    help='(deprecated, use positional USER)')
+    group.add_argument('--orcid', '-o', action=RemovedOptionAction, replacement='the USER argument', default=None)
+    group.add_argument('--username', '-u', action=RemovedOptionAction, replacement='the USER argument', default=None)
+    group.add_argument('--email', '-e', action=RemovedOptionAction, replacement='the USER argument', default=None)
     parser.set_defaults(func=_execute_edit)
 
 
@@ -482,21 +473,9 @@ def _execute_edit(args):
     """Execute the 'user edit' subcommand."""
     from crucible.config import get_client
     from .helpers import parse_user_ref
-    import warnings
-
-    orcid    = getattr(args, 'orcid', None)
-    username = getattr(args, 'username', None)
-    email    = getattr(args, 'email', None)
     user_ref = getattr(args, 'user', None)
 
-    if orcid or username or email:
-        warnings.warn(
-            "--orcid/--username/--email are deprecated; pass the identifier "
-            "positionally instead: crucible user edit USER",
-            DeprecationWarning, stacklevel=2,
-        )
-        ref_kwargs = {'orcid': orcid, 'username': username, 'email': email}
-    elif user_ref:
+    if user_ref:
         ref_kwargs = parse_user_ref(user_ref)
     else:
         logger.error("Provide a user identifier: crucible user edit USER")
@@ -541,80 +520,12 @@ def _execute_edit(args):
         fail("", e, args)
 
 
-def _register_add_access_group(subparsers):
-    """Register the 'user add-access-group' subcommand."""
-    parser = subparsers.add_parser(
-        'add-access-group',
-        help='Deprecated generic access-group membership command',
-        description=(
-            'Deprecated. Use project add-user for projects or instrument bind-sa '
-            'for instrument operators.'
-        ),
-        formatter_class=term.ColorHelpFormatter,
-        epilog="""
-Examples:
-    crucible user add-access-group 0000-0002-1825-0097 my-group
-    crucible user add-access-group fabrice my-group
-""",
-    )
-    parser.add_argument('user',       metavar='USER',  help='ORCID, MFID, username, or email of the user')
-    parser.add_argument('group_name', metavar='GROUP', help='Access group name')
-    parser.set_defaults(func=_execute_add_access_group)
 
 
-def _execute_add_access_group(args):
-    """Execute the 'user add-access-group' subcommand."""
-    from crucible.config import get_client
-    from .helpers import resolve_user_id
-    try:
-        client = get_client()
-        user_id = resolve_user_id(client, args.user)
-        client.users.add_to_access_group(user_id, args.group_name)
-        term.success(f"Added {args.user} to access group '{args.group_name}'", args)
-    except ValueError as e:
-        logger.error(str(e))
-        sys.exit(1)
-    except Exception as e:
-        from .helpers import fail
-        fail("", e, args)
 
 
-def _register_remove_access_group(subparsers):
-    """Register the 'user remove-access-group' subcommand."""
-    parser = subparsers.add_parser(
-        'remove-access-group',
-        help='Deprecated generic access-group membership command',
-        description=(
-            'Deprecated. Use project remove-user for projects or instrument unbind-sa '
-            'for instrument operators.'
-        ),
-        formatter_class=term.ColorHelpFormatter,
-        epilog="""
-Examples:
-    crucible user remove-access-group 0000-0002-1825-0097 my-group
-    crucible user remove-access-group fabrice my-group
-"""
-    )
-    parser.add_argument('user',       metavar='USER',  help='ORCID, MFID, username, or email of the user')
-    parser.add_argument('group_name', metavar='GROUP', help='Access group name')
-    parser.set_defaults(func=_execute_remove_access_group)
 
 
-def _execute_remove_access_group(args):
-    """Execute the 'user remove-access-group' subcommand."""
-    from crucible.config import get_client
-    from .helpers import resolve_user_id
-    try:
-        client = get_client()
-        user_id = resolve_user_id(client, args.user)
-        client.users.remove_from_access_group(user_id, args.group_name)
-        term.success(f"Removed {args.user} from access group '{args.group_name}'", args)
-    except ValueError as e:
-        logger.error(str(e))
-        sys.exit(1)
-    except Exception as e:
-        logger.error(f"Error removing user from access group: {e}")
-        sys.exit(1)
 
 
 def _execute_list(args):
@@ -731,20 +642,64 @@ def _execute_set_role(args):
         fail("", e, args)
 
 
+def _register_list_keys(subparsers):
+    from .helpers import add_limit_arguments
+    parser = subparsers.add_parser(
+        'list-keys',
+        help='List a user\'s API keys (admin only)',
+        description='List the API keys of a human user or service account, never the keys themselves.',
+        formatter_class=term.ColorHelpFormatter,
+        epilog="""
+Examples:
+    crucible user list-keys fabrice
+    crucible user list-keys 0000-0002-1825-0097 --inactive
+"""
+    )
+    parser.add_argument('user', metavar='USER', help='ORCID, MFID, username, or email of the user')
+    parser.add_argument('--inactive', action='store_true', default=False,
+                        help='List expired and revoked keys instead of active ones')
+    add_limit_arguments(parser, 'keys')
+    parser.add_argument('--json', action='store_true', default=False, help='Output as JSON')
+    parser.set_defaults(func=_execute_list_keys)
+
+
+def _execute_list_keys(args):
+    from crucible.config import get_client
+    from .account import print_key_list
+    from .helpers import page_kwargs, require_elevation, resolve_limit, resolve_user_id
+    try:
+        client = get_client()
+        require_elevation(client, 'list user API keys')
+        user_id = resolve_user_id(client, args.user)
+        keys = client.users.list_api_keys(
+            user_id, state='inactive' if args.inactive else 'active',
+            limit=resolve_limit(args), **page_kwargs(args))
+        print_key_list(keys, f"API Keys of {args.user}", args)
+    except ValueError as e:
+        logger.error(str(e))
+        sys.exit(1)
+    except Exception as e:
+        from .helpers import fail
+        fail("listing API keys", e, args)
+
+
 def _register_revoke_keys(subparsers):
     parser = subparsers.add_parser(
         'revoke-keys',
-        help='Revoke every API key held by a user (admin only)',
-        description='Revoke all API keys held by a human user or service account. '
-                    'Their keys stop authenticating within the API cache TTL.',
+        help='Revoke a user\'s API keys, all or one (admin only)',
+        description='Revoke all API keys held by a human user or service account, or one '
+                    'with --key. Revoked keys stop authenticating within the API cache TTL.',
         formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     crucible user revoke-keys 0000-0002-1825-0097
     crucible user revoke-keys fabrice --yes
+    crucible user revoke-keys fabrice --key 12
 """
     )
     parser.add_argument('user', metavar='USER', help='ORCID, MFID, username, or email of the user')
+    parser.add_argument('--key', dest='key_id', type=int, default=None, metavar='ID',
+                        help='Revoke only this key, from `crucible user list-keys`')
     parser.add_argument('--yes', action='store_true', default=False,
                         help='Skip the confirmation prompt')
     parser.set_defaults(func=_execute_revoke_keys)
@@ -757,12 +712,16 @@ def _execute_revoke_keys(args):
         client = get_client()
         require_elevation(client, 'revoke user API keys')
         user_id = resolve_user_id(client, args.user)
-        confirmed = args.yes or prompt_confirm(
-            f"Revoke every API key held by {args.user}?",
-            option='--yes',
-        )
+        key_id = getattr(args, 'key_id', None)
+        question = (f"Revoke API key {key_id} of {args.user}?" if key_id is not None
+                    else f"Revoke every API key held by {args.user}?")
+        confirmed = args.yes or prompt_confirm(question, option='--yes')
         if not confirmed:
             logger.info("Aborted.")
+            return
+        if key_id is not None:
+            client.users.revoke_api_key(user_id, key_id)
+            term.success(f"Revoked API key {key_id} of {args.user}", args)
             return
         client.users.revoke_api_keys(user_id)
         term.success(f"Revoked every API key held by {args.user}", args)

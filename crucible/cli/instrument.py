@@ -13,6 +13,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 from . import term
+from .helpers import RemovedOptionAction
 from .helpers import add_limit_arguments, count_label, print_more_hint, resolve_limit, page_kwargs
 from ..config import config as _config
 from ..constants import INSTRUMENT_SORTS, SORT_DIRECTIONS
@@ -252,8 +253,10 @@ def _register_get(subparsers):
 
     parser.add_argument(
         '--by-id',
-        action='store_true',
-        help='Deprecated: treat the argument explicitly as an MFID'
+        action=RemovedOptionAction,
+        nargs=0,
+        default=False,
+        reason='MFIDs and instrument IDs are told apart automatically, so drop it'
     )
 
     parser.add_argument(
@@ -568,23 +571,11 @@ def _execute_get(args):
     try:
         client = get_client()
 
-        if args.by_id:
-            import warnings
-            warnings.warn(
-                "--by-id is deprecated because MFID/slug dispatch is automatic.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-            instrument = client.instruments.get(
-                instrument_mfid=args.instrument,
-                include_metadata=include_metadata,
-            )
-        else:
-            instrument = client.instruments.get(
-                args.instrument,
-                include_metadata=include_metadata,
-                include_members=getattr(args, 'include_members', False),
-            )
+        instrument = client.instruments.get(
+            args.instrument,
+            include_metadata=include_metadata,
+            include_members=getattr(args, 'include_members', False),
+        )
 
         if instrument is None:
             logger.error(f"Instrument not found: {args.instrument}")

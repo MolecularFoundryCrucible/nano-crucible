@@ -18,14 +18,8 @@ def test_dataset_get_download_links(client, new_dataset):
     assert isinstance(link_map, dict)
 
 
-def test_file_upload_resumable(client, new_dataset, tmp_file):
-    result = client.datasets.add_file(new_dataset, tmp_file, multipart=False)
-    af = result.get('associated_file', {})
-    assert af.get('mfid'), "upload must return a file mfid"
-
-
-def test_file_upload_multipart(client, new_dataset, tmp_file):
-    result = client.datasets.add_file(new_dataset, tmp_file, multipart=True)
+def test_file_upload(client, new_dataset, tmp_file):
+    result = client.datasets.add_file(new_dataset, tmp_file)
     af = result.get('associated_file', {})
     assert af.get('mfid'), "upload must return a file mfid"
 
@@ -38,7 +32,7 @@ def uploaded_file(client, new_dataset):
     tmp.write(os.urandom(1024 * 8))
     tmp.close()
     try:
-        result = client.datasets.add_file(new_dataset, tmp.name, multipart=False)
+        result = client.datasets.add_file(new_dataset, tmp.name)
         return result.get('associated_file', {}).get('mfid')
     except Exception:
         return None

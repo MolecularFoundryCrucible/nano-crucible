@@ -13,7 +13,7 @@ from .capabilities import AccessControlMixin, OwnershipMixin
 from .users import _as_query_list
 from ..constants import DEFAULT_LIMIT, PROJECT_ACCESS_ROLES, PROJECT_MEMBER_ROLES, PROJECT_SORTS
 from ..models import Project, ProjectMember
-from ..utils.deprecation import _deprecated_parameter
+from ..utils.deprecation import _removed, _removed_parameter
 from ..utils.identifiers import (
     classify_slug_reference,
     collapse_exact_lookup,
@@ -138,7 +138,8 @@ class ProjectOperations(OwnershipMixin, AccessControlMixin, BaseResource):
              sort: Optional[str] = None, direction: Optional[str] = None,
              member_ref: Optional[Union[str, Sequence[str]]] = None,
              member_role: Optional[Union[str, Sequence[str]]] = None,
-             cursor: Optional[str] = None) -> List[Dict]:
+             cursor: Optional[str] = None,
+             mfid: Optional[Union[str, Sequence[str]]] = None) -> List[Dict]:
         """List all accessible projects.
 
         Each project dict includes a ``lead`` key with the project lead's
@@ -166,6 +167,8 @@ class ProjectOperations(OwnershipMixin, AccessControlMixin, BaseResource):
                         every result. Repeated values use AND semantics.
             member_role: Restrict member_ref to these project roles. Repeated
                          values use OR semantics and require member_ref.
+            mfid: Only these project MFIDs (up to 100). Applies to /projects
+                  only. Unreadable or missing MFIDs are left out.
 
         Returns:
             List[Dict]: Project metadata including project_id, title, organization, lead, role
@@ -176,9 +179,9 @@ class ProjectOperations(OwnershipMixin, AccessControlMixin, BaseResource):
             raise ValueError("Pass orcid or typed access selectors, not both")
         member_selectors = _as_query_list(member_ref)
         member_roles = _as_query_list(member_role)
-        if orcid and (sort or direction or member_selectors or member_roles):
+        if orcid and (sort or direction or member_selectors or member_roles or mfid):
             raise ValueError(
-                "sort, direction, and member filters apply to /projects only; "
+                "sort, direction, member, and mfid filters apply to /projects only; "
                 "pass orcid or those, not both")
         if member_roles and not member_selectors:
             raise ValueError("member_role requires member_ref.")
@@ -196,6 +199,7 @@ class ProjectOperations(OwnershipMixin, AccessControlMixin, BaseResource):
                 params['member_ref'] = member_selectors
             if member_roles:
                 params['member_role'] = member_roles
+            self._apply_mfid_filter(params, mfid)
         endpoint = f'/users/{orcid}/projects' if orcid else '/projects'
         return self._paginate(endpoint, params, limit, offset, cursor=cursor)
 
@@ -340,7 +344,7 @@ class ProjectOperations(OwnershipMixin, AccessControlMixin, BaseResource):
             raise ValueError("Resolved user is missing a canonical unique_id")
         return resolved
 
-    @_deprecated_parameter('orcid', 'user_unique_id')
+    @_removed_parameter('orcid', 'user_unique_id')
     def remove_user(self, project_id: str, user_unique_id: Optional[str] = None,
                     email: Optional[str] = None,
                     username: Optional[str] = None) -> List[ProjectMember]:
@@ -364,7 +368,7 @@ class ProjectOperations(OwnershipMixin, AccessControlMixin, BaseResource):
         raw = self._request('delete', f'/projects/{project_id}/users/{canonical_id}')
         return self._parse_members(raw)
 
-    @_deprecated_parameter('orcid', 'user_unique_id')
+    @_removed_parameter('orcid', 'user_unique_id')
     def add_user(self, user_unique_id: Optional[str] = None, project_id: str = None,
                 email: Optional[str] = None, username: Optional[str] = None,
                 role: Optional[str] = None) -> List[ProjectMember]:
@@ -394,7 +398,7 @@ class ProjectOperations(OwnershipMixin, AccessControlMixin, BaseResource):
             'post', f'/projects/{project_id}/users/{canonical_id}', params=params)
         return self._parse_members(raw)
 
-    @_deprecated_parameter('orcid', 'user_unique_id')
+    @_removed_parameter('orcid', 'user_unique_id')
     def update_user_role(self, project_id: str, user_unique_id: str,
                          role: str) -> List[ProjectMember]:
         """Change a member's role in a project.
@@ -482,19 +486,7 @@ class ProjectOperations(OwnershipMixin, AccessControlMixin, BaseResource):
             project_mfid=self._resource_mfid(project_id), status=status,
             limit=limit, offset=offset, **filters)
 
-    def get_or_create(self, project_id: str, get_project_info_function=_build_project_from_args,
-                     **kwargs) -> Dict:
-        """Deprecated: use create() instead.
+    @_removed("use create() instead; it finds an existing project itself.")
+    def get_or_create(self, *args, **kwargs):
+        """Removed in 4.0.0: use create() instead."""
 
-        .. deprecated::
-            Use :meth:`create` with a :class:`~crucible.models.Project` model.
-            ``create()`` now checks for an existing project before posting.
-        """
-        import warnings
-        warnings.warn(
-            "get_or_create() is deprecated; use create() instead — "
-            "it now checks for an existing project automatically.",
-            DeprecationWarning, stacklevel=2,
-        )
-        project_info = get_project_info_function(project_id=project_id, **kwargs)
-        return self.create(project_info)

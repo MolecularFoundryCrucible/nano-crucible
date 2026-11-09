@@ -78,7 +78,8 @@ def test_get_requests_and_preserves_public_owner_by_default(operations_class, re
         params={'include_owner': True},
     )
     assert result['owner'] == PUBLIC_OWNER
-    assert result['capabilities'] == CAPABILITIES
+    assert result['capabilities'] == {**CAPABILITIES, 'can_view_access': None,
+                                      'can_delete': None, 'can_request_deletion': None}
 
 
 @pytest.mark.parametrize(
@@ -306,22 +307,8 @@ def test_typed_generic_project_get_uses_project_mfid():
     )
 
 
-def test_dataset_create_warns_for_owner_orcid_and_preserves_payload():
-    operations = make_ops(DatasetOperations, {'unique_id': MFID})
-
-    with pytest.warns(DeprecationWarning, match='Dataset.owner_orcid'):
-        operations.create(Dataset(unique_id=MFID, dataset_name='test', owner_orcid=ORCID))
-
-    assert operations._request.call_args.kwargs['json']['owner_orcid'] == ORCID
 
 
-def test_sample_create_warns_for_owner_orcid_and_preserves_payload():
-    operations = make_ops(SampleOperations, {'unique_id': MFID})
-
-    with pytest.warns(DeprecationWarning, match='Sample.owner_orcid'):
-        operations.create(Sample(unique_id=MFID, sample_name='test', owner_orcid=ORCID))
-
-    assert operations._request.call_args.kwargs['json']['owner_orcid'] == ORCID
 
 
 @pytest.mark.parametrize(

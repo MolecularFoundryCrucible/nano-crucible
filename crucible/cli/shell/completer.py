@@ -596,7 +596,7 @@ class CrucibleCompleter(Completer):
         # matches while typing is useful preview, not just identifier lookup.
         _USER_SUBS = {'get', 'update', 'edit', 'add-access-group', 'remove-access-group',
                       'list-datasets', 'check-access', 'list-access-groups', 'list-projects',
-                      'set-role', 'revoke-keys', 'search'}
+                      'set-role', 'list-keys', 'revoke-keys', 'search'}
         if words[1] not in _USER_SUBS:
             return False
         if trailing_space and len(words) == 2:
@@ -862,7 +862,9 @@ class CrucibleCompleter(Completer):
 
         if len(words) == 1 or (len(words) == 2 and not trailing_space):
             prefix = words[1] if len(words) == 2 else ''
-            for name in sub_map:
+            for name in _visible_subcommands(self._top.get(resource), sub_map):
+                if f'{resource} {name}' in self.hidden:
+                    continue
                 if name.startswith(prefix):
                     yield Completion(name + ' ', start_position=-len(prefix))
             return
@@ -888,6 +890,21 @@ class CrucibleCompleter(Completer):
         sub_parser  = sub_map.get(subcommand)
         if sub_parser is None:
             return
+
+        depth = 2
+        nested = get_subparser_map(sub_parser)
+        while nested:
+            if len(words) == depth or (len(words) == depth + 1 and not trailing_space):
+                prefix = words[depth] if len(words) == depth + 1 else ''
+                for name in _visible_subcommands(sub_parser, nested):
+                    if name.startswith(prefix):
+                        yield Completion(name + ' ', start_position=-len(prefix))
+                return
+            sub_parser = nested.get(words[depth])
+            if sub_parser is None:
+                return
+            depth += 1
+            nested = get_subparser_map(sub_parser)
 
         current_word = '' if trailing_space else words[-1]
         prev = (words[-1] if trailing_space else words[-2]) if len(words) >= 2 else ''
@@ -986,6 +1003,8 @@ class CrucibleCompleter(Completer):
                         if choice.startswith(current_word):
                             yield Completion(
                                 choice + ' ', start_position=-len(current_word))
+                elif action is None:
+                    yield from _positional_choices(sub_parser, words[depth:], current_word)
             return
 
         if not current_word and prev in _USER_FLAGS:
@@ -1020,9 +1039,56 @@ class CrucibleCompleter(Completer):
                 for choice in action.choices:
                     yield Completion(str(choice) + ' ', start_position=0)
                 return
+            if action is None and (yield from _positional_choices(sub_parser, words[depth:], '')):
+                return
 
         for flag, action in sub_parser._option_string_actions.items():
             if action.help == argparse.SUPPRESS:
                 continue
             if flag.startswith(current_word):
                 yield Completion(flag + ' ', start_position=-len(current_word))
+
+
+def _visible_subcommands(parser, sub_map):
+    """Subcommand names to offer, leaving out those whose help marks them deprecated."""
+    deprecated = set()
+    for action in getattr(parser, '_actions', ()):
+        for choice in getattr(action, '_choices_actions', ()):
+            if (choice.help or '').startswith('Deprecated'):
+                deprecated.add(choice.dest)
+    return [name for name in sub_map
+            if name not in deprecated and not getattr(sub_map[name], '_removed', False)]
+
+
+def _positional_choices(parser, args, current_word):
+    """Complete the positional being typed when it takes fixed choices.
+
+    args are the words after the subcommand path; current_word is the word
+    being typed, or '' after a space. Returns True when choices were offered.
+    """
+    words = args[:-1] if current_word else args
+    typed, skip = [], False
+    for word in words:
+        if skip:
+            skip = False
+        elif word.startswith('-'):
+            option = parser._option_string_actions.get(word)
+            skip = option is not None and option.nargs != 0
+        else:
+            typed.append(word)
+    positionals = [action for action in parser._actions
+                   if not action.option_strings and not _is_subcommand_action(action)]
+    if len(typed) >= len(positionals):
+        return False
+    choices = positionals[len(typed)].choices
+    if not choices:
+        return False
+    for choice in choices:
+        choice = str(choice)
+        if choice.startswith(current_word):
+            yield Completion(choice + ' ', start_position=-len(current_word))
+    return True
+
+
+def _is_subcommand_action(action):
+    return isinstance(getattr(action, 'choices', None), dict)

@@ -108,7 +108,7 @@ class FileOperations(BaseResource):
         output_path = safe_output_path(output_dir, name)
         os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
 
-        response = self._client._session.get(url, stream=True)
+        response = self._client._storage_session.get(url, stream=True)
         response.raise_for_status()
 
         tmp_fd, tmp_path = tempfile.mkstemp(dir=os.path.dirname(os.path.abspath(output_path)))
@@ -195,6 +195,13 @@ class FileOperations(BaseResource):
 
         Returns:
             Dict: Updated file record.
+
+        Raises:
+            HTTPError 409: ``filename_immutable`` when renaming a non-GCS file
+                (its filename is its identity), ``storage_backend_class_change``
+                when moving a record between GCS and non-GCS storage, or
+                ``filename_exists`` when renaming onto a filename already in
+                the dataset.
         """
         return self._parse(self._request('patch', f'/files/{file_id}', json=updates))
 

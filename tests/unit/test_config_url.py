@@ -99,11 +99,6 @@ def test_unset_api_url_restores_package_default(monkeypatch, tmp_path):
         global_config._sources = original_sources
 
 
-def test_current_session_is_retained_with_deprecation_warning(monkeypatch):
-    monkeypatch.setattr(global_config, '_data', {'current_session': 'legacy-session'})
-
-    with pytest.warns(DeprecationWarning, match='current_session'):
-        assert global_config.current_session == 'legacy-session'
 
 
 def test_config_tracks_environment_and_file_sources(monkeypatch, tmp_path):
@@ -125,8 +120,9 @@ def test_config_tracks_environment_and_file_sources(monkeypatch, tmp_path):
     assert config.current_project == "saved-project"
     assert config.source("current_project") == "config file"
 
+    from crucible import RemovedError
     monkeypatch.setenv("CRUCIBLE_CURRENT_PROJECT", "environment-project")
     config.reload()
 
-    assert config.current_project == "environment-project"
-    assert config.source("current_project") == "environment"
+    with pytest.raises(RemovedError, match="CRUCIBLE_CURRENT_PROJECT"):
+        config.current_project

@@ -7,11 +7,8 @@ Provides organized access to dataset-related API endpoints.
 """
 
 import os
-import re
 import logging
 import requests
-import warnings
-from pathlib import Path
 from datetime import date, datetime
 from typing import Callable, Optional, List, Dict, Sequence, Union
 
@@ -19,10 +16,12 @@ import mfid
 
 # internal modules
 from .base import BaseResource, ListResult
+from ..errors import RemovedError
+from ..utils.deprecation import removed_message
 from .capabilities import (
     AccessControlMixin, InstrumentAssignmentMixin, OwnershipMixin, ProjectAssignmentMixin)
 from ..constants import DATASET_FACET_FIELDS, DEFAULT_LIMIT, VISIBILITIES
-from ..utils.deprecation import _deprecated, _deprecated_parameter
+from ..utils.deprecation import _removed, _removed_parameter
 from ..utils.identifiers import is_mfid, require_canonical_identifier
 from ..models import AssociatedFile
 
@@ -45,7 +44,7 @@ DATASET_LIST_PARAMS = frozenset({
     'modification_time_lte', 'offset', 'owner_id', 'owner_id_is_null',
     'owner_orcid', 'project_id', 'project_mfid', 'project_mfid_is_null',
     'project_scope', 'public', 'sample_mfid', 'session_name',
-    'session_name_is_null', 'size', 'sort', 'timestamp', 'unique_id',
+    'session_name_is_null', 'size', 'sort', 'timestamp', 'mfid',
     'visibility',
 })
 
@@ -61,6 +60,20 @@ DATASET_FACET_PARAMS = frozenset({
     'sample_mfid', 'session_name', 'session_name_is_null', 'sort',
     'visibility',
 })
+
+
+def _filename_conflict(error) -> Optional[str]:
+    """Return the existing file MFID from a 409 filename_exists response, else None."""
+    response = getattr(error, 'response', None)
+    if response is None or response.status_code != 409:
+        return None
+    try:
+        detail = response.json().get('detail')
+    except (ValueError, AttributeError):
+        return None
+    if isinstance(detail, dict) and detail.get('code') == 'filename_exists':
+        return detail.get('file_mfid')
+    return None
 
 
 class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, OwnershipMixin,
@@ -80,7 +93,7 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
         from ..models import Dataset
         return Dataset.model_validate(raw).model_dump()
 
-    @_deprecated_parameter('dsid', 'dataset_mfid')
+    @_removed_parameter('dsid', 'dataset_mfid')
     def get(self, dataset_mfid: str, include_metadata: bool = False,
             include_links: bool = False, include_owner: bool = True) -> Dict:
         """Get a dataset by its canonical MFID.
@@ -89,7 +102,7 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
             dataset_mfid (str): Dataset MFID
             include_metadata (bool): Whether to include scientific metadata
             include_links (bool): Whether to include immediate parent/child/associated links
-            include_owner (bool): Resolve owner_orcid into a public-safe user object (default: True)
+            include_owner (bool): Resolve the owner into a public-safe user object (default: True)
 
         Returns:
             Dict: Dataset object with optional metadata and links
@@ -121,7 +134,7 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
         return self._parse(require_canonical_identifier(raw, 'dataset'))
 
 
-    @_deprecated_parameter('sample_id', 'sample_mfid')
+    @_removed_parameter('sample_id', 'sample_mfid')
     def list(self, sample_mfid: Optional[str] = None, include_metadata: bool = False,
              include_links: bool = False, include_owner: bool = False,
              limit: int = DEFAULT_LIMIT, offset: int = 0,
@@ -142,11 +155,14 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
              modification_time_gte: Optional[Union[str, date, datetime]] = None,
              modification_time_lte: Optional[Union[str, date, datetime]] = None,
              cursor: Optional[str] = None,
+             mfid: Optional[Union[str, Sequence[str]]] = None,
              **kwargs) -> List[Dict]:
         """List datasets with optional filtering and automatic pagination.
 
         Args:
             sample_mfid (str, optional): If provided, returns datasets for this sample
+            mfid (str or list, optional): Only these dataset MFIDs (up to 100).
+                Unreadable, missing, or pending-deletion MFIDs are left out.
             limit (int): Maximum total results to return (default: 100). Larger
                          requests are handled transparently by following the
                          server's keyset cursor. Pass None to fetch all matches.
@@ -157,7 +173,7 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
                 result's next_cursor; the listing resumes there.
             include_metadata (bool): Include scientific metadata in results
             include_links (bool): Include linked resources (parents, children, associated) per dataset
-            include_owner (bool): Resolve owner_orcid into a public-safe user object per dataset
+            include_owner (bool): Resolve the owner into a public-safe user object per dataset
             accessible_to_user: User reference or references whose effective access
                                 must include every result
             accessible_to_project: Project reference or references whose direct access
@@ -185,7 +201,7 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
             modification_time_lte: Inclusive upper modification-time bound,
                 same types.
             **kwargs (Any): Query parameters for filtering. Supported fields include:
-                keyword, unique_id, public, dataset_name, owner_id, timestamp, size,
+                keyword, public, dataset_name, owner_id, timestamp, size,
                 data_format, data_type, measurement, session_name, and the
                 deprecated instrument_name (use instrument_mfid). Filters expect exact matches (case sensitive) except for
                 keywords, which are case insensitive and match substrings.
@@ -194,12 +210,10 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
             List[Dict]: Dataset objects matching filter criteria
         """
         params = {k: v for k, v in kwargs.items() if v is not None}
+        self._apply_mfid_filter(params, mfid)
         if 'instrument_name' in params:
-            warnings.warn(
-                "Filtering datasets by instrument_name is deprecated; pass "
-                "instrument_mfid instead.",
-                DeprecationWarning, stacklevel=2,
-            )
+            raise RemovedError(removed_message(
+                "Filtering datasets by instrument_name", "pass instrument_mfid or instrument_id instead."))
         selectors = self._access_selector_params(
             accessible_to_user, accessible_to_project)
         params.update(selectors)
@@ -230,11 +244,9 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
         if include_owner:
             params['include_owner'] = True
         if offset:
-            warnings.warn(
-                "'offset' is ignored by /datasets, which uses keyset "
-                "pagination; results start from the newest dataset.",
-                DeprecationWarning, stacklevel=2,
-            )
+            raise RemovedError(removed_message(
+                "The 'offset' argument of datasets.list()",
+                "/datasets uses keyset pagination; pass the previous result's next_cursor as cursor instead."))
         self._validate_filter_params(params, DATASET_LIST_PARAMS, '/datasets')
         raw = self._paginate('/datasets', params, limit, offset, cursor=cursor)
         return ListResult.like(raw, [self._parse(d) for d in raw])
@@ -271,6 +283,7 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
               project_scope: Optional[str] = None, **kwargs) -> int:
         """Return the total number of datasets matching the given filters without fetching items."""
         params = {k: v for k, v in kwargs.items() if v is not None}
+        self._apply_mfid_filter(params, params.pop('mfid', None))
         params.update(self._project_scope_params(
             project_id, project_mfid, project_scope))
         self._resolve_instrument_filter(params)
@@ -319,8 +332,11 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
                 path (str) or an AssociatedFile describing a file that lives
                 elsewhere (Globus, NERSC, a shared filesystem, etc.).
                 - A str path is uploaded to GCS when upload_files=True (default),
-                  or cataloged by its resolved absolute path (storage_backend='local',
-                  no upload) when upload_files=False.
+                  or cataloged without upload when upload_files=False: it is
+                  hashed, named by its path relative to the deepest folder
+                  holding all such paths, and recorded with its absolute path
+                  and storage_backend='local' (see
+                  AssociatedFile.from_local_files()).
                 - An AssociatedFile is always cataloged via add_remote_file() -
                   it must set storage_backend to something other than 'gcs',
                   since there's no local file to upload from a model description.
@@ -342,40 +358,31 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
             keywords = []
 
         if files_to_upload is not None:
-            if files is not None:
-                raise ValueError("Pass either 'files' or the deprecated 'files_to_upload', not both.")
-            warnings.warn(
-                "'files_to_upload' is deprecated, use 'files' instead.",
-                DeprecationWarning, stacklevel=2,
-            )
-            files = files_to_upload
+            raise RemovedError(removed_message(
+                "The 'files_to_upload' keyword of datasets.create()", "use 'files' instead."))
         if files is None:
             files = []
+        if not upload_files:
+            local = iter(AssociatedFile.from_local_files(
+                [f for f in files if not isinstance(f, AssociatedFile)]))
+            files = [f if isinstance(f, AssociatedFile) else next(local) for f in files]
 
         dataset_details = dataset.model_dump(
             exclude={'capabilities', 'instrument', 'project'})
 
-        if dataset_details.get('owner') is not None and dataset_details.get('owner_orcid') is not None:
-            raise ValueError("Pass either 'owner' or 'owner_orcid', not both.")
         if dataset_details.get('owner_orcid') is not None:
-            warnings.warn(
-                "Dataset.owner_orcid is deprecated for creation; use Dataset.owner "
-                "with an ORCID, MFID, username, or email instead.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
+            raise RemovedError(removed_message(
+                "Setting Dataset.owner_orcid when creating a dataset",
+                "set Dataset.owner to an ORCID, MFID, username, or email instead."))
         if dataset_details.get('owner') is not None and not isinstance(dataset_details['owner'], str):
             raise ValueError("Dataset.owner must be a string identifier when creating a dataset.")
 
         if (dataset_details.get('instrument_name') is not None
                 and dataset_details.get('instrument_id') is None
                 and dataset_details.get('instrument_mfid') is None):
-            warnings.warn(
-                "Identifying a dataset's instrument by instrument_name is deprecated: "
-                "names are free-text and may repeat. Set instrument_mfid or "
-                "instrument_id instead.",
-                DeprecationWarning, stacklevel=2,
-            )
+            raise RemovedError(removed_message(
+                "Identifying a dataset's instrument by instrument_name",
+                "names may repeat, so set instrument_mfid or instrument_id instead."))
 
         if not dataset_details.get('unique_id'):
             dataset_details['unique_id'] = mfid.mfid()[0]
@@ -404,22 +411,12 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
             logger.debug(f'Adding {file} to dataset {dataset_mfid}')
             if isinstance(file, AssociatedFile):
                 file_results.append(self.add_remote_file(dataset_mfid, file))
-            elif upload_files:
+            else:
                 file_results.append(self.add_file(dataset_mfid,
                                                   file,
                                                   ingestion_class=ingestor,
                                                   wait_for_ingestion_response=False,
                                                   skip_ingestion = skip_ingestion))
-
-            else:
-                resolved = Path(file).resolve()
-                remote = AssociatedFile(
-                    filename=os.path.basename(file),
-                    storage_path=str(resolved),
-                    storage_backend='local',
-                    size=resolved.stat().st_size if resolved.exists() else None,
-                )
-                file_results.append(self.add_remote_file(dataset_mfid, remote))
 
         if wait_for_ingestion_response and not skip_ingestion:
             pending = [r for r in file_results
@@ -436,7 +433,7 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
                   "files": file_results}
         return result
 
-    @_deprecated_parameter('dsid', 'dataset_mfid')
+    @_removed_parameter('dsid', 'dataset_mfid')
     def update(self, dataset_mfid: str, **updates) -> Dict:
         """Update an existing dataset with new field values.
 
@@ -459,17 +456,9 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
         Example:
             >>> client.datasets.update("my-dataset-id", dataset_name="Updated Name")
         """
-        public_provided = 'public' in updates
-        public = updates.pop('public', None)
-        if public_provided:
-            warnings.warn(
-                "The 'public' update field is deprecated; use set_public() or "
-                "set_private() instead.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-            if public is not None and not isinstance(public, bool):
-                raise ValueError("public must be true, false, or None.")
+        if 'public' in updates:
+            raise RemovedError(removed_message(
+                "The 'public' field of datasets.update()", "use set_public() or set_private() instead."))
         response_only = {'capabilities', 'instrument', 'project'} & updates.keys()
         if response_only:
             fields = ', '.join(sorted(response_only))
@@ -478,16 +467,11 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
         if updates:
             updated = self._parse(
                 self._request('patch', f'/datasets/{dataset_mfid}', json=updates))
-        if public is not None:
-            operation = self.set_public if public else self.set_private
-            operation(dataset_mfid)
         if updated is None:
             updated = self.get(dataset_mfid)
-        if public is not None:
-            updated['public'] = public
         return updated
 
-    @_deprecated_parameter('dsid', 'dataset_mfid')
+    @_removed_parameter('dsid', 'dataset_mfid')
     def list_files(self, dataset_mfid: str) -> List[Dict]:
         """List files attached to a dataset.
 
@@ -525,7 +509,7 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
         return [self._parse(dataset) for dataset in raw]
 
     # Keyword Methods
-    @_deprecated_parameter('dsid', 'dataset_mfid')
+    @_removed_parameter('dsid', 'dataset_mfid')
     def get_keywords(self, dataset_mfid: str,
                      limit: int = DEFAULT_LIMIT) -> List[Dict]:
         """List keywords, optionally filtered by dataset.
@@ -539,7 +523,7 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
         """
         return self._request('get', f'/datasets/{dataset_mfid}/keywords')
 
-    @_deprecated_parameter('dsid', 'dataset_mfid')
+    @_removed_parameter('dsid', 'dataset_mfid')
     def add_keyword(self, dataset_mfid: str, keyword: str) -> Dict:
         """Add a keyword to a dataset.
 
@@ -612,44 +596,25 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
         return self._request(
             'delete', f"/datasets/{parent_mfid}/children/{child_mfid}")
 
-    @_deprecated("client.datasets.link_sample()")
-    @_deprecated_parameter('dataset_id', 'dataset_mfid')
-    @_deprecated_parameter('sample_id', 'sample_mfid')
-    def add_sample(self, dataset_mfid: str, sample_mfid: str) -> Dict:
-        """Deprecated: use link_sample(dataset_mfid, sample_mfid) instead."""
-        return self.link_sample(dataset_mfid, sample_mfid)
+    @_removed("use client.datasets.link_sample() instead.")
+    def add_sample(self, *args, **kwargs):
+        """Removed in 4.0.0: use client.datasets.link_sample() instead."""
 
-    @_deprecated("client.datasets.unlink_sample()")
-    @_deprecated_parameter('dataset_id', 'dataset_mfid')
-    @_deprecated_parameter('sample_id', 'sample_mfid')
-    def remove_sample(self, dataset_mfid: str, sample_mfid: str) -> Dict:
-        """Deprecated: use unlink_sample(dataset_mfid, sample_mfid) instead."""
-        return self.unlink_sample(dataset_mfid, sample_mfid)
+    @_removed("use client.datasets.unlink_sample() instead.")
+    def remove_sample(self, *args, **kwargs):
+        """Removed in 4.0.0: use client.datasets.unlink_sample() instead."""
 
-    @_deprecated("client.datasets.unlink()")
-    @_deprecated_parameter('parent_dataset_id', 'parent_mfid')
-    @_deprecated_parameter('parent_dataset_mfid', 'parent_mfid')
-    @_deprecated_parameter('child_dataset_id', 'child_mfid')
-    @_deprecated_parameter('child_dataset_mfid', 'child_mfid')
-    def remove_child(self, parent_mfid: str, child_mfid: str) -> Dict:
-        """Deprecated: use unlink(parent_mfid, child_mfid) instead."""
-        return self.unlink(parent_mfid, child_mfid)
+    @_removed("use client.datasets.unlink() instead.")
+    def remove_child(self, *args, **kwargs):
+        """Removed in 4.0.0: use client.datasets.unlink() instead."""
 
-    @_deprecated("client.datasets.link()")
-    @_deprecated_parameter('parent_dataset_id', 'parent_mfid')
-    @_deprecated_parameter('parent_dataset_mfid', 'parent_mfid')
-    @_deprecated_parameter('child_dataset_id', 'child_mfid')
-    @_deprecated_parameter('child_dataset_mfid', 'child_mfid')
-    def link_parent_child(self, parent_mfid: str, child_mfid: str,
-                          relationship_type: Optional[str] = None) -> Dict:
-        """Deprecated: use link(parent_mfid, child_mfid) instead."""
-        if relationship_type is None:
-            return self.link(parent_mfid, child_mfid)
-        return self.link(parent_mfid, child_mfid, relationship_type)
+    @_removed("use client.datasets.link() instead.")
+    def link_parent_child(self, *args, **kwargs):
+        """Removed in 4.0.0: use client.datasets.link() instead."""
 
 
-    @_deprecated_parameter('parent_dataset_id', 'parent_mfid')
-    @_deprecated_parameter('parent_dataset_mfid', 'parent_mfid')
+    @_removed_parameter('parent_dataset_id', 'parent_mfid')
+    @_removed_parameter('parent_dataset_mfid', 'parent_mfid')
     def list_children(self, parent_mfid: str, limit: int = DEFAULT_LIMIT,
                       offset: int = 0, relationship_type: Optional[str] = None,
                       cursor: Optional[str] = None,
@@ -676,8 +641,8 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
             f"/datasets/{parent_mfid}/children", params, limit, offset, cursor=cursor)
         return ListResult.like(raw, [self._parse(dataset) for dataset in raw])
 
-    @_deprecated_parameter('child_dataset_id', 'child_mfid')
-    @_deprecated_parameter('child_dataset_mfid', 'child_mfid')
+    @_removed_parameter('child_dataset_id', 'child_mfid')
+    @_removed_parameter('child_dataset_mfid', 'child_mfid')
     def list_parents(self, child_mfid: str, limit: int = DEFAULT_LIMIT,
                      offset: int = 0, relationship_type: Optional[str] = None,
                      cursor: Optional[str] = None,
@@ -737,46 +702,35 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
             headers=headers, retry=idempotency_key is not None)
         return PostprocessingRun(**raw).model_dump()
 
-    @_deprecated("client.datasets.postprocess(dataset_mfid, 'carrier_segmentation')")
-    @_deprecated_parameter('dsid', 'dataset_mfid')
-    def request_carrier_segmentation(self, dataset_mfid: str) -> Dict:
-        """Deprecated: queue the carrier_segmentation pipeline; use postprocess()."""
-        return self.postprocess(dataset_mfid, 'carrier_segmentation')
+    @_removed("use client.datasets.postprocess(dataset_mfid, 'carrier_segmentation') instead.")
+    def request_carrier_segmentation(self, *args, **kwargs):
+        """Removed in 4.0.0: use client.datasets.postprocess(dataset_mfid, 'carrier_segmentation') instead."""
 
-    @_deprecated("client.datasets.postprocess(dataset_mfid, 'insitu_aggregation')")
-    @_deprecated_parameter('dsid', 'dataset_mfid')
-    def request_insitu_aggregation(self, dataset_mfid: str) -> Dict:
-        """Deprecated: queue the insitu_aggregation pipeline; use postprocess()."""
-        return self.postprocess(dataset_mfid, 'insitu_aggregation')
+    @_removed("use client.datasets.postprocess(dataset_mfid, 'insitu_aggregation') instead.")
+    def request_insitu_aggregation(self, *args, **kwargs):
+        """Removed in 4.0.0: use client.datasets.postprocess(dataset_mfid, 'insitu_aggregation') instead."""
 
-    @_deprecated("client.datasets.postprocess(dataset_mfid, 'rga_analysis')")
-    @_deprecated_parameter('dsid', 'dataset_mfid')
-    def request_rga_analysis(self, dataset_mfid: str) -> Dict:
-        """Deprecated: queue the rga_analysis pipeline; use postprocess()."""
-        return self.postprocess(dataset_mfid, 'rga_analysis')
+    @_removed("use client.datasets.postprocess(dataset_mfid, 'rga_analysis') instead.")
+    def request_rga_analysis(self, *args, **kwargs):
+        """Removed in 4.0.0: use client.datasets.postprocess(dataset_mfid, 'rga_analysis') instead."""
 
-    @_deprecated("client.datasets.postprocess(dataset_mfid, 'mosaic_stitch')")
-    @_deprecated_parameter('dsid', 'dataset_mfid')
-    def request_mosaic_stitch(self, dataset_mfid: str) -> Dict:
-        """Deprecated: queue the mosaic_stitch pipeline; use postprocess()."""
-        return self.postprocess(dataset_mfid, 'mosaic_stitch')
+    @_removed("use client.datasets.postprocess(dataset_mfid, 'mosaic_stitch') instead.")
+    def request_mosaic_stitch(self, *args, **kwargs):
+        """Removed in 4.0.0: use client.datasets.postprocess(dataset_mfid, 'mosaic_stitch') instead."""
 
-    @_deprecated("client.graphs.get")
-    @_deprecated_parameter('dataset_id', 'dataset_mfid')
-    def graph(self, dataset_mfid: str, recursive: bool = False,
-              as_networkx: bool = False):
-        return self._client.graphs.get(
-            dataset_mfid, recursive=recursive, as_networkx=as_networkx)
+    @_removed("use client.graphs.get instead.")
+    def graph(self, *args, **kwargs):
+        """Removed in 4.0.0: use client.graphs.get instead."""
 
     #%% Upload Methods
 
-    @_deprecated_parameter('dsid', 'dataset_mfid')
+    @_removed_parameter('dsid', 'dataset_mfid')
     def add_file(self,
                  dataset_mfid: str,
                  file_path: str,
                  ingestion_class: Optional[str] = None,
                  wait_for_ingestion_response: bool = False,
-                 multipart: bool = True,
+                 multipart: Optional[bool] = None,
                  chunk_size_mb: Optional[int] = None,
                  max_workers: Optional[int] = None,
                  skip_ingestion: bool = False,
@@ -793,28 +747,31 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
                 Defaults to the server-side default if omitted.
             wait_for_ingestion_response: Block until ingestion completes. Ignored if
                 skip_ingestion is True.
-            multipart: Use parallel multipart upload (default: True). Set to False to
-                use the sequential resumable upload (slower but simpler).
-            chunk_size_mb: Override chunk size in MiB (uses config/default if None).
-            max_workers: Override number of upload threads (uses config/default if None).
+            multipart: Deprecated and ignored; every upload uses signed multipart.
+            chunk_size_mb: Deprecated and ignored; the server sets the part size.
+            max_workers: Parts uploaded in parallel (default: the
+                upload_max_workers setting).
             skip_ingestion: Upload the file without requesting ingestion. Request it
                 later with client.files.request_ingestion(mfid). Also implied
                 when client.request_ingestion is False.
-            upload_protocol: "auto", "signed", or "legacy" for multipart uploads;
-                defaults to the upload_protocol setting. "auto" uses signed
-                upload URLs, falling back to the legacy token route when the
-                server has them switched off.
-            progress: Called as progress(filename, bytes_done, total) while a
-                signed upload sends its parts.
+            upload_protocol: Deprecated and ignored; the legacy upload routes
+                were removed.
+            progress: Called as progress(filename, bytes_done, total) while
+                the parts upload.
             replace: If the dataset already has this filename with different
                 content, replace that file's content (same MFID and filename)
-                instead of raising FileExistsWithDifferentContent. Needs a
-                server with signed uploads. Also implied by
-                client.replace_existing.
+                instead of raising FileExistsWithDifferentContent. Also implied
+                by client.replace_existing.
 
         Returns:
             Dict: {'associated_file': AssociatedFileRead, 'ingestion_request': IngestionRequest}
         """
+        for name, value in (('multipart', multipart), ('chunk_size_mb', chunk_size_mb),
+                            ('upload_protocol', upload_protocol)):
+            if value is not None:
+                raise RemovedError(removed_message(
+                    f"The '{name}' argument of datasets.add_file()",
+                    "every upload uses signed multipart; drop it."))
         filename = os.path.basename(file_path)
         skip_ingestion = skip_ingestion or not getattr(self._client, 'request_ingestion', True)
         replace = replace or getattr(self._client, 'replace_existing', False)
@@ -822,10 +779,7 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
         file_record, was_existing = upload_file_gcs(self._client,
                                                     dataset_mfid,
                                                     file_path,
-                                                    multipart=multipart,
-                                                    chunk_size_mb=chunk_size_mb,
                                                     max_workers=max_workers,
-                                                    protocol=upload_protocol,
                                                     progress=progress,
                                                     replace=replace)
         file_record = self._client.files._parse(file_record)
@@ -848,61 +802,73 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
         return {'associated_file': file_record, 'ingestion_request': ingestion_request}
 
 
-    @_deprecated_parameter('dsid', 'dataset_mfid')
-    def add_remote_file(self, dataset_mfid: str, file: AssociatedFile) -> Dict:
+    @_removed_parameter('dsid', 'dataset_mfid')
+    def add_remote_file(self, dataset_mfid: str, file: AssociatedFile,
+                        replace: bool = False) -> Dict:
         """Register a file that lives outside GCS (Globus, NERSC, a shared
         filesystem path, etc.) without uploading it.
 
-        Crucible only catalogs the pointer here — it never verifies the file
-        exists or fetches bytes on your behalf. Internally this is a two-step
-        API call (create, then set storage_path) hidden behind one method.
+        Crucible only catalogs the pointer here; it never verifies the file
+        exists or fetches bytes on your behalf. The filename is the file's
+        identity in the dataset: repeating it with the same sha256_hash, size,
+        and storage_backend returns the existing record, and any other
+        difference is a 409 conflict unless ``replace`` is set.
 
         Args:
             dataset_mfid: Dataset MFID
             file (AssociatedFile): Must have `storage_backend` set to something
-                other than 'gcs' (e.g. 'globus', 'local'). `storage_path` is
-                optional — omit it to catalog the file now and set its location
-                later via client.files.update(mfid, storage_path=...).
+                other than 'gcs' (e.g. 'globus', 'local'), `size`, and
+                `sha256_hash`. `filename` must be a canonical relative POSIX
+                path such as "freq_001/kpoints.json" (no leading, trailing, or
+                repeated "/", no "." or ".." components); the server does not
+                normalize it. `storage_path` is optional; omit it to catalog
+                the file now and set its location later via
+                client.files.update(mfid, storage_path=...).
+                AssociatedFile.from_local_files() builds these for local files.
+            replace: If the dataset already has this filename with different
+                content, update that record's hash, size, location, backend,
+                and access note instead of failing. Defaults to
+                client.replace_existing.
 
         Returns:
-            Dict: The created (and, if storage_path was given, updated) file record.
+            Dict: The created, existing, or replaced file record.
+
+        Raises:
+            HTTPError 409: ``filename_exists`` without replace, or
+                ``storage_backend_class_change`` when replacing a GCS file.
+            HTTPError 422: The filename is not a canonical relative path.
         """
         if not file.storage_backend or file.storage_backend == 'gcs':
             raise ValueError(
                 "add_remote_file() requires storage_backend set to something other "
                 "than 'gcs' (e.g. 'globus'). Use add_file() to upload a local file to GCS."
             )
+        replace = replace or getattr(self._client, 'replace_existing', False)
 
-        storage_path = file.storage_path
-        payload = file.model_dump(exclude={'mfid', 'dataset_mfid', 'storage_path'}, exclude_none=True)
-        created = self._client.files._parse(self._request(
-            'post', f'/datasets/{dataset_mfid}/files', json=payload))
+        payload = file.model_dump(exclude={'mfid', 'dataset_mfid'}, exclude_none=True)
+        try:
+            record = self._client.files._parse(self._request(
+                'post', f'/datasets/{dataset_mfid}/files', json=payload))
+        except requests.exceptions.HTTPError as e:
+            existing = _filename_conflict(e)
+            if not (replace and existing):
+                raise
+            updates = {k: v for k, v in payload.items() if k != 'filename'}
+            return self._client.files.update(existing, **updates)
 
-        if storage_path:
-            return self._client.files.update(created['mfid'], storage_path=storage_path)
-        return created
+        # A repeated filename returns the existing record without updating its location.
+        if file.storage_path and record.get('storage_path') != file.storage_path:
+            return self._client.files.update(record['mfid'], storage_path=file.storage_path)
+        return record
 
-    @_deprecated("client.datasets.add_file")
-    @_deprecated_parameter('dsid', 'dataset_mfid')
-    def add_file_to_dataset(self, dataset_mfid: str, file_path: str,
-                            ingestion_class: Optional[str] = None,
-                            wait_for_ingestion_response: bool = False,
-                            multipart: bool = True,
-                            chunk_size_mb: Optional[int] = None,
-                            max_workers: Optional[int] = None) -> Dict:
-
-        return self.add_file(dataset_mfid=dataset_mfid, file_path=file_path,
-                             ingestion_class=ingestion_class,
-                             wait_for_ingestion_response=wait_for_ingestion_response,
-                             multipart=multipart,
-                             chunk_size_mb=chunk_size_mb,
-                             max_workers=max_workers,
-                             skip_ingestion = False)
+    @_removed("use client.datasets.add_file instead.")
+    def add_file_to_dataset(self, *args, **kwargs):
+        """Removed in 4.0.0: use client.datasets.add_file instead."""
 
 
     #%% Download Methods
 
-    @_deprecated_parameter('dsid', 'dataset_mfid')
+    @_removed_parameter('dsid', 'dataset_mfid')
     def get_download_links(self, dataset_mfid: str, disposition: Optional[str] = None) -> Dict:
         """Get signed download URLs for all ingested files in a dataset.
 
@@ -945,7 +911,7 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
             include=include, exclude=exclude,
         )
 
-    @_deprecated_parameter('dsid', 'dataset_mfid')
+    @_removed_parameter('dsid', 'dataset_mfid')
     def download(self, dataset_mfid: str, file_name: Optional[str] = None,
                  output_dir: str = 'crucible-downloads',
                  no_files: bool = False,
@@ -957,7 +923,7 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
 
         Args:
             dataset_mfid: Dataset MFID
-            file_name: Deprecated. Use include=['pattern'] with glob syntax.
+            file_name: Removed in 4.0.0; raises. Use include=['pattern'] with glob syntax.
             output_dir: Directory to save files (default: 'crucible-downloads/')
             no_files: Skip file download, save record.json only.
             no_record: Skip saving record.json, just download files.
@@ -969,16 +935,9 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
             List[str]: Paths of all downloaded items (record.json + data files)
         """
         if file_name is not None:
-            import warnings
-            warnings.warn(
-                "The 'file_name' parameter is deprecated. Use include=['pattern'] instead.",
-                DeprecationWarning, stacklevel=2,
-            )
-            matched = [os.path.basename(f.get('storage_path') or f.get('filename', ''))
-                       for f in self.list_files(dataset_mfid)
-                       if re.fullmatch(fr"({file_name})",
-                                       os.path.basename(f.get('storage_path') or f.get('filename', '')))]
-            include = matched
+            raise RemovedError(removed_message(
+                "The 'file_name' argument of datasets.download()",
+                "use include=['pattern'] with glob syntax instead."))
 
         os.makedirs(output_dir, exist_ok=True)
         downloaded = []
@@ -1008,7 +967,7 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
 
     #%% Thumbnail Methods
 
-    @_deprecated_parameter('dsid', 'dataset_mfid')
+    @_removed_parameter('dsid', 'dataset_mfid')
     def get_thumbnails(self, dataset_mfid: str,
                        limit: int = DEFAULT_LIMIT) -> List[Dict]:
         """Get all thumbnails for a dataset.
@@ -1034,7 +993,7 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
             thumbnail_b64str = base64.b64encode(f.read()).decode('utf-8')
         return thumbnail_b64str, os.path.basename(image_path)
 
-    @_deprecated_parameter('dsid', 'dataset_mfid')
+    @_removed_parameter('dsid', 'dataset_mfid')
     def add_thumbnail(self, dataset_mfid: str, image,
                       thumbnail_name: Optional[str] = None) -> Dict:
         """Encode and add a thumbnail, returning the API thumbnail record."""
@@ -1046,7 +1005,7 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
         return self._request(
             'post', f'/datasets/{dataset_mfid}/thumbnails', json=thumbnail_data)
 
-    @_deprecated_parameter('dsid', 'dataset_mfid')
+    @_removed_parameter('dsid', 'dataset_mfid')
     def update_thumbnail(self, dataset_mfid: str, thumbnail_id: int,
                          image=None, thumbnail_name: Optional[str] = None) -> Dict:
         """Rename or replace a thumbnail and return the updated API record."""
@@ -1069,7 +1028,7 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
             json=thumbnail_data,
         )
 
-    @_deprecated_parameter('dsid', 'dataset_mfid')
+    @_removed_parameter('dsid', 'dataset_mfid')
     def delete_thumbnail(self, dataset_mfid: str, thumbnail_id: int) -> Dict:
         """Delete a thumbnail from a dataset."""
         return self._request(
@@ -1077,25 +1036,14 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
 
     #%% Ingestion Methods — deprecated, use client.ingestions.*
 
-    @_deprecated("client.ingestions.list(dsid=dsid, file_id=file_id)")
-    def get_ingestion_requests(self, dsid: Optional[str] = None,
-                               file_id: Optional[str] = None,
-                               limit: int = DEFAULT_LIMIT) -> List[Dict]:
-        """Deprecated: use client.ingestions.list() instead."""
-        return self._client.ingestions.list(dsid=dsid, file_id=file_id, limit=limit)
+    @_removed("use client.ingestions.list(dsid=dsid, file_id=file_id) instead.")
+    def get_ingestion_requests(self, *args, **kwargs):
+        """Removed in 4.0.0: use client.ingestions.list(dsid=dsid, file_id=file_id) instead."""
 
-    @_deprecated("client.ingestions.get(reqid)")
-    def get_request_status(self, reqid: str) -> Dict:
-        """Deprecated: use client.ingestions.get() instead."""
-        return self._client.ingestions.get(reqid)
+    @_removed("use client.ingestions.get(reqid) instead.")
+    def get_request_status(self, *args, **kwargs):
+        """Removed in 4.0.0: use client.ingestions.get(reqid) instead."""
 
-    @_deprecated("client.ingestions.update(reqid, status)")
-    def update_ingestion_status(self, reqid: str, status: str,
-                                ingestion_githash: str = None,
-                                ingestion_class: str = None,
-                                timezone: str = "America/Los_Angeles") -> Dict:
-        """Deprecated: use client.ingestions.update() instead."""
-        return self._client.ingestions.update(reqid, status,
-                                             ingestion_githash=ingestion_githash,
-                                             ingestion_class=ingestion_class,
-                                             timezone=timezone)
+    @_removed("use client.ingestions.update(reqid, status) instead.")
+    def update_ingestion_status(self, *args, **kwargs):
+        """Removed in 4.0.0: use client.ingestions.update(reqid, status) instead."""

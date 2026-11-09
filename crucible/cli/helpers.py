@@ -23,24 +23,47 @@ _MFID_RE = MFID_PATTERN
 _NO_DEFAULT = object()
 
 
-class DeprecatedAliasAction(argparse.Action):
-    """Store an option value and warn when a deprecated spelling was used."""
+class RemovedOptionAction(argparse.Action):
+    """An option removed in 4.0.0: using it fails with what to use instead.
 
-    def __init__(self, option_strings, dest, deprecated_options=(), replacement=None, **kwargs):
-        self.deprecated_options = set(deprecated_options)
+    removed_options limits the failure to some spellings (the others store
+    the value as usual); by default every spelling of the option is removed.
+    """
+
+    def __init__(self, option_strings, dest, removed_options=None, replacement=None,
+                 reason=None, **kwargs):
+        self.removed_options = set(removed_options or option_strings)
         self.replacement = replacement
+        self.reason = reason
+        kwargs.setdefault('help', argparse.SUPPRESS)
         super().__init__(option_strings, dest, **kwargs)
 
     def __call__(self, parser, namespace, values, option_string=None):
-        if option_string in self.deprecated_options:
-            from . import term
-
-            label = term.yellow('Warning:', stream=sys.stderr)
-            print(
-                f"{label} {option_string} is deprecated; use {self.replacement} instead.",
-                file=sys.stderr,
-            )
+        if option_string in self.removed_options:
+            instead = f"use {self.replacement} instead" if self.replacement else self.reason
+            parser.error(f"{option_string} was removed in nano-crucible 4.0.0; {instead}.")
         setattr(namespace, self.dest, values)
+
+
+def add_removed_command(subparsers, name, replacement, aliases=()):
+    """Keep a removed command name so it fails with what to run instead.
+
+    It is left out of help and completion.
+    """
+    parser = subparsers.add_parser(name, aliases=list(aliases), add_help=False, prefix_chars='\x01')
+    parser.add_argument('_removed_args', nargs='*', help=argparse.SUPPRESS)
+    parser._removed = True
+    subparsers._choices_actions = [action for action in subparsers._choices_actions
+                                   if action.dest != name]
+
+    def execute(args):
+        from . import term
+        print(f"{term.red('Error:', stream=sys.stderr)} '{parser.prog}' was removed in "
+              f"nano-crucible 4.0.0; use {replacement} instead.", file=sys.stderr)
+        sys.exit(2)
+
+    parser.set_defaults(func=execute)
+    return parser
 
 
 def _error_details(error):
@@ -87,7 +110,15 @@ def _error_hint(error_type, status, details):
     from ..config import config
 
     if status == 401:
-        return "Your API key was not accepted. Set a new one with `crucible config init`."
+        return ("Your API key or sign-in was not accepted. Run `crucible login`, "
+                "or set a new key with `crucible config init`.")
+    if status == 403 and any(item.get('code') == 'browser_sign_in_required' for item in details):
+        return ("A code-approved sign-in cannot do this. Run the command in a terminal on a computer "
+                f"with a browser (`crucible login`), or do it in the Hub ({config.hub_url}).")
+    if status == 403 and any(item.get('code') == 'hub_session_required' for item in details):
+        return (f"This needs a recent sign-in to the Crucible Hub, not an API key; do it from the Hub "
+                f"({config.hub_url}). Server operators can change roles with "
+                f"`python -m app.cli admin set-role`.")
     if status == 403:
         return ("Your account is not allowed to do this. `crucible whoami` shows your role; "
                 "administrators can retry with -E/--elevate.")
@@ -143,6 +174,9 @@ def format_cli_error(action: str, error: Exception) -> dict:
     hint = _error_hint(error_type, status, details)
     if hint:
         result['hint'] = hint
+    request_id = getattr(error, 'request_id', None)
+    if request_id:
+        result['request_id'] = request_id
     return result
 
 
@@ -177,6 +211,9 @@ def print_cli_error(data: dict, as_json: bool = False) -> None:
     if data.get('hint'):
         print(file=sys.stderr)
         print(term.dim(data['hint'], stream=sys.stderr), file=sys.stderr)
+    if data.get('request_id'):
+        print(term.dim(f"Request ID: {data['request_id']} (quote it when reporting this)",
+                       stream=sys.stderr), file=sys.stderr)
 
 
 def show_warning(message) -> None:
@@ -223,7 +260,7 @@ def add_scope_filters(parser, resource: str) -> None:
         help='Ignore the current project and include every accessible project'
     )
     parser.add_argument(
-        '-pid', action=DeprecatedAliasAction, deprecated_options={'-pid'},
+        '-pid', action=RemovedOptionAction, removed_options={'-pid'},
         replacement='--project-id', dest='project_id', default=argparse.SUPPRESS,
         metavar='ID', help=argparse.SUPPRESS,
     )
@@ -362,13 +399,10 @@ def complete_ingestors(**kwargs):
 
 
 def add_upload_arguments(parser) -> None:
-    """Add --upload-protocol, --replace, and --no-ingest to a command that uploads files."""
-    from ..constants import UPLOAD_PROTOCOLS
-
+    """Add --replace and --no-ingest (and the removed --upload-protocol) to an upload command."""
     parser.add_argument(
-        '--upload-protocol', choices=UPLOAD_PROTOCOLS, default=None, metavar='MODE',
-        help=f"Upload route: {', '.join(UPLOAD_PROTOCOLS)} "
-             "(default: the upload_protocol setting, normally auto)"
+        '--upload-protocol', default=None, metavar='MODE',
+        action=RemovedOptionAction, reason='every upload uses signed multipart; drop it',
     )
     parser.add_argument(
         '--replace', action='store_true', default=False,
@@ -392,12 +426,11 @@ class upload_session:
         self.client = client
         self.values = {
             'upload_progress': UploadProgress(),
-            'upload_protocol': getattr(args, 'upload_protocol', None),
             'request_ingestion': not getattr(args, 'no_ingest', False),
             'replace_existing': getattr(args, 'replace', False),
         }
 
-    _DEFAULTS = {'upload_progress': None, 'upload_protocol': None, 'request_ingestion': True,
+    _DEFAULTS = {'upload_progress': None, 'request_ingestion': True,
                  'replace_existing': False}
 
     def __enter__(self):
@@ -1074,7 +1107,7 @@ def parse_user_ref(value: str) -> dict:
     identifiers are returned under the legacy ``orcid`` keyword for compatibility.
     """
     reference_kind, normalized = classify_user_reference(value)
-    if reference_kind == 'unique_id':
+    if reference_kind in ('unique_id', 'reference'):
         return {'orcid': normalized}
     return {reference_kind: normalized}
 
@@ -1096,9 +1129,9 @@ def add_user_reference_argument(parser) -> None:
 
 
 def resolve_user_id(client, value: str) -> str:
-    """Resolve a user reference to its canonical ORCID or MFID.
+    """Resolve a user reference to its unique_id.
 
-    Returns a canonical ORCID or MFID unchanged without an API call.
+    Returns an ORCID- or MFID-shaped value unchanged without an API call.
     Raises ValueError if the identifier doesn't resolve to a user.
     """
     reference_kind, normalized = classify_user_reference(value)
@@ -1216,16 +1249,7 @@ def resolve_project_context(args=None, project_id=None):
         shell_project = shell_state.get('project')
         if shell_project:
             return shell_project, shell_state.get('project_source') or 'config file'
-    project_id, source = fetch_project_context()
-    if project_id and source == 'environment':
-        import warnings
-        warnings.warn(
-            "CRUCIBLE_CURRENT_PROJECT is deprecated because it can silently redirect operations. "
-            "Use an explicit --project-id or save the current project with the interactive shell.",
-            FutureWarning,
-            stacklevel=2,
-        )
-    return project_id, source
+    return fetch_project_context()
 
 
 def fetch_api_label():
@@ -1252,62 +1276,64 @@ def fetch_api_attention():
 
 
 def explorer_url(resource_id: str, project_id: str, resource_type: str) -> str:
-    """Build a graph explorer URL for a dataset or sample.
+    """Build the Crucible Hub URL for a dataset or sample.
 
-    Returns None if the graph_explorer_url is not configured or any argument is missing.
+    project_id is accepted for older callers and unused: Hub pages are keyed
+    by MFID alone. Returns None if hub_url is unset or resource_id is missing.
     """
-    base = _graph_explorer_base()
-    if not base or not resource_id or not project_id:
+    base = _hub_base()
+    if not base or not resource_id:
         return None
     dtype = 'samples' if resource_type == 'sample' else 'datasets'
-    return f"{base}/{project_id}/{dtype}/{resource_id}"
+    return f"{base}/{dtype}/{resource_id}"
 
 
-def _graph_explorer_base():
+def _hub_base():
     try:
         from crucible.config import config
-        return (config.graph_explorer_url or '').rstrip('/') or None
+        return (config.hub_url or '').rstrip('/') or None
     except Exception:
         return None
 
 
-def project_explorer_url(project_id: str) -> str:
-    """Build the Graph Explorer URL for a project."""
-    base = _graph_explorer_base()
-    if not base or not project_id:
+def project_explorer_url(project_ref: str) -> str:
+    """Build the Crucible Hub URL for a project, by MFID (preferred) or project ID."""
+    base = _hub_base()
+    if not base or not project_ref:
         return None
-    return f"{base}/{project_id}/"
+    return f"{base}/projects/{project_ref}"
 
 
 def instrument_explorer_url(instrument_mfid: str) -> str:
-    """Build the Graph Explorer URL for an instrument."""
-    base = _graph_explorer_base()
+    """Build the Crucible Hub URL for an instrument."""
+    base = _hub_base()
     if not base or not instrument_mfid:
         return None
-    return f"{base}/instrument/{instrument_mfid}"
+    return f"{base}/instruments/{instrument_mfid}"
 
 
 def user_explorer_url(user_unique_id: str) -> str:
-    """Build the Graph Explorer URL for a user."""
-    base = _graph_explorer_base()
+    """Build the Crucible Hub URL for a user or service account."""
+    base = _hub_base()
     if not base or not user_unique_id:
         return None
-    return f"{base}/user/{user_unique_id}"
+    return f"{base}/users/{user_unique_id}"
 
 
 def project_reference(resource):
-    """Return the display title, project ID, and Explorer URL for a resource."""
+    """Return the display title, project ID, and Hub URL for a resource."""
     reference = resource.get('project') or {}
     project_id = reference.get('project_id') or resource.get('project_id')
+    project_mfid = reference.get('unique_id') or resource.get('project_mfid')
     return (
         reference.get('title'),
         project_id,
-        project_explorer_url(project_id),
+        project_explorer_url(project_mfid or project_id),
     )
 
 
 def instrument_reference(resource):
-    """Return the display name, instrument ID, and Explorer URL for a dataset."""
+    """Return the display name, instrument ID, and Hub URL for a dataset."""
     reference = resource.get('instrument') or {}
     instrument_mfid = reference.get('unique_id')
     return (

@@ -53,8 +53,8 @@ def _execute_list(args):
     from crucible.config import get_client
     try:
         client = get_client()
-        reqs   = client.ingestions.list(dsid=args.dataset_id,
-                                        file_id=args.file_id,
+        reqs   = client.ingestions.list(dataset_mfid=args.dataset_id,
+                                        file_mfid=args.file_id,
                                         limit=resolve_limit(args), **page_kwargs(args))
 
         scope = args.dataset_id or args.file_id or 'all'

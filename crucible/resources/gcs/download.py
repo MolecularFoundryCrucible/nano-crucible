@@ -94,7 +94,7 @@ def download_dataset_files(client, dsid: str, output_dir: str,
         dest_dir = os.path.dirname(download_path) or output_dir
         os.makedirs(dest_dir, exist_ok=True)
 
-        response = client._session.get(signed_url, stream=True)
+        response = client._storage_session.get(signed_url, stream=True)
         response.raise_for_status()
 
         tmp_fd, tmp_path = tempfile.mkstemp(dir=dest_dir)

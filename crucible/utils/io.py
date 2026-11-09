@@ -247,9 +247,12 @@ def storage_display_name(file_record: dict, dataset_mfid: str = None) -> str:
     folders; the object path is a server detail that differs between upload
     flows. Legacy objects stored directly below the dataset folder keep their
     object path when it extends the filename with folders. Other records fall
-    back to the basename of their storage path or filename.
+    back to the basename of their storage path or filename. An absolute
+    filename from a legacy upload is reduced to its basename.
     """
     filename = file_record.get('filename') or ''
+    if os.path.isabs(filename):
+        filename = os.path.basename(filename)
     parts = gcs_object_parts(file_record)
     if parts is not None:
         _bucket, owner_dataset, object_name = parts

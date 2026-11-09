@@ -25,17 +25,23 @@ mkdocs build
 
 Iterate on the smallest relevant test set, then run all unit tests. `tests/integration/` hits a live API and leaves the records it creates behind, so it is never routine validation: run it only when the user authorizes live writes, and only against the `crucible-test` project. `crucible/parsers/` and `crucible/cast/` have little coverage: changes there need a mocked unit test, and a rename or removal needs a search of every call site.
 
+Before a release, or after adding or changing an API call, compare the client's routes with the API's published ones. It reads only the OpenAPI document and fails on routes the API does not define:
+
+```bash
+python scripts/check_api_routes.py https://crucible.lbl.gov/testapi-staging/openapi.json
+```
+
 ## Invariants
 
 - `AVAILABLE_INGESTORS` is a client-side completion list, not what the server supports. `ingestor=None` means server auto-detection; `ApiUploadIngestor` is not a fallback for unknown formats.
 - Most models use `extra="allow"`, so removing a field does not stop callers from sending it. Search constructors and payload builders for the old name.
-- Keep Python 3.10 syntax. Keep the library quiet: use package logging, and put terminal output in `crucible/cli/`.
+- Keep Python 3.11 syntax. Keep the library quiet: use package logging, and put terminal output in `crucible/cli/`.
 - Do not paper over a client/server mismatch by inventing server behavior. The server's generated OpenAPI is authoritative for the HTTP contract; `crucible-api` is read-only reference.
 
 ## Ship a change
 
 - Update docstrings, `docs/`, CLI help, examples, and tests in the same change as public behavior. `docs/cli/reference.md` is the canonical CLI inventory.
 - For a user-visible change, add one short line under `## Unreleased` in `docs/changelog.md` (`Added`, `Changed`, or `Fixed`), describing the user-facing result. Internal refactors need no entry.
-- Changing a public signature needs a deprecation path (`crucible/utils/deprecation.py`), not a silent alias or break.
+- Changing a public signature needs a deprecation path (`crucible/utils/deprecation.py`), not a silent alias or break. At a major release, deprecated items become `_removed`/`_removed_parameter` stubs that raise `RemovedError` naming the replacement; CLI commands and options use `add_removed_command` and `RemovedOptionAction`.
 - Shared branch is `dev`, release branch is `main`. Commit each verified subtask separately, excluding unrelated working-tree changes. Do not switch branches or push unless asked.
 - Cross-repository changes cannot land atomically: link the coordinated issues or PRs and land the producer (usually `crucible-api`) first.

@@ -2,7 +2,7 @@
 
 ## Requirements
 
-- Python 3.10 or later
+- Python 3.11 or later
 - A Crucible account and API key ([crucible.lbl.gov](https://crucible.lbl.gov))
 
 ## Install from PyPI
@@ -18,7 +18,7 @@ pip install nano-crucible
 pip install nano-crucible[parsers]
 ```
 
-> **Note:** `google-cloud-storage` (GCS parallel upload) and `prompt_toolkit` (interactive shell) are included as core dependencies — no extra needed.
+> **Note:** `prompt_toolkit` (interactive shell) is a core dependency; no extra is needed.
 
 ### Development install
 
@@ -32,7 +32,22 @@ pip install -e ".[dev]"
 
 ## Configuration
 
-### Recommended: config file
+### Sign in with a browser
+
+```bash
+crucible login            # opens your browser on this computer
+crucible login --device   # over SSH or without a browser: approve a code on any device
+crucible whoami           # shows "Signed in with"
+crucible logout
+```
+
+The sign-in is kept in your OS keyring (macOS Keychain, Windows Credential Locker, or Secret Service on Linux). Where no keyring is reachable, such as a headless Linux machine or cluster node, it goes in a file only you can read in the config directory; set `auth_store` to `keyring`, `file`, or `memory` to choose. Sessions renew themselves and end after 14 days without use or 90 days at most.
+
+Some actions, such as creating an API key, need a sign-in from the last 10 minutes. The CLI asks you to sign in again in your browser when that happens. A sign-in approved with a code (`--device`) cannot do these actions; use a computer with a browser or the Hub.
+
+An API key still works and is the right choice for scripts, CI, and batch jobs. The CLI uses, in order: an `api_key` passed to `CrucibleClient`, `CRUCIBLE_API_KEY`, your sign-in, then `api_key` in the config file.
+
+### API key: config file
 
 Run the interactive setup wizard once after installing:
 
@@ -58,6 +73,8 @@ Useful config keys:
 | `api_key` | Your Crucible API key |
 | `api_url` | Optional API override (default: `https://crucible.lbl.gov/api/v3`) |
 | `current_project` | Current project ID used when a command omits `--project-id` |
+| `hub_url` | Crucible Hub address (default: `https://crucible.lbl.gov/hub`) |
+| `auth_store` | Where `crucible login` keeps tokens: `auto` (default), `keyring`, `file`, or `memory` |
 
 ### Alternative: pass credentials directly in Python
 
@@ -77,7 +94,7 @@ export CRUCIBLE_API_KEY="your-api-key"
 
 Set `CRUCIBLE_API_URL` only when targeting staging or another non-default deployment. Environment variables take priority over the config file when both are present.
 
-Use explicit `--project-id` arguments for automation. `CRUCIBLE_CURRENT_PROJECT` is deprecated because it can silently redirect operations away from the project saved by the interactive shell.
+Use explicit `--project-id` arguments for automation. `CRUCIBLE_CURRENT_PROJECT` was removed in 4.0.0 because it could silently redirect commands to another project; the CLI stops if it is set.
 
 If an older config explicitly selects API v1 or v2, Nano displays a migration warning. Run `crucible config unset api_url` to inherit the API v3 endpoint packaged with Nano, or set the override to the desired deployment explicitly.
 
@@ -85,7 +102,7 @@ If an older config explicitly selects API v1 or v2, Nano displays a migration wa
 
 ## Getting your API key
 
-Log in and visit [crucible.lbl.gov/api/v3/user_apikey](https://crucible.lbl.gov/api/v3/user_apikey) to generate or retrieve your API key.
+Sign in to the Crucible Hub and create a key on your account page: [crucible.lbl.gov/hub/account](https://crucible.lbl.gov/hub/account#api-keys). After `crucible login`, `crucible account keys create NAME` also creates one. A key is shown only once.
 
 ---
 

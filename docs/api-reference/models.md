@@ -34,6 +34,8 @@ from crucible.models import Dataset, Sample, Project, Instrument, InstrumentRefe
 
 ::: crucible.models.ServiceAccountKeyStatus
 
+::: crucible.models.EntryCapabilities
+
 ::: crucible.models.DeletionRequest
 
 ::: crucible.models.DeletionRequestCapabilities

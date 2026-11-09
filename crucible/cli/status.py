@@ -118,10 +118,12 @@ def execute(args):
     from crucible.config import config
 
     api_url = config.api_url
+    from ..auth.store import signed_in
     try:
         api_key = config.api_key
     except ValueError:
         api_key = None
+    has_credential = bool(api_key) or (bool(api_url) and signed_in(api_url.rstrip('/')) is not None)
     if not api_url:
         logger.error("API URL is not configured. Run: crucible config set api_url URL")
         sys.exit(1)
@@ -213,9 +215,9 @@ def execute(args):
         printer("Status", f'{term.status_marker("info")} unavailable')
 
     term.subheader("Authentication")
-    if not api_key:
+    if not has_credential:
         printer("Status", f'{term.status_marker("info")} not configured')
-        printer("Action", "Run: crucible config set api_key KEY")
+        printer("Action", "Run: crucible login (or crucible config set api_key KEY)")
         print()
         sys.exit(0 if readiness_ok and database_ok else 1)
 
@@ -246,6 +248,11 @@ def execute(args):
     printer("User", identity)
     if user.get('is_service_account'):
         printer("Type", "service account")
+    from .whoami import credential_label
+    from crucible.config import get_client
+    label = credential_label(get_client())
+    if label:
+        printer("Using", label)
 
     print()
     sys.exit(0 if readiness_ok and database_ok else 1)

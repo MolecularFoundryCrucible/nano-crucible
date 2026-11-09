@@ -26,6 +26,21 @@ def register_subcommand(subparsers):
     parser.set_defaults(func=execute)
 
 
+def credential_label(client) -> str:
+    """How the client authenticates, for display, or None if unknown."""
+    source = getattr(client, 'credential_source', None)
+    if source is None:
+        return None
+    if source in ('sign-in', 'this session'):
+        store = client._credential.store.name
+        where = {'keyring': 'OS keyring', 'file': 'credentials file'}.get(store, 'memory only')
+        how = 'device code' if client._credential.tokens.grant == 'device_code' else 'browser'
+        return f"Crucible sign-in ({how}, {where})"
+    return {'argument': 'API key (passed to the client)',
+            'CRUCIBLE_API_KEY': 'API key (CRUCIBLE_API_KEY)',
+            'config file': 'API key (config file)'}.get(source, source)
+
+
 def execute(args):
     """Execute the whoami command."""
     from crucible.config import config
@@ -37,13 +52,13 @@ def execute(args):
 
         term.header("Whoami")
 
-        uid = user.get('unique_id')
         _p("Username", user.get('username') or term.dim('(not set)'))
         _p("Name",     term.fmt_name(user, fallback_username=False))
-        _p(term.user_id_label(uid), term.user_id_link(uid))
+        term.print_user_ids(_p, user)
         _p("Email",    user.get('email'))
         if user.get('is_service_account'):
             _p("Type", "service account")
+        _p("Signed in with", credential_label(config.client))
 
         if getattr(args, 'verbose', False):
             _p("ID", user.get('id'))

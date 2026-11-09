@@ -9,7 +9,6 @@ platform admins) review it. Join requests are a flat collection with their
 own int id, modeled after DeletionRequest, not a primary content resource.
 """
 
-import warnings
 from datetime import date, datetime
 from typing import Dict, List, Optional, Sequence, Union
 
@@ -21,7 +20,7 @@ from ..constants import (DEFAULT_LIMIT, JOIN_REQUEST_FACET_FIELDS,
                          JOIN_REQUEST_STATUSES, PROJECT_MEMBER_ROLES,
                          SORT_DIRECTIONS)
 from ..models import FacetResponse, JoinRequest
-from ..utils.deprecation import _deprecated_parameter
+from ..utils.deprecation import _removed_parameter
 
 TimeBound = Union[str, date, datetime]
 
@@ -36,7 +35,7 @@ class AccessGroupOperations(BaseResource):
     def _parse(data: dict) -> Dict:
         return JoinRequest(**data).model_dump()
 
-    @_deprecated_parameter('group_name', 'project_ref')
+    @_removed_parameter('group_name', 'project_ref')
     def request_join(self, project_ref: str, reason: Optional[str] = None) -> Dict:
         """Request to join a project. Any signed-in user who is not a member.
 
@@ -62,12 +61,10 @@ class AccessGroupOperations(BaseResource):
                        requested_before, reviewed_after, reviewed_before,
                        q) -> dict:
         if group_name is not None:
-            warnings.warn(
-                "The 'group_name' keyword is deprecated; use 'project_mfid' instead.",
-                DeprecationWarning, stacklevel=3)
-            if project_mfid is not None:
-                raise TypeError("Pass either 'project_mfid' or deprecated 'group_name', not both.")
-            project_mfid = self._client.projects._resource_mfid(group_name)
+            from ..errors import RemovedError
+            from ..utils.deprecation import removed_message
+            raise RemovedError(removed_message(
+                "The 'group_name' keyword of list_join_requests()", "use 'project_mfid' instead."))
         statuses = [status] if isinstance(status, str) else list(status or [])
         for value in statuses:
             if value not in JOIN_REQUEST_STATUSES:

@@ -9,6 +9,7 @@ Provides organized access to instrument-related API endpoints.
 import logging
 from typing import TYPE_CHECKING, Any, Optional, List, Dict, Sequence, Union
 from .base import BaseResource, ListResult
+from ..utils.deprecation import _removed
 from .capabilities import AccessControlMixin, OwnershipMixin
 from ..constants import DEFAULT_LIMIT
 from ..utils.identifiers import (
@@ -56,6 +57,7 @@ class InstrumentOperations(OwnershipMixin, AccessControlMixin, BaseResource):
              affiliation: Optional[Union[str, Sequence[str]]] = None,
              sort: Optional[str] = None, direction: Optional[str] = None,
              cursor: Optional[str] = None,
+             mfid: Optional[Union[str, Sequence[str]]] = None,
              **filters: Any) -> List[Dict]:
         """List instruments, defaulting to the active lifecycle state.
 
@@ -65,7 +67,7 @@ class InstrumentOperations(OwnershipMixin, AccessControlMixin, BaseResource):
             offset (int): Starting position in the full result set (default: 0)
             cursor (str, optional): Continuation token from a previous
                 result's next_cursor; the listing resumes there.
-            include_owner (bool): Resolve owner_orcid into a public-safe user object
+            include_owner (bool): Resolve the owner into a public-safe user object
             status (str, optional): Filter by active, maintenance, or decommissioned.
                                     When omitted, the API defaults to active
                                     (or every status for an instrument_id lookup).
@@ -74,6 +76,7 @@ class InstrumentOperations(OwnershipMixin, AccessControlMixin, BaseResource):
             sort: Explicit ordering, one of crucible.constants.INSTRUMENT_SORTS.
             direction: Sort direction, asc or desc. Requires sort. Without it,
                        dates default to desc and everything else to asc.
+            mfid (str or list, optional): Only these instrument MFIDs (up to 100).
             **filters: Exact-match filters accepted by GET /instruments, such as
                        instrument_id (case-insensitive slug), manufacturer,
                        model, location, instrument_type, owner_id, other_id.
@@ -86,6 +89,7 @@ class InstrumentOperations(OwnershipMixin, AccessControlMixin, BaseResource):
 
         params = {k: v for k, v in filters.items() if v is not None}
         self._validate_filter_params(params, INSTRUMENT_LIST_FILTERS, '/instruments')
+        self._apply_mfid_filter(params, mfid)
         if include_metadata:
             params['include_metadata'] = True
         if include_owner:
@@ -127,7 +131,7 @@ class InstrumentOperations(OwnershipMixin, AccessControlMixin, BaseResource):
             instrument_ref (str, optional): Instrument MFID or slug
             instrument_id (str, optional): Explicit instrument slug
             include_metadata (bool): Whether to include scientific metadata
-            include_owner (bool): Resolve owner_orcid into a public-safe user object (default: True)
+            include_owner (bool): Resolve the owner into a public-safe user object (default: True)
             instrument_mfid (str, optional): Explicit instrument MFID
             instrument_name (str, optional): Deprecated display-name lookup
             include_members (bool): Include the owner and maintainers as
@@ -149,26 +153,19 @@ class InstrumentOperations(OwnershipMixin, AccessControlMixin, BaseResource):
             raise ValueError("Provide exactly one instrument reference.")
 
         if instrument_name is not None:
-            import warnings
-            warnings.warn(
-                "instrument_name lookup is deprecated because display names are not unique; "
-                "pass an instrument MFID or instrument_id slug instead.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-            return self._get_by_name(instrument_name, include_metadata=include_metadata,
-                                     include_owner=include_owner)
+            from ..errors import RemovedError
+            from ..utils.deprecation import removed_message
+            raise RemovedError(removed_message(
+                "Looking up an instrument by instrument_name",
+                "names may repeat, so pass an instrument MFID or instrument_id instead."))
         options = dict(include_metadata=include_metadata, include_owner=include_owner,
                        include_members=include_members)
         if instrument_id is not None:
             if is_mfid(instrument_id):
-                import warnings
-                warnings.warn(
-                    "Passing an MFID as instrument_id is deprecated; use instrument_mfid instead.",
-                    DeprecationWarning,
-                    stacklevel=2,
-                )
-                return self._get_by_mfid(instrument_id, **options)
+                from ..errors import RemovedError
+                from ..utils.deprecation import removed_message
+                raise RemovedError(removed_message(
+                    "Passing an MFID as instrument_id", "use instrument_mfid instead."))
             return self._get_by_instrument_id(instrument_id, **options)
         if instrument_mfid is not None:
             return self._get_by_mfid(instrument_mfid, **options)
@@ -275,15 +272,12 @@ class InstrumentOperations(OwnershipMixin, AccessControlMixin, BaseResource):
                 "distinct from its auto-assigned MFID)."
             )
         validate_slug(payload['instrument_id'], 'instrument')
-        if payload.get('owner') is not None and payload.get('owner_orcid') is not None:
-            raise ValueError("Pass either 'owner' or 'owner_orcid', not both.")
         if payload.get('owner_orcid') is not None:
-            warnings.warn(
-                "Instrument.owner_orcid is deprecated for creation; use Instrument.owner "
-                "with an ORCID, MFID, username, or email instead.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
+            from ..errors import RemovedError
+            from ..utils.deprecation import removed_message
+            raise RemovedError(removed_message(
+                "Setting Instrument.owner_orcid when creating an instrument",
+                "set Instrument.owner to an ORCID, MFID, username, or email instead."))
         if payload.get('owner') is not None and not isinstance(payload['owner'], str):
             raise ValueError("Instrument.owner must be a string identifier when creating an instrument.")
 
@@ -441,7 +435,7 @@ class InstrumentOperations(OwnershipMixin, AccessControlMixin, BaseResource):
         Args:
             q: Search term (min 3 chars). Typo-tolerant.
             limit: Max results (default 20, max 50).
-            include_owner: Resolve owner_orcid into a public-safe user object.
+            include_owner: Resolve the owner into a public-safe user object.
             status: Restrict results to active, maintenance, or decommissioned.
             affiliation: 'owner', 'maintainer', or both, to search only the
                          caller's instruments.
@@ -461,23 +455,7 @@ class InstrumentOperations(OwnershipMixin, AccessControlMixin, BaseResource):
         items = result.get('items', result) if isinstance(result, dict) else result
         return [self._parse(item) for item in items]
 
-    def get_or_create(self, instrument_name: str, location: Optional[str] = None,
-                     instrument_owner: Optional[str] = None) -> Dict:
-        """Deprecated: use create() instead.
+    @_removed("use create() instead; it finds an existing instrument itself.")
+    def get_or_create(self, *args, **kwargs):
+        """Removed in 4.0.0: use create() instead."""
 
-        .. deprecated::
-            Use :meth:`create` with an :class:`~crucible.models.Instrument` model.
-            ``create()`` now checks for an existing instrument before posting.
-        """
-        import warnings
-        warnings.warn(
-            "get_or_create() is deprecated; use create() instead — "
-            "it now checks for an existing instrument automatically.",
-            DeprecationWarning, stacklevel=2,
-        )
-        from ..models import Instrument
-        return self.create(Instrument(
-            instrument_name=instrument_name,
-            location=location,
-            owner=instrument_owner,
-        ))

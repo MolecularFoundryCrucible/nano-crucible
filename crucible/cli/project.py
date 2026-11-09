@@ -10,12 +10,11 @@ import argparse
 import sys
 import logging
 import json
-import warnings
 
 logger = logging.getLogger(__name__)
 
 from . import term
-from .helpers import add_limit_arguments, count_label, print_more_hint, resolve_limit, page_kwargs
+from .helpers import RemovedOptionAction, add_limit_arguments, count_label, print_more_hint, resolve_limit, page_kwargs
 from ..config import config as _config
 from ..constants import (JOIN_REQUEST_STATUSES, PROJECT_ACCESS_ROLES, PROJECT_MEMBER_ROLES,
                          PROJECT_SORTS, SORT_DIRECTIONS)
@@ -27,19 +26,6 @@ except ImportError:
     ARGCOMPLETE_AVAILABLE = False
 
 
-class _DeprecatedMembersAction(argparse.Action):
-    """Set include_members while warning about the former CLI spelling."""
-
-    def __init__(self, option_strings, dest, **kwargs):
-        super().__init__(option_strings, dest, nargs=0, **kwargs)
-
-    def __call__(self, parser, namespace, values, option_string=None):
-        warnings.warn(
-            "--members is deprecated; use --include-members instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        setattr(namespace, self.dest, True)
 
 
 def register_subcommand(subparsers):
@@ -167,9 +153,10 @@ def _register_get(subparsers):
 
     parser.add_argument(
         '--members',
-        action=_DeprecatedMembersAction,
+        action=RemovedOptionAction,
+        nargs=0,
         dest='include_members',
-        help='Deprecated alias for --include-members'
+        replacement='--include-members'
     )
 
     parser.add_argument(
@@ -202,7 +189,7 @@ Examples:
 """
     )
 
-    from .helpers import DeprecatedAliasAction
+    from .helpers import RemovedOptionAction
     parser.add_argument(
         '--project-id', '-i',
         required=False,
@@ -212,8 +199,8 @@ Examples:
     )
     parser.add_argument(
         '-id',
-        action=DeprecatedAliasAction,
-        deprecated_options={'-id'},
+        action=RemovedOptionAction,
+        removed_options={'-id'},
         replacement='--project-id',
         dest='project_id',
         default=argparse.SUPPRESS,
@@ -318,9 +305,9 @@ Examples:
                         help='Role to grant (default: contributor)')
 
     group = parser.add_mutually_exclusive_group()
-    group.add_argument('--orcid',    metavar='ORCID',    help='(deprecated, use --user)')
-    group.add_argument('--email',    metavar='EMAIL',    help='(deprecated, use --user)')
-    group.add_argument('--username', metavar='USERNAME', help='(deprecated, use --user)')
+    group.add_argument('--orcid', action=RemovedOptionAction, replacement='--user', default=None)
+    group.add_argument('--email', action=RemovedOptionAction, replacement='--user', default=None)
+    group.add_argument('--username', action=RemovedOptionAction, replacement='--user', default=None)
 
     parser.set_defaults(func=_execute_add_user)
 
@@ -377,9 +364,9 @@ Examples:
                         help='ORCID, MFID, username, or email of the user')
 
     group = parser.add_mutually_exclusive_group()
-    group.add_argument('--orcid',    metavar='ORCID',    help='(deprecated, use --user)')
-    group.add_argument('--email',    metavar='EMAIL',    help='(deprecated, use --user)')
-    group.add_argument('--username', metavar='USERNAME', help='(deprecated, use --user)')
+    group.add_argument('--orcid', action=RemovedOptionAction, replacement='--user', default=None)
+    group.add_argument('--email', action=RemovedOptionAction, replacement='--user', default=None)
+    group.add_argument('--username', action=RemovedOptionAction, replacement='--user', default=None)
     parser.set_defaults(func=_execute_remove_user)
 
 
@@ -637,32 +624,16 @@ def _execute_list_users(args):
 
 def _execute_add_user(args):
     """Execute the 'project add-user' subcommand."""
-    import re
-    import warnings
     from crucible.config import get_client
     from .helpers import parse_user_ref
 
-    orcid    = getattr(args, 'orcid', None)
-    email    = getattr(args, 'email', None)
-    username = getattr(args, 'username', None)
     user_ref = getattr(args, 'user', None)
 
-    if orcid or email or username:
-        warnings.warn(
-            "--orcid/--email/--username are deprecated; use --user instead: "
-            "crucible project add-user PROJECT_ID --user VALUE",
-            DeprecationWarning, stacklevel=2,
-        )
-    elif user_ref:
+    if user_ref:
         ref = parse_user_ref(user_ref)
         orcid, email, username = ref.get('orcid'), ref.get('email'), ref.get('username')
     else:
         logger.error("Provide a user identifier: crucible project add-user PROJECT_ID --user VALUE")
-        sys.exit(1)
-
-    if orcid and not re.match(r'^\d{4}-\d{4}-\d{4}-\d{3}[0-9X]$', orcid):
-        logger.error(f"Invalid ORCID format: {orcid}")
-        logger.error("Expected format: 0000-0000-0000-000X")
         sys.exit(1)
 
     try:
@@ -740,22 +711,12 @@ def _execute_update(args):
 def _execute_remove_user(args):
     """Execute the 'project remove-user' subcommand."""
     import requests as _req
-    import warnings
     from crucible.config import get_client
     from .helpers import parse_user_ref
 
-    orcid    = getattr(args, 'orcid', None)
-    email    = getattr(args, 'email', None)
-    username = getattr(args, 'username', None)
     user_ref = getattr(args, 'user', None)
 
-    if orcid or email or username:
-        warnings.warn(
-            "--orcid/--email/--username are deprecated; use --user instead: "
-            "crucible project remove-user PROJECT_ID --user VALUE",
-            DeprecationWarning, stacklevel=2,
-        )
-    elif user_ref:
+    if user_ref:
         ref = parse_user_ref(user_ref)
         orcid, email, username = ref.get('orcid'), ref.get('email'), ref.get('username')
     else:

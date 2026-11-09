@@ -50,7 +50,7 @@ def _help(shell, line):
             ('Alt+G',  'toggle graph view for last fetched resource'),
             ('Alt+R',  'refresh projects, user info, and deletions'),
             ('Alt+P',  'project picker (type a number or filter text)'),
-            ('Alt+O',  'open last resource in Graph Explorer'),
+            ('Alt+O',  'open last resource in the Crucible Hub'),
             ('Ctrl+L', 'clear screen'),
         ]:
             print(f"  {term.bold(_key)}{' ' * (_W - len(_key))} {_desc}")
@@ -64,13 +64,6 @@ def _use(shell, line):
         print("Usage: use <project_id>")
         return True
     project_id = parts[1].strip()
-    if os.environ.get('CRUCIBLE_CURRENT_PROJECT') is not None:
-        from ..helpers import show_warning
-        show_warning(
-            "CRUCIBLE_CURRENT_PROJECT controls the current project. "
-            "Unset it before using the shell project selector."
-        )
-        return True
     try:
         import requests as _req
         project = shell.client.projects.get(project_id)
@@ -95,13 +88,6 @@ def _use(shell, line):
 
 
 def _unuse(shell, line):
-    if os.environ.get('CRUCIBLE_CURRENT_PROJECT') is not None:
-        from ..helpers import show_warning
-        show_warning(
-            "CRUCIBLE_CURRENT_PROJECT controls the current project. "
-            "Unset it before clearing the shell project selection."
-        )
-        return True
     from ..config import unset_config_value
     unset_config_value('current_project')
     shell.state['project'] = None

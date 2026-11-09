@@ -178,11 +178,11 @@ def test_orcid_user_ids_link_to_explorer(monkeypatch):
     monkeypatch.setattr(term, '_tty', lambda stream=None: True)
     monkeypatch.setattr(term, '_interactive', lambda stream=None: True)
     monkeypatch.setitem(
-        config._data, 'graph_explorer_url', 'https://example.org/explore')
+        config._data, 'hub_url', 'https://example.org/hub')
 
     rendered = term.user_id_link(orcid)
 
-    assert f'https://example.org/explore/user/{orcid}' in rendered
+    assert f'https://example.org/hub/users/{orcid}' in rendered
     assert 'orcid.org' not in rendered
     assert '\033[36m' in rendered
     assert '\033[4m' in rendered
@@ -398,15 +398,6 @@ def test_project_context_precedence(monkeypatch):
     assert helpers.resolve_project_context() == ('configured-project', 'config file')
 
 
-def test_environment_project_context_warns(monkeypatch):
-    from crucible.config import config
-
-    monkeypatch.setattr(config, '_data', {'current_project': 'environment-project'})
-    monkeypatch.setattr(config, '_sources', {'current_project': 'environment'})
-
-    with pytest.warns(FutureWarning, match='CRUCIBLE_CURRENT_PROJECT'):
-        assert helpers.resolve_project_context() == (
-            'environment-project', 'environment')
 
 
 def test_shell_use_remembers_and_unuse_clears_project(
@@ -440,22 +431,6 @@ def test_shell_use_remembers_and_unuse_clears_project(
     assert 'Cleared current project.' in output
 
 
-def test_shell_project_selection_is_blocked_by_environment(monkeypatch, capsys):
-    monkeypatch.setenv('CRUCIBLE_CURRENT_PROJECT', 'environment-project')
-    set_value = MagicMock()
-    monkeypatch.setattr('crucible.cli.config.set_config_value', set_value)
-    shell = shell_cli.CrucibleShell.__new__(shell_cli.CrucibleShell)
-    shell.client = SimpleNamespace(projects=SimpleNamespace(get=MagicMock()))
-    shell.state = {
-        'project': 'environment-project',
-        'project_source': 'environment',
-    }
-
-    assert shell._dispatch('use another-project') is True
-
-    shell.client.projects.get.assert_not_called()
-    set_value.assert_not_called()
-    assert 'CRUCIBLE_CURRENT_PROJECT controls the current project' in capsys.readouterr().err
 
 
 def test_shell_html_removes_styles_when_color_is_disabled(monkeypatch):
@@ -521,7 +496,7 @@ def test_project_detail_links_only_canonical_mfid(monkeypatch, capsys):
     monkeypatch.setattr(term, '_tty', lambda stream=None: True)
     monkeypatch.setattr(term, '_interactive', lambda stream=None: True)
     monkeypatch.setitem(
-        config._data, 'graph_explorer_url', 'https://example.org/explore')
+        config._data, 'hub_url', 'https://example.org/hub')
 
     project_cli._show_project({
         'unique_id': MFID,
@@ -530,7 +505,7 @@ def test_project_detail_links_only_canonical_mfid(monkeypatch, capsys):
     })
 
     output = capsys.readouterr().out
-    assert output.count('https://example.org/explore/project-slug/') == 1
+    assert output.count('https://example.org/hub/projects/project-slug') == 1
     assert '\033[1mProject Title\033[0m' in output
 
 
@@ -591,7 +566,7 @@ def test_instrument_detail_links_only_canonical_mfid(monkeypatch, capsys):
     monkeypatch.setattr(term, '_tty', lambda stream=None: True)
     monkeypatch.setattr(term, '_interactive', lambda stream=None: True)
     monkeypatch.setitem(
-        config._data, 'graph_explorer_url', 'https://example.org/explore')
+        config._data, 'hub_url', 'https://example.org/hub')
 
     instrument_cli._show_instrument({
         'unique_id': MFID,
@@ -600,7 +575,7 @@ def test_instrument_detail_links_only_canonical_mfid(monkeypatch, capsys):
     })
 
     output = capsys.readouterr().out
-    assert output.count(f'https://example.org/explore/instrument/{MFID}') == 1
+    assert output.count(f'https://example.org/hub/instruments/{MFID}') == 1
     assert '\033[1mInstrument Name\033[0m' in output
 
 
@@ -610,7 +585,7 @@ def test_user_detail_links_only_canonical_id(monkeypatch, capsys):
     monkeypatch.setattr(term, '_tty', lambda stream=None: True)
     monkeypatch.setattr(term, '_interactive', lambda stream=None: True)
     monkeypatch.setitem(
-        config._data, 'graph_explorer_url', 'https://example.org/explore')
+        config._data, 'hub_url', 'https://example.org/hub')
 
     user_cli._show_user({
         'unique_id': MFID,
@@ -620,7 +595,7 @@ def test_user_detail_links_only_canonical_id(monkeypatch, capsys):
     })
 
     output = capsys.readouterr().out
-    assert output.count(f'https://example.org/explore/user/{MFID}') == 1
+    assert output.count(f'https://example.org/hub/users/{MFID}') == 1
     assert 'T. User' in output
 
 
@@ -775,11 +750,11 @@ def test_sample_detail_uses_embedded_project_reference(capsys):
     assert '0td7evvtg5wb90005k1j97ak94' not in output
 
 
-def test_dataset_reference_fields_link_to_explorer(monkeypatch, capsys):
+def test_dataset_reference_fields_link_to_the_hub(monkeypatch, capsys):
     from crucible.config import config
 
     monkeypatch.setitem(
-        config._data, 'graph_explorer_url', 'https://example.org/explore')
+        config._data, 'hub_url', 'https://example.org/hub')
     monkeypatch.setattr(term, '_tty', lambda stream=None: True)
     monkeypatch.setattr(term, '_interactive', lambda stream=None: True)
     instrument_mfid = '0td7evvtg5wb90005k1j97ak94'
@@ -804,8 +779,8 @@ def test_dataset_reference_fields_link_to_explorer(monkeypatch, capsys):
     )
 
     output = capsys.readouterr().out
-    project_link = '\033]8;;https://example.org/explore/project-one/\007'
-    instrument_link = f'\033]8;;https://example.org/explore/instrument/{instrument_mfid}\007'
+    project_link = '\033]8;;https://example.org/hub/projects/0tp7evvtg5wb90005k1j97ak94\007'
+    instrument_link = f'\033]8;;https://example.org/hub/instruments/{instrument_mfid}\007'
     assert output.count(project_link) == 1
     assert output.count(instrument_link) == 1
 
@@ -841,7 +816,7 @@ def test_generic_get_dispatches_project_detail(monkeypatch):
             'resource_type': 'project',
             'project_id': 'project-one',
         },
-        'https://example.org/explore/project-one/',
+        f'https://example.org/hub/projects/{MFID}',
     ),
     (
         {
@@ -849,21 +824,38 @@ def test_generic_get_dispatches_project_detail(monkeypatch):
             'resource_type': 'instrument',
             'instrument_id': 'xrd-one',
         },
-        f'https://example.org/explore/instrument/{MFID}',
+        f'https://example.org/hub/instruments/{MFID}',
     ),
 ])
-def test_open_uses_resource_specific_explorer_route(
+def test_open_uses_resource_specific_hub_route(
         resource, expected, monkeypatch, capsys):
     from crucible.config import config
 
     client = SimpleNamespace(get=MagicMock(return_value=resource))
     monkeypatch.setattr(config, '_client', client)
     monkeypatch.setitem(
-        config._data, 'graph_explorer_url', 'https://example.org/explore')
+        config._data, 'hub_url', 'https://example.org/hub')
 
     open_cli.execute(SimpleNamespace(mfid=MFID, print_url=True))
 
     assert capsys.readouterr().out.strip() == expected
+
+
+def test_open_without_an_id_opens_the_hub_home(monkeypatch, capsys):
+    from crucible.config import config
+    monkeypatch.setitem(config._data, 'hub_url', 'https://example.org/hub')
+
+    open_cli.execute(SimpleNamespace(mfid=None, print_url=True))
+
+    assert capsys.readouterr().out.strip() == 'https://example.org/hub/'
+
+
+def test_dataset_links_need_no_project():
+    from crucible.cli.helpers import explorer_url
+    from crucible.config import config
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setitem(config._data, 'hub_url', 'https://example.org/hub')
+        assert explorer_url(MFID, None, 'sample') == f'https://example.org/hub/samples/{MFID}'
 
 
 def test_dataset_detail_falls_back_to_flat_reference_fields(capsys):

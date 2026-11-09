@@ -31,11 +31,6 @@ def test_include_members_is_canonical_without_warning():
     assert args.include_members is True
 
 
-def test_members_alias_warns_and_remains_supported():
-    with pytest.warns(DeprecationWarning, match='--include-members'):
-        args = parse_project_get('example-project', '--members')
-
-    assert args.include_members is True
 
 
 def parse_project_command(register, command, *arguments):
@@ -112,6 +107,30 @@ def test_add_user_dispatches_named_role_and_username(monkeypatch):
         username='alice',
         role='editor',
     )
+
+
+def add_user_args(**overrides):
+    values = dict(project_id='example-project', user=None, role=None, orcid=None,
+                  email=None, username=None, debug=False, json=False)
+    return SimpleNamespace(**{**values, **overrides})
+
+
+@pytest.mark.parametrize('identifier', ['0tkn2knjast3h0008nyq9zps2c', '0000-0001-6402-3752'])
+def test_add_user_sends_canonical_identifiers(monkeypatch, identifier):
+    client = SimpleNamespace(projects=SimpleNamespace(add_user=MagicMock(return_value=[])))
+    monkeypatch.setattr('crucible.config.get_client', lambda: client)
+
+    _execute_add_user(add_user_args(user=identifier))
+
+    client.projects.add_user.assert_called_once_with(
+        user_unique_id=identifier,
+        project_id='example-project',
+        email=None,
+        username=None,
+        role=None,
+    )
+
+
 
 
 def test_add_user_duplicate_conflict_uses_shared_error_formatter(monkeypatch, capsys):

@@ -388,9 +388,12 @@ def test_pending_summary_is_silent_when_nothing_waits(capsys):
     assert capsys.readouterr().out == ''
 
 
+_ADMIN_USER_SUBS = {'user set-role', 'user list-keys', 'user revoke-keys'}
+
+
 @pytest.mark.parametrize('can_manage, can_elevate, hidden', [
-    (False, False, {'sa', 'service-account'}),
-    (True, False, set()),
+    (False, False, {'sa', 'service-account'} | _ADMIN_USER_SUBS),
+    (True, False, _ADMIN_USER_SUBS),
     (False, True, set()),
 ])
 def test_admin_only_commands_are_hidden_from_completion(can_manage, can_elevate,

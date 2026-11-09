@@ -2,7 +2,7 @@
 
 from typing import TYPE_CHECKING, Dict, List, Optional
 
-from ..utils.deprecation import _deprecated
+from ..utils.deprecation import _removed
 
 if TYPE_CHECKING:
     from ..models import (
@@ -21,21 +21,22 @@ class AccessControlMixin:
     resources with human-readable slugs override to resolve them.
     """
 
-    @_deprecated("list_access()")
-    def get_access_groups(self, mfid: str) -> List[str]:
-        """Return the names of access groups granted access to a resource."""
-        groups = self._request('get', f'/resources/{self._resource_mfid(mfid)}/access_groups')
-        return [group['group_name'] for group in groups]
+    @_removed("use list_access() instead.")
+    def get_access_groups(self, *args, **kwargs):
+        """Removed in 4.0.0: use list_access() instead."""
 
-    @_deprecated("set_access()")
-    def add_access_group(self, mfid: str, group_name: str,
-                         read: bool = True, write: bool = False) -> Dict:
-        """Grant an access group read and optionally write access."""
-        params = {'group_name': group_name, 'read': read, 'write': write}
-        return self._request('post', f'/resources/{self._resource_mfid(mfid)}/access_groups', params=params)
+    @_removed("use set_access() instead.")
+    def add_access_group(self, *args, **kwargs):
+        """Removed in 4.0.0: use set_access() instead."""
 
     def list_access(self, mfid: str) -> List['AccessGrant']:
-        """List every principal with access to a resource."""
+        """List every principal with access to a resource.
+
+        Readable by anyone with a role on the resource (not through public
+        access alone); the resource's ``capabilities.can_view_access`` says
+        whether you can. Each grant's ``capabilities`` says whether you may
+        remove it or change its role, and to which roles.
+        """
         from ..models import AccessGrant
 
         raw = self._request('get', f'/resources/{self._resource_mfid(mfid)}/access')
@@ -73,20 +74,17 @@ class AccessControlMixin:
         """Revoke public access to a resource."""
         return self._request('delete', f'/resources/{self._resource_mfid(mfid)}/access/public')
 
-    @_deprecated("set_public()")
-    def publish(self, mfid: str) -> 'AccessGrant':
-        """Grant public viewer access to a resource."""
-        return self.set_public(mfid)
+    @_removed("use set_public() instead.")
+    def publish(self, *args, **kwargs):
+        """Removed in 4.0.0: use set_public() instead."""
 
-    @_deprecated("set_private()")
-    def unpublish(self, mfid: str) -> Dict:
-        """Revoke public access to a resource."""
-        return self.set_private(mfid)
+    @_removed("use set_private() instead.")
+    def unpublish(self, *args, **kwargs):
+        """Removed in 4.0.0: use set_private() instead."""
 
-    @_deprecated("set_private()")
-    def unset_public(self, mfid: str) -> Dict:
-        """Revoke public access to a resource."""
-        return self.set_private(mfid)
+    @_removed("use set_private() instead.")
+    def unset_public(self, *args, **kwargs):
+        """Removed in 4.0.0: use set_private() instead."""
 
 
 class OwnershipMixin:

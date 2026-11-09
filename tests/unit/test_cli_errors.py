@@ -143,3 +143,14 @@ def test_no_color_environment_disables_ansi(monkeypatch):
         assert '\033]8;;https://example.invalid\007MFID\033]8;;\007' == rendered
     finally:
         term._COLOR_ENABLED = original
+
+
+def test_hub_session_required_points_to_the_hub_not_elevation():
+    error = http_error(403, 'Forbidden', {'detail': {
+        'code': 'hub_session_required',
+        'message': 'Changing a human administrator needs a Hub session, not an API key'}})
+
+    rendered = json.dumps(format_cli_error('changing a role', error))
+
+    assert 'Hub' in rendered
+    assert '--elevate' not in rendered

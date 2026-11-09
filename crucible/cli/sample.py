@@ -14,7 +14,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 from . import term
-from .helpers import add_limit_arguments, count_label, print_more_hint, resolve_limit, sort_like, page_kwargs
+from .helpers import RemovedOptionAction, add_limit_arguments, count_label, print_more_hint, resolve_limit, sort_like, page_kwargs
 
 try:
     import argcomplete
@@ -203,7 +203,7 @@ Examples:
         help='Sample name. If not provided, will prompt interactively.'
     )
 
-    from .helpers import DeprecatedAliasAction
+    from .helpers import RemovedOptionAction
     parser.add_argument(
         '--project-id', '-p',
         required=False,
@@ -220,8 +220,8 @@ Examples:
     )
     parser.add_argument(
         '-pid',
-        action=DeprecatedAliasAction,
-        deprecated_options={'-pid'},
+        action=RemovedOptionAction,
+        removed_options={'-pid'},
         replacement='--project-id',
         dest='project_id',
         default=argparse.SUPPRESS,
@@ -245,8 +245,8 @@ Examples:
     )
     parser.add_argument(
         '--sample-type',
-        action=DeprecatedAliasAction,
-        deprecated_options={'--sample-type'},
+        action=RemovedOptionAction,
+        removed_options={'--sample-type'},
         replacement='--type',
         dest='sample_type',
         default=argparse.SUPPRESS,
@@ -346,8 +346,10 @@ Use `sample reassign-project` or `sample transfer-ownership` to change project o
     )
 
     group = parser.add_mutually_exclusive_group()
-    group.add_argument('--public', dest='public', action='store_true', default=None, help=argparse.SUPPRESS)
-    group.add_argument('--no-public', dest='public', action='store_false', help=argparse.SUPPRESS)
+    group.add_argument('--public', dest='public', action=RemovedOptionAction, nargs=0, default=None,
+                       replacement="'sample set-public'")
+    group.add_argument('--no-public', dest='public', action=RemovedOptionAction, nargs=0,
+                       replacement="'sample set-private'")
 
     parser.set_defaults(func=_execute_update, public=None)
 
@@ -1258,7 +1260,7 @@ Examples:
 """,
     )
     parser.add_argument('query', metavar='QUERY', help='Search term (min 3 chars)')
-    from .helpers import DeprecatedAliasAction
+    from .helpers import RemovedOptionAction
     parser.add_argument(
         '--project-id', '-p',
         dest='project_id',
@@ -1268,8 +1270,8 @@ Examples:
     )
     parser.add_argument(
         '--project', '-pid',
-        action=DeprecatedAliasAction,
-        deprecated_options={'--project', '-pid'},
+        action=RemovedOptionAction,
+        removed_options={'--project', '-pid'},
         replacement='--project-id',
         dest='project_id',
         default=argparse.SUPPRESS,

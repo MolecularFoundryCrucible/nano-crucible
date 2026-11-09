@@ -56,7 +56,7 @@ ds = client.datasets.get("0tkn2knjast3h0008nyq9zps2c", include_metadata=True)
 Full-text search across all scientific metadata in your accessible datasets:
 
 ```python
-results = client.datasets.search_scientific_metadata("temperature", limit=20)
+results = client.datasets.search_metadata("temperature", limit=20)
 ```
 
 The search is ranked and operates across all key names and string values in the metadata store.

@@ -12,7 +12,7 @@ import argparse
 import sys
 import logging
 from . import term
-from .helpers import (DeprecatedAliasAction, add_limit_arguments, count_label,
+from .helpers import (RemovedOptionAction, add_limit_arguments, count_label,
                       print_more_hint, resolve_limit, page_kwargs)
 from ..constants import (JOIN_REQUEST_SCOPES, JOIN_REQUEST_SORTS,
                          JOIN_REQUEST_STATUSES, PROJECT_MEMBER_ROLES,
@@ -163,7 +163,7 @@ Examples:
     parser.add_argument('--project', metavar='PROJECT', default=None,
                         help='Only requests to this project (ID or MFID)')
     parser.add_argument('--group', dest='project', metavar='PROJECT', default=argparse.SUPPRESS,
-                        action=DeprecatedAliasAction, deprecated_options={'--group'},
+                        action=RemovedOptionAction, removed_options={'--group'},
                         replacement='--project', help=argparse.SUPPRESS)
     parser.add_argument('--status', choices=_STATUS_CHOICES, action='append', default=None,
                         help='Filter by status; repeatable (default: pending)')

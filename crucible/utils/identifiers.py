@@ -80,7 +80,11 @@ def classify_slug_reference(value: str, resource_name: str) -> str:
 
 
 def classify_user_reference(value: str) -> Tuple[str, str]:
-    """Classify and normalize a user reference for canonical client dispatch."""
+    """Classify and normalize a user reference for canonical client dispatch.
+
+    A value that is not an email, ORCID, MFID, or valid username is returned
+    as ``reference`` for the API to resolve, since unique_id is opaque.
+    """
     if not isinstance(value, str) or not value:
         raise ValueError("User reference must be a non-empty string.")
     if '@' in value:
@@ -90,11 +94,8 @@ def classify_user_reference(value: str) -> Tuple[str, str]:
 
     try:
         return 'username', validate_username(value)
-    except ValueError as error:
-        raise ValueError(
-            "Invalid user reference. Pass an ORCID, user MFID, email, "
-            "or a valid 3-to-24-character username."
-        ) from error
+    except ValueError:
+        return 'reference', value
 
 
 def require_canonical_identifier(record: Dict, resource_name: str) -> Dict:

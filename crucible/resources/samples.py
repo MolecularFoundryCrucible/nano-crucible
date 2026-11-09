@@ -12,7 +12,7 @@ from typing import Any, Optional, List, Dict, Sequence, Union
 from .base import BaseResource, ListResult
 from .capabilities import AccessControlMixin, OwnershipMixin, ProjectAssignmentMixin
 from ..constants import DEFAULT_LIMIT, SAMPLE_FACET_FIELDS, VISIBILITIES
-from ..utils.deprecation import _deprecated, _deprecated_parameter
+from ..utils.deprecation import _removed, _removed_parameter
 from ..utils.identifiers import is_mfid, require_canonical_identifier
 
 logger = logging.getLogger(__name__)
@@ -28,7 +28,7 @@ SAMPLE_LIST_PARAMS = frozenset({
     'owner_id', 'owner_id_is_null', 'owner_orcid', 'project_id',
     'project_mfid', 'project_mfid_is_null', 'project_scope', 'public',
     'sample_name', 'sample_type', 'sample_type_is_null', 'sort',
-    'timestamp', 'unique_id', 'visibility',
+    'timestamp', 'mfid', 'visibility',
 })
 
 # Query parameters accepted by GET /samples/facets.
@@ -58,7 +58,7 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
         from ..models import Sample
         return Sample.model_validate(raw).model_dump()
 
-    @_deprecated_parameter('sample_id', 'sample_mfid')
+    @_removed_parameter('sample_id', 'sample_mfid')
     def get(self, sample_mfid: str, include_links: bool = False,
             include_metadata: bool = False, include_owner: bool = True,
             include_datasets: bool = True) -> Dict:
@@ -68,7 +68,7 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
             sample_mfid (str): Sample MFID
             include_links (bool): Whether to include immediate parent/child/associated links
             include_metadata (bool): Whether to include scientific metadata
-            include_owner (bool): Resolve owner_orcid into a public-safe user object (default: True)
+            include_owner (bool): Resolve the owner into a public-safe user object (default: True)
             include_datasets (bool): Include deprecated embedded dataset records (default: True). Set False and use include_links or client.datasets.list(sample_mfid=...) instead.
 
         Returns:
@@ -103,9 +103,9 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
             return None
         return self._parse(require_canonical_identifier(raw, 'sample'))
 
-    @_deprecated_parameter('dataset_id', 'dataset_mfid')
-    @_deprecated_parameter('parent_id', 'parent_mfid')
-    @_deprecated_parameter('parent_sample_mfid', 'parent_mfid')
+    @_removed_parameter('dataset_id', 'dataset_mfid')
+    @_removed_parameter('parent_id', 'parent_mfid')
+    @_removed_parameter('parent_sample_mfid', 'parent_mfid')
     def list(self, dataset_mfid: Optional[str] = None,
              parent_mfid: Optional[str] = None,
              include_metadata: bool = False, include_links: bool = False,
@@ -126,15 +126,18 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
              modification_time_gte: Optional[Union[str, date, datetime]] = None,
              modification_time_lte: Optional[Union[str, date, datetime]] = None,
              cursor: Optional[str] = None,
+             mfid: Optional[Union[str, Sequence[str]]] = None,
              **kwargs: Any) -> List[Dict]:
         """List samples with optional filtering and automatic pagination.
 
         Args:
+            mfid (str or list, optional): Only these sample MFIDs (up to 100).
+                Unreadable, missing, or pending-deletion MFIDs are left out.
             dataset_mfid (str, optional): Get samples linked to this dataset MFID
             parent_mfid (str, optional): Get child samples from this parent MFID
             include_metadata (bool): Include scientific metadata in results
             include_links (bool): Include linked resources (parents, children, associated) per sample
-            include_owner (bool): Resolve owner_orcid into a public-safe user object per sample
+            include_owner (bool): Resolve the owner into a public-safe user object per sample
             limit (int): Maximum total results to return (default: 100). Larger
                          requests are handled transparently by following the
                          server's keyset cursor. Pass None to fetch all matches.
@@ -181,6 +184,9 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
         if parent_mfid and dataset_mfid is None and project_params:
             raise ValueError("Project scope is supported only by the top-level sample list")
         collection_params = {}
+        self._apply_mfid_filter(params, mfid)
+        if 'mfid' in params:
+            collection_params['mfid'] = params.pop('mfid')
         collection_params.update(self._ordering_params(sort, direction))
         collection_params.update(self._affiliation_params(affiliation))
         collection_params.update(self._choice_params(
@@ -194,7 +200,7 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
             collection_params['include_total'] = include_total
         if parent_mfid and dataset_mfid is None and collection_params:
             raise ValueError(
-                "Ordering, visibility, affiliation, and time filters are "
+                "Ordering, visibility, affiliation, time, and mfid filters are "
                 "supported only by the top-level sample list")
         params.update(selectors)
         params.update(project_params)
@@ -213,12 +219,11 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
             endpoint = "/samples"
             self._validate_filter_params(params, SAMPLE_LIST_PARAMS, endpoint)
             if offset:
-                import warnings
-                warnings.warn(
-                    "'offset' is ignored by /samples, which now uses keyset "
-                    "pagination; results start from the newest sample.",
-                    DeprecationWarning, stacklevel=2,
-                )
+                from ..errors import RemovedError
+                from ..utils.deprecation import removed_message
+                raise RemovedError(removed_message(
+                    "The 'offset' argument of samples.list()",
+                    "/samples uses keyset pagination; pass the previous result's next_cursor as cursor instead."))
         raw = self._paginate(endpoint, params, limit, offset, cursor=cursor)
         return ListResult.like(raw, [self._parse(s) for s in raw])
 
@@ -252,6 +257,7 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
               project_scope: Optional[str] = None, **kwargs) -> int:
         """Return the total number of samples matching the given filters without fetching items."""
         params = {k: v for k, v in kwargs.items() if v is not None}
+        self._apply_mfid_filter(params, params.pop('mfid', None))
         params.update(self._project_scope_params(
             project_id, project_mfid, project_scope))
         self._normalize_time_filters(params)
@@ -259,8 +265,8 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
         result = self._request('get', '/samples', params={**params, 'limit': 1})
         return result['total']
 
-    @_deprecated_parameter('sample_id', 'child_mfid')
-    @_deprecated_parameter('sample_mfid', 'child_mfid')
+    @_removed_parameter('sample_id', 'child_mfid')
+    @_removed_parameter('sample_mfid', 'child_mfid')
     def list_parents(self, child_mfid: str, limit: int = DEFAULT_LIMIT,
                      offset: int = 0, relationship_type: Optional[str] = None,
                      cursor: Optional[str] = None,
@@ -285,8 +291,8 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
             params['relationship_type'] = relationship_type
         return self._paginate(f"/samples/{child_mfid}/parents", params, limit, offset, cursor=cursor)
 
-    @_deprecated_parameter('sample_id', 'parent_mfid')
-    @_deprecated_parameter('sample_mfid', 'parent_mfid')
+    @_removed_parameter('sample_id', 'parent_mfid')
+    @_removed_parameter('sample_mfid', 'parent_mfid')
     def list_children(self, parent_mfid: str, limit: int = DEFAULT_LIMIT,
                       offset: int = 0, relationship_type: Optional[str] = None,
                       cursor: Optional[str] = None,
@@ -331,8 +337,9 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
         Returns:
             Dict: Created sample record.
         """
-        import warnings
         from crucible.models import Sample
+        from ..errors import RemovedError
+        from ..utils.deprecation import removed_message
 
         if sample is None or not isinstance(sample, Sample):
             if sample is not None:
@@ -342,15 +349,9 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
                     "Use: samples.create(Sample(sample_name=..., project_id=...))"
                 )
             if kwargs:
-                warnings.warn(
-                    "Passing keyword arguments to samples.create() is deprecated. "
-                    "Pass a Sample model instead: samples.create(Sample(...))",
-                    DeprecationWarning, stacklevel=2
-                )
-                # strip keys the model doesn't know
-                _dropped = {'date_created', 'creation_date', 'owner_id', 'owner_user_id'}
-                kwargs = {k: v for k, v in kwargs.items() if k not in _dropped}
-                sample = Sample(**kwargs)
+                raise RemovedError(removed_message(
+                    "Passing keyword arguments to samples.create()",
+                    "pass a Sample model instead: samples.create(Sample(...))."))
             else:
                 raise ValueError("Pass a Sample model: samples.create(Sample(...))")
 
@@ -360,15 +361,10 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
             if v is not None
         }
 
-        if sample_info.get('owner') is not None and sample_info.get('owner_orcid') is not None:
-            raise ValueError("Pass either 'owner' or 'owner_orcid', not both.")
         if sample_info.get('owner_orcid') is not None:
-            warnings.warn(
-                "Sample.owner_orcid is deprecated for creation; use Sample.owner "
-                "with an ORCID, MFID, username, or email instead.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
+            raise RemovedError(removed_message(
+                "Setting Sample.owner_orcid when creating a sample",
+                "set Sample.owner to an ORCID, MFID, username, or email instead."))
         if sample_info.get('owner') is not None and not isinstance(sample_info['owner'], str):
             raise ValueError("Sample.owner must be a string identifier when creating a sample.")
 
@@ -386,18 +382,13 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
 
         return new_samp
 
-    @_deprecated_parameter('unique_id', 'sample_mfid')
+    @_removed_parameter('unique_id', 'sample_mfid')
     def update(self, sample_mfid: str, sample_name: Optional[str] = None,
                description: Optional[str] = None, timestamp: Optional[str] = None,
-               owner_orcid: Optional[str] = None,
-               project_id: Optional[str] = None, sample_type: Optional[str] = None,
-               public: Optional[bool] = None,
+               *, sample_type: Optional[str] = None,
                parents: Optional[List[Dict]] = None,
                children: Optional[List[Dict]] = None,
-               # deprecated aliases (creation_time/modification_time are server-assigned)
-               date_created: Optional[str] = None, creation_date: Optional[str] = None,
-               owner_id: Optional[int] = None,
-               owner_user_id: Optional[int] = None) -> Dict:
+               **removed) -> Dict:
         """Update an existing sample.
 
         Args:
@@ -406,57 +397,29 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
             sample_type (str, optional): Category of sample (for filtering)
             description (str, optional): Sample description
             timestamp (str, optional): User-defined timestamp
-            owner_orcid (str, optional): Deprecated - the API no longer accepts this
-                field here; use client.samples.transfer_ownership() instead.
-            public (bool, optional): Deprecated - use set_public() or set_private()
-            project_id (str, optional): Deprecated - the API no longer accepts this
-                field here; use client.samples.reassign_project() instead.
             parents (List[Dict], optional): Parent samples to link
             children (List[Dict], optional): Child samples to link
 
         Returns:
             Dict: Updated sample object
         """
-        import warnings
-        if date_created is not None:
-            warnings.warn(
-                "Parameter 'date_created' is deprecated and ignored; "
-                "creation_time is now assigned server-side.",
-                DeprecationWarning, stacklevel=2
-            )
-        if creation_date is not None:
-            warnings.warn(
-                "Parameter 'creation_date' is deprecated and ignored; "
-                "creation_time is now assigned server-side.",
-                DeprecationWarning, stacklevel=2
-            )
-        if owner_id is not None or owner_user_id is not None:
-            warnings.warn(
-                "Parameters 'owner_id'/'owner_user_id' are deprecated and ignored; "
-                "use 'owner_orcid' instead.",
-                DeprecationWarning, stacklevel=2
-            )
-        if owner_orcid is not None:
-            warnings.warn(
-                "Parameter 'owner_orcid' is no longer accepted by PATCH /samples/{id} "
-                "and is ignored; use client.samples.transfer_ownership() instead.",
-                DeprecationWarning, stacklevel=2
-            )
-        if project_id is not None:
-            warnings.warn(
-                "Parameter 'project_id' is no longer accepted by PATCH /samples/{id} "
-                "and is ignored; use client.samples.reassign_project() instead.",
-                DeprecationWarning, stacklevel=2
-            )
-        if public is not None:
-            warnings.warn(
-                "Parameter 'public' is deprecated; use set_public() or set_private() "
-                "instead.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-            if not isinstance(public, bool):
-                raise ValueError("public must be true, false, or None.")
+        if removed:
+            from ..errors import RemovedError
+            from ..utils.deprecation import removed_message
+            replacements = {
+                'owner_orcid': 'use client.samples.transfer_ownership() instead.',
+                'owner_id': 'use client.samples.transfer_ownership() instead.',
+                'owner_user_id': 'use client.samples.transfer_ownership() instead.',
+                'project_id': 'use client.samples.reassign_project() instead.',
+                'public': 'use set_public() or set_private() instead.',
+                'date_created': 'creation_time is assigned by the server; drop it.',
+                'creation_date': 'creation_time is assigned by the server; drop it.',
+            }
+            name = next(iter(removed))
+            if name not in replacements:
+                raise TypeError(f"samples.update() got an unexpected keyword argument '{name}'")
+            raise RemovedError(removed_message(f"The '{name}' argument of samples.update()",
+                                               replacements[name]))
 
         sample_info = {
             "sample_name": sample_name,
@@ -483,11 +446,6 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
             child_sample_mfid = chd['unique_id']
             self._request(
                 'post', f"/samples/{parent_sample_mfid}/children/{child_sample_mfid}")
-
-        if public is not None:
-            operation = self.set_public if public else self.set_private
-            operation(sample_mfid)
-            upd_samp['public'] = public
 
         return upd_samp
 
@@ -519,43 +477,30 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
         """
         return self._client.datasets.unlink_sample(dataset_mfid, sample_mfid)
 
-    @_deprecated("client.samples.link_dataset()")
-    @_deprecated_parameter('sample_id', 'sample_mfid')
-    @_deprecated_parameter('dataset_id', 'dataset_mfid')
-    def add_dataset(self, sample_mfid: str, dataset_mfid: str) -> Dict:
-        """Deprecated: use link_dataset(sample_mfid, dataset_mfid) instead."""
-        return self.link_dataset(sample_mfid, dataset_mfid)
+    @_removed("use client.samples.link_dataset() instead.")
+    def add_dataset(self, *args, **kwargs):
+        """Removed in 4.0.0: use client.samples.link_dataset() instead."""
 
-    @_deprecated("client.samples.unlink_dataset()")
-    @_deprecated_parameter('sample_id', 'sample_mfid')
-    @_deprecated_parameter('dataset_id', 'dataset_mfid')
-    def remove_dataset(self, sample_mfid: str, dataset_mfid: str) -> Dict:
-        """Deprecated: use unlink_dataset(sample_mfid, dataset_mfid) instead."""
-        return self.unlink_dataset(sample_mfid, dataset_mfid)
+    @_removed("use client.samples.unlink_dataset() instead.")
+    def remove_dataset(self, *args, **kwargs):
+        """Removed in 4.0.0: use client.samples.unlink_dataset() instead."""
 
-    @_deprecated("client.samples.link_dataset()")
-    def add_to_dataset(self, dataset_id: str, sample_id: str) -> Dict:
-        """Deprecated: use link_dataset(sample_mfid, dataset_mfid) instead."""
-        return self.link_dataset(sample_id, dataset_id)
+    @_removed("use client.samples.link_dataset() instead.")
+    def add_to_dataset(self, *args, **kwargs):
+        """Removed in 4.0.0: use client.samples.link_dataset() instead."""
 
-    @_deprecated("client.samples.unlink_dataset()")
-    def remove_from_dataset(self, dataset_id: str, sample_id: str) -> Dict:
-        """Deprecated: use unlink_dataset(sample_mfid, dataset_mfid) instead."""
-        return self.unlink_dataset(sample_id, dataset_id)
+    @_removed("use client.samples.unlink_dataset() instead.")
+    def remove_from_dataset(self, *args, **kwargs):
+        """Removed in 4.0.0: use client.samples.unlink_dataset() instead."""
 
-    @_deprecated("client.samples.unlink()")
-    @_deprecated_parameter('parent_id', 'parent_mfid')
-    @_deprecated_parameter('parent_sample_mfid', 'parent_mfid')
-    @_deprecated_parameter('child_id', 'child_mfid')
-    @_deprecated_parameter('child_sample_mfid', 'child_mfid')
-    def remove_child(self, parent_mfid: str, child_mfid: str) -> Dict:
-        """Deprecated: use unlink(parent_mfid, child_mfid) instead."""
-        return self.unlink(parent_mfid, child_mfid)
+    @_removed("use client.samples.unlink() instead.")
+    def remove_child(self, *args, **kwargs):
+        """Removed in 4.0.0: use client.samples.unlink() instead."""
 
-    @_deprecated_parameter('parent_id', 'parent_mfid')
-    @_deprecated_parameter('parent_sample_mfid', 'parent_mfid')
-    @_deprecated_parameter('child_id', 'child_mfid')
-    @_deprecated_parameter('child_sample_mfid', 'child_mfid')
+    @_removed_parameter('parent_id', 'parent_mfid')
+    @_removed_parameter('parent_sample_mfid', 'parent_mfid')
+    @_removed_parameter('child_id', 'child_mfid')
+    @_removed_parameter('child_sample_mfid', 'child_mfid')
     def link(self, parent_mfid: str, child_mfid: str,
              relationship_type: Optional[str] = None) -> Dict:
         """Link two samples with a parent-child relationship.
@@ -616,7 +561,7 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
         result = self._request('get', '/samples/search', params=params)
         return result.get('items', result) if isinstance(result, dict) else result
 
-    @_deprecated_parameter('sample_id', 'sample_mfid')
+    @_removed_parameter('sample_id', 'sample_mfid')
     def graph(self, sample_mfid: str, recursive: bool = False,
               as_networkx: bool = False) -> Any:
         """Return the graph of entities connected to this sample.
@@ -634,7 +579,7 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
         return self._client.graphs.get(
             sample_mfid, recursive=recursive, as_networkx=as_networkx)
 
-    @_deprecated_parameter('sample_id', 'sample_mfid')
+    @_removed_parameter('sample_id', 'sample_mfid')
     def download(self, sample_mfid: str,
                  output_dir: str = 'crucible-downloads') -> List[str]:
         """Save the sample record as record.json.

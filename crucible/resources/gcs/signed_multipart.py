@@ -36,10 +36,6 @@ _EXPIRY_MARGIN = 30
 Progress = Callable[[str, int, int], None]
 
 
-class SignedMultipartUnavailable(Exception):
-    """Signed multipart uploads cannot be used: switched off, or an empty file."""
-
-
 class FileExistsWithDifferentContent(RuntimeError):
     """The dataset already has a file with this name but other content.
 
@@ -256,8 +252,12 @@ class _Upload:
         except requests.HTTPError as error:
             status = getattr(error.response, 'status_code', None)
             if _disabled(error):
-                raise SignedMultipartUnavailable(
-                    "Signed multipart uploads are switched off on this server.") from error
+                raise RuntimeError(
+                    "Uploads are switched off on this server for now; try again later.") from error
+            if status == 422 and self.size == 0:
+                raise RuntimeError(
+                    f"{self.filename} is empty, and this server does not accept empty "
+                    "uploads yet.") from error
             if status == 409 and _detail_code(error) == 'filename_exists':
                 detail = _detail_payload(error)
                 raise _FilenameTaken(detail['file_mfid'], detail.get('etag')) from error
@@ -296,6 +296,8 @@ class _Upload:
 
     def _upload_missing_parts(self):
         count = len(self.part_checksums)
+        if count == 0:
+            return
         acknowledged = self._acknowledged_parts()
         for number in acknowledged:
             self._sent[number] = self._part_length(number)
@@ -381,13 +383,10 @@ def upload_file_signed_multipart(client, dsid: str, file_path: str,
         Tuple[Dict, bool]: (AssociatedFileRead, was_existing).
 
     Raises:
-        SignedMultipartUnavailable: The server has signed uploads switched off,
-            or the file is empty.
+        RuntimeError: The server has uploads switched off.
         FileExistsWithDifferentContent: The filename exists with other content
             and replace is False.
     """
-    if os.path.getsize(file_path) == 0:
-        raise SignedMultipartUnavailable("Empty files cannot use signed multipart uploads.")
     upload = _Upload(client, dsid, file_path, os.path.basename(file_path),
                      max_workers or PART_WORKERS, progress, replace=replace)
     return upload.run()
@@ -412,8 +411,6 @@ def replace_file_signed_multipart(client, file_mfid: str, file_path: str,
         Tuple[Dict, bool]: (the updated AssociatedFileRead, unchanged), where
         unchanged is True when the file already held this content.
     """
-    if os.path.getsize(file_path) == 0:
-        raise ValueError("A file cannot be replaced with empty content.")
     record = client.files.get(file_mfid)
     if (record.get('storage_backend') or 'gcs') != 'gcs':
         raise ValueError("Only files stored on GCS can be replaced; edit cataloged "

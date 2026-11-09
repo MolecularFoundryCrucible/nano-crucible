@@ -16,7 +16,7 @@
 | `session_name` | Optional tag grouping datasets collected in the same session | create, update |
 | `timestamp` | When the data was collected (ISO 8601 format) | create, update |
 | `public` | Whether the dataset is publicly accessible (default: `False`) | create, update |
-| `owner_orcid` | Canonical owner identifier returned by the API; deprecated as a creation input | read; deprecated for create |
+| `owner_orcid` | Canonical owner identifier returned by the API; read only; set `owner` when creating | read |
 | `owner` | Flexible owner identifier on create; public-safe user record on singleton reads | create with an ORCID, MFID, username, or email; expanded by default on `get()` |
 | `unique_id` | System-assigned MFID identifier | server-assigned |
 | `size` | Total file size in bytes | server-assigned |
@@ -261,17 +261,11 @@ Files are deduplicated by SHA-256 hash. If you add the same file twice, the clie
 
 ### How uploads reach storage
 
-`add_file()` and `create()` upload through the API's signed multipart flow: the client checksums the file, the API signs one URL per 64 MiB part, eight parts upload in parallel straight to storage, and the API verifies and assembles the object. Parts that fail are retried, expired URLs are renewed, and a failed upload is cancelled so it leaves nothing behind.
+`add_file()` and `create()` upload through the API's signed multipart flow: the client checksums the file, the API signs one URL per part (64 MiB), parts upload in parallel straight to storage, and the API verifies and assembles the object. Parts that fail are retried, expired URLs are renewed, and a failed upload is cancelled so it leaves nothing behind. Empty files skip the part step. No storage credentials or SDK are needed, so the same client works with any storage the API is configured for.
 
-The `upload_protocol` setting chooses the route:
+`upload_max_workers` (default 8) sets how many parts upload at once; `add_file(max_workers=...)` overrides it for one call. `--no-ingest` (or `client.request_ingestion = False`) uploads without requesting ingestion. Pass `progress=callback` to `add_file()`, or set `client.upload_progress`, to receive `callback(filename, bytes_done, total)` while parts upload; the CLI uses it to show a progress line.
 
-| Value | Behavior |
-| --- | --- |
-| `auto` (default) | Signed multipart uploads, falling back to the legacy token-based route when the server has them switched off |
-| `signed` | Signed multipart uploads only; fails when the server has them switched off |
-| `legacy` | The legacy token-based route only |
-
-Set it with `crucible config set upload_protocol legacy`, the `CRUCIBLE_UPLOAD_PROTOCOL` environment variable, `--upload-protocol` on `dataset create` and `dataset add-file`, `client.upload_protocol`, or `add_file(..., upload_protocol="legacy")`. `--no-ingest` (or `client.request_ingestion = False`) uploads without requesting ingestion. `multipart=False` keeps using the sequential resumable route. Pass `progress=callback` to `add_file()`, or set `client.upload_progress`, to receive `callback(filename, bytes_done, total)` while parts upload; the CLI uses it to show a progress line.
+Every upload uses signed multipart. The `upload_protocol` and `upload_chunk_size_mb` settings, `--upload-protocol`, and `add_file()`'s `multipart`, `chunk_size_mb`, and `upload_protocol` arguments were removed in 4.0.0.
 
 If no ingestion class exists for your data type, reach out on [Discord](https://discord.gg/Wrepphsgbx) or contribute to the [crucible-ingestion](https://github.com/MolecularFoundryCrucible/crucible-ingestion) repository.
 
@@ -283,29 +277,39 @@ Sometimes a file isn't worth (or isn't possible to) upload to GCS - it lives on 
 from crucible.models import AssociatedFile
 
 client.datasets.add_remote_file(dataset_mfid, AssociatedFile(
-    filename="raw_data.tar",
+    filename="raw/run_01.tar",
+    size=52428800,
+    sha256_hash="9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
     storage_backend="globus",
     storage_path="https://app.globus.org/file-manager?origin_id=...&origin_path=...",
     access_note="request access via NERSC allocation X",
 ))
 ```
 
-`storage_path` is optional - catalog the file now and set its location later with `client.files.update(mfid, storage_path=...)`.
+`size` and `sha256_hash` are required. `storage_path` is optional - catalog the file now and set its location later with `client.files.update(mfid, storage_path=...)`.
+
+The filename is the file's identity in its dataset, and clients rebuild datasets on disk from it, so it must be a canonical relative POSIX path such as `freq_001/kpoints.json`: no leading, trailing, or repeated `/`, no `.` or `..` components. The server rejects other names and does not normalize them. Adding the same filename again with the same hash, size, and backend returns the existing record; different content is a conflict unless you pass `replace=True`, which updates the existing record in place. A cataloged file's filename and its GCS or non-GCS kind cannot change later.
+
+For files on a filesystem you can read, `AssociatedFile.from_local_files()` hashes them and names each by its path relative to their common folder:
+
+```python
+files = AssociatedFile.from_local_files(
+    ["/scratch/phonons/freq_001/kpoints.json", "/scratch/phonons/freq_002/kpoints.json"],
+    storage_backend="nersc-perlmutter",
+)
+# filenames: freq_001/kpoints.json, freq_002/kpoints.json
+```
 
 You can also mix remote and uploaded files in one `create()` call:
 
 ```python
 result = client.datasets.create(
     dataset=Dataset(dataset_name="Mixed dataset", project_id="my-project"),
-    files=[
-        "local_results.csv",                                     # uploaded to GCS
-        AssociatedFile(filename="raw.tar", storage_backend="globus",
-                       storage_path="https://app.globus.org/..."),  # cataloged only
-    ],
+    files=["local_results.csv", *files],   # the str path is uploaded, the rest cataloged
 )
 ```
 
-A plain local path with `upload_files=False` is cataloged too, using its resolved absolute path and `storage_backend="local"`:
+Plain local paths with `upload_files=False` are cataloged the same way, with `storage_backend="local"`:
 
 ```python
 result = client.datasets.create(
@@ -314,6 +318,8 @@ result = client.datasets.create(
     upload_files=False,
 )
 ```
+
+On the command line, `crucible dataset create -i FILE ... --no-upload --backend NAME` does the same, and `--replace` updates files the dataset already has under the same name.
 
 Downloading and ingestion are GCS-only: `client.files.download()`/`client.datasets.download()` skip non-GCS files (logging why), and the server rejects ingestion requests for them. Check `storage_backend` before assuming a file is fetchable - `crucible file get MFID` and `crucible dataset list-files` both show the backend name for non-GCS files instead of an "ingested" status.
 
@@ -332,7 +338,7 @@ client.datasets.update_scientific_metadata(
 meta = client.datasets.get_scientific_metadata(dataset_mfid)
 
 # Search across all datasets
-results = client.datasets.search_scientific_metadata("temperature", limit=20)
+results = client.datasets.search_metadata("temperature", limit=20)
 ```
 
 `update_scientific_metadata()` merges new keys into the existing metadata (PATCH). To replace all existing metadata entirely, use `replace_scientific_metadata()`:

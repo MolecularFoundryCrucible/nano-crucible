@@ -247,7 +247,7 @@ def test_config_init_cancellation_stops_before_secret_prompt(monkeypatch, tmp_pa
 
 def test_project_create_reprompts_for_invalid_required_values(monkeypatch):
     enable_interactive_stdin(monkeypatch)
-    answers = iter(['-bad', 'valid-project', '', 'LBNL', 'x', 'alice', '', ''])
+    answers = iter(['-bad', 'valid-project', '', 'LBNL', '', 'alice', '', ''])
     monkeypatch.setattr('builtins.input', lambda prompt: next(answers))
     client = SimpleNamespace(projects=SimpleNamespace())
     client.projects.create = MagicMock(return_value={

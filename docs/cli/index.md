@@ -30,7 +30,7 @@ The shell opens with a compact 16×16 Crucible mark, combining two vertical pixe
 
 Tab-completion searches the API as you type: resource names complete to MFIDs, projects and instruments to their slugs, users to usernames, and filter values such as measurement or sample type to the values that exist in the current or typed project. Commands and flags you cannot use, such as service-account administration, are not suggested.
 
-An explicit `--project-id` applies only to that command. Inside the interactive shell, `use PROJECT_ID` validates and saves the current project for future commands and shell sessions. `unuse` clears the saved project. The deprecated `CRUCIBLE_CURRENT_PROJECT` environment variable temporarily retains precedence, but the CLI displays a warning whenever it supplies project context.
+An explicit `--project-id` applies only to that command. Inside the interactive shell, `use PROJECT_ID` validates and saves the current project for future commands and shell sessions. `unuse` clears the saved project.
 
 Shell-specific commands:
 

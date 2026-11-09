@@ -11,6 +11,7 @@ import json
 import sys
 import logging
 from . import term
+from .helpers import RemovedOptionAction
 from .helpers import add_limit_arguments, count_label, print_more_hint, resolve_limit, page_kwargs
 
 logger = logging.getLogger(__name__)
@@ -37,8 +38,11 @@ def register_subcommand(subparsers):
         _register_show(sa_subparsers)
         _register_set_role(sa_subparsers)
         _register_list_access_groups(sa_subparsers)
-        _register_add_access_group(sa_subparsers)
-        _register_remove_access_group(sa_subparsers)
+        from .helpers import add_removed_command
+        add_removed_command(sa_subparsers, 'add-access-group',
+                            "'crucible instrument bind-sa' or 'crucible project add-user'")
+        add_removed_command(sa_subparsers, 'remove-access-group',
+                            "'crucible instrument unbind-sa' or 'crucible project remove-user'")
 
 
 def _show_sa(sa, key=None, groups=None):
@@ -134,20 +138,9 @@ def _resolve_sa_ref(args):
     Warns if the deprecated --unique-id/--username flags were used instead of
     the positional SA argument. Exits with an error if neither was provided.
     """
-    import warnings
     from .helpers import parse_sa_ref
 
-    unique_id = getattr(args, 'unique_id', None)
-    username  = getattr(args, 'username', None)
-    sa_ref    = getattr(args, 'sa', None)
-
-    if unique_id or username:
-        warnings.warn(
-            "--unique-id/--username are deprecated; pass the identifier "
-            "positionally instead: crucible sa get SA",
-            DeprecationWarning, stacklevel=3,
-        )
-        return unique_id, username, False
+    sa_ref = getattr(args, 'sa', None)
     if sa_ref:
         ref = parse_sa_ref(sa_ref)
         return ref.get('unique_id'), ref.get('username'), 'unique_id' in ref
@@ -219,8 +212,8 @@ Examples:
                         help='MFID or username of the service account')
 
     group = parser.add_mutually_exclusive_group()
-    group.add_argument('--unique-id', '-o', metavar='MFID',     help='(deprecated, use positional SA)')
-    group.add_argument('--username',  '-u', metavar='USERNAME',  help='(deprecated, use positional SA)')
+    group.add_argument('--unique-id', '-o', action=RemovedOptionAction, replacement='the SA argument', default=None)
+    group.add_argument('--username', '-u', action=RemovedOptionAction, replacement='the SA argument', default=None)
     parser.set_defaults(func=_execute_rotate_key)
 
 
@@ -256,8 +249,8 @@ Examples:
                         help='MFID or username of the service account')
 
     group = parser.add_mutually_exclusive_group()
-    group.add_argument('--unique-id', '-o', metavar='MFID',    help='(deprecated, use positional SA)')
-    group.add_argument('--username',  '-u', metavar='USERNAME', help='(deprecated, use positional SA)')
+    group.add_argument('--unique-id', '-o', action=RemovedOptionAction, replacement='the SA argument', default=None)
+    group.add_argument('--username', '-u', action=RemovedOptionAction, replacement='the SA argument', default=None)
     parser.add_argument('--groups', '-g', action='store_true', default=False,
                         help='Also list the projects and instruments it belongs to')
     parser.add_argument('--json', action='store_true', default=False,
@@ -420,8 +413,8 @@ Examples:
                         help='MFID or username of the service account')
 
     group = parser.add_mutually_exclusive_group()
-    group.add_argument('--unique-id', '-o', metavar='MFID',    help='(deprecated, use positional SA)')
-    group.add_argument('--username',  '-u', metavar='USERNAME', help='(deprecated, use positional SA)')
+    group.add_argument('--unique-id', '-o', action=RemovedOptionAction, replacement='the SA argument', default=None)
+    group.add_argument('--username', '-u', action=RemovedOptionAction, replacement='the SA argument', default=None)
     parser.set_defaults(func=_execute_edit)
 
 
@@ -475,8 +468,8 @@ Examples:
                         help='MFID or username of the service account')
 
     group = parser.add_mutually_exclusive_group()
-    group.add_argument('--unique-id', '-o', metavar='MFID',    help='(deprecated, use positional SA)')
-    group.add_argument('--username',  '-u', metavar='USERNAME', help='(deprecated, use positional SA)')
+    group.add_argument('--unique-id', '-o', action=RemovedOptionAction, replacement='the SA argument', default=None)
+    group.add_argument('--username', '-u', action=RemovedOptionAction, replacement='the SA argument', default=None)
     parser.add_argument('--new-username',  dest='new_username',  metavar='USERNAME', help='New username')
     parser.add_argument('--first-name',    dest='first_name',    metavar='NAME',     help='First name')
     parser.add_argument('--last-name',     dest='last_name',     metavar='NAME',     help='Last name')
@@ -526,8 +519,8 @@ Examples:
                         help='MFID or username of the service account')
 
     group = parser.add_mutually_exclusive_group()
-    group.add_argument('--unique-id', '-o', metavar='MFID',    help='(deprecated, use positional SA)')
-    group.add_argument('--username',  '-u', metavar='USERNAME', help='(deprecated, use positional SA)')
+    group.add_argument('--unique-id', '-o', action=RemovedOptionAction, replacement='the SA argument', default=None)
+    group.add_argument('--username', '-u', action=RemovedOptionAction, replacement='the SA argument', default=None)
     parser.add_argument('--json', action='store_true', default=False,
                         help='Output as JSON array')
     parser.set_defaults(func=_execute_list_access_groups)
@@ -555,63 +548,9 @@ def _execute_list_access_groups(args):
         fail("", e)
 
 
-def _register_add_access_group(subparsers):
-    parser = subparsers.add_parser(
-        'add-access-group',
-        help='Deprecated: use project add-user or instrument bind-sa',
-        formatter_class=term.ColorHelpFormatter,
-        epilog="""
-Examples:
-    crucible sa add-access-group nirvana-sa my-group
-""",
-    )
-    parser.add_argument('sa', metavar='SA', help='MFID or username of the service account')
-    parser.add_argument('group_name', metavar='GROUP', help='Access group name')
-    parser.set_defaults(func=_execute_add_access_group)
 
 
-def _execute_add_access_group(args):
-    from crucible.config import get_client
-    from .helpers import resolve_sa_id
-    try:
-        client = get_client()
-        unique_id = resolve_sa_id(client, args.sa)
-        client.service_accounts.add_to_access_group(unique_id, args.group_name)
-        term.success(f"Added {args.sa} to access group '{args.group_name}'", args)
-    except ValueError as e:
-        logger.error(str(e))
-        sys.exit(1)
-    except Exception as e:
-        from .helpers import fail
-        fail("", e)
 
 
-def _register_remove_access_group(subparsers):
-    parser = subparsers.add_parser(
-        'remove-access-group',
-        help='Deprecated: use project remove-user or instrument unbind-sa',
-        formatter_class=term.ColorHelpFormatter,
-        epilog="""
-Examples:
-    crucible sa remove-access-group nirvana-sa my-group
-""",
-    )
-    parser.add_argument('sa', metavar='SA', help='MFID or username of the service account')
-    parser.add_argument('group_name', metavar='GROUP', help='Access group name')
-    parser.set_defaults(func=_execute_remove_access_group)
 
 
-def _execute_remove_access_group(args):
-    from crucible.config import get_client
-    from .helpers import resolve_sa_id
-    try:
-        client = get_client()
-        unique_id = resolve_sa_id(client, args.sa)
-        client.service_accounts.remove_from_access_group(unique_id, args.group_name)
-        term.success(f"Removed {args.sa} from access group '{args.group_name}'", args)
-    except ValueError as e:
-        logger.error(str(e))
-        sys.exit(1)
-    except Exception as e:
-        from .helpers import fail
-        fail("", e)

@@ -58,6 +58,7 @@ def setup_logging(verbose=False):
 
 
 from .client import CrucibleClient
+from .errors import CrucibleAPIError, RemovedError
 from .models import (
     AccountAuthorization,
     AccountCapabilities,
@@ -78,6 +79,7 @@ from .models import (
 from . import config
 
 __all__ = [
+    'CrucibleAPIError', 'RemovedError',
     'CrucibleClient', 'CrucibleResource', 'Dataset', 'Sample', 'Project', 'User', 'PublicUser',
     'Instrument', 'InstrumentReference', 'ProjectReference', 'AssociatedFile',
     'EffectiveResourceAccess', 'ResourceSearchResult', 'ResourceCapabilities',

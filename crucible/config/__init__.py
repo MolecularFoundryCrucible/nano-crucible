@@ -16,6 +16,7 @@ from .config import (
     create_config_file,
     get_config_file_path,
     get_graph_explorer_url,
+    get_hub_url,
     get_current_project,
 )
 
@@ -29,5 +30,6 @@ __all__ = [
     "create_config_file",
     "get_config_file_path",
     "get_graph_explorer_url",
+    "get_hub_url",
     "get_current_project",
 ]
