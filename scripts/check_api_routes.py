@@ -40,7 +40,7 @@ def client_routes(package: Path = PACKAGE):
     """[(method, template, 'file:line')] for every API call, and unchecked calls."""
     routes, unchecked = [], []
     for source in sorted(package.rglob('*.py')):
-        tree = ast.parse(source.read_text(), filename=str(source))
+        tree = ast.parse(source.read_text(encoding='utf-8'), filename=str(source))
         for call in ast.walk(tree):
             if not isinstance(call, ast.Call):
                 continue
@@ -85,7 +85,7 @@ def load_openapi(source: str) -> dict:
     if source.startswith(('http://', 'https://')):
         with urllib.request.urlopen(source, timeout=30) as response:
             return json.load(response)
-    with open(source) as handle:
+    with open(source, encoding='utf-8') as handle:
         return json.load(handle)
 
 

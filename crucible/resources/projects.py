@@ -476,8 +476,8 @@ class ProjectOperations(OwnershipMixin, AccessControlMixin, BaseResource):
                 crucible.constants.JOIN_REQUEST_STATUSES.
             limit: Maximum number of results.
             offset: Starting position in the full result set.
-            **filters: Any other list_join_requests() keyword, such as
-                scope, sort, direction, or cursor.
+            **filters (Any): Any other list_join_requests() keyword, such
+                as scope, sort, direction, or cursor.
 
         Returns:
             List[Dict]: Matching JoinRequest records, most recent first.

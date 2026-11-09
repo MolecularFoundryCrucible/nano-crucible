@@ -9,6 +9,8 @@ from crucible.cli import term
 
 @pytest.fixture
 def pacific(monkeypatch):
+    if not hasattr(time, 'tzset'):
+        pytest.skip('time.tzset is not available on Windows')
     monkeypatch.setenv('TZ', 'America/Los_Angeles')
     time.tzset()
     yield

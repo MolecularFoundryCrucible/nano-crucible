@@ -217,6 +217,7 @@ def stored(tmp_path, access='chba_old', refresh='chbr_old', expires_at=None):
     return tokens, store
 
 
+@pytest.mark.skipif(os.name == 'nt', reason='Windows has no POSIX file modes')
 def test_file_store_is_private(tmp_path):
     stored(tmp_path)
 

@@ -126,9 +126,11 @@ class AccessGroupOperations(BaseResource):
                 only those you may review.
             project_mfid: One project MFID or a list of them.
             reviewer_id: Only requests closed by this user.
-            requested_after, requested_before: Request time bounds
+            requested_after: Only requests made at or after this time
                 (datetime, date, or ISO 8601 string; naive values are UTC).
-            reviewed_after, reviewed_before: Closing time bounds.
+            requested_before: Only requests made before this time.
+            reviewed_after: Only requests closed at or after this time.
+            reviewed_before: Only requests closed before this time.
             q: Matches the requester's name, username, or ORCID.
             sort: One of crucible.constants.JOIN_REQUEST_SORTS
                 (server default: request_time).
