@@ -53,6 +53,9 @@ jobs:
       - name: Check for unused names, undefined names, and syntax errors
         run: flake8 --select=E9,F crucible/ tests/ scripts/
 
+      - name: Type-check the package
+        run: mypy crucible --ignore-missing-imports
+
   docs:
     runs-on: ubuntu-latest
     steps:

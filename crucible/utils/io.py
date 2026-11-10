@@ -10,6 +10,7 @@ import pytz
 import subprocess as sp
 import hashlib
 from datetime import datetime, timezone
+from typing import Optional
 
 
 def run_shell(cmd, checkflag=True, background=False):
@@ -240,7 +241,7 @@ def gcs_object_parts(file_record: dict):
     return parts[0], parts[1], parts[2]
 
 
-def storage_display_name(file_record: dict, dataset_mfid: str = None) -> str:
+def storage_display_name(file_record: dict, dataset_mfid: Optional[str] = None) -> str:
     """Return the display filename for a file record.
 
     GCS records are named by their ``filename``, which carries any relative

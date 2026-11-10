@@ -15,7 +15,7 @@ from ._common import vlen
 try:
     from .completer import CrucibleCompleter
 except ImportError:
-    CrucibleCompleter = None
+    CrucibleCompleter = None  # type: ignore[assignment,misc]
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +42,7 @@ def _help(shell, line):
         ('exit / quit',   'exit the shell'),
     ]:
         print(f"  {term.cyan(_cmd)}{' ' * (_W - len(_cmd))} {_desc}")
-    if CrucibleCompleter:
+    if CrucibleCompleter is not None:
         print()
         term.header("Keyboard shortcuts")
         for _key, _desc in [

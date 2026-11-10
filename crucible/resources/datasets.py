@@ -95,7 +95,7 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
 
     @_removed_parameter('dsid', 'dataset_mfid')
     def get(self, dataset_mfid: str, include_metadata: bool = False,
-            include_links: bool = False, include_owner: bool = True) -> Dict:
+            include_links: bool = False, include_owner: bool = True) -> Optional[Dict]:
         """Get a dataset by its canonical MFID.
 
         Args:
@@ -116,7 +116,7 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
 
     def _get_by_mfid(self, dataset_mfid: str, include_metadata: bool = False,
                      include_links: bool = False,
-                     include_owner: bool = True) -> Dict:
+                     include_owner: bool = True) -> Optional[Dict]:
         """Get a dataset through its canonical single-resource route."""
         if not is_mfid(dataset_mfid):
             raise ValueError("dataset_mfid must be an exact 26-character MFID.")

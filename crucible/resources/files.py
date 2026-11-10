@@ -8,7 +8,7 @@ see DatasetOperations (client.datasets.*).
 """
 
 import logging
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, overload
 
 from .base import BaseResource, ListResult
 from ..constants import DEFAULT_LIMIT
@@ -23,6 +23,14 @@ class FileOperations(BaseResource):
 
     Access via: client.files.get(), client.files.list(), etc.
     """
+
+    @overload
+    @staticmethod
+    def _parse(raw: Dict) -> Dict: ...
+
+    @overload
+    @staticmethod
+    def _parse(raw: None) -> None: ...
 
     @staticmethod
     def _parse(raw: Optional[Dict]) -> Optional[Dict]:

@@ -26,7 +26,7 @@ from .builtins import find_builtin
 try:
     from .completer import CrucibleCompleter
 except ImportError:
-    CrucibleCompleter = None
+    CrucibleCompleter = None  # type: ignore[assignment,misc]
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +50,7 @@ class CrucibleShell:
 
     def run(self):
         """Start the interactive shell."""
-        if CrucibleCompleter:
+        if CrucibleCompleter is not None:
             self._run_prompt_toolkit()
         else:
             self._run_readline()

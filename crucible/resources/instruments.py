@@ -120,7 +120,7 @@ class InstrumentOperations(OwnershipMixin, AccessControlMixin, BaseResource):
             include_metadata: bool = False, include_owner: bool = True,
             *, instrument_mfid: Optional[str] = None,
             instrument_name: Optional[str] = None,
-            include_members: bool = False) -> Dict:
+            include_members: bool = False) -> Optional[Dict]:
         """Get an instrument by canonical MFID or human-readable slug.
 
         ``instrument_id`` explicitly selects the human-readable API identifier.
@@ -168,6 +168,7 @@ class InstrumentOperations(OwnershipMixin, AccessControlMixin, BaseResource):
         if instrument_mfid is not None:
             return self._get_by_mfid(instrument_mfid, **options)
 
+        assert instrument_ref is not None
         reference_kind = classify_slug_reference(instrument_ref, 'instrument')
         if reference_kind == 'mfid':
             return self._get_by_mfid(instrument_ref, **options)
@@ -176,7 +177,7 @@ class InstrumentOperations(OwnershipMixin, AccessControlMixin, BaseResource):
     def _get_by_mfid(self, instrument_mfid: str,
                      include_metadata: bool = False,
                      include_owner: bool = True,
-                     include_members: bool = False) -> Dict:
+                     include_members: bool = False) -> Optional[Dict]:
         """Get an instrument through its canonical single-resource route."""
         if not is_mfid(instrument_mfid):
             raise ValueError("instrument_mfid must be an exact 26-character MFID.")
@@ -378,7 +379,7 @@ class InstrumentOperations(OwnershipMixin, AccessControlMixin, BaseResource):
         from ..models import AccessGrant
 
         instrument = self.get(instrument_ref, include_owner=False, include_members=True)
-        members = instrument.get('members')
+        members = instrument.get('members') if instrument is not None else None
         if members is None:
             return None
         return [AccessGrant.model_validate(m) for m in members]

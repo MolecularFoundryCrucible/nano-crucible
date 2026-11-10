@@ -51,7 +51,7 @@ dev = [
     "pytest>=6.0",
     "black>=21.0",
     "flake8>=3.8",
-    "mypy>=0.812",
+    "mypy>=2.3",
 ]
 docs = [
     "mkdocs>=1.5",

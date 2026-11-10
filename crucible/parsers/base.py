@@ -10,6 +10,7 @@ import json
 import logging
 import socket
 from pathlib import Path
+from typing import Optional
 from crucible import Dataset
 from crucible.errors import RemovedError
 from crucible.utils.deprecation import _removed_parameter, removed_message
@@ -18,10 +19,10 @@ logger = logging.getLogger(__name__)
 
 class BaseParser:
 
-    _measurement = None
-    _data_format = None
-    _data_type = None
-    _instrument_id = None
+    _measurement: Optional[str] = None
+    _data_format: Optional[str] = None
+    _data_type: Optional[str] = None
+    _instrument_id: Optional[str] = None
 
     @_removed_parameter('owner_orcid', 'owner')
     @_removed_parameter('instrument_name', 'instrument_mfid')

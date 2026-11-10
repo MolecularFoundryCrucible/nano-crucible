@@ -315,7 +315,7 @@ class BaseResource:
         )
 
     def _paginate(self, endpoint: str, params: dict,
-                  limit: int = DEFAULT_LIMIT, offset: int = 0,
+                  limit: Optional[int] = DEFAULT_LIMIT, offset: int = 0,
                   privilege_mode: Optional[str] = None,
                   cursor: Optional[str] = None,
                   page_max: Optional[int] = None) -> 'ListResult':

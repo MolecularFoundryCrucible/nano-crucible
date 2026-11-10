@@ -179,7 +179,7 @@ class CastExecutor:
     # Public entry point
     # ------------------------------------------------------------------
 
-    def apply(self, client, dry_run: bool = False) -> Dict[str, str]:
+    def apply(self, client, dry_run: bool = False) -> Dict[str, Optional[str]]:
         """
         Create all entities and apply all links.
 

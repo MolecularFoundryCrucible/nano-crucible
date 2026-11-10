@@ -29,7 +29,7 @@ def register_subcommand(subparsers):
     parser.set_defaults(func=execute)
 
 
-def credential_label(client) -> str:
+def credential_label(client) -> str | None:
     """How the client authenticates, for display, or None if unknown."""
     source = getattr(client, 'credential_source', None)
     if source is None:

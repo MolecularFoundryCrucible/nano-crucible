@@ -61,7 +61,7 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
     @_removed_parameter('sample_id', 'sample_mfid')
     def get(self, sample_mfid: str, include_links: bool = False,
             include_metadata: bool = False, include_owner: bool = True,
-            include_datasets: bool = False) -> Dict:
+            include_datasets: bool = False) -> Optional[Dict]:
         """Get a sample by its canonical MFID.
 
         Args:
@@ -93,7 +93,7 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
     def _get_by_mfid(self, sample_mfid: str, include_links: bool = False,
                      include_metadata: bool = False,
                      include_owner: bool = True,
-                     include_datasets: bool = False) -> Dict:
+                     include_datasets: bool = False) -> Optional[Dict]:
         """Get a sample through its canonical single-resource route."""
         if not is_mfid(sample_mfid):
             raise ValueError("sample_mfid must be an exact 26-character MFID.")

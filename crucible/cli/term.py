@@ -120,7 +120,7 @@ def orcid_link(orcid: str) -> str | None:
     return identifier_link(orcid, f"https://orcid.org/{orcid}")
 
 
-def user_id_link(user_id: str) -> str | None:
+def user_id_link(user_id: str | None) -> str | None:
     """Render a canonical user ID linked to its Crucible Hub profile."""
     if not user_id:
         return None
@@ -128,7 +128,7 @@ def user_id_link(user_id: str) -> str | None:
     return identifier_link(user_id, user_explorer_url(user_id))
 
 
-def user_link(label: str, user_id: str) -> str | None:
+def user_link(label: str | None, user_id: str | None) -> str | None:
     """Link a user label to its Crucible Hub profile."""
     if not label:
         return None
@@ -136,7 +136,7 @@ def user_link(label: str, user_id: str) -> str | None:
     return navigation_link(label, user_explorer_url(user_id))
 
 
-def user_id_label(user_id: str) -> str:
+def user_id_label(user_id: str | None) -> str:
     """Return the display label for a canonical user identifier."""
     return "ORCID" if is_orcid(user_id) else "User ID"
 
@@ -155,7 +155,7 @@ def print_user_ids(printer, user: dict) -> None:
     orcid = user.get('orcid')
     if orcid:
         verified = f"  {dim('(verified)')}" if user.get('orcid_verified') else ''
-        printer("ORCID", orcid_link(orcid) + verified)
+        printer("ORCID", f"{orcid_link(orcid)}{verified}")
 
 
 def fmt_name(person: dict, default: str | None = None, fallback_username: bool = True) -> str | None:
@@ -470,7 +470,7 @@ def fmt_size(size) -> str | None:
     if size is None:
         return None
     try:
-        n = int(size)
+        n: float = int(size)
     except (ValueError, TypeError):
         return str(size)
     for unit in ('B', 'KB', 'MB', 'GB', 'TB'):

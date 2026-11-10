@@ -89,6 +89,7 @@ class UserOperations(BaseResource):
         if email is not None:
             return self._get_by_email(email)
 
+        assert user_ref is not None
         reference_kind, normalized = classify_user_reference(user_ref)
         if reference_kind in ('unique_id', 'reference'):
             return self._get_by_unique_id(normalized)
@@ -251,8 +252,8 @@ class UserOperations(BaseResource):
         Returns:
             Dict: Mapping of canonical user ID to user record.
         """
-        results = {}
-        batches = []
+        results: Dict[str, Dict] = {}
+        batches: List[Dict[str, Any]] = []
         for key, values in (('unique_id', user_unique_ids), ('username', usernames)):
             values = list(dict.fromkeys(values or []))
             batches += [{key: values[i:i + _EXACT_FILTER_MAX]}
@@ -263,7 +264,7 @@ class UserOperations(BaseResource):
                 results.setdefault(user['unique_id'], user)
         return results
 
-    def list(self, limit: int = DEFAULT_LIMIT, offset: int = 0,
+    def list(self, limit: Optional[int] = DEFAULT_LIMIT, offset: int = 0,
              q: Optional[str] = None,
              search_fields: Optional[Union[str, List[str]]] = None,
              first_name: Optional[str] = None,

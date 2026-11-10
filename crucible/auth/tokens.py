@@ -41,4 +41,4 @@ class TokenSet:
 
     @classmethod
     def from_dict(cls, data: dict) -> 'TokenSet':
-        return cls(**{key: data.get(key) for key in cls.__dataclass_fields__ if key in data})
+        return cls(**{key: data[key] for key in cls.__dataclass_fields__ if key in data})

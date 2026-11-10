@@ -1,7 +1,7 @@
 """Classification and response helpers for canonical resource identifiers."""
 
 import re
-from typing import Dict, Tuple
+from typing import Dict, Optional, Tuple, TypeGuard
 
 
 MFID_PATTERN = re.compile(r'^[0-9a-hjkmnp-tv-z]{26}$')
@@ -23,7 +23,7 @@ def is_mfid(value: str) -> bool:
     return isinstance(value, str) and bool(MFID_PATTERN.fullmatch(value))
 
 
-def is_orcid(value: str) -> bool:
+def is_orcid(value: Optional[str]) -> bool:
     """Return whether a value has the canonical ORCID shape."""
     return isinstance(value, str) and bool(ORCID_PATTERN.fullmatch(value))
 
@@ -35,7 +35,7 @@ def validate_mfid(value: str) -> str:
     return value
 
 
-def is_slug(value: str) -> bool:
+def is_slug(value: Optional[str]) -> TypeGuard[str]:
     """Return whether a value is a valid 3-to-25-character resource slug."""
     return isinstance(value, str) and bool(SLUG_PATTERN.fullmatch(value))
 
@@ -54,7 +54,7 @@ def validate_username(value: str) -> str:
     return username
 
 
-def validate_slug(value: str, resource_name: str) -> str:
+def validate_slug(value: Optional[str], resource_name: str) -> str:
     """Validate a newly created or renamed project or instrument slug."""
     if not is_slug(value):
         raise ValueError(

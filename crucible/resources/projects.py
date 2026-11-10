@@ -87,6 +87,7 @@ class ProjectOperations(OwnershipMixin, AccessControlMixin, BaseResource):
                 include_metadata=include_metadata,
                 include_members=include_members,
             )
+        assert project_ref is not None
         reference_kind = classify_slug_reference(project_ref, 'project')
         if reference_kind == 'mfid':
             return self._get_by_mfid(
@@ -336,8 +337,10 @@ class ProjectOperations(OwnershipMixin, AccessControlMixin, BaseResource):
         provided = [value for value in (user_unique_id, email, username) if value is not None]
         if len(provided) != 1:
             raise ValueError("Provide exactly one user identifier")
-        if email is None:
-            return user_unique_id if user_unique_id is not None else username
+        if user_unique_id is not None:
+            return user_unique_id
+        if username is not None:
+            return username
 
         user = self._client.users.get(email=email)
         resolved = user.get('unique_id') if isinstance(user, dict) else None
@@ -372,7 +375,7 @@ class ProjectOperations(OwnershipMixin, AccessControlMixin, BaseResource):
 
     @_deprecated_parameter('user_unique_id', 'user_ref')
     @_removed_parameter('orcid', 'user_unique_id')
-    def add_user(self, user_ref: Optional[str] = None, project_id: str = None,
+    def add_user(self, user_ref: Optional[str] = None, project_id: Optional[str] = None,
                 email: Optional[str] = None, username: Optional[str] = None,
                 role: Optional[str] = None) -> List[ProjectMember]:
         """Add a user to a project.

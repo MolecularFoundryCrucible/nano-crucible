@@ -153,8 +153,8 @@ def execute(args):
     try:
         client     = get_client()
         graph_data = client.graphs.get(args.resource_id, recursive=True)
-    except Exception as e:
-        logger.error(f"Error fetching graph: {e}")
+    except Exception as exc:
+        logger.error(f"Error fetching graph: {exc}")
         if getattr(args, 'debug', False):
             import traceback; traceback.print_exc()
         sys.exit(1)

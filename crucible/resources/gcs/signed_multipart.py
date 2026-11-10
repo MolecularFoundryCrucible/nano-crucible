@@ -9,6 +9,7 @@ See docs/multipart_upload_api.md in crucible-api for the contract.
 """
 
 import base64
+import functools
 import hashlib
 import logging
 import os
@@ -17,7 +18,7 @@ import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
-from typing import Callable, Dict, List, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Set, Tuple, TypeGuard
 
 import requests
 
@@ -196,7 +197,7 @@ class _Upload:
         self.size = os.path.getsize(file_path)
         self.upload_id = None
         self.part_checksums: List[str] = []
-        self._sent = {}
+        self._sent: Dict[int, int] = {}
         self._lock = threading.Lock()
         self._sign_lock = threading.Lock()
         self.part_size = PART_SIZE
@@ -271,10 +272,11 @@ class _Upload:
                     "finishes.") from error
             raise
 
-    def _holds(self, record: Optional[Dict], sha256_hash: str) -> bool:
+    def _holds(self, record: Optional[Dict], sha256_hash: str) -> TypeGuard[Dict]:
         """Whether a file record already has this content, by its size and SHA-256."""
-        return bool(record) and (record.get('sha256_hash') == sha256_hash
-                                 and record.get('size') == self.size)
+        if not record:
+            return False
+        return record.get('sha256_hash') == sha256_hash and record.get('size') == self.size
 
     def _existing_record(self, taken) -> Dict:
         """The record that already holds this filename.
@@ -284,8 +286,9 @@ class _Upload:
         """
         return self.client.files.get(taken.file_mfid)
 
-    def _acknowledged_parts(self) -> set:
-        acknowledged, marker = set(), None
+    def _acknowledged_parts(self) -> Set[int]:
+        acknowledged: Set[int] = set()
+        marker = None
         while True:
             params = {'part_number_marker': marker} if marker else None
             page = _api(self.client, 'get', f'{self.base}/{self.upload_id}', params=params)
@@ -327,7 +330,7 @@ class _Upload:
                        if name.lower() != 'content-length'}
             self._sent[number] = 0
             reader = _PartReader(self.file_path, part['offset'], part['size'],
-                                 lambda n, number=number: self._advance(number, n))
+                                 functools.partial(self._advance, number))
             try:
                 response = requests.put(part['url'], data=reader, headers=headers,
                                         timeout=(10, _PART_TIMEOUT), allow_redirects=False)

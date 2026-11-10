@@ -12,12 +12,14 @@ import logging
 from requests.adapters import HTTPAdapter
 from urllib.parse import urlparse
 from urllib3.util.retry import Retry
-from typing import TYPE_CHECKING, Any, Callable, Dict, Optional
+from typing import TYPE_CHECKING, Any, Callable, Dict, Optional, cast
 from .constants import DEFAULT_PRIVILEGE_MODE, PRIVILEGE_MODES
 from .utils.deprecation import _removed, _removed_parameter
 from .utils.identifiers import is_mfid, require_canonical_identifier
 
 if TYPE_CHECKING:
+    from types import FrameType
+
     from .models import AccountAuthorization, AccountCapabilities
 
 logger = logging.getLogger(__name__)
@@ -101,7 +103,7 @@ class CrucibleClient:
             total            = 3,
             backoff_factor   = 1,            # waits 1s, 2s, 4s between retries
             status_forcelist = {429, 502, 503, 504},
-            allowed_methods  = False,        # only repeatable requests use this session
+            allowed_methods  = None,         # only repeatable requests use this session
             raise_on_status  = False,        # let raise_for_status() handle final failure
         )
         adapter = HTTPAdapter(max_retries=retry)
@@ -122,7 +124,7 @@ class CrucibleClient:
         self._no_retry_session.headers.update({"Connection": "close", "User-Agent": USER_AGENT})
         unprocessed_only = HTTPAdapter(max_retries=Retry(
             total=3, connect=3, read=0, other=0, status=3, backoff_factor=1,
-            status_forcelist={429}, allowed_methods=False, raise_on_status=False))
+            status_forcelist={429}, allowed_methods=None, raise_on_status=False))
         self._no_retry_session.mount("https://", unprocessed_only)
         self._no_retry_session.mount("http://", unprocessed_only)
 
@@ -152,8 +154,8 @@ class CrucibleClient:
         self.access_groups = AccessGroupOperations(self)
         self.postprocessing = PostprocessingOperations(self)
         self.print = PrintOperations(self)
-        self._authorization = None
-        self._capabilities = None
+        self._authorization: Optional['AccountAuthorization'] = None
+        self._capabilities: Optional['AccountCapabilities'] = None
         self._profile_stale = False
         self.upload_progress = None
 
@@ -197,7 +199,7 @@ class CrucibleClient:
         degrade to "no extra authority" rather than failing.
         """
         self._load_profile()
-        return self._authorization
+        return cast('AccountAuthorization', self._authorization)
 
     @property
     def capabilities(self) -> 'AccountCapabilities':
@@ -208,7 +210,7 @@ class CrucibleClient:
         privilege_mode.
         """
         self._load_profile()
-        return self._capabilities
+        return cast('AccountCapabilities', self._capabilities)
 
     @property
     def can_elevate(self) -> bool:
@@ -431,9 +433,9 @@ class CrucibleClient:
         return response['resource_type']
 
     @_removed_parameter('resource_id', 'resource_mfid')
-    def get(self, resource_mfid: str, resource_type: str = None,
+    def get(self, resource_mfid: str, resource_type: Optional[str] = None,
             include_metadata: bool = False, include_links: bool = False,
-            include_owner: bool = True, include_datasets: bool = False) -> Dict:
+            include_owner: bool = True, include_datasets: bool = False) -> Optional[Dict]:
         """
         Get a resource by ID with automatic type detection.
 
@@ -720,7 +722,8 @@ def _caller_stacklevel() -> int:
     import os
     import sys
     package = os.path.dirname(os.path.abspath(__file__)) + os.sep
-    frame, level = sys._getframe(2), 2
+    frame: Optional[FrameType] = sys._getframe(2)
+    level = 2
     while frame is not None and os.path.abspath(frame.f_code.co_filename).startswith(package):
         frame, level = frame.f_back, level + 1
     return level

@@ -1,6 +1,6 @@
 """Reusable resource capabilities backed by generic API endpoints."""
 
-from typing import TYPE_CHECKING, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 
 from ..utils.deprecation import _removed
 
@@ -20,6 +20,9 @@ class AccessControlMixin:
     its reference through ``_resource_mfid()`` (see BaseResource), which
     resources with human-readable slugs override to resolve them.
     """
+
+    _request: Callable[..., Any]
+    _resource_mfid: Callable[[str], str]
 
     @_removed("use list_access() instead.")
     def get_access_groups(self, *args, **kwargs):
@@ -90,6 +93,9 @@ class AccessControlMixin:
 class OwnershipMixin:
     """Ownership-transfer operations for resources with an exclusive owner."""
 
+    _request: Callable[..., Any]
+    _resource_mfid: Callable[[str], str]
+
     def transfer_ownership(self, mfid: str, new_owner: str,
                            confirm: bool = False) -> 'OwnershipTransfer':
         """Preview or apply a resource ownership transfer."""
@@ -106,6 +112,9 @@ class OwnershipMixin:
 
 class ProjectAssignmentMixin:
     """Project-reassignment operations for project-scoped resources."""
+
+    _request: Callable[..., Any]
+    _resource_mfid: Callable[[str], str]
 
     def reassign_project(self, mfid: str, project_id: Optional[str] = None,
                          confirm: bool = False, *,
@@ -137,6 +146,8 @@ class ProjectAssignmentMixin:
 
 class InstrumentAssignmentMixin:
     """Instrument-assignment operations for instrument-scoped resources."""
+
+    _request: Callable[..., Any]
 
     def assign_instrument(self, dataset_mfid: str, instrument_id: Optional[str] = None,
                           instrument_mfid: Optional[str] = None) -> 'InstrumentAssignment':

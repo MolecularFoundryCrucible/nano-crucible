@@ -14,6 +14,7 @@ import logging
 import re
 import sys
 from concurrent.futures import ThreadPoolExecutor
+from typing import Any, Callable, NoReturn
 
 from ..utils.identifiers import MFID_PATTERN, classify_user_reference
 
@@ -327,7 +328,7 @@ def add_scope_filters(parser, resource: str) -> None:
 
 # (flags, dest, metavar, help) for each resource's exact-match filters, shared
 # by list and facets. dest is the API query parameter.
-_RESOURCE_FILTERS = {
+_RESOURCE_FILTERS: dict[str, list[tuple[tuple[str, ...], str, str, str]]] = {
     'dataset': [
         (('-m', '--measurement'), 'measurement', 'TYPE',
          'Filter by measurement (exact match)'),
@@ -475,8 +476,8 @@ class UploadProgress:
         self._enabled = hasattr(self._stream, 'isatty') and self._stream.isatty()
         self._interval = interval
         self._lock = threading.Lock()
-        self._started = {}
-        self._shown = {}
+        self._started: dict[str, float] = {}
+        self._shown: dict[str, float | str] = {}
 
     def __call__(self, name: str, done: int, total: int) -> None:
         import time
@@ -487,9 +488,10 @@ class UploadProgress:
             now = time.monotonic()
             started = self._started.setdefault(name, now)
             finished = done >= total
-            if not finished and now - self._shown.get(name, 0) < self._interval:
+            shown = self._shown.get(name, 0)
+            if isinstance(shown, str):
                 return
-            if self._shown.get(name) == 'done':
+            if not finished and now - shown < self._interval:
                 return
             self._shown[name] = 'done' if finished else now
             elapsed = max(now - started, 1e-6)
@@ -510,10 +512,11 @@ class UploadProgress:
 
 
 def _human_bytes(count: float) -> str:
-    for unit in ('B', 'KB', 'MB', 'GB', 'TB'):
-        if count < 1024 or unit == 'TB':
+    for unit in ('B', 'KB', 'MB', 'GB'):
+        if count < 1024:
             return f"{count:.0f} {unit}" if unit == 'B' else f"{count:.1f} {unit}"
         count /= 1024
+    return f"{count:.1f} TB"
 
 
 def _clock(seconds: float) -> str:
@@ -538,7 +541,7 @@ def add_limit_arguments(parser, noun: str = 'results', short: bool = False) -> N
     parser.set_defaults(pageable=True)
 
 
-_PAGE = {'start': 0, 'total': None, 'next': None}
+_PAGE: dict[str, Any] = {'start': 0, 'total': None, 'next': None}
 
 
 def begin_page(start: int = 0, total=None) -> None:
@@ -763,13 +766,13 @@ def group_records(records: list, field: str) -> list:
     position of their last record, so the group holding the newest record
     is printed last.
     """
-    groups = {}
-    last_seen = {}
+    groups: dict[Any, list] = {}
+    last_seen: dict[Any, int] = {}
     for index, record in enumerate(records):
         key = record.get(field) or None
         groups.setdefault(key, []).append(record)
         last_seen[key] = index
-    return [(key, groups[key]) for key in sorted(groups, key=last_seen.get)]
+    return [(key, groups[key]) for key in sorted(groups, key=last_seen.__getitem__)]
 
 
 def register_facets_command(subparsers, resource: str, fields, examples: str):
@@ -875,7 +878,7 @@ def _interactive_stdin() -> bool:
     return hasattr(sys.stdin, 'isatty') and sys.stdin.isatty()
 
 
-def _prompt_unavailable(label: str, option: str = None) -> None:
+def _prompt_unavailable(label: str, option: str | None = None) -> NoReturn:
     from . import term
 
     message = f"Cannot prompt for {label.lower()} because stdin is not interactive."
@@ -887,8 +890,8 @@ def _prompt_unavailable(label: str, option: str = None) -> None:
 
 
 def _prompt_value(label: str, *, optional: bool = False, default=_NO_DEFAULT,
-                  validator=None, option: str = None, secret: bool = False,
-                  hint: str = None):
+                  validator=None, option: str | None = None, secret: bool = False,
+                  hint: str | None = None):
     from . import term
 
     if not _interactive_stdin():
@@ -896,9 +899,9 @@ def _prompt_value(label: str, *, optional: bool = False, default=_NO_DEFAULT,
             value = str(default)
             try:
                 return validator(value) if validator else value
-            except ValueError as error:
+            except ValueError as invalid:
                 print(term.red('Invalid value', stream=sys.stderr), file=sys.stderr)
-                print(str(error), file=sys.stderr)
+                print(str(invalid), file=sys.stderr)
                 if option:
                     print(f"Provide {option} to override the configured default.", file=sys.stderr)
                 raise SystemExit(2)
@@ -917,7 +920,7 @@ def _prompt_value(label: str, *, optional: bool = False, default=_NO_DEFAULT,
         suffix += term.dim(f" ({hint})")
     prompt = f"{term.bold(label)}{suffix}: "
 
-    reader = input
+    reader: Callable[[str], str] = input
     if secret:
         import getpass
         reader = getpass.getpass
@@ -947,12 +950,12 @@ def _prompt_value(label: str, *, optional: bool = False, default=_NO_DEFAULT,
         print(str(error), file=sys.stderr)
 
 
-def prompt_required(label: str, validator=None, option: str = None):
+def prompt_required(label: str, validator=None, option: str | None = None):
     return _prompt_value(label, validator=validator, option=option)
 
 
 def prompt_optional(label: str, validator=None, default=_NO_DEFAULT,
-                    option: str = None, hint: str = None):
+                    option: str | None = None, hint: str | None = None):
     return _prompt_value(
         label,
         optional=default is _NO_DEFAULT,
@@ -963,11 +966,11 @@ def prompt_optional(label: str, validator=None, default=_NO_DEFAULT,
     )
 
 
-def prompt_secret(label: str, option: str = None) -> str:
+def prompt_secret(label: str, option: str | None = None) -> str:
     return _prompt_value(label, option=option, secret=True)
 
 
-def prompt_choice(label: str, choices, default=_NO_DEFAULT, option: str = None) -> str:
+def prompt_choice(label: str, choices, default=_NO_DEFAULT, option: str | None = None) -> str:
     allowed = tuple(choices)
 
     def validate(value):
@@ -985,7 +988,7 @@ def prompt_choice(label: str, choices, default=_NO_DEFAULT, option: str = None) 
     )
 
 
-def prompt_confirm(message: str, *, default: bool = False, option: str = None) -> bool:
+def prompt_confirm(message: str, *, default: bool = False, option: str | None = None) -> bool:
     from . import term
 
     if not _interactive_stdin():
@@ -1102,7 +1105,7 @@ def require_elevation(client, action: str) -> None:
     decide.
     """
     authorization = getattr(client, 'authorization', None)
-    if getattr(authorization, 'platform_role', None) is None:
+    if authorization is None or getattr(authorization, 'platform_role', None) is None:
         return
     if not authorization.can_elevate:
         _not_permitted(action)
@@ -1290,7 +1293,7 @@ def fetch_api_attention():
         return False
 
 
-def explorer_url(resource_id: str, project_id: str, resource_type: str) -> str:
+def explorer_url(resource_id: str, project_id: str, resource_type: str) -> str | None:
     """Build the Crucible Hub URL for a dataset or sample.
 
     project_id is accepted for older callers and unused: Hub pages are keyed
@@ -1311,7 +1314,7 @@ def _hub_base():
         return None
 
 
-def project_explorer_url(project_ref: str) -> str:
+def project_explorer_url(project_ref: str) -> str | None:
     """Build the Crucible Hub URL for a project, by MFID (preferred) or project ID."""
     base = _hub_base()
     if not base or not project_ref:
@@ -1319,7 +1322,7 @@ def project_explorer_url(project_ref: str) -> str:
     return f"{base}/projects/{project_ref}"
 
 
-def instrument_explorer_url(instrument_mfid: str) -> str:
+def instrument_explorer_url(instrument_mfid: str) -> str | None:
     """Build the Crucible Hub URL for an instrument."""
     base = _hub_base()
     if not base or not instrument_mfid:
@@ -1327,7 +1330,7 @@ def instrument_explorer_url(instrument_mfid: str) -> str:
     return f"{base}/instruments/{instrument_mfid}"
 
 
-def user_explorer_url(user_unique_id: str) -> str:
+def user_explorer_url(user_unique_id: str | None) -> str | None:
     """Build the Crucible Hub URL for a user or service account."""
     base = _hub_base()
     if not base or not user_unique_id:
