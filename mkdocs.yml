@@ -94,6 +94,7 @@ nav:
     - Graphs: api-reference/graphs.md
     - Print: api-reference/printer.md
     - Models: api-reference/models.md
+    - Errors: api-reference/errors.md
   - Development:
     - Permission Alignment: development/permission-alignment.md
     - MFID UUIDv7 Compatibility: development/mfid-uuidv7-compatibility.md

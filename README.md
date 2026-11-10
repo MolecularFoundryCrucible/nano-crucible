@@ -25,12 +25,14 @@ pip install nano-crucible
 
 ## Get started
 
-Configure credentials and verify connectivity:
+Sign in and verify connectivity:
 
 ```bash
-crucible config init
+crucible login    # browser sign-in; use --device over SSH or without a browser
 crucible status
 ```
+
+For scripts and CI, use an API key instead: save it with `crucible config init` or set `CRUCIBLE_API_KEY`.
 
 The same configured credentials are available to the Python client:
 

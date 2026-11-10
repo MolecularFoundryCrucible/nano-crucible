@@ -9,7 +9,7 @@
 | `project` | Current project title, ID, and canonical identity when the relationship resolves | server-assigned |
 | `description` | Free-text description of the sample | create, update |
 | `timestamp` | Date associated with the sample (ISO 8601 format) | create, update |
-| `public` | Whether the sample is publicly accessible (default: `False`) | create, update |
+| `public` | Whether the sample is publicly accessible (default: `False`) | create; later changes use `set_public()` / `set_private()` |
 | `owner_orcid` | Canonical owner identifier returned by the API; read only; set `owner` when creating | read |
 | `owner` | Flexible owner identifier on create; public-safe user record on singleton reads | create with an ORCID, MFID, username, or email; expanded by default on `get()` |
 | `unique_id` | System-assigned MFID identifier | server-assigned |

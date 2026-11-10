@@ -12,7 +12,7 @@ cd nano-crucible
 python -m pip install -e ".[dev,docs]"
 ```
 
-The package supports Python 3.10 and newer.
+The package supports Python 3.11 and newer.
 
 ## Make and verify a change
 

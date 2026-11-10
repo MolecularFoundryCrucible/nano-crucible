@@ -10,6 +10,8 @@ client = CrucibleClient()
 client = CrucibleClient(api_key="your-key")
 ```
 
+A new client uses the first credential it finds: an `api_key` argument, then `CRUCIBLE_API_KEY`, then the sign-in stored by `crucible login` or `client.login()`, then `api_key` in the config file. `client.credential_source` reports which one is in use. `client.login()` signs in with a browser (`method="device"` approves a code on any device, for SSH or headless machines) and switches the client to that session; `client.logout()` ends and forgets the stored sign-in.
+
 ## Resource namespaces
 
 | Attribute | Type | Description |
@@ -20,12 +22,14 @@ client = CrucibleClient(api_key="your-key")
 | `client.instruments` | `InstrumentOperations` | Instrument CRUD |
 | `client.users` | `UserOperations` | User management (admin) |
 | `client.files` | `FileOperations` | File lookup, download, and ingestion by MFID |
-| `client.account` | `AccountOperations` | Self-service profile, API key, verification |
+| `client.account` | `AccountOperations` | Self-service profile, API keys, verification |
 | `client.ingestions` | `IngestionOperations` | Ingestion request management |
 | `client.postprocessing` | `PostprocessingOperations` | Postprocessing pipelines and runs |
 | `client.graphs` | `GraphOperations` | Entity graph traversal |
 | `client.deletions` | `DeletionOperations` | Deletion request management |
 | `client.access_groups` | `AccessGroupOperations` | Project join requests |
+| `client.service_accounts` | `ServiceAccountOperations` | Service-account creation, key rotation, and administration |
+| `client.print` | `PrintOperations` | Label-printer jobs |
 
 ## Privilege mode
 
@@ -60,6 +64,9 @@ A flag the profile did not report is `None`, so check for an explicit `False` be
         - __init__
         - health
         - live
+        - login
+        - logout
+        - credential_source
         - whoami
         - authorization
         - capabilities

@@ -7,15 +7,15 @@
 | `project_mfid` | Canonical project selector for creation | create |
 | `measurement` | Industry-standard experiment type (e.g. `"Raman Spectroscopy"`) | create, update |
 | `data_type` | Institution-specific data organization descriptor (e.g. `"ScopeFoundry H5 file"`) | create, update |
-| `instrument_name` | Name of the instrument as registered in Crucible | create |
-| `instrument_id` | Instrument identifier | create |
-| `instrument_mfid` | Canonical registered instrument selector for creation | create |
+| `instrument_name` | Display name derived from the assigned instrument; may repeat, so it does not identify an instrument | server-assigned |
+| `instrument_id` | Registered instrument slug | create; later changes use `assign_instrument()` |
+| `instrument_mfid` | Canonical registered instrument selector | create; later changes use `assign_instrument()` |
 | `instrument` | Current instrument identity and display fields, including its canonical MFID | server-assigned |
 | `project` | Current project identity and display fields, including its canonical MFID | server-assigned |
 | `data_format` | File type or extension (e.g. `"h5"`, `"dat"`) | create, update |
 | `session_name` | Optional tag grouping datasets collected in the same session | create, update |
 | `timestamp` | When the data was collected (ISO 8601 format) | create, update |
-| `public` | Whether the dataset is publicly accessible (default: `False`) | create, update |
+| `public` | Whether the dataset is publicly accessible (default: `False`) | create; later changes use `set_public()` / `set_private()` |
 | `owner_orcid` | Canonical owner identifier returned by the API; read only; set `owner` when creating | read |
 | `owner` | Flexible owner identifier on create; public-safe user record on singleton reads | create with an ORCID, MFID, username, or email; expanded by default on `get()` |
 | `unique_id` | System-assigned MFID identifier | server-assigned |
@@ -24,7 +24,7 @@
 | `modification_time` | When the record was last modified | server-assigned |
 | `capabilities` | Optional caller-specific actions calculated for an exact response | server-assigned |
 
-Instrument assignment is fixed at creation for now. Generic dataset updates may resubmit the current `instrument_id` or `instrument_name` for compatibility, but changing or clearing either value returns HTTP 409 until a dedicated reassignment operation is available.
+Use `client.datasets.assign_instrument(dataset_mfid, instrument_id=...)` (or `instrument_mfid=...`) to assign or change a dataset's instrument; it sets `instrument_id`, `instrument_mfid`, and `instrument_name` together. `update()` raises `RemovedError` for `instrument_id` and `instrument_name`.
 
 List datasets assigned to a canonical instrument across every project visible to the caller with:
 
@@ -56,7 +56,7 @@ result = client.datasets.create(
     dataset=Dataset(
         dataset_name="XRD run 5",
         measurement="X-ray diffraction",
-        instrument_name="Beamline 12.3.2",
+        instrument_id="beamline-123",
         project_id="my-project",
     ),
     scientific_metadata={"wavelength_angstrom": 0.7749, "temperature_K": 300},

@@ -1,6 +1,6 @@
 # Models
 
-Pydantic v2 models for all Crucible API objects. All models are importable from `crucible.models` or directly from `crucible`.
+Pydantic v2 models for all Crucible API objects. Import them from `crucible.models`. The core record models (`Project`, `Dataset`, `Sample`, `Instrument`, `User`, `PublicUser`, `InstrumentReference`, `ProjectReference`, `ResourceCapabilities`, `EffectiveResourceAccess`) are also importable directly from `crucible`.
 
 ```python
 from crucible.models import Dataset, Sample, Project, Instrument, InstrumentReference, ProjectReference, User, PublicUser, ResourceCapabilities, DeletionRequest, FacetResponse

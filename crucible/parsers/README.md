@@ -167,7 +167,6 @@ Inside your `parse()` method, you have access to all instance variables:
 - `self.instrument_id` - Registered instrument ID (defaults to `_instrument_id`)
 - `self.instrument_mfid` - Canonical registered instrument MFID
 - `self.data_format` - Data format type
-- `self.source_folder` - Directory where parser was called
 
 **Data:**
 - `self.files_to_upload` - List of file paths to upload (can be modified)

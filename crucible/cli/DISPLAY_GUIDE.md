@@ -183,7 +183,7 @@ API operations that support a server-side preview should remain preview-only by 
 
 ## Shell project context
 
-Resolve project context in this order: an explicit command argument, the deprecated `CRUCIBLE_CURRENT_PROJECT` compatibility override, then the saved `current_project`. Use the shared project-context helper for commands that accept an omitted project. The `use PROJECT_ID` shell command validates and saves the current project for future commands and shell sessions. `unuse` clears it. Always display an active environment override and its source because it can redirect operations. Dataset sessions are resource metadata and must not be treated as shell context.
+Resolve project context in this order: an explicit command argument, then the saved `current_project`. Use the shared project-context helper for commands that accept an omitted project. The `use PROJECT_ID` shell command validates and saves the current project for future commands and shell sessions. `unuse` clears it. `CRUCIBLE_CURRENT_PROJECT` was removed in 4.0.0: the CLI stops when it is set and `config.current_project` raises, so do not read it as an override. Dataset sessions are resource metadata and must not be treated as shell context.
 
 ## Errors and warnings
 

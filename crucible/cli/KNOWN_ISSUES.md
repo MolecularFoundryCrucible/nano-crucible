@@ -4,13 +4,13 @@
 
 The CLI uses conventional long options and one-letter aliases in new documentation:
 
-| Canonical option | Short alias | Deprecated compatibility aliases |
+| Canonical option | Short alias | Removed aliases |
 |---|---|---|
 | `--project-id` | `-p` | `-pid`; `--project` on dataset and sample search |
 | `--project-id` for project creation | `-i` | `-id` |
 | `--type` for sample creation | `-t` | `--sample-type` |
 
-Deprecated aliases remain accepted with a warning so existing scripts continue to work. Remove them only through the package's normal compatibility process.
+The removed aliases were dropped in 4.0.0. Using one stops the command with an error naming the option to use instead (`RemovedOptionAction` in `helpers.py`).
 
 Short options may have different meanings under unrelated subcommands. This is normal argparse scoping and is not considered a conflict.
 

@@ -14,7 +14,7 @@ Verify you're connected:
 
 ```python
 print(client.whoami())
-# {'orcid': '0000-0000-0000-0000', 'first_name': 'Jane', ...}
+# {'user_unique_id': '...', 'access_group_ids': [...], 'user_info': {'first_name': 'Jane', ...}}
 ```
 
 ---
@@ -43,7 +43,7 @@ result = client.datasets.create(
         dataset_name="XRD measurement",
         measurement="X-ray diffraction",
         data_type="X-ray diffraction xy file",
-        instrument_name="Rigaku_XRD",
+        instrument_id="rigaku-xrd",  # a registered instrument slug
         project_id=PROJECT_ID,
     ),
     files=["xrd_data.xy"],

@@ -36,10 +36,10 @@ Running `crucible` without a command starts the interactive shell. See the [CLI 
 ### Errors
 
 - A mistyped command or flag ends with a "Did you mean ...?" suggestion.
-- API errors add a next step where one applies: `crucible config init` for a rejected key, `crucible whoami` for missing permissions, `read_timeout` for slow responses.
+- API errors add a next step where one applies: `crucible login` or `crucible config init` for a rejected key or sign-in, `crucible whoami` for missing permissions, `read_timeout` for slow responses.
 - With `--json`, the hint appears as `error.hint`.
 
-`--json` is available for dataset, sample, and instrument `list` and `get`; project `list` and `get`; generic `get`; user `get`, `list`, and `search`; service-account `get` and `list`; account `show`; and dataset, sample, project, and instrument name or metadata searches. Collection and search commands return arrays, while singleton commands return objects.
+`--json` is available for dataset, sample, and instrument `list` and `get`; project `list` and `get`; user `get`, `list`, and `search`; service-account `get` and `list`; account `show`; and dataset, sample, project, and instrument name or metadata searches. Collection and search commands return arrays, while singleton commands return objects. The generic `get` command uses `-o json` (`--output json`) instead.
 
 ## Dataset commands
 
@@ -63,7 +63,7 @@ Running `crucible` without a command starts the interactive shell. See the [CLI 
 | `dataset add-sample MFID` | Link a sample to a dataset |
 | `dataset remove-sample MFID` | Unlink a sample from a dataset |
 | `dataset list-samples MFID` | List samples linked to a dataset |
-| `dataset add-file MFID FILE` | Upload files to an existing dataset |
+| `dataset add-file MFID -i FILE [FILE ...]` | Upload files to an existing dataset |
 | `dataset add-thumbnail MFID IMAGE` | Encode and add a local image as a dataset thumbnail |
 | `dataset list-files MFID` | List associated files and available download links |
 | `dataset download MFID` | Download dataset files with optional include and exclude patterns |
@@ -115,7 +115,7 @@ Both commands accept `--visibility all|public|private`, `--mine`, `--owner USER`
 
 `dataset facets FIELD` and `sample facets FIELD` count how many records fall into each value of a grouping field without fetching the records. Dataset fields are `session`, `measurement`, `data_format`, `owner`, `instrument`, and `project`; sample fields are `sample_type`, `owner`, and `project`. Both accept `--sort value|label|count`, `--direction`, `--limit`, `--json`, and the same project, visibility, ownership, time, exact-match, and `--missing` filters as the matching list command. In the interactive shell, `-m/--measurement`, `--session`, `--data-format`, and `--type` complete from these counts, scoped to the `--project-id` typed on the line or else the current project. These values and project IDs match fuzzily, so `xt` offers `xrd-titan`; commands, flags, fixed choices, and MFIDs complete by prefix.
 
-Fields normally updated through `dataset update --set` include `dataset_name`, `measurement`, `data_type`, `session_name`, `data_format`, and `timestamp`. Use `set-public` or `set-private` for public visibility, `reassign-project` for project changes, and `transfer-ownership` for owner changes. Instrument reassignment remains unavailable and is not exposed as ordinary metadata editing.
+Fields normally updated through `dataset update --set` include `dataset_name`, `measurement`, `data_type`, `session_name`, `data_format`, and `timestamp`. Use `set-public` or `set-private` for public visibility, `reassign-project` for project changes, and `transfer-ownership` for owner changes. The CLI has no instrument-assignment command; assign or change a dataset's instrument from Python with `client.datasets.assign_instrument()`.
 
 ## Sample commands
 
@@ -356,7 +356,7 @@ Configuration values can come from environment variables, the platform-specific 
 | Command | Description |
 |---|---|
 | `status` | Show endpoint reachability, deployment provenance, database readiness, and authentication identity |
-| `whoami` | Show the identity, platform role, privilege mode, and capabilities of the configured key |
+| `whoami` | Show the identity, platform role, privilege mode, and capabilities of the active credential, and whether it is an API key or a sign-in and where it came from |
 | `get MFID` | Show a dataset, sample, project, or instrument after detecting its resource type |
 | `edit MFID` | Edit a dataset, sample, or instrument after detecting its type |
 | `download MFID` | Save a record and, for datasets, associated files |

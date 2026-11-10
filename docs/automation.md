@@ -24,14 +24,15 @@ for dataset in client.datasets.list(project_id="my-project", limit=20):
     print(dataset["unique_id"], dataset.get("dataset_name"))
 ```
 
-The 3.x client uses resource namespaces: `client.datasets`, `client.samples`, `client.projects`, `client.instruments`, `client.files`, and others. Flat methods from older releases, such as `client.get_dataset()`, have been removed.
+The 4.x client uses resource namespaces: `client.datasets`, `client.samples`, `client.projects`, `client.instruments`, `client.files`, and others. Flat methods from older releases, such as `client.get_dataset()`, have been removed.
 
 ## Supply credentials safely
 
-For a workstation, initialize the platform-specific config file:
+For a workstation, sign in with a browser, or save an API key in the platform-specific config file:
 
 ```bash
-crucible config init
+crucible login            # use --device over SSH or without a browser
+crucible config init      # or store an API key instead
 ```
 
 For CI or another non-interactive environment, inject credentials through its

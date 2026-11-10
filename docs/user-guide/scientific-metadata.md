@@ -74,12 +74,12 @@ crucible dataset update DATASET_MFID --metadata '{"pressure_bar": 1.0}'
 crucible dataset update DATASET_MFID --metadata '{"new_key": "value"}' --overwrite
 
 # Search
-crucible dataset search "temperature" --limit 10
+crucible dataset search-metadata "temperature" --limit 10
 
 # Get a dataset record including metadata
 crucible dataset get DATASET_MFID --include-metadata
 # or as JSON:
-crucible dataset get DATASET_MFID -o json
+crucible dataset get DATASET_MFID --json
 ```
 
 ## Tips

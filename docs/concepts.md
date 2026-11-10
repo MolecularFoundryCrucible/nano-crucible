@@ -8,7 +8,7 @@ Crucible organizes scientific data around four types of objects. Understanding h
 Users can be people or service accounts with access to Crucible.
 Users can be members of access groups and projects.
 Human users may use an ORCID as their canonical identifier or receive a generated MFID when created without one.
-Crucible API keys are required for working with the Crucible API locally.
+Sign in with `crucible login` for interactive work, or use a Crucible API key for scripts, CI, and batch jobs.
 
 If your integration requires a service account with elevated privileges, please join [Discord](https://discord.gg/Wrepphsgbx) and submit a request for a service account.
 

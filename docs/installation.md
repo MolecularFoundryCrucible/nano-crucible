@@ -3,7 +3,7 @@
 ## Requirements
 
 - Python 3.11 or later
-- A Crucible account and API key ([crucible.lbl.gov](https://crucible.lbl.gov))
+- A Crucible account ([crucible.lbl.gov](https://crucible.lbl.gov)); an API key only for scripts, CI, and batch jobs
 
 ## Install from PyPI
 
@@ -14,7 +14,7 @@ pip install nano-crucible
 ### Optional extras
 
 ```bash
-# Parser support (includes ASE for LAMMPS/MatEnsemble parsers)
+# Parser support (installs ASE for the built-in LAMMPS parser)
 pip install nano-crucible[parsers]
 ```
 

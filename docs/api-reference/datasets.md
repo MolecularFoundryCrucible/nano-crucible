@@ -36,8 +36,6 @@ File operations are also available via `client.files` (by MFID) and ingestion vi
         - unlink
         - list_parents
         - list_children
-        - get_access_groups
-        - add_access_group
         - list_access
         - set_access
         - revoke_access
@@ -47,4 +45,3 @@ File operations are also available via `client.files` (by MFID) and ingestion vi
         - reassign_project
         - assign_instrument
         - postprocess
-        - graph

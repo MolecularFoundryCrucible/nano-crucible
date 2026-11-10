@@ -33,6 +33,7 @@
 - `CRUCIBLE_CURRENT_PROJECT` stops the CLI; use `--project-id`.
 - `owner_orcid` on `datasets.list()` and `samples.list()` (use `owner_id`), `include_datasets` on `samples.list()` (use `include_links`), and `instrument_id`/`instrument_name` in `datasets.update()` (use `assign_instrument()`).
 - Parser `owner_orcid` and `instrument_name` arguments and the `_instrument_name` class default; use `owner`, `instrument_id`/`instrument_mfid`, and `_instrument_id`.
+- `dataset update --set public=...`; use `dataset set-public` or `set-private`.
 
 ### Changed
 
@@ -53,6 +54,7 @@
 - Resource, project, instrument, and user links, `crucible open`, and Alt+O go to the Crucible Hub (`hub_url`) instead of the Graph Explorer.
 - `datasets.create()` leaves out `instrument_name` when `instrument_id` or `instrument_mfid` is set.
 - A cast recipe's `instrument` is an instrument ID or MFID, not a name.
+- The PyPI release workflow runs the tests first, and `pytest` alone runs only the unit tests; integration tests need `CRUCIBLE_TEST_API_URL` and `CRUCIBLE_TEST_API_KEY`.
 
 ### Fixed
 
@@ -60,11 +62,15 @@
 - `datasets.create(upload_files=False)` and `dataset create --no-upload` send each file's size and SHA-256, which the server requires, and name files by relative path so files sharing a basename in different folders stay separate.
 - `add_remote_file()` sets `storage_path` in the create request, and updates it when re-adding an existing file at a new location.
 - Creating a dataset, sample, project, or instrument with scientific metadata on someone else's behalf no longer fails with 403 for platform contributors.
-- The CLI shows UTC timestamps ending in `Z` in local time on Python 3.10, and table dates use the local day.
+- The CLI shows UTC timestamps ending in `Z` in local time, and table dates use the local day.
 - `project add-user` accepts user and service-account MFIDs and any other user ID instead of failing with an invalid ORCID error.
 - Downloads no longer send the API key to the storage host serving a signed URL.
 - A refusal that needs a recent Hub sign-in (`hub_session_required`) points to the Hub instead of suggesting `--elevate`.
 - `dataset ingestion` and `file ingestion` show the file MFID and creation time.
+- `deletion` and `ag` views show usernames again.
+- `sa create --unique-id` keeps the given MFID when it prompts for the username.
+- Deprecation warnings from the API point at the calling code, so Python's default filters show them.
+- Bash and zsh completion leave out removed commands.
 
 ## 3.3.0
 
