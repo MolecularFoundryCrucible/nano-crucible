@@ -60,7 +60,7 @@
 - `datasets.graph()` and `samples.graph()` still work but are deprecated in favour of `graphs.get()`.
 - Renamed, with the old names still working and warning: `datasets.list_keywords()`, `projects.list_users()`, `instruments.list_users()`, `users.list_projects()`, and the parameters `file_mfid` (files), `resource_mfid` (deletions), `service_account_ref`, `instrument_ref`, and `user_ref` (users and project members).
 - Renamed CLI commands, with the old names still working and warning: `dataset link-sample`, `unlink-sample`, `unlink -p -c`; `sample link-dataset`, `unlink-dataset`, `unlink -p -c`. `dataset ingestors` now runs `ingestion list-ingestors`, which lists the server's ingestors and takes `--filter`.
-- `--json` on the `list-parents`, `list-children`, `list-samples`, `list-datasets`, `list-files`, `list-keywords`, `list-users`, `list-projects` and `list-access-groups` commands, `file`, `ingestion`, `ag` and `deletion` `list` and `get`, `whoami`, and `status`.
+- `--json` on the `list-parents`, `list-children`, `list-samples`, `list-datasets`, `list-files`, `list-keywords`, `list-users`, `list-projects` and `list-access-groups` commands, `file`, `ingestion`, `ag` and `deletion` `list` and `get`, `ag mine`, `deletion list-deleted` and `get-deleted`, `file ingestion`, `ingestion list-ingestors`, `whoami`, and `status`.
 - `deletion delete` and `sa rotate-key` ask for confirmation (`-y/--yes` skips it), `-y` works wherever `--yes` does, and shell completion leaves out `user create` and `deletion delete` for callers who cannot elevate.
 - Tests run on Python 3.13 and macOS, and a separate workflow checks the client's routes against staging and can run the integration tests on demand.
 

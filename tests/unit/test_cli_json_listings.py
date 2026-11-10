@@ -459,3 +459,40 @@ def test_status_json_without_credential(monkeypatch, capsys):
 
     assert exited.value.code == 0
     assert json_output(capsys)['authentication'] == {'status': 'not configured'}
+
+
+JOIN = [{'id': 3, 'status': 'pending', 'project': {'project_id': 'demo'}}]
+AUDIT = {'id': 42, 'resource_id': MFID, 'resource_type': 'dataset', 'deleted_at': '2026-11-01T10:00:00Z'}
+REQUESTS = [{'id': 7, 'status': 'complete', 'ingestion_class': 'XRDIngestor', 'file_mfid': MFID}]
+
+
+@pytest.mark.parametrize(('register', 'argv', 'resources', 'expected'), [
+    (ag_cli._register_mine, ('mine', '--json'),
+     {'account': SimpleNamespace(join_requests=MagicMock(return_value=JOIN))}, JOIN),
+    (deletion_cli._register_list_deleted, ('list-deleted', '--resource', MFID, '--json'),
+     {'deletions': SimpleNamespace(list_deleted=MagicMock(return_value=[AUDIT]))}, [AUDIT]),
+    (deletion_cli._register_get_deleted, ('get-deleted', '42', '--json'),
+     {'deletions': SimpleNamespace(get_deleted=MagicMock(return_value=AUDIT))}, AUDIT),
+    (file_cli._register_ingestion, ('ingestion', MFID, '--json'),
+     {'ingestions': SimpleNamespace(list=MagicMock(return_value=REQUESTS))}, REQUESTS),
+    (ingestion_cli._register_list_ingestors, ('list-ingestors', '--filter', 'xrd', '--json'),
+     {'ingestions': SimpleNamespace(list_ingestors=MagicMock(return_value=['XRDIngestor', 'TEMIngestor']))},
+     ['XRDIngestor']),
+])
+def test_remaining_commands_print_json(monkeypatch, capsys, register, argv, resources, expected):
+    use_client(monkeypatch, **resources)
+    args = parse(register, *argv)
+
+    args.func(args)
+
+    assert json_output(capsys) == expected
+
+
+def test_list_deleted_uses_the_current_resource_keyword(monkeypatch, capsys):
+    deletions = SimpleNamespace(list_deleted=MagicMock(return_value=[]))
+    use_client(monkeypatch, deletions=deletions)
+    args = parse(deletion_cli._register_list_deleted, 'list-deleted', '--resource', MFID, '--json')
+
+    args.func(args)
+
+    assert deletions.list_deleted.call_args.kwargs['resource_mfid'] == MFID

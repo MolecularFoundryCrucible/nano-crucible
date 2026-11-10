@@ -106,6 +106,7 @@ Use the ingestor name with:
     )
     parser.add_argument('--filter', '-f', dest='filter', default=None, metavar='TEXT',
                         help='Only ingestors whose name contains TEXT (case-insensitive)')
+    parser.add_argument('--json', action='store_true', default=False, help='Output as JSON array')
     parser.set_defaults(func=_execute_list_ingestors)
 
 
@@ -117,6 +118,9 @@ def _execute_list_ingestors(args):
         text = getattr(args, 'filter', None)
         if text:
             ingestors = [name for name in ingestors if text.lower() in name.lower()]
+        if getattr(args, 'json', False):
+            print(json.dumps(ingestors, indent=2))
+            return
 
         title = f"Ingestors ({len(ingestors)})" + (f"  [filter: {text}]" if text else "")
         term.header(title)

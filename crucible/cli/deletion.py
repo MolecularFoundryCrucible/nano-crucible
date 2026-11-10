@@ -250,6 +250,7 @@ Examples:
     parser.add_argument('--direction', choices=list(SORT_DIRECTIONS), default=None,
                         help='Sort direction on deletion time')
     add_limit_arguments(parser)
+    parser.add_argument('--json', action='store_true', default=False, help='Output as JSON array')
     parser.set_defaults(func=_execute_list_deleted)
 
 
@@ -266,6 +267,7 @@ Examples:
     )
     parser.add_argument('audit_id', metavar='ID', type=int,
                         help='Integer ID of the audit log entry')
+    parser.add_argument('--json', action='store_true', default=False, help='Output as JSON object')
     parser.set_defaults(func=_execute_get_deleted)
 
 
@@ -277,7 +279,7 @@ def _execute_list_deleted(args):
     try:
         client = get_client()
         records = client.deletions.list_deleted(
-            resource_id=args.resource_id,
+            resource_mfid=args.resource_id,
             requester_id=args.requester_id,
             reviewer_id=args.reviewer_id,
             limit=resolve_limit(args), **page_kwargs(args),
@@ -286,6 +288,10 @@ def _execute_list_deleted(args):
             project_mfid=args.project_mfid,
             direction=args.direction,
         )
+        if getattr(args, 'json', False):
+            print_more_hint(records, resolve_limit(args), args)
+            print(json.dumps(records, indent=2, default=str))
+            return
 
         term.header(f"Deleted Resources ({count_label(records)})")
         if not records:
@@ -324,6 +330,9 @@ def _execute_get_deleted(args):
     try:
         client = get_client()
         record = client.deletions.get_deleted(args.audit_id)
+        if getattr(args, 'json', False):
+            print(json.dumps(record, indent=2, default=str))
+            return
         _p = term.field_printer(16)
         from .helpers import explorer_url, project_explorer_url
         rid  = record.get('resource_id') or ''

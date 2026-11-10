@@ -365,6 +365,7 @@ Examples:
 """,
     )
     parser.add_argument('file_id', metavar='FILE_ID', help='File MFID')
+    parser.add_argument('--json', action='store_true', default=False, help='Output as JSON array')
     parser.set_defaults(func=_execute_ingestion)
 
 
@@ -374,6 +375,9 @@ def _execute_ingestion(args):
     try:
         client = get_client()
         reqs = client.ingestions.list(file_mfid=args.file_id)
+        if getattr(args, 'json', False):
+            print(json.dumps(reqs, indent=2, default=str))
+            return
 
         term.header(f"Ingestion Requests · {args.file_id} ({len(reqs)})")
         if not reqs:

@@ -232,6 +232,7 @@ Examples:
     parser.add_argument('--status', choices=_STATUS_CHOICES, action='append', default=None,
                         help='Filter by status; repeatable (default: pending)')
     add_limit_arguments(parser, 'requests')
+    parser.add_argument('--json', action='store_true', default=False, help='Output as JSON array')
     parser.set_defaults(func=_execute_mine)
 
 
@@ -241,6 +242,10 @@ def _execute_mine(args):
         client = get_client()
         status = _statuses(args)
         records = client.account.join_requests(status=status, limit=resolve_limit(args), **page_kwargs(args))
+        if getattr(args, 'json', False):
+            print_more_hint(records, resolve_limit(args), args)
+            print(json.dumps(records, indent=2, default=str))
+            return
         _print_table(records, args, "My Join Requests", client)
     except Exception as e:
         from .helpers import fail
