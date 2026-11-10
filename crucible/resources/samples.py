@@ -12,7 +12,7 @@ from typing import Any, Optional, List, Dict, Sequence, Union
 from .base import BaseResource, ListResult
 from .capabilities import AccessControlMixin, OwnershipMixin, ProjectAssignmentMixin
 from ..constants import DEFAULT_LIMIT, SAMPLE_FACET_FIELDS, VISIBILITIES
-from ..utils.deprecation import _removed, _removed_parameter
+from ..utils.deprecation import _deprecated, _removed, _removed_parameter
 from ..utils.identifiers import is_mfid, require_canonical_identifier
 
 logger = logging.getLogger(__name__)
@@ -61,7 +61,7 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
     @_removed_parameter('sample_id', 'sample_mfid')
     def get(self, sample_mfid: str, include_links: bool = False,
             include_metadata: bool = False, include_owner: bool = True,
-            include_datasets: bool = True) -> Dict:
+            include_datasets: bool = False) -> Dict:
         """Get a sample by its canonical MFID.
 
         Args:
@@ -69,11 +69,19 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
             include_links (bool): Whether to include immediate parent/child/associated links
             include_metadata (bool): Whether to include scientific metadata
             include_owner (bool): Resolve the owner into a public-safe user object (default: True)
-            include_datasets (bool): Include deprecated embedded dataset records (default: True). Set False and use include_links or client.datasets.list(sample_mfid=...) instead.
+            include_datasets (bool): Also embed the linked dataset records (default: False).
+                Deprecated by the API: use include_links, or
+                client.datasets.list(sample_mfid=...).
 
         Returns:
             Dict: Sample information with optional links and metadata
         """
+        if include_datasets:
+            import warnings
+            warnings.warn(
+                "include_datasets is deprecated by the Crucible API; use include_links=True, "
+                "or client.datasets.list(sample_mfid=...) for the linked datasets.",
+                DeprecationWarning, stacklevel=2)
         return self._get_by_mfid(
             sample_mfid,
             include_links=include_links,
@@ -85,7 +93,7 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
     def _get_by_mfid(self, sample_mfid: str, include_links: bool = False,
                      include_metadata: bool = False,
                      include_owner: bool = True,
-                     include_datasets: bool = True) -> Dict:
+                     include_datasets: bool = False) -> Dict:
         """Get a sample through its canonical single-resource route."""
         if not is_mfid(sample_mfid):
             raise ValueError("sample_mfid must be an exact 26-character MFID.")
@@ -96,9 +104,8 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
             params['include_metadata'] = True
         if include_owner:
             params['include_owner'] = True
-        if not include_datasets:
-            params['include_datasets'] = False
-        raw = self._request('get', f"/samples/{sample_mfid}", params=params or None)
+        params['include_datasets'] = include_datasets
+        raw = self._request('get', f"/samples/{sample_mfid}", params=params)
         if raw is None:
             return None
         return self._parse(require_canonical_identifier(raw, 'sample'))
@@ -562,20 +569,10 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
         return result.get('items', result) if isinstance(result, dict) else result
 
     @_removed_parameter('sample_id', 'sample_mfid')
+    @_deprecated("client.graphs.get()")
     def graph(self, sample_mfid: str, recursive: bool = False,
               as_networkx: bool = False) -> Any:
-        """Return the graph of entities connected to this sample.
-
-        Delegates to client.graphs.get(). See GraphOperations.get() for full docs.
-
-        Args:
-            sample_mfid (str): Sample MFID.
-            recursive (bool): If True, traverse the full connected component.
-            as_networkx (bool): Return a networkx DiGraph if True.
-
-        Returns:
-            dict | networkx.DiGraph: Node-link graph data.
-        """
+        """Deprecated: use client.graphs.get(sample_mfid, ...), which takes the same arguments."""
         return self._client.graphs.get(
             sample_mfid, recursive=recursive, as_networkx=as_networkx)
 

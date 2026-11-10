@@ -76,7 +76,7 @@ client.projects.update("MFP12345", title="Nanoparticle synthesis study, phase 2"
 ### List users in a project
 
 ```python
-users = client.projects.get_users("MFP12345")
+users = client.projects.list_users("MFP12345")
 for u in users:
     print(u.unique_id, u.username, u.role)
 ```
@@ -86,7 +86,7 @@ Project lead, member, and operator records are public-safe and do not expose ema
 ### Add a user
 
 ```python
-members = client.projects.add_user(user_unique_id="0000-0002-3456-7890", project_id="MFP12345", role="contributor")
+members = client.projects.add_user(user_ref="0000-0002-3456-7890", project_id="MFP12345", role="contributor")
 ```
 
 Member roles are the lowercase strings `viewer`, `contributor`, `editor`, and `admin`. Adding or managing a member requires editor or above, and both the target member's current role and requested role must be strictly below the caller's role. Editors can manage viewers and contributors, admins can also manage editors, and owners can also manage admins. Platform administrators retain their bypass. Ownership is changed only through `transfer_ownership()`.
@@ -102,7 +102,7 @@ members = client.projects.update_user_role("MFP12345", "0000-0002-3456-7890", "e
 ### Remove a user
 
 ```python
-members = client.projects.remove_user(project_id="MFP12345", user_unique_id="0000-0002-3456-7890")
+members = client.projects.remove_user(project_id="MFP12345", user_ref="0000-0002-3456-7890")
 ```
 
 Project owners and platform administrators may remove members. Any member may remove themselves. Other member removal is not governed by the add and role-update hierarchy.

@@ -45,6 +45,22 @@ class RemovedOptionAction(argparse.Action):
         setattr(namespace, self.dest, values)
 
 
+def deprecate_command(subparsers, name, replacement):
+    """Keep a renamed command working with a warning, left out of help and completion."""
+    parser = subparsers.choices[name]
+    parser._deprecated = True
+    subparsers._choices_actions = [action for action in subparsers._choices_actions
+                                   if action.dest != name]
+    run = parser.get_default('func')
+
+    def warn_and_run(args):
+        from . import term
+        print(f"{term.yellow('Warning:', stream=sys.stderr)} '{parser.prog}' is deprecated; "
+              f"use {replacement} instead.", file=sys.stderr)
+        return run(args)
+    parser.set_defaults(func=warn_and_run)
+
+
 def add_removed_command(subparsers, name, replacement, aliases=()):
     """Keep a removed command name so it fails with what to run instead.
 
@@ -1101,14 +1117,13 @@ def _not_permitted(action: str) -> None:
 
 
 def parse_user_ref(value: str) -> dict:
-    """Sniff a user identifier's format and return a kwargs dict for users.get()/users.resolve().
+    """Sniff a user identifier's format and return a kwargs dict for users.get().
 
-    Uses the shared API-contract classifier. Canonical person and service-account
-    identifiers are returned under the legacy ``orcid`` keyword for compatibility.
+    Canonical person and service-account identifiers come back as ``user_unique_id``.
     """
     reference_kind, normalized = classify_user_reference(value)
     if reference_kind in ('unique_id', 'reference'):
-        return {'orcid': normalized}
+        return {'user_unique_id': normalized}
     return {reference_kind: normalized}
 
 
@@ -1440,7 +1455,7 @@ def cache_resource(shell_state, client, data, rtype, resource_id, **flags):
     if rtype == 'dataset':
         pool = ThreadPoolExecutor(max_workers=3, thread_name_prefix='prefetch')
         futures = {
-            '_keywords_future': pool.submit(client.datasets.get_keywords, resource_id),
+            '_keywords_future': pool.submit(client.datasets.list_keywords, resource_id),
             '_files_future':    pool.submit(client.datasets.list_files, resource_id),
             '_dl_links_future': pool.submit(client.datasets.get_download_links, resource_id),
         }

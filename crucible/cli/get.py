@@ -83,8 +83,7 @@ def execute(args):
     try:
         client   = get_client()
         resource = client.get(args.resource_id, include_metadata=include_metadata,
-                              include_links=graph, include_owner=True,
-                              include_datasets=output == 'json')
+                              include_links=graph, include_owner=True)
         if resource is None:
             logger.error(f"Resource not found: {args.resource_id}")
             sys.exit(1)

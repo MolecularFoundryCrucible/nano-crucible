@@ -685,7 +685,7 @@ Examples:
 """
     )
     parser.add_argument('user', metavar='USER', help='ORCID, MFID, or username of the waiting account')
-    parser.add_argument('--yes', action='store_true', default=False,
+    parser.add_argument('-y', '--yes', action='store_true', default=False,
                         help='Skip the confirmation prompt')
     parser.set_defaults(func=_execute_reject)
 
@@ -815,7 +815,7 @@ Examples:
     parser.add_argument('user', metavar='USER', help='ORCID, MFID, username, or email of the user')
     parser.add_argument('--key', dest='key_id', type=int, default=None, metavar='ID',
                         help='Revoke only this key, from `crucible user list-keys`')
-    parser.add_argument('--yes', action='store_true', default=False,
+    parser.add_argument('-y', '--yes', action='store_true', default=False,
                         help='Skip the confirmation prompt')
     parser.set_defaults(func=_execute_revoke_keys)
 
@@ -866,6 +866,8 @@ Examples:
     )
     parser.add_argument('user', metavar='USER', help='ORCID, MFID, username, or email of the user')
     add_limit_arguments(parser, 'datasets')
+    parser.add_argument('--json', action='store_true', default=False,
+                        help='Output as JSON array')
     parser.set_defaults(func=_execute_list_datasets)
 
 
@@ -901,6 +903,8 @@ Examples:
 """
     )
     parser.add_argument('user', metavar='USER', help='ORCID, MFID, username, or email of the user')
+    parser.add_argument('--json', action='store_true', default=False,
+                        help='Output as JSON array')
     parser.set_defaults(func=_execute_list_access_groups)
 
 
@@ -925,6 +929,8 @@ Examples:
                         help='Sort by project_id, title, created, or updated (default: project ID)')
     parser.add_argument('--direction', choices=SORT_DIRECTIONS, default=None,
                         help='Sort direction (dates default desc, everything else asc); requires --sort')
+    parser.add_argument('--json', action='store_true', default=False,
+                        help='Output as JSON array')
     parser.set_defaults(func=_execute_list_projects)
 
 
@@ -938,6 +944,10 @@ def _execute_list_datasets(args):
             accessible_to_user=args.user,
             limit=limit, **page_kwargs(args),
         )
+        if getattr(args, 'json', False):
+            print_more_hint(datasets, limit, args)
+            print(json.dumps(datasets, indent=2, default=str))
+            return
         dataset_ids = [dataset['unique_id'] for dataset in datasets]
 
         term.header(f"Datasets · {args.user} ({count_label(datasets)})")
@@ -986,6 +996,10 @@ def _execute_list_access_groups(args):
         user_id = resolve_user_id(client, args.user)
         groups = client.users.list_access_groups(user_id)
 
+        if getattr(args, 'json', False):
+            print(json.dumps(groups, indent=2, default=str))
+            return
+
         term.header(f"Access Groups · {args.user} ({len(groups)})")
         if not groups:
             print(f"  {term.dim('No access groups found.')}")
@@ -1009,11 +1023,15 @@ def _execute_list_projects(args):
         client = get_client()
         user_id = resolve_user_id(client, args.user)
         sort = getattr(args, 'sort', None)
-        projects = client.users.get_projects(
+        projects = client.users.list_projects(
             user_id, limit=None, role=getattr(args, 'role', None),
             sort=sort, direction=getattr(args, 'direction', None))
         if sort is None:
             projects = sorted(projects, key=lambda p: (p.get('project_id') or '').lower())
+
+        if getattr(args, 'json', False):
+            print(json.dumps(projects, indent=2, default=str))
+            return
 
         term.header(f"Projects · {args.user} ({len(projects)})")
         if not projects:

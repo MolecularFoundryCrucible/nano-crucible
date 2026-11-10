@@ -64,7 +64,7 @@ def execute(args):
         url = f"{hub_url}/"
     else:
         try:
-            resource = config.client.get(mfid, include_datasets=False)
+            resource = config.client.get(mfid)
         except Exception as e:
             logger.error(f"Resource '{mfid}' not found: {e}")
             sys.exit(1)

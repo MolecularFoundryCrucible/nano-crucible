@@ -29,7 +29,7 @@ File operations are also available via `client.files` (by MFID) and ingestion vi
         - update_thumbnail
         - delete_thumbnail
         - add_keyword
-        - get_keywords
+        - list_keywords
         - link_sample
         - unlink_sample
         - link

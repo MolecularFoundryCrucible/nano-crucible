@@ -352,7 +352,7 @@ client.datasets.replace_scientific_metadata(dataset_mfid, {"new_key": "value"})
 
 ```python
 client.datasets.add_keyword(dataset_mfid, "annealed")
-keywords = client.datasets.get_keywords(dataset_mfid=dataset_mfid)
+keywords = client.datasets.list_keywords(dataset_mfid=dataset_mfid)
 ```
 
 ## Thumbnails

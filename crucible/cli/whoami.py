@@ -4,6 +4,7 @@
 Whoami subcommand — show current user info based on the active API key.
 """
 
+import json
 import logging
 
 logger = logging.getLogger(__name__)
@@ -23,6 +24,8 @@ def register_subcommand(subparsers):
         action='store_true',
         help='Show all fields, including access group IDs and every capability flag'
     )
+    parser.add_argument('--json', action='store_true', default=False,
+                        help='Output as JSON object')
     parser.set_defaults(func=execute)
 
 
@@ -47,6 +50,10 @@ def execute(args):
     try:
         info = config.client.whoami()
         user = info.get('user_info', {})
+
+        if getattr(args, 'json', False):
+            print(json.dumps(_whoami_payload(info, config.client), indent=2, default=str))
+            return
 
         _p = term.field_printer(16)
 
@@ -97,6 +104,21 @@ _CAPABILITY_LABELS = {
     'can_manage_service_accounts': 'manage service accounts',
     'can_manage_users':            'manage users',
 }
+
+
+def _whoami_payload(info, client):
+    """The whoami response plus how the client signed in and its authorization."""
+    auth = client.authorization
+    payload = dict(info)
+    payload['signed_in_with'] = credential_label(client)
+    payload['authorization'] = {
+        'platform_role': auth.platform_role,
+        'privilege_mode': 'elevated' if client.is_elevated else 'normal',
+        'privilege_mode_is_default': client.privilege_mode is None,
+        'can_elevate': auth.can_elevate,
+    }
+    payload['capabilities'] = client.capabilities.model_dump()
+    return payload
 
 
 def _show_authorization(client, _p, verbose=False):

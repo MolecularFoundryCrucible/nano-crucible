@@ -10,7 +10,7 @@ import os
 import logging
 import requests
 from datetime import date, datetime
-from typing import Callable, Optional, List, Dict, Sequence, Union
+from typing import Any, Callable, Optional, List, Dict, Sequence, Union
 
 import mfid
 
@@ -21,7 +21,7 @@ from ..utils.deprecation import removed_message
 from .capabilities import (
     AccessControlMixin, InstrumentAssignmentMixin, OwnershipMixin, ProjectAssignmentMixin)
 from ..constants import DATASET_FACET_FIELDS, DEFAULT_LIMIT, VISIBILITIES
-from ..utils.deprecation import _removed, _removed_parameter
+from ..utils.deprecation import _deprecated, _removed, _removed_parameter
 from ..utils.identifiers import is_mfid, require_canonical_identifier
 from ..models import AssociatedFile
 
@@ -344,7 +344,7 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
                 their own storage_backend regardless of this flag.
             files_to_upload: Removed in 4.0.0; passing it raises RemovedError. Use `files`.
         Returns:
-            Dict: created_record, scientific_metadata_record, dataset_mfid, dsid, files
+            Dict: created_record, scientific_metadata_record, dataset_mfid, files
                 (files is the per-item result of adding each entry in `files`,
                 in the same order). ``dsid`` is retained for compatibility.
         """
@@ -428,7 +428,7 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
 
         result = {"created_record": new_ds_record,
                   "scientific_metadata_record": scimd,
-                  "dataset_mfid": dataset_mfid, "dsid": dataset_mfid,
+                  "dataset_mfid": dataset_mfid,
                   "files": file_results}
         return result
 
@@ -510,8 +510,13 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
         return [self._parse(dataset) for dataset in raw]
 
     # Keyword Methods
+    @_deprecated("client.datasets.list_keywords()")
+    def get_keywords(self, *args, **kwargs):
+        """Deprecated: use list_keywords()."""
+        return self.list_keywords(*args, **kwargs)
+
     @_removed_parameter('dsid', 'dataset_mfid')
-    def get_keywords(self, dataset_mfid: str,
+    def list_keywords(self, dataset_mfid: str,
                      limit: int = DEFAULT_LIMIT) -> List[Dict]:
         """List keywords, optionally filtered by dataset.
 
@@ -719,9 +724,12 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
     def request_mosaic_stitch(self, *args, **kwargs):
         """Removed in 4.0.0: use client.datasets.postprocess(dataset_mfid, 'mosaic_stitch') instead."""
 
-    @_removed("use client.graphs.get instead.")
-    def graph(self, *args, **kwargs):
-        """Removed in 4.0.0: use client.graphs.get instead."""
+    @_deprecated("client.graphs.get()")
+    def graph(self, dataset_mfid: str, recursive: bool = False,
+              as_networkx: bool = False) -> Any:
+        """Deprecated: use client.graphs.get(dataset_mfid, ...), which takes the same arguments."""
+        return self._client.graphs.get(
+            dataset_mfid, recursive=recursive, as_networkx=as_networkx)
 
     #%% Upload Methods
 

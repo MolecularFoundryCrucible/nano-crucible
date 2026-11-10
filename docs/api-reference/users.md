@@ -20,7 +20,7 @@ For self-service profile and API key operations see `client.account`.
         - reject
         - check_dataset_access
         - list_access_groups
-        - get_projects
+        - list_projects
         - set_platform_role
         - list_api_keys
         - revoke_api_key

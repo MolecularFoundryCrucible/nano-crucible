@@ -925,26 +925,28 @@ class CrucibleCompleter(Completer):
                 '-p': 'datasets', '--parent': 'datasets',
                 '-c': 'datasets', '--child': 'datasets',
             },
-            ('dataset', 'add-sample'): {
+            ('dataset', 'link-sample'): {
                 '-s': 'samples', '--sample': 'samples',
             },
-            ('dataset', 'remove-sample'): {
+            ('dataset', 'unlink-sample'): {
                 '-s': 'samples', '--sample': 'samples',
             },
-            ('dataset', 'remove-child'): {
+            ('dataset', 'unlink'): {
+                '-p': 'datasets', '--parent': 'datasets',
                 '-c': 'datasets', '--child': 'datasets',
             },
             ('sample', 'link'): {
                 '-p': 'samples', '--parent': 'samples',
                 '-c': 'samples', '--child': 'samples',
             },
-            ('sample', 'add-dataset'): {
+            ('sample', 'link-dataset'): {
                 '-d': 'datasets', '--dataset': 'datasets',
             },
-            ('sample', 'remove-dataset'): {
+            ('sample', 'unlink-dataset'): {
                 '-d': 'datasets', '--dataset': 'datasets',
             },
-            ('sample', 'remove-child'): {
+            ('sample', 'unlink'): {
+                '-p': 'samples', '--parent': 'samples',
                 '-c': 'samples', '--child': 'samples',
             },
         }.get((resource, subcommand), {})
@@ -1050,8 +1052,10 @@ class CrucibleCompleter(Completer):
 
 
 def _visible_subcommands(parser, sub_map):
-    """Subcommand names to offer, leaving out removed commands."""
-    return [name for name in sub_map if not getattr(sub_map[name], '_removed', False)]
+    """Subcommand names to offer, leaving out removed and deprecated commands."""
+    return [name for name in sub_map
+            if not getattr(sub_map[name], '_removed', False)
+            and not getattr(sub_map[name], '_deprecated', False)]
 
 
 def _positional_choices(parser, args, current_word):

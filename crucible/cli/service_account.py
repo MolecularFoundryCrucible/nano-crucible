@@ -97,7 +97,7 @@ def _describe_groups(client, group_ids, own_id=None):
             continue
         kind, label = 'group', None
         try:
-            resource = client.get(group_id, include_owner=False, include_datasets=False)
+            resource = client.get(group_id, include_owner=False)
         except Exception:
             resource = None
         if resource:
@@ -205,11 +205,13 @@ def _register_rotate_key(subparsers):
         epilog="""
 Examples:
     crucible sa rotate-key 0th7...
-    crucible sa rotate-key nirvana-sa
+    crucible sa rotate-key nirvana-sa --yes
 """,
     )
     parser.add_argument('sa', metavar='SA', nargs='?', default=None,
                         help='MFID or username of the service account')
+    parser.add_argument('-y', '--yes', action='store_true', default=False,
+                        help='Skip the confirmation prompt')
 
     group = parser.add_mutually_exclusive_group()
     group.add_argument('--unique-id', '-o', action=RemovedOptionAction, replacement='the SA argument', default=None)
@@ -225,6 +227,12 @@ def _execute_rotate_key(args):
         client = get_client()
         require_elevation(client, 'rotate service account API keys')
         sa = _resolve_sa(client, unique_id=unique_id, username=username, ambiguous=ambiguous)
+        from .helpers import prompt_confirm
+        question = (f"Rotate the API key of {sa.get('username') or sa.get('unique_id')}? "
+                    "The current key stops working immediately.")
+        if not (getattr(args, 'yes', False) or prompt_confirm(question, option='--yes')):
+            logger.info("Aborted.")
+            return
         result = client.service_accounts.rotate_key(sa.get('unique_id'))
         _show_sa(result, key=result.get('api_key'))
     except SystemExit:

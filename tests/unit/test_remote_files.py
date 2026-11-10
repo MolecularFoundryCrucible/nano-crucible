@@ -179,7 +179,8 @@ class TestCreateFilesDispatch:
 
         dataset_ops.add_file.assert_called_once()
         assert result['dataset_mfid'] == 'ds-1'
-        assert result['dsid'] == 'ds-1'
+        assert result['dataset_mfid'] == 'ds-1'
+        assert 'dsid' not in result
         assert result['files'] == [{'associated_file': {'mfid': 'mf-1'}}]
 
     def test_associated_file_always_uses_add_remote_file(self, dataset_ops):

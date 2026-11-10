@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 class GraphOperations(BaseResource):
     """Entity graph traversal operations.
 
-    Access via: client.graphs.get(), or client.samples.graph() for a sample.
+    Access via: client.graphs.get() for a dataset or sample, client.graphs.project() for a project.
     """
 
     @_removed_parameter('entity_id', 'resource_mfid')

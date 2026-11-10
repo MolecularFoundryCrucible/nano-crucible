@@ -226,21 +226,6 @@ class AccessGrant(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
-    @property
-    def principal(self) -> str:
-        """Deprecated alias for :attr:`principal_id`."""
-        return self.principal_id
-
-    @property
-    def kind(self) -> str:
-        """Deprecated alias for :attr:`principal_type`."""
-        return self.principal_type
-
-    @property
-    def effective_permission(self) -> str:
-        """Deprecated alias for :attr:`permission`."""
-        return self.permission
-
 
 class EffectiveResourceAccess(BaseModel):
     '''A user's effective permission on one resource.'''

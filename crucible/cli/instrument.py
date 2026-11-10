@@ -79,6 +79,8 @@ def _register_member_commands(subparsers):
         'list-users', help='List the instrument owner and maintainers',
         description=f'List the instrument owner and maintainers. {note}')
     parser.add_argument('instrument', metavar='INSTRUMENT', help='Instrument MFID or instrument_id')
+    parser.add_argument('--json', action='store_true', default=False,
+                        help='Output as JSON array')
     parser.set_defaults(func=_execute_list_users)
 
     parser = subparsers.add_parser(
@@ -130,11 +132,14 @@ def _execute_list_users(args):
     from crucible.config import get_client
     from .helpers import fail
     try:
-        members = get_client().instruments.get_users(args.instrument)
+        members = get_client().instruments.list_users(args.instrument)
         if members is None:
             logger.error("Members are visible only to the instrument owner, its "
                          "maintainers, and platform administrators.")
             sys.exit(1)
+        if getattr(args, 'json', False):
+            print(json.dumps([m.model_dump(mode='json') for m in members], indent=2, default=str))
+            return
         term.header(f"Members · {args.instrument} ({len(members)})")
         _member_table(members)
     except Exception as e:

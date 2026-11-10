@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any, Optional, Dict, List, Sequence, Union
 from .base import BaseResource, ListResult
 from ..constants import (
     DEFAULT_LIMIT, PLATFORM_ROLES, PROJECT_ACCESS_ROLES, PROJECT_SORTS)
-from ..utils.deprecation import _removed, _removed_parameter
+from ..utils.deprecation import _deprecated_parameter, _deprecated, _removed, _removed_parameter
 from ..utils.identifiers import (
     classify_user_reference,
     collapse_exact_lookup,
@@ -52,23 +52,22 @@ class UserOperations(BaseResource):
     Access via: client.users.get(), client.users.create(), etc.
     """
 
+    @_removed_parameter('orcid', 'user_ref')
     def get(self, user_ref: Optional[str] = None,
             email: Optional[str] = None, username: Optional[str] = None,
-            *, orcid: Optional[str] = None,
-            user_unique_id: Optional[str] = None) -> Dict:
+            *, user_unique_id: Optional[str] = None) -> Dict:
         """Get a user by canonical unique ID, username, or email.
 
         Username and email references use exact collection filters and return
         the caller-authorized representation without a second request. Self
         and platform-administrator lookups may include email; other callers
         receive the public-safe representation.
-        ``orcid``, ``email``, and ``username`` remain supported keyword forms.
+        ``email`` and ``username`` remain supported keyword forms.
 
         Args:
             user_ref (str, optional): ORCID, user MFID, username, or email
             email (str, optional): User's email address
             username (str, optional): User's username
-            orcid (str, optional): Explicit person ORCID
             user_unique_id (str, optional): Explicit canonical ORCID or user MFID
 
         Returns:
@@ -78,15 +77,13 @@ class UserOperations(BaseResource):
             ValueError: If no identifier or multiple identifiers are provided
         """
         provided = [
-            value for value in (user_ref, email, username, orcid, user_unique_id)
+            value for value in (user_ref, email, username, user_unique_id)
             if value is not None
         ]
         if len(provided) != 1:
             raise ValueError("Provide exactly one user reference.")
         if user_unique_id is not None:
             return self._get_by_unique_id(user_unique_id)
-        if orcid is not None:
-            return self._get_by_unique_id(orcid)
         if username is not None:
             return self._get_by_username(username)
         if email is not None:
@@ -157,7 +154,8 @@ class UserOperations(BaseResource):
     def verify_api_key(self, *args, **kwargs):
         """Removed in 4.0.0: use client.users.get(user_unique_id)['api_key_status'] instead."""
 
-    def set_platform_role(self, user_unique_id: str, platform_role: str) -> Dict:
+    @_deprecated_parameter('user_unique_id', 'user_ref')
+    def set_platform_role(self, user_ref: str, platform_role: str) -> Dict:
         """Change a human user's platform role.
 
         **Requires human platform-administrator permissions.** Service-account
@@ -167,7 +165,7 @@ class UserOperations(BaseResource):
         last human platform administrator returns 409.
 
         Args:
-            user_unique_id: Canonical user ORCID or MFID
+            user_ref: Canonical user ORCID or MFID
             platform_role: One of crucible.constants.PLATFORM_ROLES
                 (none, contributor, admin)
 
@@ -179,7 +177,7 @@ class UserOperations(BaseResource):
                 f"platform_role must be one of: {', '.join(PLATFORM_ROLES)}.")
         return self._request(
             'patch',
-            f'/users/{user_unique_id}/platform_role',
+            f'/users/{user_ref}/platform_role',
             json={'platform_role': platform_role},
             privilege_mode='elevated',
         )
@@ -218,7 +216,8 @@ class UserOperations(BaseResource):
         self._request('delete', f'/users/{user_ref}/apikeys/{key_id}',
                       privilege_mode='elevated')
 
-    def revoke_api_keys(self, user_unique_id: str) -> None:
+    @_deprecated_parameter('user_unique_id', 'user_ref')
+    def revoke_api_keys(self, user_ref: str) -> None:
         """Revoke every API key held by a user, in one atomic call. Platform administrators only.
 
         The user's keys stop authenticating within the API's principal-cache
@@ -226,11 +225,11 @@ class UserOperations(BaseResource):
         use revoke_api_key().
 
         Args:
-            user_unique_id: Canonical user ORCID or MFID
+            user_ref: Canonical user ORCID or MFID
         """
         self._request(
             'delete',
-            f'/users/{user_unique_id}/apikey',
+            f'/users/{user_ref}/apikey',
             privilege_mode='elevated',
         )
 
@@ -476,24 +475,31 @@ class UserOperations(BaseResource):
         raw = self._request('get', f'/users/{user_ref}/datasets/{dataset_mfid}')
         return EffectiveResourceAccess.model_validate(raw)
 
+    @_deprecated_parameter('user_unique_id', 'user_ref')
     @_removed_parameter('orcid', 'user_unique_id')
-    def list_access_groups(self, user_unique_id: str) -> List[str]:
+    def list_access_groups(self, user_ref: str) -> List[str]:
         """List access group names for a user.
 
         Args:
-            user_unique_id (str): Canonical user ORCID or MFID
+            user_ref (str): Canonical user ORCID or MFID
 
         Returns:
             List[str]: Access group names the user belongs to
         """
-        return self._request('get', f'/users/{user_unique_id}/access_groups')
+        return self._request('get', f'/users/{user_ref}/access_groups')
 
     @_removed("use client.projects.add_user() or client.instruments.bind_service_account() instead.")
     def add_to_access_group(self, *args, **kwargs):
         """Removed in 4.0.0: use client.projects.add_user() or client.instruments.bind_service_account() instead."""
 
+    @_deprecated("client.users.list_projects()")
+    def get_projects(self, *args, **kwargs):
+        """Deprecated: use list_projects()."""
+        return self.list_projects(*args, **kwargs)
+
+    @_deprecated_parameter('user_unique_id', 'user_ref')
     @_removed_parameter('orcid', 'user_unique_id')
-    def get_projects(self, user_unique_id: str, limit: int = DEFAULT_LIMIT,
+    def list_projects(self, user_ref: str, limit: int = DEFAULT_LIMIT,
                      offset: int = 0,
                      role: Optional[Union[str, Sequence[str]]] = None,
                      sort: Optional[str] = None,
@@ -506,7 +512,7 @@ class UserOperations(BaseResource):
         caller's, each project's ``role`` here is the listed user's.
 
         Args:
-            user_unique_id (str): Canonical user ORCID or MFID
+            user_ref (str): Canonical user ORCID or MFID
             limit (int): Maximum number of results to return (default: 100).
                 Pass None to fetch all.
             offset (int): Starting position in the full result set (default: 0)
@@ -532,16 +538,17 @@ class UserOperations(BaseResource):
         if include_metadata:
             params['include_metadata'] = True
         params.update(self._ordering_params(sort, direction, sorts=PROJECT_SORTS))
-        return self._paginate(f'/users/{user_unique_id}/projects', params, limit, offset, cursor=cursor)
+        return self._paginate(f'/users/{user_ref}/projects', params, limit, offset, cursor=cursor)
 
+    @_deprecated_parameter('user_unique_id', 'user_ref')
     @_removed_parameter('orcid', 'user_unique_id')
-    def update(self, user_unique_id: str, **kwargs: Any) -> Dict:
+    def update(self, user_ref: str, **kwargs: Any) -> Dict:
         """Partially update a user record.
 
         **Requires admin permissions.**
 
         Args:
-            user_unique_id (str): Canonical user ORCID or MFID
+            user_ref (str): Canonical user ORCID or MFID
             **kwargs: Fields to update. Accepted: first_name, last_name,
                       email, username.
 
@@ -550,7 +557,7 @@ class UserOperations(BaseResource):
         """
         if 'is_service_account' in kwargs:
             raise ValueError("is_service_account cannot be changed through user update.")
-        return self._request('patch', f'/users/{user_unique_id}', json=kwargs)
+        return self._request('patch', f'/users/{user_ref}', json=kwargs)
 
     @_removed("use client.account.create_api_key() instead.")
     def get_api_key(self, *args, **kwargs):

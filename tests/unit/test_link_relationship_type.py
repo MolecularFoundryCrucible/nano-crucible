@@ -135,27 +135,13 @@ def test_client_link_allows_dataset_sample_pair_without_type():
     client.datasets.link_sample.assert_called_once_with(PARENT, CHILD)
 
 
-def test_get_links_adds_legacy_relationship_alias():
+def test_get_links_returns_the_api_links_unchanged():
     client = _client_with_types('dataset', 'dataset')
-    client._request = MagicMock(return_value=[
-        {'unique_id': CHILD, 'direction': 'target'},
-        {'unique_id': PARENT, 'direction': 'source'},
-    ])
+    raw = [{'unique_id': CHILD, 'direction': 'target'}]
+    client._request = MagicMock(return_value=raw)
 
-    links = client.get_links(PARENT)
-
-    assert [link['relationship'] for link in links] == ['child', 'parent']
-
-
-def test_get_links_normalizes_legacy_relationship_response():
-    client = _client_with_types('dataset', 'sample')
-    client._request = MagicMock(return_value=[
-        {'unique_id': CHILD, 'relationship': 'associated'},
-    ])
-
-    links = client.get_links(PARENT)
-
-    assert links[0]['direction'] == 'undirected'
+    assert client.get_links(PARENT) == raw
+    assert 'relationship' not in client.get_links(PARENT)[0]
 
 
 # ── CLI ───────────────────────────────────────────────────────────────────────

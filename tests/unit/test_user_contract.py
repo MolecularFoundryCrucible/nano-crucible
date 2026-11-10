@@ -252,7 +252,7 @@ def test_get_projects_sends_the_target_user_filters():
     client._request.return_value = {'items': [], 'total': None, 'next_cursor': None}
     users = UserOperations(client)
 
-    users.get_projects('U' * 26, limit=None, role=['owner', 'admin'],
+    users.list_projects('U' * 26, limit=None, role=['owner', 'admin'],
                        sort='title', direction='asc', include_metadata=True)
 
     params = client._request.call_args.kwargs['params']
@@ -267,7 +267,7 @@ def test_get_projects_rejects_unknown_roles_locally():
 
     client = MagicMock()
     with pytest.raises(ValueError, match='role must be one of'):
-        UserOperations(client).get_projects('U' * 26, role='member')
+        UserOperations(client).list_projects('U' * 26, role='member')
     client._request.assert_not_called()
 
 

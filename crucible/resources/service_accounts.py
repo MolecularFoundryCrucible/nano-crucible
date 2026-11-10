@@ -11,7 +11,7 @@ import logging
 from typing import Dict, List, Optional
 
 from .base import BaseResource, ListResult
-from ..utils.deprecation import _removed
+from ..utils.deprecation import _deprecated_parameter, _removed
 from ..constants import DEFAULT_LIMIT, PLATFORM_ROLES
 from ..utils.identifiers import validate_mfid, validate_username
 
@@ -45,21 +45,22 @@ class ServiceAccountOperations(BaseResource):
         return self._request('post', '/service_accounts', json=body,
                              privilege_mode='elevated')
 
-    def rotate_key(self, unique_id: str) -> Dict:
+    @_deprecated_parameter('unique_id', 'service_account_ref')
+    def rotate_key(self, service_account_ref: str) -> Dict:
         """Generate a new API key for a service account, invalidating the old one.
 
         The new key is returned once only — store it immediately.
 
         Args:
-            unique_id: Service account MFID.
+            service_account_ref: Service account MFID.
 
         Returns:
-            Dict with unique_id, username, is_service_account, and api_key.
+            Dict with service_account_ref, username, is_service_account, and api_key.
 
         Raises:
-            HTTPError 404: unique_id does not correspond to a service account.
+            HTTPError 404: service_account_ref does not correspond to a service account.
         """
-        return self._request('post', f'/service_accounts/{unique_id}/rotate_key',
+        return self._request('post', f'/service_accounts/{service_account_ref}/rotate_key',
                              privilege_mode='elevated')
 
     @staticmethod
@@ -169,28 +170,30 @@ class ServiceAccountOperations(BaseResource):
         """
         return self._client.users.list(limit=limit, is_service_account=True)
 
-    def update(self, unique_id: str, **kwargs) -> Dict:
+    @_deprecated_parameter('unique_id', 'service_account_ref')
+    def update(self, service_account_ref: str, **kwargs) -> Dict:
         """Update a service account record.
 
         Args:
-            unique_id: Service account MFID.
+            service_account_ref: Service account MFID.
             **kwargs: Fields to update. Accepted: username, first_name, last_name.
 
         Returns:
             Dict: Updated user record.
         """
-        return self._client.users.update(unique_id, **kwargs)
+        return self._client.users.update(service_account_ref, **kwargs)
 
-    def list_access_groups(self, unique_id: str) -> List[str]:
+    @_deprecated_parameter('unique_id', 'service_account_ref')
+    def list_access_groups(self, service_account_ref: str) -> List[str]:
         """List access group names a service account belongs to.
 
         Args:
-            unique_id: Service account MFID.
+            service_account_ref: Service account MFID.
 
         Returns:
             List[str]: Access group names.
         """
-        return self._client.users.list_access_groups(unique_id)
+        return self._client.users.list_access_groups(service_account_ref)
 
     @_removed("use client.instruments.bind_service_account() or client.projects.add_user() instead.")
     def add_to_access_group(self, *args, **kwargs):

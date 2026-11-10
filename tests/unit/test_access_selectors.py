@@ -159,11 +159,14 @@ def test_project_sort_rejects_unknown_field():
         operations.list(sort='name')
 
 
-def test_project_member_filters_require_the_projects_endpoint():
+def test_project_list_orcid_is_removed():
+    from crucible import RemovedError
     operations = ProjectOperations(MagicMock())
 
-    with pytest.raises(ValueError, match='/projects only'):
-        operations.list(orcid='0000-0001-6402-3752', member_ref='alice')
+    with pytest.raises(RemovedError, match='member_ref'):
+        operations.list(orcid='0000-0001-6402-3752')
+    with pytest.raises(RemovedError):
+        operations.list('0000-0001-6402-3752')
 
 
 def test_instrument_list_sends_sort_and_direction():

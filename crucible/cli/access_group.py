@@ -10,6 +10,7 @@ lets project editors and above (and admins) review it. Accessible as both
 
 import argparse
 import sys
+import json
 import logging
 from . import term
 from .helpers import (RemovedOptionAction, add_limit_arguments, count_label,
@@ -179,6 +180,8 @@ Examples:
     parser.add_argument('--direction', choices=list(SORT_DIRECTIONS), default=None,
                         help='Sort direction (default: desc)')
     add_limit_arguments(parser, 'requests')
+    parser.add_argument('--json', action='store_true', default=False,
+                        help='Output as JSON array')
     parser.set_defaults(func=_execute_list)
 
 
@@ -202,6 +205,10 @@ def _execute_list(args):
             records = client.projects.list_join_requests(args.project, **filters)
         else:
             records = client.access_groups.list_join_requests(**filters)
+        if getattr(args, 'json', False):
+            print_more_hint(records, resolve_limit(args), args)
+            print(json.dumps(records, indent=2, default=str))
+            return
         _print_table(records, args, "Join Requests", client)
     except Exception as e:
         from .helpers import fail
@@ -253,6 +260,8 @@ Examples:
 """,
     )
     parser.add_argument('request_id', type=int, metavar='REQUEST_ID', help='Join request ID')
+    parser.add_argument('--json', action='store_true', default=False,
+                        help='Output as JSON object')
     parser.set_defaults(func=_execute_get)
 
 
@@ -264,6 +273,9 @@ def _execute_get(args):
         if record is None:
             logger.error(f"Join request not found: {args.request_id}")
             sys.exit(1)
+        if getattr(args, 'json', False):
+            print(json.dumps(record, indent=2, default=str))
+            return
         _show_join_request(record, client=client)
     except Exception as e:
         from .helpers import fail

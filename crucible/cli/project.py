@@ -259,6 +259,8 @@ def _register_list_users(subparsers):
         if ARGCOMPLETE_AVAILABLE:
             pid_arg.completer = argcomplete.completers.SuppressCompleter()
         add_limit_arguments(p, 'members')
+        p.add_argument('--json', action='store_true', default=False,
+                       help='Output as JSON array')
 
     parser = subparsers.add_parser(
         'list-users',
@@ -598,7 +600,12 @@ def _execute_list_users(args):
     from .helpers import sort_members
     try:
         client = get_client()
-        users = sort_members(client.projects.get_users(args.project_id, limit=resolve_limit(args), **page_kwargs(args)))
+        users = sort_members(client.projects.list_users(args.project_id, limit=resolve_limit(args), **page_kwargs(args)))
+
+        if getattr(args, 'json', False):
+            print_more_hint(users, resolve_limit(args), args)
+            print(json.dumps([u.model_dump(mode='json') for u in users], indent=2, default=str))
+            return
 
         term.header(f"Users · {args.project_id} ({count_label(users)})")
         if not users:
@@ -631,7 +638,7 @@ def _execute_add_user(args):
 
     if user_ref:
         ref = parse_user_ref(user_ref)
-        orcid, email, username = ref.get('orcid'), ref.get('email'), ref.get('username')
+        orcid, email, username = ref.get('user_unique_id'), ref.get('email'), ref.get('username')
     else:
         logger.error("Provide a user identifier: crucible project add-user PROJECT_ID --user VALUE")
         sys.exit(1)
@@ -639,7 +646,7 @@ def _execute_add_user(args):
     try:
         client = get_client()
         role = getattr(args, 'role', None)
-        users = client.projects.add_user(user_unique_id=orcid, project_id=args.project_id,
+        users = client.projects.add_user(user_ref=orcid, project_id=args.project_id,
                                          email=email, username=username, role=role)
 
         name = orcid or username or email
@@ -718,7 +725,7 @@ def _execute_remove_user(args):
 
     if user_ref:
         ref = parse_user_ref(user_ref)
-        orcid, email, username = ref.get('orcid'), ref.get('email'), ref.get('username')
+        orcid, email, username = ref.get('user_unique_id'), ref.get('email'), ref.get('username')
     else:
         logger.error("Provide a user identifier: crucible project remove-user PROJECT_ID --user VALUE")
         sys.exit(1)
@@ -727,7 +734,7 @@ def _execute_remove_user(args):
         client = get_client()
 
         try:
-            user = client.users.get(orcid=orcid, email=email, username=username)
+            user = client.users.get(**ref)
             user_unique_id = user.get('unique_id')
             first = user.get('first_name') or ''
             last  = user.get('last_name') or ''

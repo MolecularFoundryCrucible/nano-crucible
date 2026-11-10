@@ -20,7 +20,6 @@ from crucible import __version__
 _DEPRECATED_SUBCOMMANDS = {
     ('dataset', 'update-metadata'): 'update',
     ('dataset', 'get-keywords'):    'list-keywords',
-    ('sample',  'link-dataset'):    'add-dataset SAMPLE_ID -d DATASET_ID',
     ('user',    'get-access-groups'): 'list-access-groups',
     ('user',    'get-projects'):    'list-projects',
     ('project', 'get-users'):       'list-users',
@@ -135,12 +134,22 @@ def setup_logging(debug=False):
     logging.getLogger('crucible').setLevel(level)
 
 
+def _list_visible_commands_in_usage(parser):
+    """Name only the commands shown in help in each usage line, not removed or deprecated ones."""
+    for action in parser._actions:
+        if isinstance(action, argparse._SubParsersAction):
+            if action.metavar is None:
+                action.metavar = '{' + ','.join(choice.dest for choice in action._choices_actions) + '}'
+            for sub in action.choices.values():
+                _list_visible_commands_in_usage(sub)
+
+
 def _drop_removed_commands(parser):
-    """Leave removed commands out of shell completion; only done in a completion run, which exits."""
+    """Leave removed and deprecated commands out of shell completion; only done in a completion run, which exits."""
     for action in parser._actions:
         if isinstance(action, argparse._SubParsersAction):
             for name, sub in list(action.choices.items()):
-                if getattr(sub, '_removed', False):
+                if getattr(sub, '_removed', False) or getattr(sub, '_deprecated', False):
                     del action.choices[name]
                 else:
                     _drop_removed_commands(sub)
@@ -264,6 +273,7 @@ Examples:
     cast.register_subcommand(subparsers)
     qr.register_subcommand(subparsers)
     printer.register_subcommand(subparsers)
+    _list_visible_commands_in_usage(parser)
 
     # Enable shell completion if argcomplete is available
     if ARGCOMPLETE_AVAILABLE:

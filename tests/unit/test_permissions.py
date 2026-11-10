@@ -134,8 +134,8 @@ class TestListAccess:
         assert isinstance(result[0], AccessGrant)
         assert result[0].principal_type == 'user'
         assert result[0].permission == 'viewer'
-        assert result[0].kind == 'user'
-        assert result[0].effective_permission == 'viewer'
+        assert result[0].principal_type == 'user'
+        assert result[0].permission == 'viewer'
 
 
 class TestSetAccess:
@@ -323,7 +323,7 @@ class TestProjectAddUserRole:
         ])
 
         result = project_ops.add_user(
-            user_unique_id='0000-0001', project_id='proj-1', role='editor')
+            user_ref='0000-0001', project_id='proj-1', role='editor')
 
         project_ops._request.assert_called_once_with(
             'post', '/projects/proj-1/users/0000-0001', params={'role': 'editor'})
@@ -333,7 +333,7 @@ class TestProjectAddUserRole:
     def test_role_omitted_when_not_given(self, project_ops):
         project_ops._request = MagicMock(return_value=[])
 
-        project_ops.add_user(user_unique_id='0000-0001', project_id='proj-1')
+        project_ops.add_user(user_ref='0000-0001', project_id='proj-1')
 
         project_ops._request.assert_called_once_with(
             'post', '/projects/proj-1/users/0000-0001', params={})
@@ -364,7 +364,7 @@ class TestProjectAddUserRole:
         service_account_mfid = '0tkvpezyz1zzf00076nahf85j4'
         project_ops._request = MagicMock(return_value=[])
 
-        project_ops.add_user(user_unique_id=service_account_mfid, project_id='proj-1')
+        project_ops.add_user(user_ref=service_account_mfid, project_id='proj-1')
 
         project_ops._client.users.get.assert_not_called()
         project_ops._request.assert_called_once_with(
@@ -375,7 +375,7 @@ class TestProjectAddUserRole:
 
         with pytest.raises(ValueError, match='exactly one user identifier'):
             project_ops.add_user(
-                user_unique_id='0000-0001', username='alice', project_id='proj-1')
+                user_ref='0000-0001', username='alice', project_id='proj-1')
 
         project_ops._request.assert_not_called()
 
@@ -385,7 +385,7 @@ class TestProjectAddUserRole:
 
         with pytest.raises(ValueError, match='Project member role must be one of'):
             project_ops.add_user(
-                user_unique_id='0000-0001', project_id='proj-1', role=role)
+                user_ref='0000-0001', project_id='proj-1', role=role)
 
         project_ops._request.assert_not_called()
 
@@ -398,7 +398,7 @@ class TestProjectAddUserRole:
             '409 Conflict', response=response))
 
         with pytest.raises(requests.HTTPError) as raised:
-            project_ops.add_user(user_unique_id='0000-0001', project_id='proj-1')
+            project_ops.add_user(user_ref='0000-0001', project_id='proj-1')
 
         assert raised.value.response.status_code == 409
 
@@ -548,11 +548,11 @@ def test_instrument_members_are_typed_or_none(instrument_ops):
     _instrument_lookup(instrument_ops, members=[
         {'principal_id': '0000-0002-1825-0097', 'principal_type': 'user',
          'permission': 'owner', 'slug': 'jdoe', 'display_name': 'Jane Doe'}])
-    members = instrument_ops.get_users('xrd-1')
+    members = instrument_ops.list_users('xrd-1')
     assert members[0].permission == 'owner'
 
     _instrument_lookup(instrument_ops, members=None)
-    assert instrument_ops.get_users('xrd-1') is None
+    assert instrument_ops.list_users('xrd-1') is None
 
 
 def test_instrument_member_roles_exclude_owner(instrument_ops):

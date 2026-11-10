@@ -11,7 +11,7 @@ Access via `client.projects`.
         - create
         - update
         - search
-        - get_users
+        - list_users
         - add_user
         - update_user_role
         - remove_user

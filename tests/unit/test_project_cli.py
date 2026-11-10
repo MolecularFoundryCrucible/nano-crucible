@@ -101,7 +101,7 @@ def test_add_user_dispatches_named_role_and_username(monkeypatch):
     ))
 
     client.projects.add_user.assert_called_once_with(
-        user_unique_id=None,
+        user_ref=None,
         project_id='example-project',
         email=None,
         username='alice',
@@ -123,7 +123,7 @@ def test_add_user_sends_canonical_identifiers(monkeypatch, identifier):
     _execute_add_user(add_user_args(user=identifier))
 
     client.projects.add_user.assert_called_once_with(
-        user_unique_id=identifier,
+        user_ref=identifier,
         project_id='example-project',
         email=None,
         username=None,

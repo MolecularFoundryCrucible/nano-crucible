@@ -39,7 +39,7 @@ Running `crucible` without a command starts the interactive shell. See the [CLI 
 - API errors add a next step where one applies: `crucible login` or `crucible config init` for a rejected key or sign-in, `crucible whoami` for missing permissions, `read_timeout` for slow responses.
 - With `--json`, the hint appears as `error.hint`.
 
-`--json` is available for dataset, sample, and instrument `list` and `get`; project `list` and `get`; user `get`, `list`, and `search`; service-account `get` and `list`; account `show`; and dataset, sample, project, and instrument name or metadata searches. Collection and search commands return arrays, while singleton commands return objects. The generic `get` command uses `-o json` (`--output json`) instead.
+`--json` is available for dataset, sample, project, and instrument `list`, `get`, `search`, and `search-metadata`; dataset `list-parents`, `list-children`, `list-samples`, `list-files`, `list-keywords`, and `facets`; sample `list-parents`, `list-children`, `list-datasets`, and `facets`; project and instrument `list-users`; user `get`, `list`, `search`, `list-datasets`, `list-projects`, `list-access-groups`, `list-keys`, `approve`, and `set-role`; service-account `get`, `show`, `list`, `set-role`, and `list-access-groups`; file, ingestion, `ag`, and deletion `list` and `get`; account `show`, `keys list`, and `keys create`; `print barcode`; and `whoami` and `status`. List and search commands return arrays, while single-record commands, `facets`, `whoami`, and `status` return objects. `dataset list-files` adds each file's signed `download_url`. The generic `get` command uses `-o json` (`--output json`) instead.
 
 ## Dataset commands
 
@@ -57,11 +57,11 @@ Running `crucible` without a command starts the interactive shell. See the [CLI 
 | `dataset search QUERY` | Search dataset names |
 | `dataset search-metadata QUERY` | Search scientific metadata; `search-md` is an alias |
 | `dataset link` | Link parent and child datasets; `--relationship-type` records the kind of link |
-| `dataset remove-child` | Remove a dataset parent-child link |
+| `dataset unlink -p PARENT -c CHILD` | Remove a dataset parent-child link |
 | `dataset list-parents MFID` | List parent datasets; `--relationship-type` filters by kind of link |
 | `dataset list-children MFID` | List child datasets; `--relationship-type` filters by kind of link |
-| `dataset add-sample MFID` | Link a sample to a dataset |
-| `dataset remove-sample MFID` | Unlink a sample from a dataset |
+| `dataset link-sample MFID -s SAMPLE` | Link a sample to a dataset |
+| `dataset unlink-sample MFID -s SAMPLE` | Unlink a sample from a dataset |
 | `dataset list-samples MFID` | List samples linked to a dataset |
 | `dataset add-file MFID -i FILE [FILE ...]` | Upload files to an existing dataset |
 | `dataset add-thumbnail MFID IMAGE` | Encode and add a local image as a dataset thumbnail |
@@ -132,11 +132,11 @@ Fields normally updated through `dataset update --set` include `dataset_name`, `
 | `sample search QUERY` | Search sample names |
 | `sample search-metadata QUERY` | Search scientific metadata; `search-md` is an alias |
 | `sample link` | Link parent and child samples; `--relationship-type` records the kind of link |
-| `sample remove-child` | Remove a sample parent-child link |
+| `sample unlink -p PARENT -c CHILD` | Remove a sample parent-child link |
 | `sample list-parents MFID` | List parent samples; `--relationship-type` filters by kind of link |
 | `sample list-children MFID` | List child samples; `--relationship-type` filters by kind of link |
-| `sample add-dataset MFID` | Link a dataset to a sample |
-| `sample remove-dataset MFID` | Unlink a dataset from a sample |
+| `sample link-dataset MFID -d DATASET` | Link a dataset to a sample |
+| `sample unlink-dataset MFID -d DATASET` | Unlink a dataset from a sample |
 | `sample list-datasets MFID` | List datasets linked to a sample |
 | `sample access ...` | List, grant, or revoke direct access entries |
 | `sample set-public MFID` | Make a sample publicly viewable |
@@ -368,6 +368,17 @@ Configuration values can come from environment variables, the platform-specific 
 | `print barcode PRINTER_ID MFID NAME` | Publish a barcode print job and wait for confirmation it printed; exits non-zero unless the printer confirms success |
 | `completion [SHELL]` | Generate and install completion for bash, zsh, fish, or tcsh |
 
+## Renamed in 4.0.0
+
+The old names still work and print a warning naming the new one; they are left out of help and completion.
+
+| Old | New |
+|---|---|
+| `dataset add-sample`, `dataset remove-sample` | `dataset link-sample`, `dataset unlink-sample` |
+| `dataset remove-child PARENT -c CHILD` | `dataset unlink -p PARENT -c CHILD` |
+| `sample add-dataset`, `sample remove-dataset` | `sample link-dataset`, `sample unlink-dataset` |
+| `sample remove-child PARENT -c CHILD` | `sample unlink -p PARENT -c CHILD` |
+
 ## Removed in 4.0.0
 
 These commands and options stop with the form to use instead.
@@ -381,7 +392,6 @@ These commands and options stop with the form to use instead.
 | `sa add-access-group`, `sa remove-access-group` | `instrument bind-sa`/`unbind-sa`, or `project add-user`/`remove-user` |
 | `RESOURCE publish`, `RESOURCE unpublish` | `RESOURCE set-public`, `RESOURCE set-private` |
 | `dataset update-metadata`, `dataset get-keywords` | `dataset update --metadata`, `dataset list-keywords` |
-| `sample link-dataset` | `sample add-dataset SAMPLE_ID -d DATASET_ID` |
 | `user get-access-groups`, `user get-projects`, `project get-users` | `user list-access-groups`, `user list-projects`, `project list-users` |
 | `--orcid`, `--username`, `--email` on `user get`/`edit` | the `USER` argument |
 | `--unique-id`, `--username` on `sa` commands | the `SA` argument |

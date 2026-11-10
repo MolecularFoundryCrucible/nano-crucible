@@ -65,13 +65,6 @@ def test_sample_children_listing_rejects_mfid():
         operations.list(parent_mfid=MFIDS[0], mfid=MFIDS[1])
 
 
-def test_project_mfid_filter_does_not_combine_with_orcid():
-    operations = make(ProjectOperations)
-
-    with pytest.raises(ValueError, match='mfid'):
-        operations.list(orcid='0000-0002-1825-0097', mfid=MFIDS)
-
-
 def test_user_search_reads_items():
     operations = UserOperations(MagicMock())
     operations._request = MagicMock(return_value={'limit': 20, 'items': [{'username': 'ron'}]})

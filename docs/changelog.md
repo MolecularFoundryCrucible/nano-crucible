@@ -34,6 +34,7 @@
 - `owner_orcid` on `datasets.list()` and `samples.list()` (use `owner_id`), `include_datasets` on `samples.list()` (use `include_links`), and `instrument_id`/`instrument_name` in `datasets.update()` (use `assign_instrument()`).
 - Parser `owner_orcid` and `instrument_name` arguments and the `_instrument_name` class default; use `owner`, `instrument_id`/`instrument_mfid`, and `_instrument_id`.
 - `dataset update --set public=...`; use `dataset set-public` or `set-private`.
+- `users.get(orcid=)` (pass the user reference), `projects.list(orcid=)` (use `member_ref` or `users.list_projects()`), the `AccessGrant` properties `principal`, `kind` and `effective_permission` (use `principal_id`, `principal_type`, `permission`), the `relationship` key in `get_links()` results (use `direction`), and the `dsid` key in `datasets.create()` results (use `dataset_mfid`).
 
 ### Changed
 
@@ -55,6 +56,13 @@
 - `datasets.create()` leaves out `instrument_name` when `instrument_id` or `instrument_mfid` is set.
 - A cast recipe's `instrument` is an instrument ID or MFID, not a name.
 - The PyPI release workflow runs the tests first, and `pytest` alone runs only the unit tests; integration tests need `CRUCIBLE_TEST_API_URL` and `CRUCIBLE_TEST_API_KEY`.
+- `samples.get()` and `client.get()` no longer embed a sample's datasets; `include_datasets=True` still works with a warning (use `include_links` or `datasets.list(sample_mfid=...)`), and `sample get --json` includes links instead.
+- `datasets.graph()` and `samples.graph()` still work but are deprecated in favour of `graphs.get()`.
+- Renamed, with the old names still working and warning: `datasets.list_keywords()`, `projects.list_users()`, `instruments.list_users()`, `users.list_projects()`, and the parameters `file_mfid` (files), `resource_mfid` (deletions), `service_account_ref`, `instrument_ref`, and `user_ref` (users and project members).
+- Renamed CLI commands, with the old names still working and warning: `dataset link-sample`, `unlink-sample`, `unlink -p -c`; `sample link-dataset`, `unlink-dataset`, `unlink -p -c`. `dataset ingestors` now runs `ingestion list-ingestors`, which lists the server's ingestors and takes `--filter`.
+- `--json` on the `list-parents`, `list-children`, `list-samples`, `list-datasets`, `list-files`, `list-keywords`, `list-users`, `list-projects` and `list-access-groups` commands, `file`, `ingestion`, `ag` and `deletion` `list` and `get`, `whoami`, and `status`.
+- `deletion delete` and `sa rotate-key` ask for confirmation (`-y/--yes` skips it), `-y` works wherever `--yes` does, and shell completion leaves out `user create` and `deletion delete` for callers who cannot elevate.
+- Tests run on Python 3.13 and macOS, and a separate workflow checks the client's routes against staging and can run the integration tests on demand.
 
 ### Fixed
 

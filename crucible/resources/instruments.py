@@ -9,7 +9,7 @@ Provides organized access to instrument-related API endpoints.
 import logging
 from typing import TYPE_CHECKING, Any, Optional, List, Dict, Sequence, Union
 from .base import BaseResource, ListResult
-from ..utils.deprecation import _removed
+from ..utils.deprecation import _deprecated_parameter, _deprecated, _removed
 from .capabilities import AccessControlMixin, OwnershipMixin
 from ..constants import DEFAULT_LIMIT
 from ..utils.identifiers import (
@@ -283,13 +283,14 @@ class InstrumentOperations(OwnershipMixin, AccessControlMixin, BaseResource):
             self._add_first_scientific_metadata(result['unique_id'], scientific_metadata)
         return self._parse(result)
 
-    def update(self, unique_id: str, **kwargs: Any) -> Dict:
+    @_deprecated_parameter('unique_id', 'instrument_ref')
+    def update(self, instrument_ref: str, **kwargs: Any) -> Dict:
         """Partially update an instrument record.
 
         **Requires editor permission.**
 
         Args:
-            unique_id (str): Instrument unique identifier (MFID)
+            instrument_ref (str): Instrument unique identifier (MFID)
             **kwargs: Fields to update. Accepted: instrument_id, instrument_name,
                       location, manufacturer, model, instrument_type, description,
                       other_id, other_id_source.
@@ -306,9 +307,11 @@ class InstrumentOperations(OwnershipMixin, AccessControlMixin, BaseResource):
             raise ValueError("Instrument capabilities are response-only.")
         if kwargs.get('instrument_id') is not None:
             validate_slug(kwargs['instrument_id'], 'instrument')
-        return self._parse(self._request('patch', f'/instruments/{self._resource_mfid(unique_id)}', json=kwargs))
+        return self._parse(self._request('patch', f'/instruments/{self._resource_mfid(instrument_ref)}', json=kwargs))
 
-    def bind_service_account(self, instrument_mfid: str, sa_unique_id: str) -> List['ProjectMember']:
+    @_deprecated_parameter('instrument_mfid', 'instrument_ref')
+    @_deprecated_parameter('sa_unique_id', 'service_account_ref')
+    def bind_service_account(self, instrument_ref: str, service_account_ref: str) -> List['ProjectMember']:
         """Bind a service account as an operator of an instrument.
 
         Requires admin on the instrument (its owner or an admin maintainer).
@@ -316,30 +319,32 @@ class InstrumentOperations(OwnershipMixin, AccessControlMixin, BaseResource):
         to the instrument.
 
         Args:
-            instrument_mfid (str): Instrument unique identifier (MFID)
-            sa_unique_id (str): Service account unique identifier (MFID)
+            instrument_ref (str): Instrument unique identifier (MFID)
+            service_account_ref (str): Service account unique identifier (MFID)
 
         Returns:
             List[ProjectMember]: The instrument's operator group members
         """
         from ..models import ProjectMember
-        raw = self._request('post', f'/instruments/{self._resource_mfid(instrument_mfid)}/service_accounts/{sa_unique_id}')
+        raw = self._request('post', f'/instruments/{self._resource_mfid(instrument_ref)}/service_accounts/{service_account_ref}')
         return [ProjectMember.model_validate(m) for m in raw]
 
-    def unbind_service_account(self, instrument_mfid: str, sa_unique_id: str) -> List['ProjectMember']:
+    @_deprecated_parameter('instrument_mfid', 'instrument_ref')
+    @_deprecated_parameter('sa_unique_id', 'service_account_ref')
+    def unbind_service_account(self, instrument_ref: str, service_account_ref: str) -> List['ProjectMember']:
         """Remove a service account as an operator of an instrument.
 
         Requires admin on the instrument (its owner or an admin maintainer).
 
         Args:
-            instrument_mfid (str): Instrument unique identifier (MFID)
-            sa_unique_id (str): Service account unique identifier (MFID)
+            instrument_ref (str): Instrument unique identifier (MFID)
+            service_account_ref (str): Service account unique identifier (MFID)
 
         Returns:
             List[ProjectMember]: The instrument's operator group members
         """
         from ..models import ProjectMember
-        raw = self._request('delete', f'/instruments/{self._resource_mfid(instrument_mfid)}/service_accounts/{sa_unique_id}')
+        raw = self._request('delete', f'/instruments/{self._resource_mfid(instrument_ref)}/service_accounts/{service_account_ref}')
         return [ProjectMember.model_validate(m) for m in raw]
 
     def list_service_accounts(self, instrument_mfid: str) -> List['ProjectMember']:
@@ -355,7 +360,12 @@ class InstrumentOperations(OwnershipMixin, AccessControlMixin, BaseResource):
         raw = self._request('get', f'/instruments/{self._resource_mfid(instrument_mfid)}/service_accounts')
         return [ProjectMember.model_validate(member) for member in raw]
 
-    def get_users(self, instrument_ref: str) -> Optional[List['AccessGrant']]:
+    @_deprecated("client.instruments.list_users()")
+    def get_users(self, *args, **kwargs):
+        """Deprecated: use list_users()."""
+        return self.list_users(*args, **kwargs)
+
+    def list_users(self, instrument_ref: str) -> Optional[List['AccessGrant']]:
         """List the instrument's owner and maintainers, owner first.
 
         Maintainers manage the instrument record only; they never gain access

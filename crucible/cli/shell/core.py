@@ -201,8 +201,8 @@ class CrucibleShell:
         if not self._can_manage_service_accounts():
             hidden.update({'sa', 'service-account'})
         if not self.client.can_elevate:
-            hidden.update({'user set-role', 'user list-keys', 'user revoke-keys',
-                           'user approve', 'user reject'})
+            hidden.update({'user create', 'user set-role', 'user list-keys', 'user revoke-keys',
+                           'user approve', 'user reject', 'deletion delete'})
         return hidden
 
     def _can_manage_service_accounts(self):

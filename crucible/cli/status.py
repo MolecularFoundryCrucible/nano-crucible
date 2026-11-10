@@ -3,6 +3,7 @@
 """Check API reachability, database health, and authentication."""
 
 import itertools
+import json
 import logging
 import sys
 import threading
@@ -109,6 +110,8 @@ def register_subcommand(subparsers):
         help='Check API connectivity, database health, and authentication',
         description='Show endpoint, deployment, database, and authentication status',
     )
+    parser.add_argument('--json', action='store_true', default=False,
+                        help='Output as JSON object')
     parser.set_defaults(func=execute)
 
 
@@ -129,12 +132,27 @@ def execute(args):
         sys.exit(1)
 
     endpoint = api_url.rstrip('/')
-    is_tty = hasattr(sys.stdout, 'isatty') and sys.stdout.isatty()
+    as_json = getattr(args, 'json', False)
+    is_tty = not as_json and hasattr(sys.stdout, 'isatty') and sys.stdout.isatty()
     stop = threading.Event()
-    printer = term.field_printer(16)
+    report = {'endpoint': {
+        'url': endpoint,
+        'project': config.current_project,
+        'project_source': config.source('current_project'),
+    }}
 
-    term.header("Crucible Status")
-    term.subheader("Endpoint")
+    def _finish(code):
+        if as_json:
+            print(json.dumps(report, indent=2, default=str))
+        sys.exit(code)
+
+    if as_json:
+        def printer(label, value):
+            pass
+    else:
+        printer = term.field_printer(16)
+        term.header("Crucible Status")
+        term.subheader("Endpoint")
     printer("URL", endpoint)
     printer("Project", config.current_project)
     printer("Project source", config.source('current_project'))
@@ -147,12 +165,14 @@ def execute(args):
 
     health_result, elapsed_ms, error = _check(stop, is_tty, _health)
     if error is not None:
+        report['reachability'] = {'reachable': False, 'error': str(error)}
         printer("Reachability", f'{term.status_marker("error")} unreachable')
         printer("Error", str(error))
-        sys.exit(1)
+        _finish(1)
 
     response = health_result
     http_status = response.status_code
+    report['reachability'] = {'reachable': True, 'latency_ms': elapsed_ms}
     printer(
         "Reachability",
         f'{term.status_marker("success")} reachable  {term.dim(f"{elapsed_ms:.0f} ms")}',
@@ -166,6 +186,7 @@ def execute(args):
 
     if health is None:
         readiness_ok = False
+        readiness_label = 'invalid response'
         printer(
             "Readiness",
             f'{term.status_marker("error")} invalid response  {term.dim(f"HTTP {http_status}")}',
@@ -184,21 +205,32 @@ def execute(args):
     else:
         readiness_ok = 200 <= http_status < 300
         readiness_kind = 'info' if readiness_ok else 'error'
+        readiness_label = 'unknown'
         printer(
             "Readiness",
             f'{term.status_marker(readiness_kind)} unknown  {term.dim(f"HTTP {http_status}")}',
         )
+    report['readiness'] = {'status': readiness_label, 'ok': readiness_ok,
+                           'http_status': http_status}
 
     from crucible import __version__
 
-    term.subheader("Deployment")
+    report['deployment'] = {
+        'client_version': __version__,
+        'api_version': details['api_version'],
+        'branch': details['branch'],
+        'git_commit': details['git_commit'],
+    }
+    if not as_json:
+        term.subheader("Deployment")
     printer("Client version", __version__)
     printer("API version", details['api_version'])
     printer("Branch", details['branch'])
     commit = details['git_commit']
     printer("Commit", str(commit)[:12] if commit else None)
 
-    term.subheader("Database")
+    if not as_json:
+        term.subheader("Database")
     if details['detected']:
         database_status = details['database_status'] or 'unknown'
         database_ok = database_status == 'ok'
@@ -210,16 +242,23 @@ def execute(args):
         printer("Latency", latency)
         revisions = details['schema_revisions']
         printer("Schema", ', '.join(revisions) if revisions else None)
+        report['database'] = {'status': database_label, 'ok': database_ok,
+                              'latency_ms': database_ms, 'schema_revisions': revisions}
     else:
         database_ok = True
         printer("Status", f'{term.status_marker("info")} unavailable')
+        report['database'] = {'status': 'unavailable', 'ok': None,
+                              'latency_ms': None, 'schema_revisions': []}
 
-    term.subheader("Authentication")
+    if not as_json:
+        term.subheader("Authentication")
     if not has_credential:
+        report['authentication'] = {'status': 'not configured'}
         printer("Status", f'{term.status_marker("info")} not configured')
         printer("Action", "Run: crucible login (or crucible config set api_key KEY)")
-        print()
-        sys.exit(0 if readiness_ok and database_ok else 1)
+        if not as_json:
+            print()
+        _finish(0 if readiness_ok and database_ok else 1)
 
     def _whoami():
         from crucible.config import get_client
@@ -227,10 +266,12 @@ def execute(args):
 
     info, auth_ms, error = _check(stop, is_tty, _whoami)
     if error is not None:
+        report['authentication'] = {'status': 'failed', 'error': str(error)}
         printer("Status", f'{term.status_marker("error")} failed')
         printer("Error", str(error))
-        print()
-        sys.exit(1)
+        if not as_json:
+            print()
+        _finish(1)
 
     user = info.get('user_info', {})
     user_id = user.get('unique_id')
@@ -253,6 +294,14 @@ def execute(args):
     label = credential_label(get_client())
     if label:
         printer("Using", label)
+    report['authentication'] = {
+        'status': 'authenticated',
+        'latency_ms': auth_ms,
+        'user': {key: user.get(key) for key in
+                 ('unique_id', 'username', 'first_name', 'last_name', 'is_service_account')},
+        'using': label,
+    }
 
-    print()
-    sys.exit(0 if readiness_ok and database_ok else 1)
+    if not as_json:
+        print()
+    _finish(0 if readiness_ok and database_ok else 1)

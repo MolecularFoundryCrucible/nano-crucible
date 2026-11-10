@@ -133,7 +133,7 @@ Examples:
     revoke = sub.add_parser('revoke', help='Revoke an API key',
                             formatter_class=term.ColorHelpFormatter)
     revoke.add_argument('key_id', metavar='ID', type=int, help='Key ID from `crucible account keys list`')
-    revoke.add_argument('--yes', action='store_true', default=False,
+    revoke.add_argument('-y', '--yes', action='store_true', default=False,
                         help='Skip the confirmation prompt')
     revoke.set_defaults(func=_execute_keys_revoke)
 

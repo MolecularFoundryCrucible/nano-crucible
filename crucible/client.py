@@ -433,7 +433,7 @@ class CrucibleClient:
     @_removed_parameter('resource_id', 'resource_mfid')
     def get(self, resource_mfid: str, resource_type: str = None,
             include_metadata: bool = False, include_links: bool = False,
-            include_owner: bool = True, include_datasets: bool = True) -> Dict:
+            include_owner: bool = True, include_datasets: bool = False) -> Dict:
         """
         Get a resource by ID with automatic type detection.
 
@@ -445,7 +445,8 @@ class CrucibleClient:
             include_metadata (bool): Include scientific metadata
             include_links (bool): Include immediate parent/child/associated links
             include_owner (bool): Resolve the owner into a public-safe user object (default: True)
-            include_datasets (bool): For samples, include deprecated embedded dataset records (default: True)
+            include_datasets (bool): For samples, also embed the linked dataset records
+                (default: False). Deprecated by the API: use include_links.
 
         Returns:
             Dict: Resource data
@@ -453,6 +454,12 @@ class CrucibleClient:
         Raises:
             ValueError: If resource type is unknown or not supported
         """
+        if include_datasets:
+            import warnings
+            warnings.warn(
+                "include_datasets is deprecated by the Crucible API; use include_links=True, "
+                "or client.datasets.list(sample_mfid=...) for the linked datasets.",
+                DeprecationWarning, stacklevel=2)
         if not is_mfid(resource_mfid):
             raise ValueError("resource_mfid must be an exact 26-character MFID.")
         if resource_type is None:
@@ -463,10 +470,8 @@ class CrucibleClient:
                 params['include_metadata'] = True
             if include_owner:
                 params['include_owner'] = True
-            if not include_datasets:
-                params['include_datasets'] = False
-            raw = self._request(
-                'get', f"/resources/{resource_mfid}", params=params or None)
+            params['include_datasets'] = include_datasets
+            raw = self._request('get', f"/resources/{resource_mfid}", params=params)
             return require_canonical_identifier(raw, 'resource')
 
         if resource_type == "sample":
@@ -475,9 +480,8 @@ class CrucibleClient:
                 'include_metadata': include_metadata,
                 'include_owner': include_owner,
             }
-            if not include_datasets:
-                sample_options['include_datasets'] = False
-            return self.samples.get(resource_mfid, **sample_options)
+            return self.samples._get_by_mfid(
+                resource_mfid, include_datasets=include_datasets, **sample_options)
         elif resource_type == "dataset":
             return self.datasets.get(resource_mfid, include_metadata=include_metadata,
                                      include_links=include_links,
@@ -503,7 +507,6 @@ class CrucibleClient:
         Hits GET /resources/{id}/links and returns a flat list of link dicts:
             [{"unique_id": "...", "resource_type": "dataset|sample",
               "name": "...", "direction": "source|target|undirected",
-              "relationship": "parent|child|associated",
               "relationship_type": "is_derived_from|is_part_of|null"}, ...]
 
         `direction` says which end of the stored parent -> child edge this
@@ -512,7 +515,6 @@ class CrucibleClient:
         hierarchy and are always "undirected". `relationship_type` is the kind
         of link, stored on the link row and oriented child-relative-to-parent;
         it is null on associations and on links created before typing existed.
-        `relationship` remains as a compatibility alias for `direction`.
 
         Args:
             resource_mfid (str): Dataset or sample MFID
@@ -520,27 +522,7 @@ class CrucibleClient:
         Returns:
             list: Link objects, or empty list if none
         """
-        result = self._request('get', f"/resources/{resource_mfid}/links") or []
-        direction_to_relationship = {
-            'source': 'parent',
-            'target': 'child',
-            'undirected': 'associated',
-        }
-        relationship_to_direction = {
-            value: key for key, value in direction_to_relationship.items()
-        }
-        links = []
-        for raw_link in result:
-            link = dict(raw_link)
-            if link.get('direction') in direction_to_relationship:
-                link.setdefault(
-                    'relationship',
-                    direction_to_relationship[link['direction']],
-                )
-            elif link.get('relationship') in relationship_to_direction:
-                link['direction'] = relationship_to_direction[link['relationship']]
-            links.append(link)
-        return links
+        return self._request('get', f"/resources/{resource_mfid}/links") or []
 
     @_removed_parameter('parent_id', 'parent_mfid')
     @_removed_parameter('child_id', 'child_mfid')

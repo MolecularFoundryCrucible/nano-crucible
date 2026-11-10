@@ -376,7 +376,7 @@ def test_grid_fills_columns_top_to_bottom(capsys):
 
 def test_list_projects_shows_the_users_role(monkeypatch, capsys):
     client = SimpleNamespace(users=SimpleNamespace())
-    client.users.get_projects = MagicMock(return_value=[
+    client.users.list_projects = MagicMock(return_value=[
         {'project_id': 'zeta', 'title': 'Zeta', 'organization': 'LBL', 'role': 'viewer'},
         {'project_id': 'Alpha', 'title': 'Alpha', 'organization': 'LBL', 'role': 'contributor'},
     ])
@@ -385,7 +385,7 @@ def test_list_projects_shows_the_users_role(monkeypatch, capsys):
 
     _execute_list_projects(SimpleNamespace(user='alice', json=False, debug=False))
 
-    client.users.get_projects.assert_called_once_with(
+    client.users.list_projects.assert_called_once_with(
         'U' * 26, limit=None, role=None, sort=None, direction=None)
     output = capsys.readouterr().out
     assert 'contributor' in output
@@ -394,7 +394,7 @@ def test_list_projects_shows_the_users_role(monkeypatch, capsys):
 
 def test_list_projects_keeps_the_server_order_for_an_explicit_sort(monkeypatch, capsys):
     client = SimpleNamespace(users=SimpleNamespace())
-    client.users.get_projects = MagicMock(return_value=[
+    client.users.list_projects = MagicMock(return_value=[
         {'project_id': 'zeta', 'title': 'Zeta', 'role': 'owner'},
         {'project_id': 'Alpha', 'title': 'Alpha', 'role': 'owner'},
     ])
@@ -404,7 +404,7 @@ def test_list_projects_keeps_the_server_order_for_an_explicit_sort(monkeypatch, 
     _execute_list_projects(SimpleNamespace(user='alice', role=['owner'], sort='updated',
                                            direction='desc', json=False, debug=False))
 
-    client.users.get_projects.assert_called_once_with(
+    client.users.list_projects.assert_called_once_with(
         'U' * 26, limit=None, role=['owner'], sort='updated', direction='desc')
     output = capsys.readouterr().out
     assert output.index('zeta') < output.index('Alpha')

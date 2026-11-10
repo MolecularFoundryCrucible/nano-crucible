@@ -13,7 +13,8 @@ from .capabilities import AccessControlMixin, OwnershipMixin
 from .users import _as_query_list
 from ..constants import DEFAULT_LIMIT, PROJECT_ACCESS_ROLES, PROJECT_MEMBER_ROLES, PROJECT_SORTS
 from ..models import Project, ProjectMember
-from ..utils.deprecation import _removed, _removed_parameter
+from ..errors import RemovedError
+from ..utils.deprecation import _deprecated_parameter, _deprecated, _removed, _removed_parameter, removed_message
 from ..utils.identifiers import (
     classify_slug_reference,
     collapse_exact_lookup,
@@ -148,7 +149,8 @@ class ProjectOperations(OwnershipMixin, AccessControlMixin, BaseResource):
         platform role or resource grants).
 
         Args:
-            orcid (str, optional): Filter projects by those associated with a certain user
+            orcid: Removed in 4.0.0; passing it raises RemovedError. Use member_ref or
+                client.users.list_projects().
             include_metadata (bool): Include scientific metadata in results
             limit (int): Maximum number of results to return (default: 100)
             offset (int): Starting position in the full result set (default: 0)
@@ -159,7 +161,6 @@ class ProjectOperations(OwnershipMixin, AccessControlMixin, BaseResource):
             accessible_to_project: Project reference or references whose direct access
                                    must include every result
             sort: Explicit ordering, one of crucible.constants.PROJECT_SORTS.
-                  Applies to /projects only, not the per-user listing.
             direction: Sort direction, asc or desc. Requires sort. Without it,
                        dates default to desc and everything else to asc.
             member_ref: User reference or references (ORCID, service-account
@@ -173,16 +174,14 @@ class ProjectOperations(OwnershipMixin, AccessControlMixin, BaseResource):
         Returns:
             List[Dict]: Project metadata including project_id, title, organization, lead, role
         """
+        if orcid is not None:
+            raise RemovedError(removed_message(
+                "The 'orcid' argument of projects.list()",
+                "use member_ref=... or client.users.list_projects() instead."))
         params = self._access_selector_params(
             accessible_to_user, accessible_to_project)
-        if orcid and params:
-            raise ValueError("Pass orcid or typed access selectors, not both")
         member_selectors = _as_query_list(member_ref)
         member_roles = _as_query_list(member_role)
-        if orcid and (sort or direction or member_selectors or member_roles or mfid):
-            raise ValueError(
-                "sort, direction, member, and mfid filters apply to /projects only; "
-                "pass orcid or those, not both")
         if member_roles and not member_selectors:
             raise ValueError("member_role requires member_ref.")
         invalid = [role for role in (member_roles or [])
@@ -192,16 +191,13 @@ class ProjectOperations(OwnershipMixin, AccessControlMixin, BaseResource):
                 f"member_role must be one of: {', '.join(PROJECT_ACCESS_ROLES)}.")
         if include_metadata:
             params['include_metadata'] = True
-        if not orcid:
-            params.update(self._ordering_params(sort, direction,
-                                                sorts=PROJECT_SORTS))
-            if member_selectors:
-                params['member_ref'] = member_selectors
-            if member_roles:
-                params['member_role'] = member_roles
-            self._apply_mfid_filter(params, mfid)
-        endpoint = f'/users/{orcid}/projects' if orcid else '/projects'
-        return self._paginate(endpoint, params, limit, offset, cursor=cursor)
+        params.update(self._ordering_params(sort, direction, sorts=PROJECT_SORTS))
+        if member_selectors:
+            params['member_ref'] = member_selectors
+        if member_roles:
+            params['member_role'] = member_roles
+        self._apply_mfid_filter(params, mfid)
+        return self._paginate('/projects', params, limit, offset, cursor=cursor)
 
     def create(self, project: Union[Project, Dict],
                scientific_metadata: Optional[Dict] = None) -> Dict:
@@ -264,7 +260,12 @@ class ProjectOperations(OwnershipMixin, AccessControlMixin, BaseResource):
                                                 scientific_metadata)
         return result
 
-    def get_users(self, project_id: str, limit: int = DEFAULT_LIMIT,
+    @_deprecated("client.projects.list_users()")
+    def get_users(self, *args, **kwargs):
+        """Deprecated: use list_users()."""
+        return self.list_users(*args, **kwargs)
+
+    def list_users(self, project_id: str, limit: int = DEFAULT_LIMIT,
                   offset: int = 0,
                   cursor: Optional[str] = None) -> List[ProjectMember]:
         """Get users associated with a project.
@@ -344,8 +345,9 @@ class ProjectOperations(OwnershipMixin, AccessControlMixin, BaseResource):
             raise ValueError("Resolved user is missing a canonical unique_id")
         return resolved
 
+    @_deprecated_parameter('user_unique_id', 'user_ref')
     @_removed_parameter('orcid', 'user_unique_id')
-    def remove_user(self, project_id: str, user_unique_id: Optional[str] = None,
+    def remove_user(self, project_id: str, user_ref: Optional[str] = None,
                     email: Optional[str] = None,
                     username: Optional[str] = None) -> List[ProjectMember]:
         """Remove a user from a project.
@@ -357,19 +359,20 @@ class ProjectOperations(OwnershipMixin, AccessControlMixin, BaseResource):
 
         Args:
             project_id (str): Unique project identifier
-            user_unique_id (str, optional): Canonical user ORCID or MFID
+            user_ref (str, optional): Canonical user ORCID or MFID
             email (str, optional): User's email address
             username (str, optional): User's username
 
         Returns:
             List[ProjectMember]: Updated list of project users
         """
-        canonical_id = self._resolve_member_unique_id(user_unique_id, email, username)
+        canonical_id = self._resolve_member_unique_id(user_ref, email, username)
         raw = self._request('delete', f'/projects/{project_id}/users/{canonical_id}')
         return self._parse_members(raw)
 
+    @_deprecated_parameter('user_unique_id', 'user_ref')
     @_removed_parameter('orcid', 'user_unique_id')
-    def add_user(self, user_unique_id: Optional[str] = None, project_id: str = None,
+    def add_user(self, user_ref: Optional[str] = None, project_id: str = None,
                 email: Optional[str] = None, username: Optional[str] = None,
                 role: Optional[str] = None) -> List[ProjectMember]:
         """Add a user to a project.
@@ -383,7 +386,7 @@ class ProjectOperations(OwnershipMixin, AccessControlMixin, BaseResource):
         Email and username inputs are resolved before the canonical membership request.
 
         Args:
-            user_unique_id (str, optional): Canonical user ORCID or MFID
+            user_ref (str, optional): Canonical user ORCID or MFID
             project_id (str): Unique project identifier
             email (str, optional): User's email address
             username (str, optional): User's username
@@ -392,14 +395,15 @@ class ProjectOperations(OwnershipMixin, AccessControlMixin, BaseResource):
         Returns:
             List[ProjectMember]: Updated list of project users
         """
-        canonical_id = self._resolve_member_unique_id(user_unique_id, email, username)
+        canonical_id = self._resolve_member_unique_id(user_ref, email, username)
         params = {'role': self._validate_member_role(role)} if role is not None else {}
         raw = self._request(
             'post', f'/projects/{project_id}/users/{canonical_id}', params=params)
         return self._parse_members(raw)
 
+    @_deprecated_parameter('user_unique_id', 'user_ref')
     @_removed_parameter('orcid', 'user_unique_id')
-    def update_user_role(self, project_id: str, user_unique_id: str,
+    def update_user_role(self, project_id: str, user_ref: str,
                          role: str) -> List[ProjectMember]:
         """Change a member's role in a project.
 
@@ -410,7 +414,7 @@ class ProjectOperations(OwnershipMixin, AccessControlMixin, BaseResource):
 
         Args:
             project_id (str): Unique project identifier
-            user_unique_id (str): Canonical user ORCID or MFID
+            user_ref (str): Canonical user ORCID or MFID
             role (str): New role to grant
 
         Returns:
@@ -418,7 +422,7 @@ class ProjectOperations(OwnershipMixin, AccessControlMixin, BaseResource):
         """
         role = self._validate_member_role(role)
         raw = self._request(
-            'patch', f'/projects/{project_id}/users/{user_unique_id}',
+            'patch', f'/projects/{project_id}/users/{user_ref}',
             params={'role': role})
         return self._parse_members(raw)
 

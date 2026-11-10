@@ -141,7 +141,7 @@ def _show_dataset(dataset, client, verbose=False, graph=False, include_metadata=
     else:
         from concurrent.futures import ThreadPoolExecutor
         with ThreadPoolExecutor(max_workers=3) as pool:
-            f_kw    = pool.submit(client.datasets.get_keywords, dsid) if verbose else None
+            f_kw    = pool.submit(client.datasets.list_keywords, dsid) if verbose else None
             f_meta  = pool.submit(client.datasets.list_files, dsid)
             f_links = pool.submit(client.datasets.get_download_links, dsid)
             if f_kw is not None:
@@ -268,9 +268,16 @@ def register_subcommand(subparsers):
     _register_delete(dataset_subparsers)
     _register_edit(dataset_subparsers)
     _register_link(dataset_subparsers)
+    _register_unlink(dataset_subparsers)
     _register_add_sample(dataset_subparsers)
+    _register_add_sample(dataset_subparsers, 'add-sample')
     _register_remove_sample(dataset_subparsers)
+    _register_remove_sample(dataset_subparsers, 'remove-sample')
     _register_remove_child(dataset_subparsers)
+    from .helpers import deprecate_command
+    deprecate_command(dataset_subparsers, 'add-sample', "'crucible dataset link-sample'")
+    deprecate_command(dataset_subparsers, 'remove-sample', "'crucible dataset unlink-sample'")
+    deprecate_command(dataset_subparsers, 'remove-child', "'crucible dataset unlink -p PARENT -c CHILD'")
     _register_list_parents(dataset_subparsers)
     _register_list_children(dataset_subparsers)
     _register_list_samples(dataset_subparsers)
@@ -291,6 +298,7 @@ def register_subcommand(subparsers):
     _register_facets(dataset_subparsers)
     _register_parsers(dataset_subparsers)
     _register_ingestors(dataset_subparsers)
+    deprecate_command(dataset_subparsers, 'ingestors', "'crucible ingestion list-ingestors'")
     from .postprocess import register as register_postprocess_commands
     register_postprocess_commands(dataset_subparsers)
 
@@ -1009,16 +1017,16 @@ def _register_link(subparsers):
     parser.set_defaults(func=_execute_link)
 
 
-def _register_add_sample(subparsers):
-    """Register the 'dataset add-sample' subcommand."""
+def _register_add_sample(subparsers, name='link-sample'):
+    """Register the 'dataset link-sample' subcommand."""
     parser = subparsers.add_parser(
-        'add-sample',
+        name,
         help='Link a sample to a dataset',
         description='Associate a sample with a dataset',
         formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
-    crucible dataset add-sample DATASET_MFID --sample SAMPLE_MFID
+    crucible dataset link-sample DATASET_MFID --sample SAMPLE_MFID
 """
     )
     parser.add_argument('dataset_id', metavar='DATASET_MFID', help='Dataset MFID')
@@ -1027,7 +1035,7 @@ Examples:
 
 
 def _execute_add_sample(args):
-    """Execute the 'dataset add-sample' subcommand."""
+    """Execute the 'dataset link-sample' subcommand."""
     from crucible.config import get_client
     try:
         client = get_client()
@@ -1040,16 +1048,16 @@ def _execute_add_sample(args):
         fail("linking sample to dataset", e, args)
 
 
-def _register_remove_sample(subparsers):
-    """Register the 'dataset remove-sample' subcommand."""
+def _register_remove_sample(subparsers, name='unlink-sample'):
+    """Register the 'dataset unlink-sample' subcommand."""
     parser = subparsers.add_parser(
-        'remove-sample',
+        name,
         help='Unlink a sample from a dataset',
         description='Remove the association between a dataset and a sample (requires admin)',
         formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
-    crucible dataset remove-sample DATASET_MFID --sample SAMPLE_MFID
+    crucible dataset unlink-sample DATASET_MFID --sample SAMPLE_MFID
 """
     )
     parser.add_argument('dataset_id', metavar='DATASET_MFID', help='Dataset MFID')
@@ -1058,7 +1066,7 @@ Examples:
 
 
 def _execute_remove_sample(args):
-    """Execute the 'dataset remove-sample' subcommand."""
+    """Execute the 'dataset unlink-sample' subcommand."""
     from crucible.config import get_client
     try:
         client = get_client()
@@ -1069,8 +1077,26 @@ def _execute_remove_sample(args):
         fail("unlinking sample from dataset", e, args)
 
 
+def _register_unlink(subparsers):
+    """Register the 'dataset unlink' subcommand."""
+    parser = subparsers.add_parser(
+        'unlink',
+        help='Unlink parent and child datasets',
+        description='Remove the parent-child relationship between two datasets',
+        formatter_class=term.ColorHelpFormatter,
+        epilog="""
+Examples:
+    crucible dataset unlink -p PARENT_MFID -c CHILD_MFID
+"""
+    )
+    parser.add_argument('-p', '--parent', dest='parent_id', required=True, metavar='PARENT_MFID',
+                        help='Parent dataset MFID')
+    parser.add_argument('-c', '--child', required=True, metavar='CHILD_MFID', help='Child dataset MFID')
+    parser.set_defaults(func=_execute_remove_child)
+
+
 def _register_remove_child(subparsers):
-    """Register the 'dataset remove-child' subcommand."""
+    """Register the deprecated 'dataset remove-child' subcommand."""
     parser = subparsers.add_parser(
         'remove-child',
         help='Unlink a child dataset from a parent dataset',
@@ -1087,7 +1113,7 @@ Examples:
 
 
 def _execute_remove_child(args):
-    """Execute the 'dataset remove-child' subcommand."""
+    """Execute the 'dataset unlink' subcommand."""
     from crucible.config import get_client
     try:
         client = get_client()
@@ -1116,6 +1142,8 @@ Examples:
     add_limit_arguments(parser)
     from .helpers import add_relationship_type_filter
     add_relationship_type_filter(parser)
+    parser.add_argument('--json', action='store_true', default=False,
+                        help='Output as JSON array')
     parser.set_defaults(func=_execute_list_parents)
 
 
@@ -1137,6 +1165,8 @@ Examples:
     add_limit_arguments(parser)
     from .helpers import add_relationship_type_filter
     add_relationship_type_filter(parser)
+    parser.add_argument('--json', action='store_true', default=False,
+                        help='Output as JSON array')
     parser.set_defaults(func=_execute_list_children)
 
 
@@ -1154,6 +1184,8 @@ Examples:
     )
     parser.add_argument('dataset_id', metavar='DATASET_MFID', help='Dataset MFID')
     add_limit_arguments(parser)
+    parser.add_argument('--json', action='store_true', default=False,
+                        help='Output as JSON array')
     parser.set_defaults(func=_execute_list_samples)
 
 
@@ -1460,6 +1492,8 @@ def _register_list_files(subparsers):
                     'clickable download links (valid for 1 hour) in supporting terminals.',
     )
     parser.add_argument('dataset_id', metavar='DATASET_MFID', help='Dataset MFID')
+    parser.add_argument('--json', action='store_true', default=False,
+                        help='Output as JSON array')
     parser.set_defaults(func=_execute_list_files)
 
 
@@ -1477,6 +1511,11 @@ def _execute_list_files(args):
             f_links = pool.submit(client.datasets.get_download_links, dsid)
             meta_list  = f_meta.result()
             link_map   = f_links.result()   # {filepath: signed_url}
+
+        if getattr(args, 'json', False):
+            files = [{**f, 'download_url': link_map.get(f.get('mfid'))} for f in meta_list]
+            print(json.dumps(files, indent=2, default=str))
+            return
 
         file_display = _build_file_display(meta_list, link_map, dsid)
 
@@ -1715,6 +1754,8 @@ def _register_list_keywords(subparsers):
         description='Show all keywords associated with a dataset',
     )
     _add_args(parser)
+    parser.add_argument('--json', action='store_true', default=False,
+                        help='Output as JSON array')
     parser.set_defaults(func=_execute_list_keywords)
 
 
@@ -1723,7 +1764,11 @@ def _execute_list_keywords(args):
     from crucible.config import get_client
     try:
         client = get_client()
-        keywords = client.datasets.get_keywords(args.dataset_id)
+        keywords = client.datasets.list_keywords(args.dataset_id)
+
+        if getattr(args, 'json', False):
+            print(json.dumps(keywords, indent=2, default=str))
+            return
 
         term.header(f"Keywords · {args.dataset_id} ({len(keywords)})")
         if not keywords:
@@ -2289,6 +2334,11 @@ def _execute_list_parents(args):
             relationship_type=args.relationship_type),
                          key=lambda ds: (ds.get('dataset_name') or '').lower())
 
+        if getattr(args, 'json', False):
+            print_more_hint(parents, resolve_limit(args), args)
+            print(json.dumps(parents, indent=2, default=str))
+            return
+
         term.header(f"Parent Datasets · {args.dataset_id} ({count_label(parents)})")
         if not parents:
             print(f"  {term.dim('No parent datasets found.')}")
@@ -2314,6 +2364,11 @@ def _execute_list_children(args):
             relationship_type=args.relationship_type),
                           key=lambda ds: (ds.get('dataset_name') or '').lower())
 
+        if getattr(args, 'json', False):
+            print_more_hint(children, resolve_limit(args), args)
+            print(json.dumps(children, indent=2, default=str))
+            return
+
         term.header(f"Child Datasets · {args.dataset_id} ({count_label(children)})")
         if not children:
             print(f"  {term.dim('No child datasets found.')}")
@@ -2336,6 +2391,11 @@ def _execute_list_samples(args):
         client = get_client()
         samples = sort_like(client.samples.list(dataset_mfid=args.dataset_id, limit=resolve_limit(args), **page_kwargs(args)),
                          key=lambda s: (s.get('sample_name') or '').lower())
+
+        if getattr(args, 'json', False):
+            print_more_hint(samples, resolve_limit(args), args)
+            print(json.dumps(samples, indent=2, default=str))
+            return
 
         term.header(f"Samples · {args.dataset_id} ({count_label(samples)})")
         if not samples:
@@ -2413,19 +2473,6 @@ Use the ingestor name with:
 
 
 def _execute_ingestors(args):
-    """Execute the 'dataset ingestors' subcommand."""
-    from crucible.constants import AVAILABLE_INGESTORS
-    ingestors = AVAILABLE_INGESTORS
-    if args.filter:
-        ingestors = [i for i in ingestors if args.filter.lower() in i.lower()]
-
-    title = f"Server-Side Ingestors ({len(ingestors)})"
-    if args.filter:
-        title += f"  [filter: {args.filter}]"
-    term.header(title)
-    if not ingestors:
-        print(f"  {term.dim('No ingestors match the filter.')}")
-    else:
-        for name in ingestors:
-            print(f"  {name}")
-    print(f"\n  {term.dim('Use with: crucible dataset create -i FILE --ingestor INGESTOR_CLASS')}")
+    """Execute the deprecated 'dataset ingestors' subcommand."""
+    from .ingestion import _execute_list_ingestors
+    _execute_list_ingestors(args)

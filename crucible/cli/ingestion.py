@@ -5,6 +5,7 @@ Ingestion subcommand — manage ingestion requests.
 """
 
 import sys
+import json
 import logging
 
 logger = logging.getLogger(__name__)
@@ -46,6 +47,8 @@ Examples:
     parser.add_argument('--file', '-f', dest='file_id', default=None,
                         metavar='FILE_ID', help='Filter by file MFID')
     add_limit_arguments(parser, short=True)
+    parser.add_argument('--json', action='store_true', default=False,
+                        help='Output as JSON array')
     parser.set_defaults(func=_execute_list)
 
 
@@ -56,6 +59,11 @@ def _execute_list(args):
         reqs   = client.ingestions.list(dataset_mfid=args.dataset_id,
                                         file_mfid=args.file_id,
                                         limit=resolve_limit(args), **page_kwargs(args))
+
+        if getattr(args, 'json', False):
+            print_more_hint(reqs, resolve_limit(args), args)
+            print(json.dumps(reqs, indent=2, default=str))
+            return
 
         scope = args.dataset_id or args.file_id or 'all'
         term.header(f"Ingestion Requests · {scope} ({count_label(reqs)})")
@@ -90,8 +98,14 @@ def _register_list_ingestors(subparsers):
         epilog="""
 Examples:
     crucible ingestion list-ingestors
+    crucible ingestion list-ingestors --filter scopefoundry
+
+Use the ingestor name with:
+    crucible dataset create -i FILE --ingestor INGESTOR_CLASS
 """,
     )
+    parser.add_argument('--filter', '-f', dest='filter', default=None, metavar='TEXT',
+                        help='Only ingestors whose name contains TEXT (case-insensitive)')
     parser.set_defaults(func=_execute_list_ingestors)
 
 
@@ -100,13 +114,18 @@ def _execute_list_ingestors(args):
     try:
         client = get_client()
         ingestors = client.ingestions.list_ingestors()
+        text = getattr(args, 'filter', None)
+        if text:
+            ingestors = [name for name in ingestors if text.lower() in name.lower()]
 
-        term.header(f"Ingestors ({len(ingestors)})")
+        title = f"Ingestors ({len(ingestors)})" + (f"  [filter: {text}]" if text else "")
+        term.header(title)
         if not ingestors:
             print(f"  {term.dim('No ingestors found.')}")
             return
         for name in ingestors:
             print(f"  {name}")
+        print(f"\n  {term.dim('Use with: crucible dataset create -i FILE --ingestor INGESTOR_CLASS')}")
 
     except Exception as e:
         from .helpers import fail
@@ -126,6 +145,8 @@ Examples:
     )
     parser.add_argument('request_id', metavar='REQUEST_ID', type=int,
                         help='Integer ingestion request ID')
+    parser.add_argument('--json', action='store_true', default=False,
+                        help='Output as JSON object')
     parser.set_defaults(func=_execute_get)
 
 
@@ -134,6 +155,9 @@ def _execute_get(args):
     try:
         client = get_client()
         r = client.ingestions.get(args.request_id)
+        if getattr(args, 'json', False):
+            print(json.dumps(r, indent=2, default=str))
+            return
         _p = term.field_printer(16)
         term.header(f"Ingestion Request #{r.get('id')}")
         _p("Status",  term.status_label(r.get('status')))

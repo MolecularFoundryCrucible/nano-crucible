@@ -122,7 +122,7 @@ crucible dataset create -i xrd_data.xy -n "XRD measurement" -m "X-ray diffractio
 crucible sample create -n "Silicon wafer A" --type substrate --project-id my-project
 
 # Link them
-crucible sample add-dataset SAMPLE_ID -d DATASET_ID
+crucible sample link-dataset SAMPLE_ID -d DATASET_ID
 
 # List datasets
 crucible dataset list --project-id my-project
