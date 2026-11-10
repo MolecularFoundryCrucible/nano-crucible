@@ -1,7 +1,8 @@
 name: API checks
 
-# Checks against the live staging API, kept apart from Tests so a staging
-# outage never blocks a push or a release.
+# Compares the client's API calls with the staging OpenAPI document, kept
+# apart from Tests so a staging outage never blocks a push or a release.
+# Live API tests belong to the crucible-tests repository.
 on:
   push:
     branches:
@@ -10,10 +11,6 @@ on:
     - cron: "0 6 * * 1"
   workflow_dispatch:
     inputs:
-      integration:
-        description: "Also run the integration tests, which write to the API (needs the CRUCIBLE_TEST_API_KEY secret)"
-        type: boolean
-        default: false
       api_url:
         description: "API to test against"
         type: string
@@ -37,23 +34,3 @@ jobs:
         run: python scripts/check_api_routes.py "${API_URL}/openapi.json"
         env:
           API_URL: ${{ inputs.api_url || 'https://crucible.lbl.gov/testapi-staging' }}
-
-  integration:
-    name: Integration tests
-    if: github.event_name == 'workflow_dispatch' && inputs.integration
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Install package and test dependencies
-        run: pip install ".[dev,parsers]"
-
-      - name: Run integration tests
-        run: pytest tests/integration -q
-        env:
-          CRUCIBLE_TEST_API_URL: ${{ inputs.api_url }}
-          CRUCIBLE_TEST_API_KEY: ${{ secrets.CRUCIBLE_TEST_API_KEY }}

@@ -55,14 +55,14 @@
 - Resource, project, instrument, and user links, `crucible open`, and Alt+O go to the Crucible Hub (`hub_url`) instead of the Graph Explorer.
 - `datasets.create()` leaves out `instrument_name` when `instrument_id` or `instrument_mfid` is set.
 - A cast recipe's `instrument` is an instrument ID or MFID, not a name.
-- The PyPI release workflow runs the tests first, and `pytest` alone runs only the unit tests; integration tests need `CRUCIBLE_TEST_API_URL` and `CRUCIBLE_TEST_API_KEY`.
+- The PyPI release workflow runs the tests first. The live-API integration tests moved to the separate `crucible-tests` repository.
 - `samples.get()` and `client.get()` no longer embed a sample's datasets; `include_datasets=True` still works with a warning (use `include_links` or `datasets.list(sample_mfid=...)`), and `sample get --json` includes links instead.
 - `datasets.graph()` and `samples.graph()` still work but are deprecated in favour of `graphs.get()`.
 - Renamed, with the old names still working and warning: `datasets.list_keywords()`, `projects.list_users()`, `instruments.list_users()`, `users.list_projects()`, and the parameters `file_mfid` (files), `resource_mfid` (deletions), `service_account_ref`, `instrument_ref`, and `user_ref` (users and project members).
 - Renamed CLI commands, with the old names still working and warning: `dataset link-sample`, `unlink-sample`, `unlink -p -c`; `sample link-dataset`, `unlink-dataset`, `unlink -p -c`. `dataset ingestors` now runs `ingestion list-ingestors`, which lists the server's ingestors and takes `--filter`.
 - `--json` on the `list-parents`, `list-children`, `list-samples`, `list-datasets`, `list-files`, `list-keywords`, `list-users`, `list-projects` and `list-access-groups` commands, `file`, `ingestion`, `ag` and `deletion` `list` and `get`, `ag mine`, `deletion list-deleted` and `get-deleted`, `file ingestion`, `ingestion list-ingestors`, `whoami`, and `status`.
 - `deletion delete` and `sa rotate-key` ask for confirmation (`-y/--yes` skips it), `-y` works wherever `--yes` does, and shell completion leaves out `user create` and `deletion delete` for callers who cannot elevate.
-- Tests run on Python 3.13 and macOS, and a separate workflow checks the client's routes against staging and can run the integration tests on demand.
+- Tests run on Python 3.13 and macOS, and a separate workflow checks the client's routes against staging.
 - The package passes mypy, which now runs in CI; `get()` methods are typed as returning `None` when the API sends no record.
 
 ### Fixed

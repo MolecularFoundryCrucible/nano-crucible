@@ -1,8 +1,7 @@
 """Unit tests for the permission-system overhaul - mocked, no live API.
 
 Targets the `feat/permission-roles` crucible-api branch (see
-crucible-api/docs/permission_system_api_changes.md), not yet universally
-deployed - see tests/unit/ vs tests/integration/ split in CLAUDE.md.
+crucible-api/docs/permission_system_api_changes.md).
 """
 
 from unittest.mock import MagicMock

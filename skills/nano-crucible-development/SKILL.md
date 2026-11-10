@@ -23,7 +23,7 @@ pytest tests/unit -q
 mkdocs build
 ```
 
-Iterate on the smallest relevant test set, then run all unit tests. `tests/integration/` hits a live API and leaves the records it creates behind, so it is never routine validation: run it only when the user authorizes live writes, and only against the `crucible-test` project. `crucible/parsers/` and `crucible/cast/` have little coverage: changes there need a mocked unit test, and a rename or removal needs a search of every call site.
+Iterate on the smallest relevant test set, then run all unit tests. Unit tests are mocked and never contact an API; live checks against staging belong to the separate `crucible-tests` repository. `crucible/parsers/` and `crucible/cast/` have little coverage: changes there need a mocked unit test, and a rename or removal needs a search of every call site.
 
 Before a release, or after adding or changing an API call, compare the client's routes with the API's published ones. It reads only the OpenAPI document and fails on routes the API does not define:
 

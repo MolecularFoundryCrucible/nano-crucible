@@ -1,8 +1,6 @@
 """Unit tests for remote (non-GCS) file records - mocked, no live API.
 
-Unlike tests/integration/, these don't hit a real server: the feature under
-test (AssociatedFile.storage_backend/access_note) is new server-side and may
-not be deployed everywhere tests/integration/ points at.
+Covers AssociatedFile.storage_backend/access_note without a server.
 """
 
 import hashlib
