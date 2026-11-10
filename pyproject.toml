@@ -77,3 +77,6 @@ packages = {find = {}}
 
 [tool.setuptools.dynamic]
 version = {attr = "crucible.__version__"}
+
+[tool.pytest.ini_options]
+testpaths = ["tests/unit"]

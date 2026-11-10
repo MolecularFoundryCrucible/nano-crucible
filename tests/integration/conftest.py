@@ -1,8 +1,9 @@
 """
 Shared pytest fixtures for nano-crucible integration tests.
 
-These tests hit the live Crucible API and require a valid API key.
-Set up credentials with: crucible config init
+These tests write to a live Crucible API. They run only when both
+CRUCIBLE_TEST_API_URL (use staging, never production) and
+CRUCIBLE_TEST_API_KEY are set; otherwise every test is skipped.
 
 Run all:        pytest tests/integration/
 Run one module: pytest tests/integration/test_datasets.py -v
@@ -20,7 +21,11 @@ TEST_TAG   = 'v3-client-test'
 @pytest.fixture(scope='session')
 def client():
     from crucible.client import CrucibleClient
-    return CrucibleClient()
+    api_url = os.environ.get('CRUCIBLE_TEST_API_URL')
+    api_key = os.environ.get('CRUCIBLE_TEST_API_KEY')
+    if not api_url or not api_key:
+        pytest.skip("set CRUCIBLE_TEST_API_URL and CRUCIBLE_TEST_API_KEY to run integration tests")
+    return CrucibleClient(api_url=api_url, api_key=api_key)
 
 
 @pytest.fixture(scope='session')
@@ -58,7 +63,7 @@ def new_dataset(client):
         project_id=PROJECT_ID,
         measurement='test',
     ))
-    return result.get('dsid')
+    return result.get('dataset_mfid')
 
 
 @pytest.fixture(scope='session')

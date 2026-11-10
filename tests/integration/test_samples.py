@@ -87,16 +87,16 @@ def test_sample_link_parent_child(client, project_id, test_tag):
     children = client.samples.list_children(pid)
     assert any(s.get('unique_id') == cid for s in children)
 
-    client.samples.remove_child(pid, cid)
+    client.samples.unlink(pid, cid)
     children = client.samples.list_children(pid)
     assert not any(s.get('unique_id') == cid for s in children)
 
 
 def test_sample_dataset_link(client, new_sample, new_dataset):
-    client.datasets.add_sample(new_dataset, new_sample)
+    client.datasets.link_sample(new_dataset, new_sample)
     linked = client.datasets.list(sample_mfid=new_sample)
     assert any(d.get('unique_id') == new_dataset for d in linked)
 
-    client.datasets.remove_sample(new_dataset, new_sample)
+    client.datasets.unlink_sample(new_dataset, new_sample)
     linked = client.datasets.list(sample_mfid=new_sample)
     assert not any(d.get('unique_id') == new_dataset for d in linked)

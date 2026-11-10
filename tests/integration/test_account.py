@@ -12,9 +12,9 @@ def test_account_profile(client):
     assert p.get('unique_id') or p.get('orcid')
 
 
-def test_account_api_key(client):
-    key = client.account.api_key()
-    assert isinstance(key, str) and len(key) > 0
+def test_account_list_api_keys(client):
+    keys = client.account.list_api_keys()
+    assert all('id' in key and 'api_key' not in key for key in keys)
 
 
 def test_account_verify(client):

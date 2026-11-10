@@ -1,11 +1,12 @@
 # Integration Tests
 
-These tests hit the live Crucible API. They require a valid API key and network access.
+These tests write to a live Crucible API. They run only when both `CRUCIBLE_TEST_API_URL` and `CRUCIBLE_TEST_API_KEY` are set; otherwise every test is skipped. Point them at staging, never production. Your own config, sign-in, and `CRUCIBLE_API_KEY` are not used.
 
 ## Setup
 
 ```bash
-crucible config init   # configure your API key
+export CRUCIBLE_TEST_API_URL=https://crucible.lbl.gov/testapi-staging
+export CRUCIBLE_TEST_API_KEY=...   # a staging key with access to the crucible-test project
 ```
 
 ## Run

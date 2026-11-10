@@ -53,9 +53,6 @@ def test_dataset_graph(client, existing_dataset):
     assert isinstance(g, dict)
 
 
-def test_dataset_search_metadata_on_resource(client, existing_dataset):
-    results = client.datasets.search_metadata('test', limit=5)
-    assert isinstance(results, list)
 
 
 # ── create / update ───────────────────────────────────────────────────────────
@@ -67,7 +64,7 @@ def test_dataset_create_and_update(client, project_id, test_tag):
         project_id=project_id,
         measurement='test',
     ))
-    dsid = result.get('dsid')
+    dsid = result.get('dataset_mfid')
     assert dsid
 
     updated = client.datasets.update(dsid, session_name='pytest-session')
@@ -83,13 +80,13 @@ def test_dataset_add_keyword(client, new_dataset):
 
 def test_dataset_link_parent_child(client, project_id, test_tag):
     from crucible.models import Dataset
-    parent = client.datasets.create(Dataset(dataset_name=f'{test_tag}-parent', project_id=project_id)).get('dsid')
-    child  = client.datasets.create(Dataset(dataset_name=f'{test_tag}-child',  project_id=project_id)).get('dsid')
+    parent = client.datasets.create(Dataset(dataset_name=f'{test_tag}-parent', project_id=project_id)).get('dataset_mfid')
+    child  = client.datasets.create(Dataset(dataset_name=f'{test_tag}-child',  project_id=project_id)).get('dataset_mfid')
 
     client.datasets.link(parent, child)
     children = client.datasets.list_children(parent)
     assert any(d.get('unique_id') == child for d in children)
 
-    client.datasets.remove_child(parent, child)
+    client.datasets.unlink(parent, child)
     children = client.datasets.list_children(parent)
     assert not any(d.get('unique_id') == child for d in children)

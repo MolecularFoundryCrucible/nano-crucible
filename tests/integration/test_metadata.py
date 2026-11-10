@@ -58,7 +58,7 @@ def test_dataset_post_conflicts_without_overwrite(client, project_id, test_tag):
     r = client.datasets.create(Dataset(
         dataset_name=f'{test_tag}-conflict-test', project_id=project_id
     ))
-    dsid = r['dsid']
+    dsid = r['dataset_mfid']
     # Create metadata first
     client.datasets.replace_scientific_metadata(dsid, {'first': True})
     # Second POST without overwrite should 409
@@ -84,7 +84,7 @@ def test_dataset_get_metadata_null_when_absent(client, project_id, test_tag):
     r = client.datasets.create(Dataset(
         dataset_name=f'{test_tag}-no-meta', project_id=project_id
     ))
-    result = client.datasets.get_scientific_metadata(r['dsid'])
+    result = client.datasets.get_scientific_metadata(r['dataset_mfid'])
     assert result is None or _md(result) == {}
 
 
@@ -95,7 +95,7 @@ def test_dataset_create_with_metadata(client, project_id, test_tag):
         Dataset(dataset_name=f'{test_tag}-meta-create', project_id=project_id),
         scientific_metadata={'created_with': 'one_call', 'value': 99},
     )
-    dsid = result['dsid']
+    dsid = result['dataset_mfid']
     r = client.datasets.get_scientific_metadata(dsid)
     md = _md(r)
     assert md.get('created_with') == 'one_call'

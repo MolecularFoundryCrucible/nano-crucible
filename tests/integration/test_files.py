@@ -68,19 +68,19 @@ def test_file_download(client, uploaded_file, tmp_path):
 
 
 def test_ingestion_list_by_dataset(client, new_dataset):
-    reqs = client.ingestions.list(dsid=new_dataset)
+    reqs = client.ingestions.list(dataset_mfid=new_dataset)
     assert isinstance(reqs, list)
 
 
 def test_ingestion_list_by_file(client, uploaded_file):
     if not uploaded_file:
         pytest.skip("upload failed")
-    reqs = client.ingestions.list(file_id=uploaded_file)
+    reqs = client.ingestions.list(file_mfid=uploaded_file)
     assert isinstance(reqs, list)
 
 
 def test_ingestion_get(client, new_dataset):
-    reqs = client.ingestions.list(dsid=new_dataset)
+    reqs = client.ingestions.list(dataset_mfid=new_dataset)
     if not reqs:
         pytest.skip("no ingestion requests available")
     r = client.ingestions.get(reqs[0]['id'])

@@ -1,5 +1,6 @@
 """Unit coverage for shared CLI resource presentation."""
 
+import os
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -1031,7 +1032,7 @@ def test_interactive_table_width_uses_terminal_size(monkeypatch):
     monkeypatch.setattr(
         term.shutil,
         'get_terminal_size',
-        lambda fallback: SimpleNamespace(columns=72),
+        lambda fallback: os.terminal_size((72, 24)),
     )
 
     assert term._table_output_width() == 72
