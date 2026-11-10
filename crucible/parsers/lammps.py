@@ -20,7 +20,6 @@ class LAMMPSParser(BaseParser):
 
     _measurement = "LAMMPS"
     _data_format = "LAMMPS"
-    _instrument_name = None
 
     def parse(self):
         """

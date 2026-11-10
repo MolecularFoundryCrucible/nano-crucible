@@ -11,6 +11,8 @@ import logging
 import socket
 from pathlib import Path
 from crucible import Dataset
+from crucible.errors import RemovedError
+from crucible.utils.deprecation import _removed_parameter, removed_message
 
 logger = logging.getLogger(__name__)
 
@@ -19,12 +21,14 @@ class BaseParser:
     _measurement = None
     _data_format = None
     _data_type = None
-    _instrument_name = None
+    _instrument_id = None
 
-    def __init__(self, files_to_upload=None, project_id=None, owner_orcid=None,
+    @_removed_parameter('owner_orcid', 'owner')
+    @_removed_parameter('instrument_name', 'instrument_mfid')
+    def __init__(self, files_to_upload=None, project_id=None, owner=None,
                  metadata=None, keywords=None, mfid=None,
                  measurement=None, dataset_name=None,
-                 session_name=None, public=False, instrument_name=None,
+                 session_name=None, public=False,
                  data_format=None, data_type=None, timestamp=None,
                  project_mfid=None, instrument_id=None, instrument_mfid=None):
         """
@@ -33,6 +37,8 @@ class BaseParser:
         Args:
             files_to_upload (str, list, or None): File(s) to upload. Can be a single file path (str) or list of file paths
             project_id (str, optional): Crucible project ID
+            owner (str, optional): Owner to create the dataset for: ORCID, MFID,
+                username, or email. Defaults to the caller.
             project_mfid (str, optional): Canonical Crucible project MFID
             metadata (dict, str, or Path, optional): Scientific metadata as dict or path to JSON file
             keywords (list, optional): Keywords for the dataset
@@ -41,8 +47,7 @@ class BaseParser:
             dataset_name (str, optional): Human-readable dataset name
             session_name (str, optional): Session name for grouping datasets
             public (bool, optional): Whether dataset is public. Defaults to False.
-            instrument_name (str, optional): Instrument name
-            instrument_id (str, optional): Registered instrument ID
+            instrument_id (str, optional): Registered instrument ID (defaults to _instrument_id)
             instrument_mfid (str, optional): Canonical registered instrument MFID
             data_format (str, optional): Data format type
         """
@@ -53,8 +58,12 @@ class BaseParser:
             data_format = self._data_format
         if data_type is None:
             data_type = self._data_type
-        if instrument_name is None:
-            instrument_name = self._instrument_name
+        if getattr(type(self), '_instrument_name', None) is not None:
+            raise RemovedError(removed_message(
+                f"{type(self).__name__}._instrument_name",
+                "set _instrument_id to a registered instrument ID instead."))
+        if instrument_id is None and instrument_mfid is None:
+            instrument_id = self._instrument_id
 
         # Handle files_to_upload - convert string to list if needed
         if files_to_upload is None:
@@ -71,10 +80,8 @@ class BaseParser:
         self.dataset_name    = dataset_name
         self.session_name    = session_name
         self.timestamp       = timestamp
-        self.owner_orcid     = owner_orcid
-        self.owner           = None
+        self.owner           = owner
         self.public          = public
-        self.instrument_name = instrument_name
         self.instrument_id   = instrument_id
         self.instrument_mfid = instrument_mfid
         self.data_format     = data_format
@@ -251,13 +258,11 @@ class BaseParser:
             measurement    = self.measurement,
             project_id     = self.project_id,
             project_mfid   = self.project_mfid,
-            owner_orcid    = self.owner_orcid,  # API key handles user authentication
-            owner          = getattr(self, 'owner', None),
+            owner          = self.owner,
             dataset_name   = self.dataset_name,
             session_name   = self.session_name,
             timestamp      = self.timestamp,
             public         = self.public,
-            instrument_name = self.instrument_name,
             instrument_id   = self.instrument_id,
             instrument_mfid = self.instrument_mfid,
             data_format    = self.data_format,
@@ -272,7 +277,7 @@ class BaseParser:
         Upload the parsed dataset to Crucible.
 
         Uses instance variables for all dataset properties (mfid, measurement,
-        project_id, owner_orcid, dataset_name, metadata, keywords).
+        project_id, owner, dataset_name, metadata, keywords).
 
         Args:
             ingestor (str, optional): Ingestion class to use. Defaults to None,

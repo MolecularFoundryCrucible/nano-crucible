@@ -31,6 +31,8 @@
 - Everything deprecated before 4.0.0. Calling a removed method, keyword, or setting raises `crucible.RemovedError` (a `TypeError`) naming the replacement, and removed CLI commands and options stop with the one to use; the CLI reference lists them under "Removed in 4.0.0".
 - Removed settings (`graph_explorer_url`, `current_session`, `upload_protocol`, `upload_chunk_size_mb`) are ignored in old config files; `config show` lists them and `config unset` removes them. `get_graph_explorer_url()` is replaced by `get_hub_url()`.
 - `CRUCIBLE_CURRENT_PROJECT` stops the CLI; use `--project-id`.
+- `owner_orcid` on `datasets.list()` and `samples.list()` (use `owner_id`), `include_datasets` on `samples.list()` (use `include_links`), and `instrument_id`/`instrument_name` in `datasets.update()` (use `assign_instrument()`).
+- Parser `owner_orcid` and `instrument_name` arguments and the `_instrument_name` class default; use `owner`, `instrument_id`/`instrument_mfid`, and `_instrument_id`.
 
 ### Changed
 
@@ -49,6 +51,8 @@
 - `users.search()` reads the paginated `items` response.
 - `keyring` is a new dependency, and the package ships type information (`py.typed`).
 - Resource, project, instrument, and user links, `crucible open`, and Alt+O go to the Crucible Hub (`hub_url`) instead of the Graph Explorer.
+- `datasets.create()` leaves out `instrument_name` when `instrument_id` or `instrument_mfid` is set.
+- A cast recipe's `instrument` is an instrument ID or MFID, not a name.
 
 ### Fixed
 
@@ -60,6 +64,7 @@
 - `project add-user` accepts user and service-account MFIDs and any other user ID instead of failing with an invalid ORCID error.
 - Downloads no longer send the API key to the storage host serving a signed URL.
 - A refusal that needs a recent Hub sign-in (`hub_session_required`) points to the Hub instead of suggesting `--elevate`.
+- `dataset ingestion` and `file ingestion` show the file MFID and creation time.
 
 ## 3.3.0
 

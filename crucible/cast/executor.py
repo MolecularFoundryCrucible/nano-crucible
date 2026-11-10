@@ -57,6 +57,14 @@ def _file_sha256(path: str) -> str:
     return h.hexdigest()
 
 
+def _instrument_ref(value: Optional[str]) -> Dict[str, str]:
+    """Map a recipe's instrument (MFID or instrument_id) to the matching Dataset field."""
+    if not value:
+        return {}
+    from crucible.utils.identifiers import is_mfid
+    return {'instrument_mfid' if is_mfid(value) else 'instrument_id': value}
+
+
 class CastExecutor:
     """
     Executes a CastPlan against the Crucible API.
@@ -287,7 +295,7 @@ class CastExecutor:
                 dataset_name=ds.name,
                 session_name=ds.session,
                 public=ds.public,
-                instrument_name=ds.instrument,
+                **_instrument_ref(ds.instrument),
                 data_format=ds.data_format,
                 timestamp=ds.timestamp,
             )
@@ -304,7 +312,7 @@ class CastExecutor:
                 measurement=ds.measurement,
                 session_name=ds.session,
                 public=ds.public,
-                instrument_name=ds.instrument,
+                **_instrument_ref(ds.instrument),
                 data_format=ds.data_format,
                 timestamp=ds.timestamp,
             )

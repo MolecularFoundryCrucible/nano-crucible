@@ -113,9 +113,71 @@ def test_removed_dataset_fields_raise_on_create(fields, message):
     operations._request.assert_not_called()
 
 
-def test_instrument_name_alongside_an_instrument_id_is_still_fine():
+def test_instrument_name_alongside_an_instrument_id_is_dropped_from_create():
     from crucible.models import Dataset
-    _datasets().create(Dataset(dataset_name='t', instrument_name='Titan', instrument_id='titan'))
+    operations = _datasets()
+
+    operations.create(Dataset(dataset_name='t', instrument_name='Titan', instrument_id='titan'))
+
+    sent = operations._request.call_args_list[0].kwargs['json']
+    assert sent['instrument_id'] == 'titan'
+    assert 'instrument_name' not in sent
+
+
+@pytest.mark.parametrize('fields', [
+    {'instrument_id': 'titan'},
+    {'instrument_name': 'Titan'},
+    {'instrument_id': 'titan', 'instrument_name': 'Titan'},
+])
+def test_instrument_fields_on_update_raise(fields):
+    operations = _datasets()
+
+    with pytest.raises(RemovedError, match='assign_instrument'):
+        operations.update('D' * 26, dataset_name='x', **fields)
+    operations._request.assert_not_called()
+
+
+@pytest.mark.parametrize('keyword, replacement', [
+    ('owner_orcid', 'owner'),
+    ('instrument_name', 'instrument_mfid'),
+])
+def test_removed_parser_keywords_raise(keyword, replacement):
+    from crucible.parsers.base import BaseParser
+    with pytest.raises(RemovedError, match=f"'{keyword}' keyword .*use '{replacement}'"):
+        BaseParser([], **{keyword: 'x'})
+
+
+def test_parser_class_default_instrument_name_raises():
+    from crucible.parsers.base import BaseParser
+
+    class OldParser(BaseParser):
+        _instrument_name = 'Titan'
+
+    with pytest.raises(RemovedError, match='_instrument_id'):
+        OldParser([])
+
+
+def test_parser_builds_a_dataset_with_owner_and_default_instrument_id():
+    from crucible.parsers.base import BaseParser
+
+    class XRDParser(BaseParser):
+        _instrument_id = 'xrd-one'
+
+    dataset = XRDParser([], owner='jdoe').to_dataset()
+
+    assert (dataset.owner, dataset.instrument_id) == ('jdoe', 'xrd-one')
+    assert dataset.owner_orcid is None and dataset.instrument_name is None
+    assert XRDParser([], instrument_mfid='0tk8pf1me0h3h0003fp91vr037').to_dataset().instrument_id is None
+
+
+@pytest.mark.parametrize('value, expected', [
+    (None, {}),
+    ('xrd-one', {'instrument_id': 'xrd-one'}),
+    ('0tk8pf1me0h3h0003fp91vr037', {'instrument_mfid': '0tk8pf1me0h3h0003fp91vr037'}),
+])
+def test_cast_instrument_maps_to_an_instrument_reference(value, expected):
+    from crucible.cast.executor import _instrument_ref
+    assert _instrument_ref(value) == expected
 
 
 def test_join_request_group_name_raises():

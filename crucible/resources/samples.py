@@ -22,10 +22,10 @@ logger = logging.getLogger(__name__)
 SAMPLE_LIST_PARAMS = frozenset({
     'accessible_to_project', 'accessible_to_user', 'affiliation',
     'anchor_mfid', 'creation_time_gte', 'creation_time_lte', 'cursor',
-    'dataset_mfid', 'description', 'direction', 'include_datasets',
+    'dataset_mfid', 'description', 'direction',
     'include_links', 'include_metadata', 'include_owner', 'include_total',
     'limit', 'modification_time_gte', 'modification_time_lte', 'offset',
-    'owner_id', 'owner_id_is_null', 'owner_orcid', 'project_id',
+    'owner_id', 'owner_id_is_null', 'project_id',
     'project_mfid', 'project_mfid_is_null', 'project_scope', 'public',
     'sample_name', 'sample_type', 'sample_type_is_null', 'sort',
     'timestamp', 'mfid', 'visibility',
@@ -106,6 +106,8 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
     @_removed_parameter('dataset_id', 'dataset_mfid')
     @_removed_parameter('parent_id', 'parent_mfid')
     @_removed_parameter('parent_sample_mfid', 'parent_mfid')
+    @_removed_parameter('owner_orcid', 'owner_id')
+    @_removed_parameter('include_datasets', 'include_links')
     def list(self, dataset_mfid: Optional[str] = None,
              parent_mfid: Optional[str] = None,
              include_metadata: bool = False, include_links: bool = False,

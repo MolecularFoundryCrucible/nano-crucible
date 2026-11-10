@@ -372,7 +372,7 @@ def _execute_ingestion(args):
                 str(r.get('id', '-')),
                 term.status_label(r.get('status')),
                 r.get('ingestion_class') or '-',
-                term.fmt_ts(r.get('created_at') or r.get('creation_time')) or '-',
+                term.fmt_ts(r.get('time_created')) or '-',
             ))
         term.table(rows, ['ID', 'Status', 'Class', 'Created'], max_widths=[8, 12, 25, 20])
 

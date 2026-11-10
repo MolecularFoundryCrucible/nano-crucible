@@ -220,11 +220,11 @@ def test_parser_preserves_creation_selectors():
     assert parsed.instrument_mfid == '0tk8pf1me0h3h0003fp91vr037'
 
 
-def test_parser_new_selectors_preserve_legacy_positional_arguments():
+def test_parser_third_positional_argument_is_the_owner():
     parsed = BaseParser([], 'project-one', '0000-0001-6402-3752')
 
     assert parsed.project_id == 'project-one'
-    assert parsed.owner_orcid == '0000-0001-6402-3752'
+    assert parsed.to_dataset().owner == '0000-0001-6402-3752'
 
 
 def test_sample_create_with_project_mfid_does_not_apply_project_default(monkeypatch):

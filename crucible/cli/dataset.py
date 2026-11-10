@@ -1548,8 +1548,8 @@ def _execute_ingestion(args):
                 str(r.get('id', '-')),
                 term.status_label(r.get('status')),
                 r.get('ingestion_class') or '-',
-                term.cyan(r.get('file_id')) if r.get('file_id') else '-',
-                term.fmt_ts(r.get('created_at') or r.get('creation_time')) or '-',
+                term.cyan(r.get('file_mfid')) if r.get('file_mfid') else '-',
+                term.fmt_ts(r.get('time_created')) or '-',
             ))
         term.table(rows, ['ID', 'Status', 'Class', 'File MFID', 'Created'],
                    max_widths=[8, 12, 25, 30, 20])
@@ -2135,6 +2135,7 @@ def _execute_create(args):
                 data_format=args.data_format,
                 data_type=args.data_type,
                 timestamp=timestamp,
+                owner=args.owner,
             )
         except Exception as e:
             from .helpers import fail
@@ -2142,7 +2143,6 @@ def _execute_create(args):
 
         if args.ingestor is not None and args.measurement is None:
             parser.measurement = None
-        parser.owner = args.owner
 
         dataset_record = parser.to_dataset()
         record_metadata = parser.scientific_metadata

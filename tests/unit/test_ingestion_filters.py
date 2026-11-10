@@ -46,3 +46,25 @@ def test_conflicting_names_raise(kwargs):
 
     with pytest.raises(ValueError, match='pass only one'):
         ops.list(**kwargs)
+
+
+REQUEST = {'id': 7, 'status': 'complete', 'ingestion_class': 'XRDIngestor',
+           'dataset_mfid': 'D', 'file_mfid': '0tkfile000000000000000000a',
+           'time_created': '2026-11-01T10:00:00Z'}
+
+
+@pytest.mark.parametrize('module', ['dataset', 'file'])
+def test_ingestion_tables_show_the_file_and_creation_time(module, monkeypatch, capsys):
+    import importlib
+    from types import SimpleNamespace
+    cli = importlib.import_module(f'crucible.cli.{module}')
+    client = MagicMock()
+    client.ingestions.list.return_value = [REQUEST]
+    monkeypatch.setattr('crucible.config.get_client', lambda: client)
+
+    cli._execute_ingestion(SimpleNamespace(dataset_id='D', file_id=REQUEST['file_mfid'], debug=False))
+
+    out = capsys.readouterr().out
+    assert '2026-11-01' in out
+    if module == 'dataset':
+        assert REQUEST['file_mfid'] in out

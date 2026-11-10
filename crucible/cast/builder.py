@@ -82,7 +82,7 @@ class CastDatasetNode:
             'id':          self.local_id,
             'name':        ds.dataset_name,
             'measurement': ds.measurement,
-            'instrument':  ds.instrument_name,
+            'instrument':  ds.instrument_id or ds.instrument_mfid,
             'session':     ds.session_name,
             'data_format': ds.data_format,
             'public':      ds.public or None,
@@ -123,7 +123,7 @@ class CastDatasetNode:
         return CastDataset(
             name=ds.dataset_name,
             measurement=ds.measurement,
-            instrument=ds.instrument_name,
+            instrument=ds.instrument_id or ds.instrument_mfid,
             data_format=ds.data_format,
             session=ds.session_name,
             public=ds.public or False,

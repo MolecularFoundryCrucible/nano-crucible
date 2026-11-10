@@ -39,10 +39,10 @@ DATASET_LIST_PARAMS = frozenset({
     'data_format', 'data_format_is_null', 'data_type', 'dataset_name',
     'direction', 'include_links', 'include_metadata', 'include_owner',
     'include_total', 'instrument_mfid', 'instrument_mfid_is_null',
-    'instrument_name', 'keyword', 'limit', 'measurement',
+    'keyword', 'limit', 'measurement',
     'measurement_is_null', 'modification_time_gte',
     'modification_time_lte', 'offset', 'owner_id', 'owner_id_is_null',
-    'owner_orcid', 'project_id', 'project_mfid', 'project_mfid_is_null',
+    'project_id', 'project_mfid', 'project_mfid_is_null',
     'project_scope', 'public', 'sample_mfid', 'session_name',
     'session_name_is_null', 'size', 'sort', 'timestamp', 'mfid',
     'visibility',
@@ -135,6 +135,7 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
 
 
     @_removed_parameter('sample_id', 'sample_mfid')
+    @_removed_parameter('owner_orcid', 'owner_id')
     def list(self, sample_mfid: Optional[str] = None, include_metadata: bool = False,
              include_links: bool = False, include_owner: bool = False,
              limit: int = DEFAULT_LIMIT, offset: int = 0,
@@ -202,8 +203,7 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
                 same types.
             **kwargs (Any): Query parameters for filtering. Supported fields include:
                 keyword, public, dataset_name, owner_id, timestamp, size,
-                data_format, data_type, measurement, session_name, and the
-                deprecated instrument_name (use instrument_mfid). Filters expect exact matches (case sensitive) except for
+                data_format, data_type, measurement, and session_name. Filters expect exact matches (case sensitive) except for
                 keywords, which are case insensitive and match substrings.
 
         Returns:
@@ -377,12 +377,14 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
         if dataset_details.get('owner') is not None and not isinstance(dataset_details['owner'], str):
             raise ValueError("Dataset.owner must be a string identifier when creating a dataset.")
 
-        if (dataset_details.get('instrument_name') is not None
-                and dataset_details.get('instrument_id') is None
-                and dataset_details.get('instrument_mfid') is None):
-            raise RemovedError(removed_message(
-                "Identifying a dataset's instrument by instrument_name",
-                "names may repeat, so set instrument_mfid or instrument_id instead."))
+        if dataset_details.get('instrument_name') is not None:
+            if (dataset_details.get('instrument_id') is None
+                    and dataset_details.get('instrument_mfid') is None):
+                raise RemovedError(removed_message(
+                    "Identifying a dataset's instrument by instrument_name",
+                    "names may repeat, so set instrument_mfid or instrument_id instead."))
+            # Records read from the API carry instrument_name; the ID already names the instrument.
+            del dataset_details['instrument_name']
 
         if not dataset_details.get('unique_id'):
             dataset_details['unique_id'] = mfid.mfid()[0]
@@ -441,10 +443,7 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
         use transfer_ownership() / reassign_project() instead.
 
         Instrument assignment is not available through generic PATCH - use
-        assign_instrument(). Omit 'instrument_id' and 'instrument_name' unless
-        resubmitting their current values for compatibility.
-
-        The deprecated 'public' field delegates to set_public() or set_private().
+        assign_instrument().
 
         Args:
             dataset_mfid (str): Dataset MFID
@@ -459,6 +458,11 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
         if 'public' in updates:
             raise RemovedError(removed_message(
                 "The 'public' field of datasets.update()", "use set_public() or set_private() instead."))
+        instrument_fields = sorted({'instrument_id', 'instrument_name'} & updates.keys())
+        if instrument_fields:
+            raise RemovedError(removed_message(
+                f"The {' and '.join(repr(f) for f in instrument_fields)} field of datasets.update()",
+                "use assign_instrument() instead."))
         response_only = {'capabilities', 'instrument', 'project'} & updates.keys()
         if response_only:
             fields = ', '.join(sorted(response_only))
