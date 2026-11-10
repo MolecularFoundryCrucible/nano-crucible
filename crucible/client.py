@@ -12,7 +12,7 @@ import logging
 from requests.adapters import HTTPAdapter
 from urllib.parse import urlparse
 from urllib3.util.retry import Retry
-from typing import TYPE_CHECKING, Optional, Dict, Any
+from typing import TYPE_CHECKING, Any, Callable, Dict, Optional
 from .constants import DEFAULT_PRIVILEGE_MODE, PRIVILEGE_MODES
 from .utils.deprecation import _removed, _removed_parameter
 from .utils.identifiers import is_mfid, require_canonical_identifier
@@ -237,7 +237,7 @@ class CrucibleClient:
         return self._credential.source
 
     def login(self, method: str = 'auto', store: Optional[str] = None,
-              open_browser: bool = True, notify=print) -> Dict:
+              open_browser: bool = True, notify: Callable[[str, str], None] = print) -> Dict:
         """Sign in with a browser and use that session from now on.
 
         Args:

@@ -1,3 +1,4 @@
+import copy
 import os
 import time
 
@@ -34,13 +35,12 @@ def _isolated(tmp_path_factory, monkeypatch):
         os.environ['TZ'] = 'UTC'
         time.tzset()
 
-    saved_config = dict(config.__dict__)
+    for name, value in list(vars(config).items()):
+        monkeypatch.setattr(config, name, copy.copy(value))
     config.__init__()
     stepup.install(None)
     client_module._deprecations_seen.clear()
     yield
-    config.__dict__.clear()
-    config.__dict__.update(saved_config)
     stepup.install(None)
     client_module._deprecations_seen.clear()
     if hasattr(time, 'tzset'):
