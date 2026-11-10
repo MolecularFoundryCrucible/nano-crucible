@@ -277,3 +277,11 @@ def test_create_config_file_refuses_removed_settings():
     from crucible.config import create_config_file
     with pytest.raises(RemovedError, match='hub_url'):
         create_config_file('key', graph_explorer_url='https://x/explore')
+
+
+@pytest.mark.parametrize('name', ['upload_file_gcs_multipart', 'upload_file_gcs_resumable'])
+def test_removed_legacy_upload_functions_raise(name):
+    from crucible.resources.gcs import upload
+
+    with pytest.raises(RemovedError, match='upload_file_gcs'):
+        getattr(upload, name)(MagicMock(), 'D' * 26, 'file.dat')

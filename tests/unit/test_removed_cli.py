@@ -68,3 +68,17 @@ def test_the_current_project_environment_variable_stops_the_cli(monkeypatch, cap
     assert code == 2
     assert 'CRUCIBLE_CURRENT_PROJECT was removed' in err
     assert '--project-id' in err
+
+
+@pytest.mark.parametrize('key', sorted(__import__('crucible.cli', fromlist=['x'])._DEPRECATED_SUBCOMMANDS))
+def test_every_removed_subcommand_name_stops_with_its_replacement(capsys, key):
+    from crucible.cli import _DEPRECATED_SUBCOMMANDS, _remap_deprecated
+    resource, old = key
+
+    with pytest.raises(SystemExit) as stopped:
+        _remap_deprecated([resource, old, 'X'])
+
+    assert stopped.value.code == 2
+    error = capsys.readouterr().err
+    assert f"'crucible {resource} {old}' was removed" in error
+    assert _DEPRECATED_SUBCOMMANDS[key] in error

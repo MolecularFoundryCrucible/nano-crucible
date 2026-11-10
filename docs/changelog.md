@@ -63,6 +63,7 @@
 - `--json` on the `list-parents`, `list-children`, `list-samples`, `list-datasets`, `list-files`, `list-keywords`, `list-users`, `list-projects` and `list-access-groups` commands, `file`, `ingestion`, `ag` and `deletion` `list` and `get`, `ag mine`, `deletion list-deleted` and `get-deleted`, `file ingestion`, `ingestion list-ingestors`, `whoami`, and `status`.
 - `deletion delete` and `sa rotate-key` ask for confirmation (`-y/--yes` skips it), `-y` works wherever `--yes` does, and shell completion leaves out `user create` and `deletion delete` for callers who cannot elevate.
 - Tests run on Python 3.13 and macOS, and a separate workflow checks the client's routes against staging and can run the integration tests on demand.
+- The package passes mypy, which now runs in CI; `get()` methods are typed as returning `None` when the API sends no record.
 
 ### Fixed
 
@@ -79,6 +80,7 @@
 - `sa create --unique-id` keeps the given MFID when it prompts for the username.
 - Deprecation warnings from the API point at the calling code, so Python's default filters show them.
 - Bash and zsh completion leave out removed commands.
+- Upload progress no longer crashes when a part of a finished file is retried.
 
 ## 3.3.0
 
