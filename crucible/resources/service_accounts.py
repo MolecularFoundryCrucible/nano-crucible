@@ -138,7 +138,7 @@ class ServiceAccountOperations(BaseResource):
         Args:
             service_account_mfid: Service account MFID.
             username: Service account username.
-            unique_id: Deprecated alias for ``service_account_mfid``.
+            unique_id: Removed in 4.0.0; passing it raises RemovedError. Use service_account_mfid.
 
         Returns:
             Dict: User record, or None if not found.

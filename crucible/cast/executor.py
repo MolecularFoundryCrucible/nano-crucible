@@ -353,7 +353,7 @@ class CastExecutor:
             scientific_metadata=metadata,
             keywords=keywords,
         )
-        dsid = result['dsid']
+        dsid = result['dataset_mfid']
         self._mark_created(local_id, dsid, _hash_entity(ds))
         logger.info(f"Created dataset '{ds.name}': {dsid}")
 

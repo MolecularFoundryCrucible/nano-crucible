@@ -3,7 +3,7 @@
 """
 Dataset subcommand for Crucible CLI.
 
-Provides dataset-related operations: list, get, create, update-metadata, link, etc.
+Provides dataset-related operations: list, get, create, update, link, etc.
 """
 
 import argparse
@@ -728,7 +728,6 @@ def _execute_update(args):
 
     # Parse --set for model field updates
     updates = {}
-    public = None
     if has_set:
         valid_fields = set(_dataset_updatable_fields())
         for field in args.set_fields:
@@ -738,17 +737,9 @@ def _execute_update(args):
             key, _, value = field.partition('=')
             key = key.strip()
             if key == 'public':
-                public = cast_value(value)
-                if not isinstance(public, bool):
-                    logger.error("Error: public must be true or false")
-                    sys.exit(1)
-                warning = term.yellow('Warning:', stream=sys.stderr)
-                replacement = 'set-public' if public else 'set-private'
-                print(
-                    f"{warning} --set public=... is deprecated; use dataset {replacement} instead.",
-                    file=sys.stderr,
-                )
-                continue
+                logger.error("Error: --set public=... was removed in nano-crucible 4.0.0; "
+                             "use 'dataset set-public' or 'dataset set-private' instead.")
+                sys.exit(2)
             if key not in valid_fields:
                 logger.error(
                     f"Unknown field '{key}'.\n"
@@ -774,12 +765,6 @@ def _execute_update(args):
             term.success(f"Dataset {args.dataset_id} fields updated", args)
             if getattr(args, "debug", False):
                 logger.debug(f"Updated fields: {list(updates.keys())}")
-
-        if public is not None:
-            operation = client.datasets.set_public if public else client.datasets.set_private
-            operation(args.dataset_id)
-            visibility = 'publicly viewable' if public else 'private'
-            term.success(f"Dataset {args.dataset_id} is now {visibility}", args)
 
         if metadata_dict is not None:
             overwrite = getattr(args, 'overwrite', False)
@@ -1734,7 +1719,7 @@ def _register_list_keywords(subparsers):
 
 
 def _execute_list_keywords(args):
-    """Execute the 'dataset get-keywords' subcommand."""
+    """Execute the 'dataset list-keywords' subcommand."""
     from crucible.config import get_client
     try:
         client = get_client()

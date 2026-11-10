@@ -3,7 +3,7 @@
 """
 Ingestion request operations for the Crucible API.
 
-Access via: client.ingestion.list(), client.ingestion.get(), etc.
+Access via: client.ingestions.list(), client.ingestions.get(), etc.
 """
 
 import logging
@@ -27,7 +27,7 @@ def _one_of(name, value, alias, alias_value):
 class IngestionOperations(BaseResource):
     """Operations on ingestion requests (/ingestion_requests endpoints).
 
-    Access via: client.ingestion.list(), client.ingestion.get(), etc.
+    Access via: client.ingestions.list(), client.ingestions.get(), etc.
     """
 
     def list(self, dataset_mfid: Optional[str] = None,

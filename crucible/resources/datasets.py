@@ -167,9 +167,8 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
             limit (int): Maximum total results to return (default: 100). Larger
                          requests are handled transparently by following the
                          server's keyset cursor. Pass None to fetch all matches.
-            offset (int): Deprecated. The /datasets collection uses keyset
-                          pagination and ignores offset, including when filtered
-                          by sample_mfid.
+            offset (int): Removed in 4.0.0; a nonzero value raises RemovedError.
+                          Pass the previous result's next_cursor as cursor.
             cursor (str, optional): Continuation token from a previous
                 result's next_cursor; the listing resumes there.
             include_metadata (bool): Include scientific metadata in results
@@ -322,8 +321,7 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
         Args:
             dataset (Dataset): Dataset object with dataset details. Use `owner` with
                 an ORCID, MFID, username, or email to create for a
-                specific owner. `owner_orcid` is deprecated for creation. Providing
-                both owner fields is invalid. `project_id` and `instrument_id` accept
+                specific owner; `owner_orcid` raises RemovedError. `project_id` and `instrument_id` accept
                 human-readable IDs; `project_mfid` and `instrument_mfid` accept
                 canonical MFIDs. Matching ID and MFID selectors may be supplied together.
             scientific_metadata (dict, optional): Scientific metadata
@@ -344,8 +342,7 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
                 (default: True) or just cataloged by their local path (False).
                 Only affects str items - AssociatedFile items are routed by
                 their own storage_backend regardless of this flag.
-            files_to_upload (list, optional): Deprecated alias for `files`
-                (str paths only, always uploaded). Use `files` instead.
+            files_to_upload: Removed in 4.0.0; passing it raises RemovedError. Use `files`.
         Returns:
             Dict: created_record, scientific_metadata_record, dataset_mfid, dsid, files
                 (files is the per-item result of adding each entry in `files`,
@@ -751,15 +748,14 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
                 Defaults to the server-side default if omitted.
             wait_for_ingestion_response: Block until ingestion completes. Ignored if
                 skip_ingestion is True.
-            multipart: Deprecated and ignored; every upload uses signed multipart.
-            chunk_size_mb: Deprecated and ignored; the server sets the part size.
+            multipart: Removed in 4.0.0; passing it raises RemovedError.
+            chunk_size_mb: Removed in 4.0.0; passing it raises RemovedError.
             max_workers: Parts uploaded in parallel (default: the
                 upload_max_workers setting).
             skip_ingestion: Upload the file without requesting ingestion. Request it
                 later with client.files.request_ingestion(mfid). Also implied
                 when client.request_ingestion is False.
-            upload_protocol: Deprecated and ignored; the legacy upload routes
-                were removed.
+            upload_protocol: Removed in 4.0.0; passing it raises RemovedError.
             progress: Called as progress(filename, bytes_done, total) while
                 the parts upload.
             replace: If the dataset already has this filename with different
@@ -1038,11 +1034,11 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
         return self._request(
             'delete', f'/datasets/{dataset_mfid}/thumbnails/{thumbnail_id}')
 
-    #%% Ingestion Methods — deprecated, use client.ingestions.*
+    #%% Ingestion Methods - removed, use client.ingestions.*
 
-    @_removed("use client.ingestions.list(dsid=dsid, file_id=file_id) instead.")
+    @_removed("use client.ingestions.list(dataset_mfid=..., file_mfid=...) instead.")
     def get_ingestion_requests(self, *args, **kwargs):
-        """Removed in 4.0.0: use client.ingestions.list(dsid=dsid, file_id=file_id) instead."""
+        """Removed in 4.0.0: use client.ingestions.list(dataset_mfid=..., file_mfid=...) instead."""
 
     @_removed("use client.ingestions.get(reqid) instead.")
     def get_request_status(self, *args, **kwargs):

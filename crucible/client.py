@@ -315,7 +315,7 @@ class CrucibleClient:
                 retried that way, since a POST or PATCH whose response was
                 lost may already have taken effect. 429 and connection
                 failures, where nothing was processed, are retried for every
-                request. Set False to turn even that off.
+                request, including with retry=False.
             log_body: Whether the response body may be written to the debug
                 log. Set False when it carries credentials such as signed URLs.
             **kwargs: Additional arguments to pass to requests, including a
@@ -729,8 +729,19 @@ def _warn_if_deprecated(method: str, endpoint: str, response) -> None:
         message += f"; see {link}"
     import warnings
     warnings.warn(message + ". Upgrading nano-crucible may remove this call.",
-                  DeprecationWarning, stacklevel=4)
+                  DeprecationWarning, stacklevel=_caller_stacklevel())
     logger.debug(message)
+
+
+def _caller_stacklevel() -> int:
+    """Stack level of the first frame outside this package, so warnings are attributed to the caller."""
+    import os
+    import sys
+    package = os.path.dirname(os.path.abspath(__file__)) + os.sep
+    frame, level = sys._getframe(2), 2
+    while frame is not None and os.path.abspath(frame.f_code.co_filename).startswith(package):
+        frame, level = frame.f_back, level + 1
+    return level
 
 
 def _http_date(value: str) -> Optional[str]:

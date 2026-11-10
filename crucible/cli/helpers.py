@@ -1199,7 +1199,7 @@ def resolve_usernames(client, orcids):
     if not orcids or client is None:
         return {}
     try:
-        resolved = client.users.resolve(orcids=orcids)
+        resolved = client.users.resolve(user_unique_ids=orcids)
     except Exception:
         return {}
     return {orcid: (info.get('username') or orcid) if info else orcid

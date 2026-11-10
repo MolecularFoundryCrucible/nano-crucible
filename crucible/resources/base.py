@@ -335,8 +335,8 @@ class BaseResource:
             endpoint: API path (e.g. '/datasets')
             params:   Query parameters (must NOT include 'limit', 'offset', or 'cursor')
             limit:    Maximum number of records to return. Pass None to fetch all.
-            offset:   Starting position in the full result set. Ignored by keyset
-                      endpoints, which no longer accept an offset.
+            offset:   Starting position in the full result set, for endpoints that
+                      still page by offset; keyset endpoints use cursor.
             privilege_mode: Per-call privilege mode applied to every page.
             cursor:   Continuation token from a previous ListResult.next_cursor;
                       the listing resumes there instead of at offset.

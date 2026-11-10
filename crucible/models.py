@@ -470,7 +470,7 @@ class JoinRequest(BaseModel):
     reviewer_notes: Optional[str] = None
     granted_role: Optional[str] = None
     capabilities: Optional[JoinRequestCapabilities] = None
-    group_name: Optional[str] = None      # deprecated server alias of project.project_id
+    group_name: Optional[str] = None      # server alias of project.project_id, deprecated by the API
 
     model_config = ConfigDict(from_attributes=True, populate_by_name=True, extra='allow')
 

@@ -593,7 +593,7 @@ def _execute_create(args):
 
 
 def _execute_list_users(args):
-    """Execute the 'project get-users' subcommand."""
+    """Execute the 'project list-users' subcommand."""
     from crucible.config import get_client
     from .helpers import sort_members
     try:
@@ -817,10 +817,6 @@ def _follow_project_rename(old_id, new_id):
 
     current = config.current_project
     if not old_id or not current or current.lower() != old_id.lower():
-        return
-    if config.source('current_project') == 'environment':
-        logger.warning(f"CRUCIBLE_CURRENT_PROJECT still names '{old_id}'; "
-                       f"update it to '{new_id}'.")
         return
     set_config_value('current_project', new_id)
     logger.info(f"Current project updated: {old_id} -> {new_id}")

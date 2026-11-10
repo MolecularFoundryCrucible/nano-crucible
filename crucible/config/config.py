@@ -467,10 +467,8 @@ def get_current_project():
     """
     Get the current project ID from configuration.
 
-    Priority order:
-    1. CRUCIBLE_CURRENT_PROJECT environment variable
-    2. current_project from ~/.config/nano-crucible/config.ini
-    3. None if not configured
+    Reads current_project from the config file; None if not configured.
+    CRUCIBLE_CURRENT_PROJECT was removed in 4.0.0 and raises RemovedError.
 
     Returns:
         str or None: The current project ID if configured, None otherwise
@@ -627,13 +625,10 @@ def create_config_file(api_key, api_url=None, cache_dir=None,
         if default_limit is not None:
             f.write(f"default_limit = {default_limit}\n")
         else:
-            f.write("# default_limit = 100\n")
+            f.write("# default_limit = 50\n")
 
         # ── [upload] ─────────────────────────────────────────────────────────
         f.write("\n[upload]\n")
-        f.write("# Multipart upload chunk size in MiB (benchmarked optimum: 64)\n")
-        f.write("# chunk_size_mb = 64\n")
-        f.write("\n")
         f.write("# Concurrent upload threads (benchmarked optimum: 8)\n")
         f.write("# max_workers = 8\n")
 

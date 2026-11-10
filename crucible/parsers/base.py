@@ -286,8 +286,8 @@ class BaseParser:
             wait_for_ingestion_response (bool, optional): Wait for ingestion to complete. Defaults to True.
 
         Returns:
-            dict: Dictionary containing 'created_record', 'scientific_metadata_record',
-                  'ingestion_request', and 'uploaded_files'
+            dict: The datasets.create() result: 'created_record',
+                  'scientific_metadata_record', 'dataset_mfid', and 'files'
         """
         # Create dataset object from instance variables
         dataset = self.to_dataset()
@@ -298,13 +298,12 @@ class BaseParser:
             files=self.files_to_upload,
             scientific_metadata=self.scientific_metadata,
             keywords=self.keywords,
-            # get_user_info_function=self.client.get_user,
             ingestor=ingestor,
             verbose=verbose,
             wait_for_ingestion_response=wait_for_ingestion_response
         )
 
-        dataset_id = result['dsid']
+        dataset_id = result['dataset_mfid']
         logger.info(f"Dataset uploaded successfully: {dataset_id}")
         logger.info(f"  Dataset name: {result['created_record'].get('dataset_name', 'N/A')}")
         logger.info(f"  Project: {result['created_record'].get('project_id', 'N/A')}")

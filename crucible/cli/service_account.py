@@ -133,10 +133,9 @@ def _resolve_sa(client, unique_id=None, username=None, ambiguous=False):
 
 
 def _resolve_sa_ref(args):
-    """Resolve the sa/unique_id/username args into (unique_id, username, ambiguous).
+    """Resolve the SA argument into (unique_id, username, ambiguous).
 
-    Warns if the deprecated --unique-id/--username flags were used instead of
-    the positional SA argument. Exits with an error if neither was provided.
+    Raises ValueError when no service account was given.
     """
     from .helpers import parse_sa_ref
 
@@ -182,7 +181,8 @@ def _execute_create(args):
         print("  Creating a new service account.")
         print()
         username = prompt_username()
-        unique_id = prompt_optional("MFID", validator=validate_mfid)
+        if unique_id is None:
+            unique_id = prompt_optional("MFID", validator=validate_mfid)
         print()
 
     try:

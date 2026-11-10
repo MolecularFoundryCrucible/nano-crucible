@@ -5,17 +5,18 @@ Crucible CLI - Unified command-line interface for Crucible operations.
 
 Available subcommands:
     config      Manage crucible configuration
-    upload      Parse and upload datasets to Crucible
     open        Open resources in the Crucible Hub
     link        Link resources (datasets, samples)
     completion  Install shell autocomplete
 """
 
+import argparse
+import os
 import sys
 import logging
 from crucible import __version__
 
-# Deprecated subcommand aliases: (resource, old_name) -> new_name
+# Removed subcommand names: (resource, old_name) -> new_name
 _DEPRECATED_SUBCOMMANDS = {
     ('dataset', 'update-metadata'): 'update',
     ('dataset', 'get-keywords'):    'list-keywords',
@@ -132,6 +133,17 @@ def setup_logging(debug=False):
 
     # Only the crucible logger switches between INFO and DEBUG.
     logging.getLogger('crucible').setLevel(level)
+
+
+def _drop_removed_commands(parser):
+    """Leave removed commands out of shell completion; only done in a completion run, which exits."""
+    for action in parser._actions:
+        if isinstance(action, argparse._SubParsersAction):
+            for name, sub in list(action.choices.items()):
+                if getattr(sub, '_removed', False):
+                    del action.choices[name]
+                else:
+                    _drop_removed_commands(sub)
 
 
 def main():
@@ -255,6 +267,8 @@ Examples:
 
     # Enable shell completion if argcomplete is available
     if ARGCOMPLETE_AVAILABLE:
+        if '_ARGCOMPLETE' in os.environ:
+            _drop_removed_commands(parser)
         argcomplete.autocomplete(parser)
 
     # Remap deprecated subcommand names before parsing

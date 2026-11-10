@@ -124,8 +124,6 @@ class InstrumentOperations(OwnershipMixin, AccessControlMixin, BaseResource):
         """Get an instrument by canonical MFID or human-readable slug.
 
         ``instrument_id`` explicitly selects the human-readable API identifier.
-        An MFID-shaped value remains temporarily compatible with its former
-        meaning and emits a deprecation warning.
 
         Args:
             instrument_ref (str, optional): Instrument MFID or slug
@@ -133,7 +131,7 @@ class InstrumentOperations(OwnershipMixin, AccessControlMixin, BaseResource):
             include_metadata (bool): Whether to include scientific metadata
             include_owner (bool): Resolve the owner into a public-safe user object (default: True)
             instrument_mfid (str, optional): Explicit instrument MFID
-            instrument_name (str, optional): Deprecated display-name lookup
+            instrument_name (str, optional): Removed in 4.0.0; passing it raises RemovedError.
             include_members (bool): Include the owner and maintainers as
                 ``members``. The API returns ``members: None`` to callers
                 without a role on the instrument.
@@ -211,18 +209,6 @@ class InstrumentOperations(OwnershipMixin, AccessControlMixin, BaseResource):
             params['include_members'] = True
         raw = self._request('get', '/instruments', params=params)
         return self._parse(collapse_exact_lookup(raw, 'instrument', instrument_id))
-
-    def _get_by_name(self, instrument_name: str,
-                     include_metadata: bool = False,
-                     include_owner: bool = True) -> Dict:
-        """Compatibility lookup for a non-unique instrument display name."""
-        params = {'instrument_name': instrument_name, 'limit': 2}
-        if include_metadata:
-            params['include_metadata'] = True
-        if include_owner:
-            params['include_owner'] = True
-        raw = self._request('get', '/instruments', params=params)
-        return self._parse(collapse_exact_lookup(raw, 'instrument', instrument_name))
 
     def create(self, instrument: Union['Instrument', Dict],
                scientific_metadata: Optional[Dict] = None) -> Dict:

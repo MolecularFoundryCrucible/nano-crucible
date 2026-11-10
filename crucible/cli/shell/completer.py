@@ -498,7 +498,7 @@ class CrucibleCompleter(Completer):
             return False
         # Complete the SA positional (MFID or username) for subcommands that take one.
         _SA_SUBS = {'get', 'show', 'set-role', 'rotate-key', 'edit', 'update',
-                    'list-access-groups', 'add-access-group', 'remove-access-group'}
+                    'list-access-groups'}
         if words[1] not in _SA_SUBS:
             return False
         if trailing_space and len(words) == 2:
@@ -594,7 +594,7 @@ class CrucibleCompleter(Completer):
         # Complete the USER positional (ORCID/username/email) by username search.
         # 'search' is included too: TERM is free text, but showing live
         # matches while typing is useful preview, not just identifier lookup.
-        _USER_SUBS = {'get', 'update', 'edit', 'add-access-group', 'remove-access-group',
+        _USER_SUBS = {'get', 'update', 'edit',
                       'list-datasets', 'check-access', 'list-access-groups', 'list-projects',
                       'set-role', 'list-keys', 'revoke-keys', 'search'}
         if words[1] not in _USER_SUBS:
@@ -909,11 +909,11 @@ class CrucibleCompleter(Completer):
         current_word = '' if trailing_space else words[-1]
         prev = (words[-1] if trailing_space else words[-2]) if len(words) >= 2 else ''
 
-        _PROJECT_FLAGS = ('--project-id', '--project', '-pid')
+        _PROJECT_FLAGS = ('--project-id', '--project')
         _PROJECT_MFID_FLAGS = ('--project-mfid',)
         if subcommand in {'list', 'create', 'search'}:
             _PROJECT_FLAGS += ('-p',)
-        _USER_FLAGS = ('--user', '-u', '--owner', '--lead', '-e', '--orcid')
+        _USER_FLAGS = ('--user', '-u', '--owner', '--lead', '-e')
         _INSTRUMENT_FLAGS = ('--instrument-id',)
         _INSTRUMENT_MFID_FLAGS = ('--instrument-mfid',)
         # Flags whose value is a dataset or sample MFID, by resource context.
@@ -1050,14 +1050,8 @@ class CrucibleCompleter(Completer):
 
 
 def _visible_subcommands(parser, sub_map):
-    """Subcommand names to offer, leaving out those whose help marks them deprecated."""
-    deprecated = set()
-    for action in getattr(parser, '_actions', ()):
-        for choice in getattr(action, '_choices_actions', ()):
-            if (choice.help or '').startswith('Deprecated'):
-                deprecated.add(choice.dest)
-    return [name for name in sub_map
-            if name not in deprecated and not getattr(sub_map[name], '_removed', False)]
+    """Subcommand names to offer, leaving out removed commands."""
+    return [name for name in sub_map if not getattr(sub_map[name], '_removed', False)]
 
 
 def _positional_choices(parser, args, current_word):

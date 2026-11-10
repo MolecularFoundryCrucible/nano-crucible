@@ -143,9 +143,8 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
             limit (int): Maximum total results to return (default: 100). Larger
                          requests are handled transparently by following the
                          server's keyset cursor. Pass None to fetch all matches.
-            offset (int): Deprecated for the /samples collection, which uses
-                          keyset pagination and ignores offset. Still honored for
-                          the parent-child sub-listing.
+            offset (int): Only for the parent-child sub-listing; a nonzero value
+                          on the /samples collection raises RemovedError (use cursor).
             cursor (str, optional): Continuation token from a previous
                 result's next_cursor; the listing resumes there.
             accessible_to_user: User reference or references whose effective access
@@ -328,8 +327,7 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
         Args:
             sample (Sample): Sample model instance with the desired fields. Use
                 `owner` with an ORCID, MFID, username, or email to
-                create for a specific owner. `owner_orcid` is deprecated for
-                creation. Providing both owner fields is invalid. `project_id`
+                create for a specific owner; `owner_orcid` raises RemovedError. `project_id`
                 accepts the human-readable ID and `project_mfid` accepts the canonical
                 MFID. Matching selectors may be supplied together.
             scientific_metadata (dict, optional): Scientific metadata to attach after creation.

@@ -110,7 +110,7 @@ class AccessGroupOperations(BaseResource):
         """List join requests visible to the caller.
 
         Args:
-            group_name: Deprecated; use project_mfid. A project slug or MFID.
+            group_name: Removed in 4.0.0; passing it raises RemovedError. Use project_mfid.
             status: One status or a list of them, from
                 crucible.constants.JOIN_REQUEST_STATUSES.
             requester_id: Only requests by this user (ORCID or MFID).

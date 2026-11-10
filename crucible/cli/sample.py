@@ -361,22 +361,12 @@ def _execute_update(args):
 
     has_set      = bool(getattr(args, 'set_fields', None))
     has_metadata = bool(getattr(args, 'metadata', None))
-    has_public   = getattr(args, 'public', None) is not None
-
-    if has_public:
-        warning = term.yellow('Warning:', stream=sys.stderr)
-        replacement = 'set-public' if args.public else 'set-private'
-        option = '--public' if args.public else '--no-public'
-        print(
-            f"{warning} {option} is deprecated; use sample {replacement} instead.",
-            file=sys.stderr,
-        )
 
     named = {k: getattr(args, k) for k in
              ('sample_name', 'sample_type', 'description', 'timestamp')
              if getattr(args, k, None) is not None}
 
-    if not has_set and not has_metadata and not has_public and not named:
+    if not has_set and not has_metadata and not named:
         logger.error("Error: provide at least one field to update")
         sys.exit(1)
 
@@ -414,12 +404,6 @@ def _execute_update(args):
         if updates:
             client.samples.update(args.sample_id, **updates)
             term.success(f"Sample {args.sample_id} fields updated", args)
-
-        if has_public:
-            operation = client.samples.set_public if args.public else client.samples.set_private
-            operation(args.sample_id)
-            visibility = 'publicly viewable' if args.public else 'private'
-            term.success(f"Sample {args.sample_id} is now {visibility}", args)
 
         if metadata_dict is not None:
             overwrite = getattr(args, 'overwrite', False)
