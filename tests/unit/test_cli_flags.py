@@ -271,9 +271,9 @@ def test_dataset_add_thumbnail_dispatches_local_image(monkeypatch, tmp_path, cap
 @pytest.mark.parametrize(
     ('module', 'command', 'visible', 'hidden'),
     [
-        (dataset, ['dataset', 'search'], '--project-id ID, -p ID', '--project ID'),
-        (sample, ['sample', 'create'], '--type TYPE, -t TYPE', '--sample-type TYPE'),
-        (project, ['project', 'create'], '--project-id ID, -i ID', ', -id ID'),
+        (dataset, ['dataset', 'search'], ('--project-id', '-p'), '--project '),
+        (sample, ['sample', 'create'], ('--type', '-t'), '--sample-type'),
+        (project, ['project', 'create'], ('--project-id', '-i'), ' -id '),
     ],
 )
 def test_help_hides_legacy_flags(module, command, visible, hidden, capsys):
@@ -281,9 +281,10 @@ def test_help_hides_legacy_flags(module, command, visible, hidden, capsys):
         make_parser(module).parse_args(command + ['--help'])
 
     assert exit_info.value.code == 0
-    output = capsys.readouterr().out
-    assert visible in output
-    assert hidden not in output
+    options = capsys.readouterr().out.split('options:', 1)[1].split('Examples:', 1)[0]
+    options = options.replace(',', ' ')
+    assert all(f' {flag} ' in options for flag in visible)
+    assert hidden not in options
 
 
 def test_dataset_create_no_upload_catalogs_hashed_relative_paths(monkeypatch, tmp_path):
