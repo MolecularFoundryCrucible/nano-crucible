@@ -27,7 +27,6 @@ Each file's upload and ingestion request happen together in one call
 already recorded in the lock and re-attempts the rest.
 """
 
-import fcntl
 import hashlib
 import json
 import logging
@@ -98,6 +97,7 @@ class CastExecutor:
     @contextmanager
     def _file_lock(self):
         """Exclusive file lock to prevent simultaneous cast runs on the same recipe."""
+        import fcntl
         lock_file = self.plan.lock_path.with_suffix('.lck')
         with open(lock_file, 'w') as f:
             try:

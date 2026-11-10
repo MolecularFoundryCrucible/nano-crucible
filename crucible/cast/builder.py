@@ -39,7 +39,6 @@ HPC incremental workflow::
     # crucible cast run.crux
 """
 
-import fcntl
 import json
 import logging
 import warnings
@@ -331,6 +330,7 @@ class Cast:
                 yaml.dump_all(docs, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
             return
 
+        import fcntl
         lock_file = path.with_suffix(path.suffix + '.lck')
         with open(lock_file, 'w') as lf:
             try:
