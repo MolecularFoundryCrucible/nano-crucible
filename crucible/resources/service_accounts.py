@@ -8,7 +8,7 @@ Created and managed via /service_accounts — admin only.
 """
 
 import logging
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from .base import BaseResource, ListResult
 from ..utils.deprecation import _deprecated_parameter, _removed
@@ -171,7 +171,7 @@ class ServiceAccountOperations(BaseResource):
         return self._client.users.list(limit=limit, is_service_account=True)
 
     @_deprecated_parameter('unique_id', 'service_account_ref')
-    def update(self, service_account_ref: str, **kwargs) -> Dict:
+    def update(self, service_account_ref: str, **kwargs: Any) -> Dict:
         """Update a service account record.
 
         Args:

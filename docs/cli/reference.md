@@ -74,7 +74,6 @@ Running `crucible` without a command starts the interactive shell. See the [CLI 
 | `dataset set-public MFID` | Make a dataset publicly viewable |
 | `dataset set-private MFID` | Remove public access from a dataset |
 | `dataset parsers` | List installed client-side parsers |
-| `dataset ingestors` | List server-advertised ingestion classes |
 | `dataset pipelines` | List postprocessing pipelines and their parameters |
 | `dataset postprocess MFID PIPELINE` | Queue a postprocessing run; `--param KEY=VALUE` (repeatable), `--params JSON`, `--idempotency-key` |
 | `dataset list-runs [MFID]` | List postprocessing runs; `--pipeline`, `--status` |
@@ -378,6 +377,7 @@ The old names still work and print a warning naming the new one; they are left o
 | `dataset remove-child PARENT -c CHILD` | `dataset unlink -p PARENT -c CHILD` |
 | `sample add-dataset`, `sample remove-dataset` | `sample link-dataset`, `sample unlink-dataset` |
 | `sample remove-child PARENT -c CHILD` | `sample unlink -p PARENT -c CHILD` |
+| `dataset ingestors` | `ingestion list-ingestors` |
 
 ## Removed in 4.0.0
 

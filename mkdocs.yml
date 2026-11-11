@@ -89,6 +89,8 @@ nav:
     - Users: api-reference/users.md
     - Files: api-reference/files.md
     - Account: api-reference/account.md
+    - Service accounts: api-reference/service-accounts.md
+    - Deletions: api-reference/deletions.md
     - Ingestion: api-reference/ingestion.md
     - Postprocessing: api-reference/postprocessing.md
     - Graphs: api-reference/graphs.md

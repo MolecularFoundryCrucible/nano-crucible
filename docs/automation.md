@@ -89,11 +89,10 @@ print(result["dataset_mfid"])
 
 String paths in `files` are uploaded to Crucible storage by default. To register paths without uploading their contents, set `upload_files=False`; the client hashes each file and names it by its path relative to the files' common folder. To catalog a file held by an external system, pass an `AssociatedFile` with its `storage_backend`, `storage_path`, and any access instructions. Choose these modes intentionally: a catalog entry does not make an external file accessible to another user by itself.
 
-An omitted `ingestor` lets the server detect a supported format. If detection
-fails, inspect the server-advertised choices with:
+An omitted `ingestor` lets the server detect a supported format. If detection fails, inspect the server-advertised choices with:
 
 ```bash
-crucible dataset ingestors
+crucible ingestion list-ingestors
 ```
 
 ## Make agent-assisted work reviewable

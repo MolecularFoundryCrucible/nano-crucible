@@ -634,7 +634,7 @@ Examples:
         default=None,
         metavar='CLASS',
         help='Server-side ingestor class to use (default: auto-detected from file format). '
-             'Run "crucible dataset ingestors" to see all available options.'
+             'Run "crucible ingestion list-ingestors" to see all available options.'
     )
     if ARGCOMPLETE_AVAILABLE:
         from .helpers import complete_ingestors
