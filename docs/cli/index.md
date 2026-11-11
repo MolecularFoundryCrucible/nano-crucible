@@ -46,8 +46,11 @@ Shell-specific commands:
 | `elevate on` / `elevate off` | Toggle platform-administrator elevation; an `ELEVATED` badge appears in the toolbar while it is on. It starts on for platform administrators unless `privilege_mode` is set to `normal` |
 | `elevate COMMAND` | Run one command with platform-administrator elevation, like `--elevate COMMAND` |
 | `more` | Show the next page of the last listing, continuing from where it stopped with the same filters and limit |
-| `help` | List available commands |
+| `help` | List commands, shell commands, and keyboard shortcuts |
+| `help COMMAND [SUBCOMMAND]` | Show a command's options, like `crucible COMMAND --help` |
 | `exit` / `quit` | Exit the shell |
+
+Commands that take longer than two seconds print how long they took; those that wait on an editor, a browser, or a shell command do not. Creating or updating a project refreshes project completion right away.
 
 ## Global flags
 
@@ -120,7 +123,7 @@ crucible completion fish    # fish
 
 Follow the printed instructions to activate it in your shell.
 
-The interactive Crucible shell completes command flags and fixed choices. It searches users, projects, instruments, datasets, and samples after three typed characters, returning canonical usernames, project or instrument IDs, and resource MFIDs as appropriate. Searches are scoped to the active project for dataset and sample suggestions.
+The interactive Crucible shell completes command flags and fixed choices. It searches users, projects, instruments, datasets, and samples after three typed characters, returning canonical usernames, project or instrument IDs, and resource MFIDs as appropriate. Searches are scoped to the active project for dataset and sample suggestions. A search waits until typing pauses for a moment, so fast typing does not send a request per keystroke.
 
 ## First-time setup
 

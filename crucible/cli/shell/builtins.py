@@ -20,9 +20,43 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
+def _visible_subcommands(parser):
+    """(name, help) for the subcommands help shows, in registration order."""
+    import argparse
+    for action in parser._actions:
+        if isinstance(action, argparse._SubParsersAction):
+            return [(choice.dest, choice.help or '') for choice in action._choices_actions], action
+    return [], None
+
+
+def _help_for(shell, words):
+    """Print one command's own help, as 'crucible COMMAND --help' would."""
+    parser = shell.parser
+    for word in words:
+        _, action = _visible_subcommands(parser)
+        if action is None or word not in action.choices:
+            print(f"No command '{' '.join(words)}'. Type 'help' for the list.")
+            return True
+        parser = action.choices[word]
+    parser.print_help()
+    return True
+
+
 def _help(shell, line):
-    shell.parser.print_help()
+    words = line.split()[1:]
+    if words:
+        return _help_for(shell, words)
     _W = 18
+    hidden = getattr(getattr(shell, 'completer', None), 'hidden', set())
+    commands, _ = _visible_subcommands(shell.parser)
+    merged = {}
+    for name, desc in commands:
+        if name not in hidden:
+            merged.setdefault(desc, []).append(name)
+    term.header("Commands")
+    for _desc, names in merged.items():
+        _cmd = ', '.join(names)
+        print(f"  {term.cyan(_cmd)}{' ' * max(1, _W - len(_cmd))} {_desc}")
     print()
     term.header("Shell commands")
     for _cmd, _desc in [
@@ -39,6 +73,7 @@ def _help(shell, line):
         ('ls [PATH]',     'list directory'),
         ('cd [PATH]',     'change directory'),
         ('pwd',           'print working directory'),
+        ('help COMMAND',  "show a command's options, e.g. help dataset list"),
         ('exit / quit',   'exit the shell'),
     ]:
         print(f"  {term.cyan(_cmd)}{' ' * (_W - len(_cmd))} {_desc}")
@@ -273,7 +308,7 @@ def _elevate(shell, line):
 
 
 BUILTINS = {
-    'help': (_help, False),
+    'help': (_help, True),
     'use': (_use, True),
     'unuse': (_unuse, False),
     'refresh': (_refresh, False),

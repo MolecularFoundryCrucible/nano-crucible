@@ -166,3 +166,18 @@ def test_startup_error_for_a_refused_credential():
     message = _startup_error(requests.HTTPError('401', response=response), 'https://x.test/api')
 
     assert 'refused the credential' in message and 'crucible login' in message
+
+
+@pytest.mark.parametrize('line, seconds, shown', [
+    ('dataset list', 4.24, True),
+    ('dataset list', 0.5, False),
+    ('dataset edit X', 40, False),
+    ('login', 30, False),
+    ('!sleep 5', 5, False),
+])
+def test_slow_commands_report_their_time(capsys, line, seconds, shown):
+    from crucible.cli.shell.core import _report_duration
+
+    _report_duration(line, seconds)
+
+    assert ('took 4.2s' in capsys.readouterr().out) is (shown and seconds == 4.24)

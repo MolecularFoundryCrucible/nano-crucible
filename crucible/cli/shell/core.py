@@ -67,6 +67,23 @@ def _startup_error(exc, api_url):
     return f"Cannot connect to Crucible: {exc}"
 
 
+SLOW_COMMAND_SECONDS = 2.0
+_INTERACTIVE_WORDS = {'edit', 'login', 'reload', 'cd', 'init'}
+
+
+def _report_duration(line, seconds):
+    """Note how long a slow command took, like zsh's REPORTTIME.
+
+    Commands that wait on an editor, a browser, or the user are left out,
+    since their time is the user's, not Crucible's.
+    """
+    words = line.split()
+    if (seconds < SLOW_COMMAND_SECONDS or not words or line.lstrip().startswith('!')
+            or _INTERACTIVE_WORDS & set(words)):
+        return
+    print(term.dim(f"(took {seconds:.1f}s)"))
+
+
 class CrucibleShell:
     """Interactive Crucible shell.
 
@@ -564,6 +581,14 @@ class CrucibleShell:
             if self.completer is not None:
                 self.completer._service_accounts = new_service_accounts or []
 
+        if len(words) >= 2 and words[0] == 'project' and words[1] in ('create', 'update', 'edit'):
+            from ..helpers import fetch_projects
+            new_projects = fetch_projects(self.client)
+            self.state['projects'] = new_projects
+            if self.completer is not None:
+                self.completer._projects = new_projects
+                self.completer._project_search_cache.clear()
+
         if len(words) >= 2 and words[0] == 'config' and words[1] in ('set', 'unset', 'edit'):
             try:
                 self.rebind_client(keep_privilege_mode=False)
@@ -634,8 +659,10 @@ class CrucibleShell:
                 continue
             except EOFError:
                 break
+            started = time.monotonic()
             if not self._dispatch(line):
                 break
+            _report_duration(line, time.monotonic() - started)
             print()
 
 
@@ -655,8 +682,10 @@ class CrucibleShell:
                 continue
             except EOFError:
                 break
+            started = time.monotonic()
             if not self._dispatch(line):
                 break
+            _report_duration(line, time.monotonic() - started)
             print()
 
 

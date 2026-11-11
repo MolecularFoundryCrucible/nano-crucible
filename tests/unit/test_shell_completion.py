@@ -484,3 +484,66 @@ def test_hidden_subcommands_are_not_suggested():
     assert 'list-keys' not in offered
     assert 'revoke-keys' not in offered
     assert 'get' in offered
+
+
+def test_a_search_waits_for_typing_to_pause(monkeypatch):
+    import threading
+    import time
+    client = MagicMock()
+    client.users.search.return_value = [{'unique_id': MFID, 'username': 'ada'}]
+    completer = make_completer(client=client)
+    monkeypatch.setattr(_CrucibleCompleter, 'SEARCH_DELAY', 0.2)
+
+    worker = threading.Thread(target=lambda: completer._search_users('ada'))
+    worker.start()
+    time.sleep(0.05)
+    completer._keystrokes += 1
+    worker.join()
+
+    client.users.search.assert_not_called()
+    assert 'ada' not in completer._user_search_cache
+    assert completer._search_users('ada') == [('ada', '', MFID)]
+    client.users.search.assert_called_once()
+
+
+def test_search_caches_keep_only_recent_queries():
+    from crucible.cli.shell.completer import _BoundedCache
+
+    cache = _BoundedCache(size=2)
+    cache['a'], cache['b'] = 1, 2
+    cache['a']
+    cache['c'] = 3
+
+    assert list(cache) == ['a', 'c']
+
+
+def _shell_parser():
+    parser = argparse.ArgumentParser(prog='crucible')
+    subparsers = parser.add_subparsers(dest='resource')
+    for module in (dataset, sample):
+        module.register_subcommand(subparsers)
+    from crucible.cli import access_group
+    access_group.register_subcommand(subparsers)
+    return parser
+
+
+def test_help_lists_commands_once_with_aliases_together(capsys):
+    from crucible.cli.shell.builtins import find_builtin
+
+    shell = SimpleNamespace(parser=_shell_parser(), completer=SimpleNamespace(hidden=set()))
+    find_builtin('help')(shell, 'help')
+
+    out = capsys.readouterr().out
+    assert 'access-group, ag' in out and 'usage:' not in out
+    assert 'help COMMAND' in out
+
+
+def test_help_command_shows_that_commands_options(capsys):
+    from crucible.cli.shell.builtins import find_builtin
+
+    shell = SimpleNamespace(parser=_shell_parser(), completer=None)
+    find_builtin('help dataset list')(shell, 'help dataset list')
+    assert 'usage: crucible dataset list' in capsys.readouterr().out
+
+    find_builtin('help dataset nope')(shell, 'help dataset nope')
+    assert "No command 'dataset nope'" in capsys.readouterr().out
