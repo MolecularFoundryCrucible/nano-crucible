@@ -13,6 +13,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 from . import term
+from .helpers import RemovedOptionAction
 from .helpers import add_limit_arguments, count_label, print_more_hint, resolve_limit, page_kwargs
 from ..config import config as _config
 from ..constants import INSTRUMENT_SORTS, SORT_DIRECTIONS
@@ -78,6 +79,8 @@ def _register_member_commands(subparsers):
         'list-users', help='List the instrument owner and maintainers',
         description=f'List the instrument owner and maintainers. {note}')
     parser.add_argument('instrument', metavar='INSTRUMENT', help='Instrument MFID or instrument_id')
+    parser.add_argument('--json', action='store_true', default=False,
+                        help='Output as JSON array')
     parser.set_defaults(func=_execute_list_users)
 
     parser = subparsers.add_parser(
@@ -129,11 +132,14 @@ def _execute_list_users(args):
     from crucible.config import get_client
     from .helpers import fail
     try:
-        members = get_client().instruments.get_users(args.instrument)
+        members = get_client().instruments.list_users(args.instrument)
         if members is None:
             logger.error("Members are visible only to the instrument owner, its "
                          "maintainers, and platform administrators.")
             sys.exit(1)
+        if getattr(args, 'json', False):
+            print(json.dumps([m.model_dump(mode='json') for m in members], indent=2, default=str))
+            return
         term.header(f"Members · {args.instrument} ({len(members)})")
         _member_table(members)
     except Exception as e:
@@ -252,8 +258,10 @@ def _register_get(subparsers):
 
     parser.add_argument(
         '--by-id',
-        action='store_true',
-        help='Deprecated: treat the argument explicitly as an MFID'
+        action=RemovedOptionAction,
+        nargs=0,
+        default=False,
+        reason='MFIDs and instrument IDs are told apart automatically, so drop it'
     )
 
     parser.add_argument(
@@ -568,23 +576,11 @@ def _execute_get(args):
     try:
         client = get_client()
 
-        if args.by_id:
-            import warnings
-            warnings.warn(
-                "--by-id is deprecated because MFID/slug dispatch is automatic.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-            instrument = client.instruments.get(
-                instrument_mfid=args.instrument,
-                include_metadata=include_metadata,
-            )
-        else:
-            instrument = client.instruments.get(
-                args.instrument,
-                include_metadata=include_metadata,
-                include_members=getattr(args, 'include_members', False),
-            )
+        instrument = client.instruments.get(
+            args.instrument,
+            include_metadata=include_metadata,
+            include_members=getattr(args, 'include_members', False),
+        )
 
         if instrument is None:
             logger.error(f"Instrument not found: {args.instrument}")

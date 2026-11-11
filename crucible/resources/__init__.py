@@ -3,8 +3,7 @@
 """
 Resource classes for Crucible API operations.
 
-Provides organized access to different resource types (datasets, samples, etc.)
-while maintaining backward compatibility with the original flat API.
+Provides organized access to different resource types (datasets, samples, etc.).
 """
 
 from .files import FileOperations
@@ -19,10 +18,11 @@ from .graphs import GraphOperations
 from .account import AccountOperations
 from .service_accounts import ServiceAccountOperations
 from .access_groups import AccessGroupOperations
+from .postprocessing import PostprocessingOperations
 from .printer import PrintOperations
 
 __all__ = ['FileOperations', 'DatasetOperations', 'IngestionOperations',
            'SampleOperations', 'ProjectOperations',
            'UserOperations', 'InstrumentOperations', 'DeletionOperations', 'GraphOperations',
            'AccountOperations', 'ServiceAccountOperations', 'AccessGroupOperations',
-           'PrintOperations']
+           'PostprocessingOperations', 'PrintOperations']

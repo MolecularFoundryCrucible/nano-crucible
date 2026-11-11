@@ -9,7 +9,7 @@ Provides access to entity graph traversal endpoints.
 import logging
 from typing import Any
 from .base import BaseResource
-from ..utils.deprecation import _deprecated_parameter
+from ..utils.deprecation import _removed_parameter
 
 logger = logging.getLogger(__name__)
 
@@ -17,11 +17,10 @@ logger = logging.getLogger(__name__)
 class GraphOperations(BaseResource):
     """Entity graph traversal operations.
 
-    Access via: client.graphs.get(), or as a convenience via
-    client.samples.graph() / client.datasets.graph().
+    Access via: client.graphs.get() for a dataset or sample, client.graphs.project() for a project.
     """
 
-    @_deprecated_parameter('entity_id', 'resource_mfid')
+    @_removed_parameter('entity_id', 'resource_mfid')
     def get(self, resource_mfid: str, recursive: bool = False,
             as_networkx: bool = False) -> Any:
         """Return the graph of entities connected to a dataset or sample MFID.
@@ -37,7 +36,10 @@ class GraphOperations(BaseResource):
                 of the raw node-link dict. Requires networkx to be installed.
 
         Returns:
-            dict | networkx.DiGraph: Node-link graph data.
+            dict | networkx.DiGraph: Node-link graph data. Each link carries
+                source, target, and relationship_type (None for
+                dataset-sample associations); in a DiGraph it is an edge
+                attribute.
         """
         params = {"recursive": recursive} if recursive else {}
         data = self._request(

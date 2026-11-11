@@ -50,7 +50,7 @@ class XRDParser(BaseParser):
     # Define parser defaults (optional)
     _measurement = "XRD"
     _data_format = "XRD"
-    _instrument_name = None  # Or set a default instrument
+    _instrument_id = None  # Or a registered instrument ID used by default
 
     def parse(self):
         """
@@ -163,11 +163,10 @@ Inside your `parse()` method, you have access to all instance variables:
 - `self.dataset_name` - Human-readable dataset name
 - `self.session_name` - Session name for grouping
 - `self.public` - Whether dataset is public (bool)
-- `self.instrument_name` - Instrument name
-- `self.instrument_id` - Registered instrument ID
+- `self.owner` - Owner to create the dataset for (ORCID, MFID, username, or email), or None for the caller
+- `self.instrument_id` - Registered instrument ID (defaults to `_instrument_id`)
 - `self.instrument_mfid` - Canonical registered instrument MFID
 - `self.data_format` - Data format type
-- `self.source_folder` - Directory where parser was called
 
 **Data:**
 - `self.files_to_upload` - List of file paths to upload (can be modified)

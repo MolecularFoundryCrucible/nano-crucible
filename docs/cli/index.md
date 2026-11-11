@@ -14,7 +14,7 @@ Utility commands operate directly on IDs without a sub-action:
 
 ```
 crucible download DATASET_ID
-crucible link PARENT_ID CHILD_ID
+crucible link -p PARENT_ID -c CHILD_ID
 crucible open RESOURCE_ID
 ```
 
@@ -30,7 +30,7 @@ The shell opens with a compact 16×16 Crucible mark, combining two vertical pixe
 
 Tab-completion searches the API as you type: resource names complete to MFIDs, projects and instruments to their slugs, users to usernames, and filter values such as measurement or sample type to the values that exist in the current or typed project. Commands and flags you cannot use, such as service-account administration, are not suggested.
 
-An explicit `--project-id` applies only to that command. Inside the interactive shell, `use PROJECT_ID` validates and saves the current project for future commands and shell sessions. `unuse` clears the saved project. The deprecated `CRUCIBLE_CURRENT_PROJECT` environment variable temporarily retains precedence, but the CLI displays a warning whenever it supplies project context.
+An explicit `--project-id` applies only to that command. Inside the interactive shell, `use PROJECT_ID` validates and saves the current project for future commands and shell sessions. `unuse` clears the saved project.
 
 Shell-specific commands:
 
@@ -52,7 +52,9 @@ Shell-specific commands:
 | Flag | Effect |
 |---|---|
 | `--debug` | Print HTTP calls, raw responses, and tracebacks. Must come **before** the resource name. |
+| `-E`, `--elevate` | Run one command with platform-administrator elevation. Must come **before** the resource name. |
 | `--no-color` | Disable ANSI colors while retaining interactive terminal hyperlinks. Must come **before** the resource name. |
+| `--no-pager` | Print a long listing directly even when the `pager` setting is `auto`. Must come **before** the resource name. |
 | `--version` | Print version and exit. |
 
 ```bash
@@ -121,10 +123,11 @@ The interactive Crucible shell completes command flags and fixed choices. It sea
 ## First-time setup
 
 ```bash
-crucible config init
+crucible login            # sign in with a browser
+crucible login --device   # over SSH or without a browser
 ```
 
-This walks through setting your API key and optional local defaults. See [Installation → Configuration](../installation.md#configuration) for details.
+For scripts, CI, and batch jobs, use an API key instead: `crucible config init` walks through setting it and optional local defaults, or set `CRUCIBLE_API_KEY`. See [Installation → Configuration](../installation.md#configuration) for details.
 
 ## Full command reference
 

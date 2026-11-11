@@ -39,7 +39,6 @@ HPC incremental workflow::
     # crucible cast run.crux
 """
 
-import fcntl
 import json
 import logging
 import warnings
@@ -54,18 +53,20 @@ from .executor import CastExecutor
 
 logger = logging.getLogger(__name__)
 
+_CastNode = Union['CastDatasetNode', 'CastSampleNode']
+
 
 class CastDatasetNode:
     """Thin wrapper around a Dataset that tracks cast relationships."""
 
-    def __init__(self, dataset, local_id: str, *, server_id: str = None, stub: bool = False):
+    def __init__(self, dataset, local_id: str, *, server_id: Optional[str] = None, stub: bool = False):
         self._dataset    = dataset
         self.local_id    = local_id
         self._server_id  = server_id  # known server ID (from lock or unique_id)
         self._is_stub    = stub        # True = loaded from file, not re-written
-        self._children: List['CastDatasetNode'] = []
-        self._parents:  List['CastDatasetNode'] = []
-        self._samples:  List['CastSampleNode']  = []
+        self._children: List[_CastNode]        = []
+        self._parents:  List[_CastNode]        = []
+        self._samples:  List['CastSampleNode'] = []
 
     def _ref(self) -> dict:
         sid = self._server_id or (self._dataset.unique_id if self._dataset else None)
@@ -82,7 +83,7 @@ class CastDatasetNode:
             'id':          self.local_id,
             'name':        ds.dataset_name,
             'measurement': ds.measurement,
-            'instrument':  ds.instrument_name,
+            'instrument':  ds.instrument_id or ds.instrument_mfid,
             'session':     ds.session_name,
             'data_format': ds.data_format,
             'public':      ds.public or None,
@@ -123,7 +124,7 @@ class CastDatasetNode:
         return CastDataset(
             name=ds.dataset_name,
             measurement=ds.measurement,
-            instrument=ds.instrument_name,
+            instrument=ds.instrument_id or ds.instrument_mfid,
             data_format=ds.data_format,
             session=ds.session_name,
             public=ds.public or False,
@@ -135,13 +136,13 @@ class CastDatasetNode:
 class CastSampleNode:
     """Thin wrapper around a Sample that tracks cast relationships."""
 
-    def __init__(self, sample, local_id: str, *, server_id: str = None, stub: bool = False):
+    def __init__(self, sample, local_id: str, *, server_id: Optional[str] = None, stub: bool = False):
         self._sample     = sample
         self.local_id    = local_id
         self._server_id  = server_id
         self._is_stub    = stub
-        self._children: List['CastSampleNode']  = []
-        self._parents:  List['CastSampleNode']  = []
+        self._children: List[_CastNode]         = []
+        self._parents:  List[_CastNode]         = []
         self._datasets: List['CastDatasetNode'] = []
 
     def _ref(self) -> dict:
@@ -211,7 +212,7 @@ class Cast:
     serialize to a .crux file or execute directly against the Crucible API.
     """
 
-    def __init__(self, config: CastConfig = None):
+    def __init__(self, config: Optional[CastConfig] = None):
         self._config        = config or CastConfig()
         self._nodes:        List[Union[CastDatasetNode, CastSampleNode]]      = []
         self._id_map:       Dict[int, Union[CastDatasetNode, CastSampleNode]] = {}
@@ -331,6 +332,7 @@ class Cast:
                 yaml.dump_all(docs, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
             return
 
+        import fcntl
         lock_file = path.with_suffix(path.suffix + '.lck')
         with open(lock_file, 'w') as lf:
             try:
@@ -349,7 +351,8 @@ class Cast:
                 fcntl.flock(lf, fcntl.LOCK_UN)
         lock_file.unlink(missing_ok=True)
 
-    def apply(self, client, lock_path: Path = None, dry_run: bool = False) -> Dict[str, str]:
+    def apply(self, client, lock_path: Optional[Path] = None,
+              dry_run: bool = False) -> Dict[str, Optional[str]]:
         """Build a CastPlan in memory and execute - no file needed."""
         plan = self._to_cast_plan(lock_path)
         return CastExecutor(plan).apply(client, dry_run=dry_run)

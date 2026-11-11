@@ -10,6 +10,7 @@ import pytz
 import subprocess as sp
 import hashlib
 from datetime import datetime, timezone
+from typing import Optional
 
 
 def run_shell(cmd, checkflag=True, background=False):
@@ -240,16 +241,19 @@ def gcs_object_parts(file_record: dict):
     return parts[0], parts[1], parts[2]
 
 
-def storage_display_name(file_record: dict, dataset_mfid: str = None) -> str:
+def storage_display_name(file_record: dict, dataset_mfid: Optional[str] = None) -> str:
     """Return the display filename for a file record.
 
     GCS records are named by their ``filename``, which carries any relative
     folders; the object path is a server detail that differs between upload
     flows. Legacy objects stored directly below the dataset folder keep their
     object path when it extends the filename with folders. Other records fall
-    back to the basename of their storage path or filename.
+    back to the basename of their storage path or filename. An absolute
+    filename from a legacy upload is reduced to its basename.
     """
     filename = file_record.get('filename') or ''
+    if os.path.isabs(filename):
+        filename = os.path.basename(filename)
     parts = gcs_object_parts(file_record)
     if parts is not None:
         _bucket, owner_dataset, object_name = parts

@@ -84,14 +84,19 @@ nav:
     - Datasets: api-reference/datasets.md
     - Samples: api-reference/samples.md
     - Projects: api-reference/projects.md
+    - Join requests: api-reference/join-requests.md
     - Instruments: api-reference/instruments.md
     - Users: api-reference/users.md
     - Files: api-reference/files.md
     - Account: api-reference/account.md
+    - Service accounts: api-reference/service-accounts.md
+    - Deletions: api-reference/deletions.md
     - Ingestion: api-reference/ingestion.md
+    - Postprocessing: api-reference/postprocessing.md
     - Graphs: api-reference/graphs.md
     - Print: api-reference/printer.md
     - Models: api-reference/models.md
+    - Errors: api-reference/errors.md
   - Development:
     - Permission Alignment: development/permission-alignment.md
     - MFID UUIDv7 Compatibility: development/mfid-uuidv7-compatibility.md

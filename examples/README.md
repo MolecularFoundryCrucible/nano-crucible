@@ -39,7 +39,7 @@ The main tutorial demonstrates all core dataset and sample operations:
 The project management tutorial includes administrative operations. Run only the sections allowed by your project or platform role:
 
 1. **Setup and Configuration** - Initializing with credentials appropriate for the operations being demonstrated
-2. **Creating Projects** - Creating or getting projects
+2. **Creating Projects** - Creating projects
 3. **Getting Project Details** - Retrieving project information
 4. **Listing Projects** - Viewing all accessible projects
 5. **Creating Users** - Adding new users to Crucible
@@ -56,9 +56,10 @@ The project management tutorial includes administrative operations. Run only the
    pip install -e /path/to/nano-crucible
    ```
 
-2. Configure your API credentials:
+2. Sign in, or configure an API key:
    ```bash
-   crucible config init
+   crucible login          # browser sign-in; use --device over SSH or without a browser
+   crucible config init    # or save an API key instead
    ```
 
    You'll need:

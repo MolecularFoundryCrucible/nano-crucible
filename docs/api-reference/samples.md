@@ -30,4 +30,3 @@ Access via `client.samples`.
         - set_private
         - transfer_ownership
         - reassign_project
-        - graph

@@ -3,7 +3,7 @@
 """
 Open subcommand for opening Crucible resources in the browser.
 
-Opens the Graph Explorer home page or a specific resource by mfid.
+Opens the Crucible Hub home page or a specific resource by mfid.
 """
 
 import sys
@@ -18,11 +18,11 @@ def register_subcommand(subparsers):
     parser = subparsers.add_parser(
         'open',
         help='Open a Crucible resource in the browser',
-        description='Open the Graph Explorer or a specific resource by mfid',
+        description='Open the Crucible Hub or a specific resource by mfid',
         formatter_class=lambda prog: term.ColorHelpFormatter(prog, max_help_position=35),
         epilog="""
 Examples:
-    # Open the Graph Explorer home page
+    # Open the Crucible Hub home page
     crucible open
 
     # Open a specific resource by mfid
@@ -56,16 +56,15 @@ def execute(args):
     from crucible.config import config
     mfid = args.mfid
 
-    # Get graph explorer URL from config
-    graph_explorer_url = config.graph_explorer_url.rstrip('/')
+    hub_url = config.hub_url
 
     # Build URL
     if mfid is None:
         # No mfid -> open root URL
-        url = graph_explorer_url
+        url = f"{hub_url}/"
     else:
         try:
-            resource = config.client.get(mfid, include_datasets=False)
+            resource = config.client.get(mfid)
         except Exception as e:
             logger.error(f"Resource '{mfid}' not found: {e}")
             sys.exit(1)
@@ -80,14 +79,14 @@ def execute(args):
         if resource_type == 'instrument':
             url = instrument_explorer_url(mfid)
         elif resource_type == 'project':
-            url = project_explorer_url(resource.get('project_id'))
+            url = project_explorer_url(resource.get('unique_id') or resource.get('project_id'))
         elif resource_type in ('dataset', 'sample'):
             _, project_id, _ = project_reference(resource)
             url = explorer_url(mfid, project_id, resource_type)
         else:
             url = None
         if not url:
-            logger.error(f"Resource '{mfid}' has no supported Explorer route")
+            logger.error(f"Resource '{mfid}' has no supported Hub page")
             sys.exit(1)
 
     if args.print_url:

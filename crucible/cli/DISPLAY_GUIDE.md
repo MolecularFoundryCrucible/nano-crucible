@@ -142,9 +142,9 @@ Pass project membership roles through `term.role_label()`. Member tables are ord
 
 Label resource slugs explicitly as `Project ID` or `Instrument ID`, and label canonical identifiers as `MFID`. Detail views for slug-addressable resources should show both when available.
 
-Singleton resource views use this section order when the data applies: primary identity and scientific fields, project, instrument, access, timing, then files, relationships, and scientific metadata. The inspected resource keeps its own MFID visible. Embedded project and instrument references show their title or name and public ID without exposing the related MFID. Use the related MFID internally when the Explorer route requires it.
+Singleton resource views use this section order when the data applies: primary identity and scientific fields, project, instrument, access, timing, then files, relationships, and scientific metadata. The inspected resource keeps its own MFID visible. Embedded project and instrument references show their title or name and public ID without exposing the related MFID. Use the related MFID internally when the Hub route requires it.
 
-Treat usernames, project IDs, and instrument IDs as human-readable slugs. Keep them in the default foreground when their resource name or canonical ID already carries navigation. Canonical user IDs and MFIDs use cyan underlined text when a stable Explorer route is available. Identifiers without a stable destination remain cyan without underlining. User labels and canonical IDs link to the Crucible Explorer profile rather than the external ORCID record. Do not make an additional API request solely to enrich a label or construct a link.
+Treat usernames, project IDs, and instrument IDs as human-readable slugs. Keep them in the default foreground when their resource name or canonical ID already carries navigation. Canonical user IDs and MFIDs use cyan underlined text when a stable Hub route is available. Identifiers without a stable destination remain cyan without underlining. User labels and canonical IDs link to the Crucible Hub profile rather than the external ORCID record. Do not make an additional API request solely to enrich a label or construct a link.
 
 Use one primary navigational link per table row when possible: title for projects, name for instruments and users, MFID for datasets and samples, and filename for signed downloads. Use the slug or canonical ID as the fallback link when the preferred human-readable label is unavailable.
 
@@ -183,7 +183,7 @@ API operations that support a server-side preview should remain preview-only by 
 
 ## Shell project context
 
-Resolve project context in this order: an explicit command argument, the deprecated `CRUCIBLE_CURRENT_PROJECT` compatibility override, then the saved `current_project`. Use the shared project-context helper for commands that accept an omitted project. The `use PROJECT_ID` shell command validates and saves the current project for future commands and shell sessions. `unuse` clears it. Always display an active environment override and its source because it can redirect operations. Dataset sessions are resource metadata and must not be treated as shell context.
+Resolve project context in this order: an explicit command argument, then the saved `current_project`. Use the shared project-context helper for commands that accept an omitted project. The `use PROJECT_ID` shell command validates and saves the current project for future commands and shell sessions. `unuse` clears it. `CRUCIBLE_CURRENT_PROJECT` was removed in 4.0.0: the CLI stops when it is set and `config.current_project` raises, so do not read it as an override. Dataset sessions are resource metadata and must not be treated as shell context.
 
 ## Errors and warnings
 

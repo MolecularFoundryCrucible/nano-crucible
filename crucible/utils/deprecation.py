@@ -44,13 +44,37 @@ def _deprecated_parameter(old_name: str, new_name: str):
     return decorator
 
 
-def _removed(reason: str):
-    """Decorator that raises NotImplementedError for methods removed from the API."""
+def removed_message(old: str, replacement: str, version: str = '4.0.0') -> str:
+    return f"{old} was removed in nano-crucible {version}; {replacement}"
+
+
+def _removed(replacement: str, version: str = '4.0.0'):
+    """Decorator for a removed method: calling it raises RemovedError naming the replacement.
+
+    replacement is a sentence fragment, such as "use client.account.profile() instead."
+    """
     def decorator(func):
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
-            raise NotImplementedError(
-                f"{func.__name__}() has been removed and is no longer available. {reason}"
-            )
+            from ..errors import RemovedError
+            raise RemovedError(removed_message(f"{func.__qualname__}()", replacement, version))
+        wrapper.__removed__ = replacement
+        return wrapper
+    return decorator
+
+
+def _removed_parameter(old_name: str, new_name: str, version: str = '4.0.0'):
+    """Decorator for a renamed keyword whose old name was removed: passing it raises
+    RemovedError naming the new one."""
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            if old_name in kwargs:
+                from ..errors import RemovedError
+                raise RemovedError(removed_message(
+                    f"The '{old_name}' keyword of {func.__qualname__}()",
+                    f"use '{new_name}' instead.", version))
+            return func(*args, **kwargs)
+        wrapper.__removed_parameters__ = getattr(func, '__removed_parameters__', ()) + ((old_name, new_name),)
         return wrapper
     return decorator

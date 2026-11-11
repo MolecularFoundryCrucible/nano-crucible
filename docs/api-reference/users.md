@@ -16,12 +16,12 @@ For self-service profile and API key operations see `client.account`.
         - resolve
         - create
         - update
-        - list_datasets
+        - approve
+        - reject
         - check_dataset_access
         - list_access_groups
-        - add_to_access_group
-        - remove_from_access_group
-        - get_projects
-        - verify_api_key
+        - list_projects
         - set_platform_role
+        - list_api_keys
+        - revoke_api_key
         - revoke_api_keys

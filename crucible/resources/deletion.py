@@ -14,6 +14,7 @@ from ..constants import (DEFAULT_LIMIT, DELETION_AUDIT_SCOPES,
                          DELETION_REQUEST_SCOPES, DELETION_REQUEST_SORTS,
                          SORT_DIRECTIONS)
 from ..models import DeletionRequest, DeletionAuditLog
+from ..utils.deprecation import _deprecated_parameter
 
 
 class DeletionOperations(BaseResource):
@@ -23,14 +24,15 @@ class DeletionOperations(BaseResource):
     def _parse(data: dict) -> Dict:
         return DeletionRequest(**data).model_dump()
 
-    def request(self, resource_id: str, reason: Optional[str] = None) -> Dict:
+    @_deprecated_parameter('resource_id', 'resource_mfid')
+    def request(self, resource_mfid: str, reason: Optional[str] = None) -> Dict:
         """Submit a deletion request for a dataset or sample.
 
         The resource is immediately hidden from list results (status: pending)
         until an admin approves or rejects the request.
 
         Args:
-            resource_id: The unique_id (MFID) of the dataset or sample to delete.
+            resource_mfid: The unique_id (MFID) of the dataset or sample to delete.
             reason: Optional explanation for why deletion is requested.
 
         Returns:
@@ -39,7 +41,7 @@ class DeletionOperations(BaseResource):
         params = {}
         if reason is not None:
             params["reason"] = reason
-        raw = self._request("post", f"/resources/{resource_id}/delete", params=params or None)
+        raw = self._request("post", f"/resources/{resource_mfid}/delete", params=params or None)
         return self._parse(raw)
 
     def list(self, status: Optional[str] = None, limit: int = DEFAULT_LIMIT,
@@ -124,7 +126,8 @@ class DeletionOperations(BaseResource):
         """
         return self._review(request_id, status="rejected", reviewer_notes=reviewer_notes)
 
-    def list_deleted(self, resource_id: Optional[str] = None,
+    @_deprecated_parameter('resource_id', 'resource_mfid')
+    def list_deleted(self, resource_mfid: Optional[str] = None,
                    requester_id: Optional[str] = None,
                    reviewer_id: Optional[str] = None,
                    limit: int = DEFAULT_LIMIT,
@@ -141,7 +144,7 @@ class DeletionOperations(BaseResource):
         the original DeletionRequest and Resource rows are gone.
 
         Args:
-            resource_id: Filter by resource MFID.
+            resource_mfid: Filter by resource MFID.
             requester_id: Filter by the ORCID of who requested deletion.
             reviewer_id: Filter by the ORCID of who approved deletion.
             limit: Maximum number of results.
@@ -161,8 +164,8 @@ class DeletionOperations(BaseResource):
             List[Dict]: DeletionAuditLog records.
         """
         params = {}
-        if resource_id:
-            params['resource_id'] = resource_id
+        if resource_mfid:
+            params['resource_id'] = resource_mfid
         if requester_id:
             params['requester_id'] = requester_id
         if reviewer_id:
@@ -198,14 +201,15 @@ class DeletionOperations(BaseResource):
                             privilege_mode=self._client._admin_mode())
         return DeletionAuditLog(**raw).model_dump()
 
-    def delete(self, resource_id: str, force: bool = False) -> Dict:
+    @_deprecated_parameter('resource_id', 'resource_mfid')
+    def delete(self, resource_mfid: str, force: bool = False) -> Dict:
         """Permanently delete a resource. Admin only.
 
         By default requires an existing approved deletion request (409 if none).
         Use force=True to bypass the workflow and hard-delete immediately.
 
         Args:
-            resource_id: MFID of the dataset or sample to permanently delete.
+            resource_mfid: MFID of the dataset or sample to permanently delete.
             force: If True, skip the deletion request check and delete immediately.
 
         Returns:
@@ -216,7 +220,7 @@ class DeletionOperations(BaseResource):
             HTTPError 404: Resource not found.
         """
         params = {'force': True} if force else None
-        return self._request('delete', f'/resources/{resource_id}', params=params,
+        return self._request('delete', f'/resources/{resource_mfid}', params=params,
                              privilege_mode=self._client._admin_mode())
 
     def _review(self, request_id: int, status: str,

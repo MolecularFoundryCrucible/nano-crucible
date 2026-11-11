@@ -1,8 +1,7 @@
 """Unit tests for the permission-system overhaul - mocked, no live API.
 
 Targets the `feat/permission-roles` crucible-api branch (see
-crucible-api/docs/permission_system_api_changes.md), not yet universally
-deployed - see tests/unit/ vs tests/integration/ split in CLAUDE.md.
+crucible-api/docs/permission_system_api_changes.md).
 """
 
 from unittest.mock import MagicMock
@@ -134,8 +133,8 @@ class TestListAccess:
         assert isinstance(result[0], AccessGrant)
         assert result[0].principal_type == 'user'
         assert result[0].permission == 'viewer'
-        assert result[0].kind == 'user'
-        assert result[0].effective_permission == 'viewer'
+        assert result[0].principal_type == 'user'
+        assert result[0].permission == 'viewer'
 
 
 class TestSetAccess:
@@ -185,65 +184,9 @@ class TestPublicAccess:
 
         dataset_ops._request.assert_called_once_with('delete', '/resources/ds-1/access/public')
 
-    def test_publish_warns_and_sets_public(self, dataset_ops):
-        dataset_ops.set_public = MagicMock(return_value='grant')
 
-        with pytest.warns(DeprecationWarning, match=r'publish\(\) is deprecated'):
-            result = dataset_ops.publish('ds-1')
 
-        dataset_ops.set_public.assert_called_once_with('ds-1')
-        assert result == 'grant'
 
-    @pytest.mark.parametrize('method_name', ['unpublish', 'unset_public'])
-    def test_private_aliases_warn_and_set_private(self, dataset_ops, method_name):
-        dataset_ops.set_private = MagicMock(return_value={'detail': 'removed'})
-
-        with pytest.warns(DeprecationWarning, match=rf'{method_name}\(\) is deprecated'):
-            result = getattr(dataset_ops, method_name)('ds-1')
-
-        dataset_ops.set_private.assert_called_once_with('ds-1')
-        assert result == {'detail': 'removed'}
-
-    def test_dataset_update_public_delegates_to_access_route(self, dataset_ops):
-        dataset_ops._request = MagicMock(side_effect=[
-            {'unique_id': 'ds-1', 'dataset_name': 'Updated'},
-            {
-                'principal_id': 'public',
-                'principal_type': 'public',
-                'permission': 'viewer',
-            },
-        ])
-
-        with pytest.warns(DeprecationWarning, match="'public' update field"):
-            result = dataset_ops.update('ds-1', dataset_name='Updated', public=True)
-
-        assert dataset_ops._request.call_args_list == [
-            (("patch", "/datasets/ds-1"), {'json': {'dataset_name': 'Updated'}}),
-            (("put", "/resources/ds-1/access/public"),),
-        ]
-        assert result['public'] is True
-
-    def test_sample_update_public_delegates_to_access_route(self):
-        client = MagicMock()
-        from crucible.resources.samples import SampleOperations
-        sample_ops = SampleOperations(client)
-        sample_ops._request = MagicMock(side_effect=[
-            {'unique_id': 'sample-1', 'sample_name': 'Updated'},
-            {
-                'principal_id': 'public',
-                'principal_type': 'public',
-                'permission': 'viewer',
-            },
-        ])
-
-        with pytest.warns(DeprecationWarning, match="Parameter 'public'"):
-            result = sample_ops.update('sample-1', sample_name='Updated', public=True)
-
-        assert sample_ops._request.call_args_list == [
-            (("patch", "/samples/sample-1"), {'json': {'sample_name': 'Updated'}}),
-            (("put", "/resources/sample-1/access/public"),),
-        ]
-        assert result['public'] is True
 
 
 class TestEffectiveDatasetAccess:
@@ -379,7 +322,7 @@ class TestProjectAddUserRole:
         ])
 
         result = project_ops.add_user(
-            user_unique_id='0000-0001', project_id='proj-1', role='editor')
+            user_ref='0000-0001', project_id='proj-1', role='editor')
 
         project_ops._request.assert_called_once_with(
             'post', '/projects/proj-1/users/0000-0001', params={'role': 'editor'})
@@ -389,7 +332,7 @@ class TestProjectAddUserRole:
     def test_role_omitted_when_not_given(self, project_ops):
         project_ops._request = MagicMock(return_value=[])
 
-        project_ops.add_user(user_unique_id='0000-0001', project_id='proj-1')
+        project_ops.add_user(user_ref='0000-0001', project_id='proj-1')
 
         project_ops._request.assert_called_once_with(
             'post', '/projects/proj-1/users/0000-0001', params={})
@@ -420,7 +363,7 @@ class TestProjectAddUserRole:
         service_account_mfid = '0tkvpezyz1zzf00076nahf85j4'
         project_ops._request = MagicMock(return_value=[])
 
-        project_ops.add_user(user_unique_id=service_account_mfid, project_id='proj-1')
+        project_ops.add_user(user_ref=service_account_mfid, project_id='proj-1')
 
         project_ops._client.users.get.assert_not_called()
         project_ops._request.assert_called_once_with(
@@ -431,7 +374,7 @@ class TestProjectAddUserRole:
 
         with pytest.raises(ValueError, match='exactly one user identifier'):
             project_ops.add_user(
-                user_unique_id='0000-0001', username='alice', project_id='proj-1')
+                user_ref='0000-0001', username='alice', project_id='proj-1')
 
         project_ops._request.assert_not_called()
 
@@ -441,7 +384,7 @@ class TestProjectAddUserRole:
 
         with pytest.raises(ValueError, match='Project member role must be one of'):
             project_ops.add_user(
-                user_unique_id='0000-0001', project_id='proj-1', role=role)
+                user_ref='0000-0001', project_id='proj-1', role=role)
 
         project_ops._request.assert_not_called()
 
@@ -454,7 +397,7 @@ class TestProjectAddUserRole:
             '409 Conflict', response=response))
 
         with pytest.raises(requests.HTTPError) as raised:
-            project_ops.add_user(user_unique_id='0000-0001', project_id='proj-1')
+            project_ops.add_user(user_ref='0000-0001', project_id='proj-1')
 
         assert raised.value.response.status_code == 409
 
@@ -604,11 +547,11 @@ def test_instrument_members_are_typed_or_none(instrument_ops):
     _instrument_lookup(instrument_ops, members=[
         {'principal_id': '0000-0002-1825-0097', 'principal_type': 'user',
          'permission': 'owner', 'slug': 'jdoe', 'display_name': 'Jane Doe'}])
-    members = instrument_ops.get_users('xrd-1')
+    members = instrument_ops.list_users('xrd-1')
     assert members[0].permission == 'owner'
 
     _instrument_lookup(instrument_ops, members=None)
-    assert instrument_ops.get_users('xrd-1') is None
+    assert instrument_ops.list_users('xrd-1') is None
 
 
 def test_instrument_member_roles_exclude_owner(instrument_ops):

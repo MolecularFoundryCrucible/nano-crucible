@@ -1,6 +1,6 @@
 # GraphOperations
 
-Access via `client.graphs`. Also available as convenience methods on `client.datasets.graph()` and `client.samples.graph()`.
+Access via `client.graphs`: `get()` for the graph around a dataset or sample, `project()` for a whole project. `client.datasets.graph()` and `client.samples.graph()` are deprecated wrappers around `get()`.
 
 ::: crucible.resources.graphs.GraphOperations
     options:

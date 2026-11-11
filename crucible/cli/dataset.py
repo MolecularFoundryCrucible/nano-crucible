@@ -3,7 +3,7 @@
 """
 Dataset subcommand for Crucible CLI.
 
-Provides dataset-related operations: list, get, create, update-metadata, link, etc.
+Provides dataset-related operations: list, get, create, update, link, etc.
 """
 
 import argparse
@@ -15,7 +15,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 from . import term
-from .helpers import add_limit_arguments, count_label, print_more_hint, resolve_limit, sort_like, page_kwargs
+from .helpers import RemovedOptionAction, add_limit_arguments, count_label, print_more_hint, resolve_limit, sort_like, page_kwargs
 from ..utils.io import gcs_object_parts, storage_display_name
 
 
@@ -141,7 +141,7 @@ def _show_dataset(dataset, client, verbose=False, graph=False, include_metadata=
     else:
         from concurrent.futures import ThreadPoolExecutor
         with ThreadPoolExecutor(max_workers=3) as pool:
-            f_kw    = pool.submit(client.datasets.get_keywords, dsid) if verbose else None
+            f_kw    = pool.submit(client.datasets.list_keywords, dsid) if verbose else None
             f_meta  = pool.submit(client.datasets.list_files, dsid)
             f_links = pool.submit(client.datasets.get_download_links, dsid)
             if f_kw is not None:
@@ -268,9 +268,16 @@ def register_subcommand(subparsers):
     _register_delete(dataset_subparsers)
     _register_edit(dataset_subparsers)
     _register_link(dataset_subparsers)
+    _register_unlink(dataset_subparsers)
     _register_add_sample(dataset_subparsers)
+    _register_add_sample(dataset_subparsers, 'add-sample')
     _register_remove_sample(dataset_subparsers)
+    _register_remove_sample(dataset_subparsers, 'remove-sample')
     _register_remove_child(dataset_subparsers)
+    from .helpers import deprecate_command
+    deprecate_command(dataset_subparsers, 'add-sample', "'crucible dataset link-sample'")
+    deprecate_command(dataset_subparsers, 'remove-sample', "'crucible dataset unlink-sample'")
+    deprecate_command(dataset_subparsers, 'remove-child', "'crucible dataset unlink -p PARENT -c CHILD'")
     _register_list_parents(dataset_subparsers)
     _register_list_children(dataset_subparsers)
     _register_list_samples(dataset_subparsers)
@@ -283,13 +290,17 @@ def register_subcommand(subparsers):
     _register_search_metadata(dataset_subparsers)
     _register_add_keyword(dataset_subparsers)
     _register_list_keywords(dataset_subparsers)
-    _register_list_access_groups(dataset_subparsers)
-    _register_add_access_group(dataset_subparsers)
+    from .helpers import add_removed_command
+    add_removed_command(dataset_subparsers, 'list-access-groups', "'crucible dataset access list MFID'")
+    add_removed_command(dataset_subparsers, 'add-access-group', "'crucible dataset access grant MFID ...'")
     from ._access import register_access_commands
     register_access_commands(dataset_subparsers, 'datasets', id_metavar='DATASET_MFID')
     _register_facets(dataset_subparsers)
     _register_parsers(dataset_subparsers)
     _register_ingestors(dataset_subparsers)
+    deprecate_command(dataset_subparsers, 'ingestors', "'crucible ingestion list-ingestors'")
+    from .postprocess import register as register_postprocess_commands
+    register_postprocess_commands(dataset_subparsers)
 
 
 def _register_list(subparsers):
@@ -334,8 +345,8 @@ Examples:
         help='Filter by data type (exact match)'
     )
     parser.add_argument(
-        '--instrument', default=None, dest='instrument_name', metavar='NAME',
-        help='Deprecated: filter by instrument display name; use --instrument-id'
+        '--instrument', default=None, dest='instrument_name', action=RemovedOptionAction,
+        replacement='--instrument-id or --instrument-mfid'
     )
     parser.add_argument(
         '--group-by', dest='group_by', default=None,
@@ -471,7 +482,7 @@ Examples:
         type_arg.completer = lambda **kwargs: sorted(PARSER_REGISTRY.keys())
 
     # Project ID
-    from .helpers import DeprecatedAliasAction
+    from .helpers import RemovedOptionAction
     parser.add_argument(
         '--project-id', '-p',
         required=False,
@@ -488,8 +499,8 @@ Examples:
     )
     parser.add_argument(
         '-pid',
-        action=DeprecatedAliasAction,
-        deprecated_options={'-pid'},
+        action=RemovedOptionAction,
+        removed_options={'-pid'},
         replacement='--project-id',
         dest='project_id',
         default=argparse.SUPPRESS,
@@ -573,8 +584,8 @@ Examples:
         '--instrument',
         dest='instrument_name',
         default=None,
-        metavar='NAME',
-        help='Deprecated: identifies the instrument by its display name; use --instrument-id'
+        action=RemovedOptionAction,
+        replacement='--instrument-id or --instrument-mfid'
     )
     parser.add_argument(
         '--instrument-id',
@@ -623,7 +634,7 @@ Examples:
         default=None,
         metavar='CLASS',
         help='Server-side ingestor class to use (default: auto-detected from file format). '
-             'Run "crucible dataset ingestors" to see all available options.'
+             'Run "crucible ingestion list-ingestors" to see all available options.'
     )
     if ARGCOMPLETE_AVAILABLE:
         from .helpers import complete_ingestors
@@ -725,7 +736,6 @@ def _execute_update(args):
 
     # Parse --set for model field updates
     updates = {}
-    public = None
     if has_set:
         valid_fields = set(_dataset_updatable_fields())
         for field in args.set_fields:
@@ -735,17 +745,9 @@ def _execute_update(args):
             key, _, value = field.partition('=')
             key = key.strip()
             if key == 'public':
-                public = cast_value(value)
-                if not isinstance(public, bool):
-                    logger.error("Error: public must be true or false")
-                    sys.exit(1)
-                warning = term.yellow('Warning:', stream=sys.stderr)
-                replacement = 'set-public' if public else 'set-private'
-                print(
-                    f"{warning} --set public=... is deprecated; use dataset {replacement} instead.",
-                    file=sys.stderr,
-                )
-                continue
+                logger.error("Error: --set public=... was removed in nano-crucible 4.0.0; "
+                             "use 'dataset set-public' or 'dataset set-private' instead.")
+                sys.exit(2)
             if key not in valid_fields:
                 logger.error(
                     f"Unknown field '{key}'.\n"
@@ -771,12 +773,6 @@ def _execute_update(args):
             term.success(f"Dataset {args.dataset_id} fields updated", args)
             if getattr(args, "debug", False):
                 logger.debug(f"Updated fields: {list(updates.keys())}")
-
-        if public is not None:
-            operation = client.datasets.set_public if public else client.datasets.set_private
-            operation(args.dataset_id)
-            visibility = 'publicly viewable' if public else 'private'
-            term.success(f"Dataset {args.dataset_id} is now {visibility}", args)
 
         if metadata_dict is not None:
             overwrite = getattr(args, 'overwrite', False)
@@ -1021,16 +1017,16 @@ def _register_link(subparsers):
     parser.set_defaults(func=_execute_link)
 
 
-def _register_add_sample(subparsers):
-    """Register the 'dataset add-sample' subcommand."""
+def _register_add_sample(subparsers, name='link-sample'):
+    """Register the 'dataset link-sample' subcommand."""
     parser = subparsers.add_parser(
-        'add-sample',
+        name,
         help='Link a sample to a dataset',
         description='Associate a sample with a dataset',
         formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
-    crucible dataset add-sample DATASET_MFID --sample SAMPLE_MFID
+    crucible dataset link-sample DATASET_MFID --sample SAMPLE_MFID
 """
     )
     parser.add_argument('dataset_id', metavar='DATASET_MFID', help='Dataset MFID')
@@ -1039,7 +1035,7 @@ Examples:
 
 
 def _execute_add_sample(args):
-    """Execute the 'dataset add-sample' subcommand."""
+    """Execute the 'dataset link-sample' subcommand."""
     from crucible.config import get_client
     try:
         client = get_client()
@@ -1052,16 +1048,16 @@ def _execute_add_sample(args):
         fail("linking sample to dataset", e, args)
 
 
-def _register_remove_sample(subparsers):
-    """Register the 'dataset remove-sample' subcommand."""
+def _register_remove_sample(subparsers, name='unlink-sample'):
+    """Register the 'dataset unlink-sample' subcommand."""
     parser = subparsers.add_parser(
-        'remove-sample',
+        name,
         help='Unlink a sample from a dataset',
         description='Remove the association between a dataset and a sample (requires admin)',
         formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
-    crucible dataset remove-sample DATASET_MFID --sample SAMPLE_MFID
+    crucible dataset unlink-sample DATASET_MFID --sample SAMPLE_MFID
 """
     )
     parser.add_argument('dataset_id', metavar='DATASET_MFID', help='Dataset MFID')
@@ -1070,7 +1066,7 @@ Examples:
 
 
 def _execute_remove_sample(args):
-    """Execute the 'dataset remove-sample' subcommand."""
+    """Execute the 'dataset unlink-sample' subcommand."""
     from crucible.config import get_client
     try:
         client = get_client()
@@ -1081,8 +1077,26 @@ def _execute_remove_sample(args):
         fail("unlinking sample from dataset", e, args)
 
 
+def _register_unlink(subparsers):
+    """Register the 'dataset unlink' subcommand."""
+    parser = subparsers.add_parser(
+        'unlink',
+        help='Unlink parent and child datasets',
+        description='Remove the parent-child relationship between two datasets',
+        formatter_class=term.ColorHelpFormatter,
+        epilog="""
+Examples:
+    crucible dataset unlink -p PARENT_MFID -c CHILD_MFID
+"""
+    )
+    parser.add_argument('-p', '--parent', dest='parent_id', required=True, metavar='PARENT_MFID',
+                        help='Parent dataset MFID')
+    parser.add_argument('-c', '--child', required=True, metavar='CHILD_MFID', help='Child dataset MFID')
+    parser.set_defaults(func=_execute_remove_child)
+
+
 def _register_remove_child(subparsers):
-    """Register the 'dataset remove-child' subcommand."""
+    """Register the deprecated 'dataset remove-child' subcommand."""
     parser = subparsers.add_parser(
         'remove-child',
         help='Unlink a child dataset from a parent dataset',
@@ -1099,7 +1113,7 @@ Examples:
 
 
 def _execute_remove_child(args):
-    """Execute the 'dataset remove-child' subcommand."""
+    """Execute the 'dataset unlink' subcommand."""
     from crucible.config import get_client
     try:
         client = get_client()
@@ -1128,6 +1142,8 @@ Examples:
     add_limit_arguments(parser)
     from .helpers import add_relationship_type_filter
     add_relationship_type_filter(parser)
+    parser.add_argument('--json', action='store_true', default=False,
+                        help='Output as JSON array')
     parser.set_defaults(func=_execute_list_parents)
 
 
@@ -1149,6 +1165,8 @@ Examples:
     add_limit_arguments(parser)
     from .helpers import add_relationship_type_filter
     add_relationship_type_filter(parser)
+    parser.add_argument('--json', action='store_true', default=False,
+                        help='Output as JSON array')
     parser.set_defaults(func=_execute_list_children)
 
 
@@ -1166,6 +1184,8 @@ Examples:
     )
     parser.add_argument('dataset_id', metavar='DATASET_MFID', help='Dataset MFID')
     add_limit_arguments(parser)
+    parser.add_argument('--json', action='store_true', default=False,
+                        help='Output as JSON array')
     parser.set_defaults(func=_execute_list_samples)
 
 
@@ -1472,6 +1492,8 @@ def _register_list_files(subparsers):
                     'clickable download links (valid for 1 hour) in supporting terminals.',
     )
     parser.add_argument('dataset_id', metavar='DATASET_MFID', help='Dataset MFID')
+    parser.add_argument('--json', action='store_true', default=False,
+                        help='Output as JSON array')
     parser.set_defaults(func=_execute_list_files)
 
 
@@ -1489,6 +1511,11 @@ def _execute_list_files(args):
             f_links = pool.submit(client.datasets.get_download_links, dsid)
             meta_list  = f_meta.result()
             link_map   = f_links.result()   # {filepath: signed_url}
+
+        if getattr(args, 'json', False):
+            files = [{**f, 'download_url': link_map.get(f.get('mfid'))} for f in meta_list]
+            print(json.dumps(files, indent=2, default=str))
+            return
 
         file_display = _build_file_display(meta_list, link_map, dsid)
 
@@ -1532,7 +1559,7 @@ def _execute_ingestion(args):
     from crucible.config import get_client
     try:
         client = get_client()
-        reqs = client.ingestions.list(dsid=args.dataset_id)
+        reqs = client.ingestions.list(dataset_mfid=args.dataset_id)
 
         term.header(f"Ingestion Requests · {args.dataset_id} ({len(reqs)})")
         if not reqs:
@@ -1545,8 +1572,8 @@ def _execute_ingestion(args):
                 str(r.get('id', '-')),
                 term.status_label(r.get('status')),
                 r.get('ingestion_class') or '-',
-                term.cyan(r.get('file_id')) if r.get('file_id') else '-',
-                term.fmt_ts(r.get('created_at') or r.get('creation_time')) or '-',
+                term.cyan(r.get('file_mfid')) if r.get('file_mfid') else '-',
+                term.fmt_ts(r.get('time_created')) or '-',
             ))
         term.table(rows, ['ID', 'Status', 'Class', 'File MFID', 'Created'],
                    max_widths=[8, 12, 25, 30, 20])
@@ -1571,7 +1598,7 @@ Examples:
 """,
     )
     parser.add_argument('query', metavar='QUERY', help='Search term (min 3 chars)')
-    from .helpers import DeprecatedAliasAction
+    from .helpers import RemovedOptionAction
     parser.add_argument(
         '--project-id', '-p',
         dest='project_id',
@@ -1581,8 +1608,8 @@ Examples:
     )
     parser.add_argument(
         '--project', '-pid',
-        action=DeprecatedAliasAction,
-        deprecated_options={'--project', '-pid'},
+        action=RemovedOptionAction,
+        removed_options={'--project', '-pid'},
         replacement='--project-id',
         dest='project_id',
         default=argparse.SUPPRESS,
@@ -1727,15 +1754,21 @@ def _register_list_keywords(subparsers):
         description='Show all keywords associated with a dataset',
     )
     _add_args(parser)
+    parser.add_argument('--json', action='store_true', default=False,
+                        help='Output as JSON array')
     parser.set_defaults(func=_execute_list_keywords)
 
 
 def _execute_list_keywords(args):
-    """Execute the 'dataset get-keywords' subcommand."""
+    """Execute the 'dataset list-keywords' subcommand."""
     from crucible.config import get_client
     try:
         client = get_client()
-        keywords = client.datasets.get_keywords(args.dataset_id)
+        keywords = client.datasets.list_keywords(args.dataset_id)
+
+        if getattr(args, 'json', False):
+            print(json.dumps(keywords, indent=2, default=str))
+            return
 
         term.header(f"Keywords · {args.dataset_id} ({len(keywords)})")
         if not keywords:
@@ -1776,71 +1809,6 @@ def _execute_facets(args):
     execute_facets_command(args, 'dataset')
 
 
-def _register_list_access_groups(subparsers):
-    parser = subparsers.add_parser(
-        'list-access-groups',
-        help='Deprecated: use dataset access list',
-        description='Deprecated compatibility command. Use dataset access list.',
-        formatter_class=term.ColorHelpFormatter,
-        epilog="""
-Examples:
-    crucible dataset list-access-groups DATASET_MFID
-""",
-    )
-    parser.add_argument('dataset_id', metavar='DATASET_MFID', help='Dataset MFID')
-    parser.set_defaults(func=_execute_list_access_groups)
-
-
-def _execute_list_access_groups(args):
-    """Execute 'crucible dataset list-access-groups'."""
-    from crucible.config import get_client
-    try:
-        client = get_client()
-        groups = client.datasets.get_access_groups(args.dataset_id)
-        term.header(f"Access Groups · {args.dataset_id} ({len(groups)})")
-        if not groups:
-            print(f"  {term.dim('No access groups found.')}")
-        else:
-            for g in groups:
-                print(f"  {g}")
-    except Exception as e:
-        from .helpers import fail
-        fail("", e, args)
-
-
-def _register_add_access_group(subparsers):
-    parser = subparsers.add_parser(
-        'add-access-group',
-        help='Deprecated: use dataset access grant',
-        description='Deprecated compatibility command. Use dataset access grant.',
-        formatter_class=term.ColorHelpFormatter,
-        epilog="""
-Examples:
-    crucible dataset add-access-group DATASET_MFID my-group
-    crucible dataset add-access-group DATASET_MFID my-group --write
-""",
-    )
-    parser.add_argument('dataset_id', metavar='DATASET_MFID', help='Dataset MFID')
-    parser.add_argument('group_name', metavar='GROUP',      help='Access group name')
-    parser.add_argument('--write', action='store_true', default=False,
-                        help='Also grant write access (read access is always granted)')
-    parser.set_defaults(func=_execute_add_access_group)
-
-
-def _execute_add_access_group(args):
-    """Execute 'crucible dataset add-access-group'."""
-    from crucible.config import get_client
-    try:
-        client = get_client()
-        client.datasets.add_access_group(args.dataset_id, args.group_name,
-                                         read=True, write=args.write)
-        perms = 'read+write' if args.write else 'read'
-        term.success(f"Access group '{args.group_name}' added to {args.dataset_id} ({perms})", args)
-    except Exception as e:
-        from .helpers import fail
-        fail("", e, args)
-
-
 def _register_parsers(subparsers):
     """Register the 'dataset parsers' subcommand."""
     parser = subparsers.add_parser(
@@ -1877,10 +1845,6 @@ def _execute_list(args):
             value = getattr(args, name, None)
             if value:
                 filters[name] = value
-        if getattr(args, 'instrument_name', None):
-            from .helpers import show_warning
-            show_warning("--instrument NAME is deprecated; use --instrument-id.")
-            filters['instrument_name'] = args.instrument_name
         filters.update(listing_filter_kwargs(args))
         limit = resolve_limit(args)
         fetched = client.datasets.list(limit=limit, **page_kwargs(args), **filters)
@@ -2068,7 +2032,6 @@ def _execute_create(args):
                 ('--no-upload', args.no_upload),
                 ('--backend', args.backend is not None),
                 ('--access-note', args.access_note is not None),
-                ('--upload-protocol', args.upload_protocol is not None),
                 ('--no-ingest', args.no_ingest),
                 ('--replace', args.replace),
             )
@@ -2082,10 +2045,6 @@ def _execute_create(args):
     project_mfid = getattr(args, 'project_mfid', None)
     instrument_id = getattr(args, 'instrument_id', None)
     instrument_mfid = getattr(args, 'instrument_mfid', None)
-    if args.instrument_name and not (instrument_id or instrument_mfid):
-        from .helpers import show_warning
-        show_warning("--instrument NAME is deprecated: instrument names may repeat. "
-                     "Use --instrument-id or --instrument-mfid.")
     if project_id is None and project_mfid is None:
         project_id, project_source = resolve_project_context(args)
     else:
@@ -2201,12 +2160,12 @@ def _execute_create(args):
                 dataset_name=args.dataset_name,
                 session_name=args.session_name,
                 public=args.public,
-                instrument_name=args.instrument_name,
                 instrument_id=instrument_id,
                 instrument_mfid=instrument_mfid,
                 data_format=args.data_format,
                 data_type=args.data_type,
                 timestamp=timestamp,
+                owner=args.owner,
             )
         except Exception as e:
             from .helpers import fail
@@ -2214,7 +2173,6 @@ def _execute_create(args):
 
         if args.ingestor is not None and args.measurement is None:
             parser.measurement = None
-        parser.owner = args.owner
 
         dataset_record = parser.to_dataset()
         record_metadata = parser.scientific_metadata
@@ -2230,7 +2188,6 @@ def _execute_create(args):
             session_name=args.session_name,
             timestamp=timestamp,
             public=args.public,
-            instrument_name=args.instrument_name,
             instrument_id=instrument_id,
             instrument_mfid=instrument_mfid,
             data_format=args.data_format,
@@ -2301,21 +2258,20 @@ def _execute_create(args):
             if args.no_upload:
                 from crucible.config import get_client
                 from crucible.models import AssociatedFile
-                remote_files = [
-                    AssociatedFile(
-                        filename=Path(f).name,
-                        storage_path=str(Path(f).resolve()),
-                        storage_backend=args.backend or 'local',
-                        access_note=args.access_note,
-                    )
-                    for f in parser.files_to_upload
-                ]
-                result = get_client().datasets.create(
-                    parser.to_dataset(),
-                    scientific_metadata=parser.scientific_metadata,
-                    keywords=parser.keywords,
-                    files=remote_files,
+                remote_files = AssociatedFile.from_local_files(
+                    parser.files_to_upload,
+                    storage_backend=args.backend or 'local',
+                    access_note=args.access_note,
                 )
+                from .helpers import upload_session
+                client = get_client()
+                with upload_session(client, args):
+                    result = client.datasets.create(
+                        parser.to_dataset(),
+                        scientific_metadata=parser.scientific_metadata,
+                        keywords=parser.keywords,
+                        files=remote_files,
+                    )
             else:
                 if parser is None:
                     from crucible.config import get_client
@@ -2378,6 +2334,11 @@ def _execute_list_parents(args):
             relationship_type=args.relationship_type),
                          key=lambda ds: (ds.get('dataset_name') or '').lower())
 
+        if getattr(args, 'json', False):
+            print_more_hint(parents, resolve_limit(args), args)
+            print(json.dumps(parents, indent=2, default=str))
+            return
+
         term.header(f"Parent Datasets · {args.dataset_id} ({count_label(parents)})")
         if not parents:
             print(f"  {term.dim('No parent datasets found.')}")
@@ -2403,6 +2364,11 @@ def _execute_list_children(args):
             relationship_type=args.relationship_type),
                           key=lambda ds: (ds.get('dataset_name') or '').lower())
 
+        if getattr(args, 'json', False):
+            print_more_hint(children, resolve_limit(args), args)
+            print(json.dumps(children, indent=2, default=str))
+            return
+
         term.header(f"Child Datasets · {args.dataset_id} ({count_label(children)})")
         if not children:
             print(f"  {term.dim('No child datasets found.')}")
@@ -2425,6 +2391,11 @@ def _execute_list_samples(args):
         client = get_client()
         samples = sort_like(client.samples.list(dataset_mfid=args.dataset_id, limit=resolve_limit(args), **page_kwargs(args)),
                          key=lambda s: (s.get('sample_name') or '').lower())
+
+        if getattr(args, 'json', False):
+            print_more_hint(samples, resolve_limit(args), args)
+            print(json.dumps(samples, indent=2, default=str))
+            return
 
         term.header(f"Samples · {args.dataset_id} ({count_label(samples)})")
         if not samples:
@@ -2502,19 +2473,6 @@ Use the ingestor name with:
 
 
 def _execute_ingestors(args):
-    """Execute the 'dataset ingestors' subcommand."""
-    from crucible.constants import AVAILABLE_INGESTORS
-    ingestors = AVAILABLE_INGESTORS
-    if args.filter:
-        ingestors = [i for i in ingestors if args.filter.lower() in i.lower()]
-
-    title = f"Server-Side Ingestors ({len(ingestors)})"
-    if args.filter:
-        title += f"  [filter: {args.filter}]"
-    term.header(title)
-    if not ingestors:
-        print(f"  {term.dim('No ingestors match the filter.')}")
-    else:
-        for name in ingestors:
-            print(f"  {name}")
-    print(f"\n  {term.dim('Use with: crucible dataset create -i FILE --ingestor INGESTOR_CLASS')}")
+    """Execute the deprecated 'dataset ingestors' subcommand."""
+    from .ingestion import _execute_list_ingestors
+    _execute_list_ingestors(args)

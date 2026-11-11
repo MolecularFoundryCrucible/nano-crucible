@@ -2,7 +2,7 @@
 
 This page is the canonical command inventory for the Crucible CLI. Use `crucible <command> --help` or `crucible <resource> <action> --help` for the exact arguments, aliases, defaults, and examples supported by the installed version.
 
-Project options use `--project-id` with the conventional `-p` short alias. Sample type options use `--type` with `-t`. Older spellings remain temporarily accepted with a deprecation warning but are omitted from current examples.
+Project options use `--project-id` with the conventional `-p` short alias. Sample type options use `--type` with `-t`. Older spellings were removed in 4.0.0 and stop with the option to use instead.
 
 ## Global options
 
@@ -36,10 +36,10 @@ Running `crucible` without a command starts the interactive shell. See the [CLI 
 ### Errors
 
 - A mistyped command or flag ends with a "Did you mean ...?" suggestion.
-- API errors add a next step where one applies: `crucible config init` for a rejected key, `crucible whoami` for missing permissions, `read_timeout` for slow responses.
+- API errors add a next step where one applies: `crucible login` or `crucible config init` for a rejected key or sign-in, `crucible whoami` for missing permissions, `read_timeout` for slow responses.
 - With `--json`, the hint appears as `error.hint`.
 
-`--json` is available for dataset, sample, and instrument `list` and `get`; project `list` and `get`; generic `get`; user `get`, `list`, and `search`; service-account `get` and `list`; account `show`; and dataset, sample, project, and instrument name or metadata searches. Collection and search commands return arrays, while singleton commands return objects.
+`--json` is available for dataset, sample, project, and instrument `list`, `get`, `search`, and `search-metadata`; dataset `list-parents`, `list-children`, `list-samples`, `list-files`, `list-keywords`, and `facets`; sample `list-parents`, `list-children`, `list-datasets`, and `facets`; project and instrument `list-users`; user `get`, `list`, `search`, `list-datasets`, `list-projects`, `list-access-groups`, `list-keys`, `approve`, and `set-role`; service-account `get`, `show`, `list`, `set-role`, and `list-access-groups`; file, ingestion, `ag`, and deletion `list` and `get`; `ag mine`, `deletion list-deleted` and `get-deleted`, `file ingestion`, and `ingestion list-ingestors`; account `show`, `keys list`, and `keys create`; `print barcode`; and `whoami` and `status`. List and search commands return arrays, while single-record commands, `facets`, `whoami`, and `status` return objects. `dataset list-files` adds each file's signed `download_url`. The generic `get` command uses `-o json` (`--output json`) instead.
 
 ## Dataset commands
 
@@ -57,26 +57,27 @@ Running `crucible` without a command starts the interactive shell. See the [CLI 
 | `dataset search QUERY` | Search dataset names |
 | `dataset search-metadata QUERY` | Search scientific metadata; `search-md` is an alias |
 | `dataset link` | Link parent and child datasets; `--relationship-type` records the kind of link |
-| `dataset remove-child` | Remove a dataset parent-child link |
+| `dataset unlink -p PARENT -c CHILD` | Remove a dataset parent-child link |
 | `dataset list-parents MFID` | List parent datasets; `--relationship-type` filters by kind of link |
 | `dataset list-children MFID` | List child datasets; `--relationship-type` filters by kind of link |
-| `dataset add-sample MFID` | Link a sample to a dataset |
-| `dataset remove-sample MFID` | Unlink a sample from a dataset |
+| `dataset link-sample MFID -s SAMPLE` | Link a sample to a dataset |
+| `dataset unlink-sample MFID -s SAMPLE` | Unlink a sample from a dataset |
 | `dataset list-samples MFID` | List samples linked to a dataset |
-| `dataset add-file MFID FILE` | Upload files to an existing dataset |
+| `dataset add-file MFID -i FILE [FILE ...]` | Upload files to an existing dataset |
 | `dataset add-thumbnail MFID IMAGE` | Encode and add a local image as a dataset thumbnail |
 | `dataset list-files MFID` | List associated files and available download links |
 | `dataset download MFID` | Download dataset files with optional include and exclude patterns |
 | `dataset ingestion MFID` | Show ingestion requests for a dataset |
 | `dataset add-keyword MFID WORD` | Add a keyword |
 | `dataset list-keywords MFID` | List a dataset's keywords and usage counts |
-| `dataset list-access-groups MFID` | Deprecated compatibility command; use `dataset access list` |
-| `dataset add-access-group MFID GROUP` | Deprecated compatibility command; use `dataset access grant` |
 | `dataset access ...` | List, grant, or revoke direct access entries |
 | `dataset set-public MFID` | Make a dataset publicly viewable |
 | `dataset set-private MFID` | Remove public access from a dataset |
 | `dataset parsers` | List installed client-side parsers |
-| `dataset ingestors` | List server-advertised ingestion classes |
+| `dataset pipelines` | List postprocessing pipelines and their parameters |
+| `dataset postprocess MFID PIPELINE` | Queue a postprocessing run; `--param KEY=VALUE` (repeatable), `--params JSON`, `--idempotency-key` |
+| `dataset list-runs [MFID]` | List postprocessing runs; `--pipeline`, `--status` |
+| `dataset get-run ID` | Show a postprocessing run |
 
 Common creation example:
 
@@ -98,8 +99,8 @@ Dataset creation accepts `--project-id` or `--project-mfid` and `--instrument-id
 
 - `sample create` and `dataset create` accept `--owner USER` (username, ORCID, MFID, or email). Platform contributors and administrators can name anyone; everyone else only themselves.
 - Run on a terminal without `--input` or `--name`, `dataset create` prompts for the name, project (default: the current project), measurement, session, and timestamp. Scripts are not prompted.
-- `--type`, `--ingestor`, `--no-upload`, `--backend`, `--access-note`, `--upload-protocol`, `--replace`, and `--no-ingest` require at least one `--input` file.
-- Uploads use signed multipart uploads, falling back to the legacy route when the server has them switched off. `--upload-protocol auto|signed|legacy` overrides the `upload_protocol` setting for one run.
+- `--type`, `--ingestor`, `--no-upload`, `--backend`, `--access-note`, `--replace`, and `--no-ingest` require at least one `--input` file.
+- Uploads use signed multipart uploads.
 - On a terminal, `dataset create` and `dataset add-file` show a progress line per file.
 - `--no-ingest` uploads without requesting ingestion; request it later with `crucible file request-ingestion FILE_MFID`. It cannot be combined with `--wait` or `--ingestor`.
 - When a file exists with different content, both commands ask whether to replace it on a terminal. `--replace` replaces without asking; scripts without it fail.
@@ -109,11 +110,11 @@ Use `dataset list --project-id PROJECT --project-scope shared` to show resources
 
 `dataset list` and `sample list` use the current project when one is set and otherwise list every accessible project; `--all-projects` ignores the current project, and the table then shows each record's project. Results are fetched newest first, so `--limit N` keeps the N most recent, and printed oldest to newest so the newest row sits next to the prompt. `--sort created|updated|name` with `--direction asc|desc` changes the server ordering (`--direction` requires `--sort`); an ascending sort prints in that order. Tables are flat unless `--group-by` or the `dataset_group_by`/`sample_group_by` config key selects a field; groups keep chronological order and the group with the newest record comes last. `--json` returns records in server order.
 
-Both commands accept `--visibility all|public|private`, `--mine`, `--owner USER` (username, ORCID, or MFID, resolved to the stable identifier before the request), the time bounds `--created-after`, `--created-before`, `--modified-after`, and `--modified-before` (ISO 8601 or `YYYY-MM-DD`; a bare date covers the whole day and a time without an offset is UTC), and `--missing FIELD` (repeatable) to select records with no value for a field. Dataset listing adds `--name`, `-m/--measurement`, `--session`, `--data-format`, `--data-type`, `--instrument-id` (resolved to the instrument MFID), `--instrument-mfid`, `--sample-mfid`, and `-k/--keyword`; `--instrument NAME` is deprecated because instrument names are display text and may repeat; sample listing adds `--name`, `--type`, `--description`, and `--dataset-mfid`.
+Both commands accept `--visibility all|public|private`, `--mine`, `--owner USER` (username, ORCID, or MFID, resolved to the stable identifier before the request), the time bounds `--created-after`, `--created-before`, `--modified-after`, and `--modified-before` (ISO 8601 or `YYYY-MM-DD`; a bare date covers the whole day and a time without an offset is UTC), and `--missing FIELD` (repeatable) to select records with no value for a field. Dataset listing adds `--name`, `-m/--measurement`, `--session`, `--data-format`, `--data-type`, `--instrument-id` (resolved to the instrument MFID), `--instrument-mfid`, `--sample-mfid`, and `-k/--keyword`; sample listing adds `--name`, `--type`, `--description`, and `--dataset-mfid`.
 
 `dataset facets FIELD` and `sample facets FIELD` count how many records fall into each value of a grouping field without fetching the records. Dataset fields are `session`, `measurement`, `data_format`, `owner`, `instrument`, and `project`; sample fields are `sample_type`, `owner`, and `project`. Both accept `--sort value|label|count`, `--direction`, `--limit`, `--json`, and the same project, visibility, ownership, time, exact-match, and `--missing` filters as the matching list command. In the interactive shell, `-m/--measurement`, `--session`, `--data-format`, and `--type` complete from these counts, scoped to the `--project-id` typed on the line or else the current project. These values and project IDs match fuzzily, so `xt` offers `xrd-titan`; commands, flags, fixed choices, and MFIDs complete by prefix.
 
-Fields normally updated through `dataset update --set` include `dataset_name`, `measurement`, `data_type`, `session_name`, `data_format`, and `timestamp`. Use `set-public` or `set-private` for public visibility, `reassign-project` for project changes, and `transfer-ownership` for owner changes. Instrument reassignment remains unavailable and is not exposed as ordinary metadata editing.
+Fields normally updated through `dataset update --set` include `dataset_name`, `measurement`, `data_type`, `session_name`, `data_format`, and `timestamp`. Use `set-public` or `set-private` for public visibility, `reassign-project` for project changes, and `transfer-ownership` for owner changes. The CLI has no instrument-assignment command; assign or change a dataset's instrument from Python with `client.datasets.assign_instrument()`.
 
 ## Sample commands
 
@@ -130,11 +131,11 @@ Fields normally updated through `dataset update --set` include `dataset_name`, `
 | `sample search QUERY` | Search sample names |
 | `sample search-metadata QUERY` | Search scientific metadata; `search-md` is an alias |
 | `sample link` | Link parent and child samples; `--relationship-type` records the kind of link |
-| `sample remove-child` | Remove a sample parent-child link |
+| `sample unlink -p PARENT -c CHILD` | Remove a sample parent-child link |
 | `sample list-parents MFID` | List parent samples; `--relationship-type` filters by kind of link |
 | `sample list-children MFID` | List child samples; `--relationship-type` filters by kind of link |
-| `sample add-dataset MFID` | Link a dataset to a sample |
-| `sample remove-dataset MFID` | Unlink a dataset from a sample |
+| `sample link-dataset MFID -d DATASET` | Link a dataset to a sample |
+| `sample unlink-dataset MFID -d DATASET` | Unlink a dataset from a sample |
 | `sample list-datasets MFID` | List datasets linked to a sample |
 | `sample access ...` | List, grant, or revoke direct access entries |
 | `sample set-public MFID` | Make a sample publicly viewable |
@@ -198,7 +199,6 @@ The `access grant` commands accept `viewer`, `contributor`, `editor`, or `admin`
 | `instrument set-public MFID` | Make an instrument publicly viewable |
 | `instrument set-private MFID` | Remove public access from an instrument |
 
-The deprecated `publish` and `unpublish` command names remain temporarily available as aliases for `set-public` and `set-private`.
 
 Instrument commands accept an MFID or the instrument slug, which ignores case. An instrument has two separate kinds of access. Its owner and maintainers manage the instrument record: `editor` edits details, `admin` also changes status, binds service accounts, and grants access. Maintainer roles never grant access to datasets recorded with the instrument; only bound service accounts reach those, at `contributor`. Member commands check the instrument's `can_manage_access` capability before sending a change.
 
@@ -210,17 +210,18 @@ Most user-management commands require administrator permissions.
 |---|---|
 | `user get USER` | Show a user by ORCID, MFID, username, or email |
 | `user search QUERY` | Search names and usernames |
-| `user list [--q QUERY] [--first-name NAME] [--last-name NAME] [--username USERNAME] [--email EMAIL] [--platform-role ROLE] [--service-account\\|--human] [--sort FIELD] [--direction DIR] [--exact]` | List users; administrators see email and platform roles |
+| `user list [--q QUERY] [--first-name NAME] [--last-name NAME] [--username USERNAME] [--email EMAIL] [--platform-role ROLE] [--service-account\\|--human] [--sort FIELD] [--direction DIR] [--exact] [--pending]` | List users; administrators see email and platform roles, and `--pending` lists accounts waiting for approval |
 | `user create` | Create a user |
 | `user update USER` | Update a user record |
 | `user edit USER` | Edit a user record interactively |
 | `user set-role USER ROLE` | Change a human user's platform role (`none`, `contributor`, `admin`); human platform admins only |
-| `user revoke-keys USER [--yes]` | Revoke every API key held by a user; admin only |
+| `user list-keys USER [--inactive]` | List a user's API keys, never the keys themselves; admin only |
+| `user revoke-keys USER [--key ID] [--yes]` | Revoke every API key held by a user, or one with `--key`; admin only |
+| `user approve USER` | Let in an account waiting for approval; admin only |
+| `user reject USER [--yes]` | Delete an account waiting for approval, freeing its username and login; admin only |
 | `user list-datasets USER [--limit N\|--all]` | List datasets accessible to a user |
 | `user check-access USER DATASET_MFID` | Show a user's effective dataset access role |
 | `user list-access-groups USER` | List a user's access groups |
-| `user add-access-group USER GROUP` | Deprecated; use the typed project or instrument membership command |
-| `user remove-access-group USER GROUP` | Deprecated; use the typed project or instrument membership command |
 | `user list-projects USER [--role ROLE] [--sort FIELD] [--direction DIR]` | List the projects USER is a member of with USER's role in each, optionally filtered by role (repeatable) and sorted by `project_id`, `title`, `created`, or `updated` |
 
 Human users require a username and may optionally supply an ORCID during creation.
@@ -266,21 +267,21 @@ Service-account creation uses the same username rules and interactive validation
 | `sa show USER` | Alias for `sa get` |
 | `sa set-role USER ROLE` | Set a service account's platform role |
 | `sa list-access-groups USER` | List access groups for a service account |
-| `sa add-access-group USER GROUP` | Deprecated; use `project add-user` or `instrument bind-sa` |
-| `sa remove-access-group USER GROUP` | Deprecated; use `project remove-user` or `instrument unbind-sa` |
 
 ## Access-group commands
 
-`ag` is an alias for `access-group`.
+`ag` is an alias for `access-group`. Project editors and above review join requests to their projects; platform administrators review all of them.
 
 | Command | Description |
 |---|---|
-| `ag request GROUP` | Request to join an access group or project |
+| `ag request PROJECT` | Request to join a project |
 | `ag mine` | List the current user's join requests |
-| `ag list` | List join requests for review |
+| `ag list` | List join requests you may review; `--scope`, `--project`, `--status` (repeatable), `--search`, `--sort` |
 | `ag get ID` | Show a join request |
-| `ag approve ID...` | Approve pending join requests |
+| `ag approve ID...` | Approve pending join requests; `--role` sets the granted role (default contributor) |
 | `ag reject ID...` | Reject pending join requests |
+| `ag withdraw ID...` | Withdraw your own pending join requests |
+
 
 ## Account commands
 
@@ -288,13 +289,18 @@ These commands operate on the currently authenticated account and do not require
 
 | Command | Description |
 |---|---|
+| `login [--device\|--browser] [--no-open]` | Sign in with a browser; `--device` approves a code on any device |
+| `logout` | End and delete the stored sign-in for the configured API |
 | `account show` | Show the current profile |
 | `account update` | Update profile fields |
 | `account edit` | Edit the current profile interactively |
-| `account api-key` | Show the current API key |
+| `account keys list [--inactive]` | List your API keys, never the keys themselves |
+| `account keys create NAME [--expires DATE]` | Create an API key and show it once; needs a recent browser sign-in, not an API key |
+| `account keys rename ID NAME` | Rename one of your API keys |
+| `account keys revoke ID [--yes]` | Revoke one of your API keys |
 | `account verify` | Check API-key validity and expiry |
 
-Treat output from `account api-key` as a secret. Do not include it in logs, issue reports, or agent prompts.
+Treat output from `account keys create` as a secret. Do not include it in logs, issue reports, or agent prompts.
 
 ## Deletion commands
 
@@ -349,29 +355,52 @@ Configuration values can come from environment variables, the platform-specific 
 | Command | Description |
 |---|---|
 | `status` | Show endpoint reachability, deployment provenance, database readiness, and authentication identity |
-| `whoami` | Show the identity, platform role, privilege mode, and capabilities of the configured key |
+| `whoami` | Show the identity, platform role, privilege mode, and capabilities of the active credential, and whether it is an API key or a sign-in and where it came from |
 | `get MFID` | Show a dataset, sample, project, or instrument after detecting its resource type |
 | `edit MFID` | Edit a dataset, sample, or instrument after detecting its type |
 | `download MFID` | Save a record and, for datasets, associated files |
 | `link` | Link parent-child resources or associate a dataset and sample; `--relationship-type` applies to parent-child links only |
 | `unlink MFID1 MFID2` | Remove a resource relationship |
 | `tree MFID` | Display connected ancestors and descendants |
-| `open [ID]` | Open the Graph Explorer or print its URL |
+| `open [ID]` | Open the Crucible Hub, or a resource's Hub page, or print its URL |
 | `qr ID` | Print a terminal QR code for an MFID |
 | `print barcode PRINTER_ID MFID NAME` | Publish a barcode print job and wait for confirmation it printed; exits non-zero unless the printer confirms success |
 | `completion [SHELL]` | Generate and install completion for bash, zsh, fish, or tcsh |
-| `upload ...` | Deprecated upload command; use `dataset create` |
 
-## Deprecated aliases
+## Renamed in 4.0.0
 
-| Old form | Current form |
+The old names still work and print a warning naming the new one; they are left out of help and completion.
+
+| Old | New |
 |---|---|
-| `dataset update-metadata` | `dataset update --metadata` |
-| `dataset get-keywords` | `dataset list-keywords` |
-| `sample link-dataset` | `sample add-dataset` |
-| `user get-access-groups` | `user list-access-groups` |
-| `user get-projects` | `user list-projects` |
-| `project get-users` | `project list-users` |
-| `project get PROJECT --members` | `project get PROJECT --include-members` |
+| `dataset add-sample`, `dataset remove-sample` | `dataset link-sample`, `dataset unlink-sample` |
+| `dataset remove-child PARENT -c CHILD` | `dataset unlink -p PARENT -c CHILD` |
+| `sample add-dataset`, `sample remove-dataset` | `sample link-dataset`, `sample unlink-dataset` |
+| `sample remove-child PARENT -c CHILD` | `sample unlink -p PARENT -c CHILD` |
+| `dataset ingestors` | `ingestion list-ingestors` |
 
-Deprecated forms remain available for compatibility but emit a warning. New documentation and scripts should use the current forms.
+## Removed in 4.0.0
+
+These commands and options stop with the form to use instead.
+
+| Removed | Use instead |
+|---|---|
+| `upload ...` | `dataset create -i FILE ...` |
+| `account api-key` | `account keys create NAME` |
+| `dataset list-access-groups`, `dataset add-access-group` | `dataset access list`, `dataset access grant` |
+| `user add-access-group`, `user remove-access-group` | `project add-user`/`remove-user`, or `instrument bind-sa`/`unbind-sa` |
+| `sa add-access-group`, `sa remove-access-group` | `instrument bind-sa`/`unbind-sa`, or `project add-user`/`remove-user` |
+| `RESOURCE publish`, `RESOURCE unpublish` | `RESOURCE set-public`, `RESOURCE set-private` |
+| `dataset update-metadata`, `dataset get-keywords` | `dataset update --metadata`, `dataset list-keywords` |
+| `user get-access-groups`, `user get-projects`, `project get-users` | `user list-access-groups`, `user list-projects`, `project list-users` |
+| `--orcid`, `--username`, `--email` on `user get`/`edit` | the `USER` argument |
+| `--unique-id`, `--username` on `sa` commands | the `SA` argument |
+| `--orcid`, `--email`, `--username` on `project add-user`/`remove-user` | `--user` |
+| `-pid`, `-id`, `--project` (as project ID) | `--project-id` / `-p` |
+| `--instrument NAME` | `--instrument-id` or `--instrument-mfid` |
+| `project get --members` | `--include-members` |
+| `instrument get --by-id` | drop it; MFIDs and instrument IDs are told apart automatically |
+| `sample update --public`/`--no-public` | `sample set-public`/`set-private` |
+| `--upload-protocol` | drop it; every upload uses signed multipart |
+| `ag list --group` | `--project` |
+| `CRUCIBLE_CURRENT_PROJECT` | `--project-id`, or `use PROJECT_ID` in the shell |

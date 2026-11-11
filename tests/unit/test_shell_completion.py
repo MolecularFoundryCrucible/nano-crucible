@@ -439,3 +439,48 @@ def test_facet_values_match_fuzzily():
 
     assert _texts(completer, 'dataset list -m xd') == ['XRD ']
     assert _texts(completer, 'dataset list -m stm') == ['4D-STEM ']
+
+
+def make_account_completer():
+    from crucible.cli import account, config as config_cmd
+    parser = argparse.ArgumentParser()
+    subparsers = parser.add_subparsers(dest='resource')
+    for module in (account, config_cmd, user):
+        module.register_subcommand(subparsers)
+    return _CrucibleCompleter(parser, state={})
+
+
+def test_nested_subcommands_complete_and_then_their_flags():
+    completer = make_account_completer()
+
+    assert complete(completer, 'account keys ') == ['list', 'create', 'rename', 'revoke']
+    assert complete(completer, 'account keys cr') == ['create']
+    assert '--expires' in complete(completer, 'account keys create laptop --')
+    assert '--inactive' in complete(completer, 'account keys list --')
+
+
+def test_deprecated_subcommands_are_not_suggested():
+    completer = make_account_completer()
+
+    offered = complete(completer, 'account ')
+
+    assert 'keys' in offered
+    assert 'api-key' not in offered
+
+
+def test_positional_choices_complete():
+    completer = make_account_completer()
+
+    assert complete(completer, 'config get hub') == ['hub_url']
+    assert 'hub_url' in complete(completer, 'config unset ')
+
+
+def test_hidden_subcommands_are_not_suggested():
+    completer = make_account_completer()
+    completer.hidden = {'user list-keys', 'user revoke-keys'}
+
+    offered = complete(completer, 'user ')
+
+    assert 'list-keys' not in offered
+    assert 'revoke-keys' not in offered
+    assert 'get' in offered

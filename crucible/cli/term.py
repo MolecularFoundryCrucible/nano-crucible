@@ -120,25 +120,42 @@ def orcid_link(orcid: str) -> str | None:
     return identifier_link(orcid, f"https://orcid.org/{orcid}")
 
 
-def user_id_link(user_id: str) -> str | None:
-    """Render a canonical user ID linked to its Crucible Explorer profile."""
+def user_id_link(user_id: str | None) -> str | None:
+    """Render a canonical user ID linked to its Crucible Hub profile."""
     if not user_id:
         return None
     from .helpers import user_explorer_url
     return identifier_link(user_id, user_explorer_url(user_id))
 
 
-def user_link(label: str, user_id: str) -> str | None:
-    """Link a user label to its Crucible Explorer profile."""
+def user_link(label: str | None, user_id: str | None) -> str | None:
+    """Link a user label to its Crucible Hub profile."""
     if not label:
         return None
     from .helpers import user_explorer_url
     return navigation_link(label, user_explorer_url(user_id))
 
 
-def user_id_label(user_id: str) -> str:
+def user_id_label(user_id: str | None) -> str:
     """Return the display label for a canonical user identifier."""
     return "ORCID" if is_orcid(user_id) else "User ID"
+
+
+def print_user_ids(printer, user: dict) -> None:
+    """Print a person's unique_id and, separately, their linked ORCID.
+
+    Servers that predate the ``orcid`` field get one row labelled by the
+    unique_id's shape instead.
+    """
+    uid = user.get('unique_id')
+    if 'orcid' not in user:
+        printer(user_id_label(uid), user_id_link(uid))
+        return
+    printer("User ID", user_id_link(uid))
+    orcid = user.get('orcid')
+    if orcid:
+        verified = f"  {dim('(verified)')}" if user.get('orcid_verified') else ''
+        printer("ORCID", f"{orcid_link(orcid)}{verified}")
 
 
 def fmt_name(person: dict, default: str | None = None, fallback_username: bool = True) -> str | None:
@@ -166,11 +183,11 @@ def fmt_owner(resource: dict) -> str | None:
     """Format the owner of a resource.
 
     If include_owner was used and the owner object is present, returns
-    'F. Lastname (@username)' linked to the Crucible Explorer profile. Falls
+    'F. Lastname (@username)' linked to the Crucible Hub profile. Falls
     back to the canonical owner identifier.
     """
     owner = resource.get('owner')
-    owner_id = resource.get('owner_orcid')
+    owner_id = (owner or {}).get('unique_id') or resource.get('owner_orcid')
     if owner:
         name = fmt_name(owner, default=owner_id or '-')
         uname = owner.get('username')
@@ -336,6 +353,21 @@ def _rel(delta) -> str:
     return f"{days // 365}y ago"
 
 
+def _local_datetime(text: str) -> datetime:
+    """Parse an API ISO 8601 timestamp (UTC when it has no offset) into local time.
+
+    A bare date has no instant to convert, so it stays on the same calendar day.
+    """
+    if text[-1:] in ('Z', 'z'):
+        text = text[:-1] + '+00:00'
+    dt = datetime.fromisoformat(text)
+    if len(text) == 10:
+        return dt.astimezone()
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone()
+
+
 def fmt_ts(ts) -> str | None:
     """
     Format a timestamp for display.
@@ -357,10 +389,7 @@ def fmt_ts(ts) -> str | None:
 
     # ── Strategy 1: ISO 8601 ─────────────────────────────────────────────────
     try:
-        dt = datetime.fromisoformat(s)
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
-        dt = dt.astimezone()  # convert to local timezone
+        dt = _local_datetime(s)
         abs_str = dt.strftime('%Y-%m-%d %H:%M')
     except (ValueError, TypeError):
         pass
@@ -395,8 +424,7 @@ def fmt_date(ts) -> str:
     if not ts:
         return '-'
     try:
-        dt = datetime.fromisoformat(str(ts).strip())
-        return dt.strftime('%Y-%m-%d')
+        return _local_datetime(str(ts).strip()).strftime('%Y-%m-%d')
     except (ValueError, TypeError):
         return str(ts)
 
@@ -411,13 +439,18 @@ _STATUS_COLORS = {
     'ingested': green,
     'rejected': red,
     'failed':   red,
+    'withdrawn': dim,
+    'requested': yellow,
+    'running':  yellow,
+    'completed': green,
 }
 
 
 def status_label(status: str) -> str:
     """Colorize a status string using the shared request/ingestion status palette.
 
-    Covers: pending (yellow), approved/complete/ingested (green), rejected/failed (red).
+    Covers: pending/requested/running (yellow), approved/complete/completed/ingested
+    (green), rejected/failed (red), withdrawn (dim).
     Unrecognized statuses are returned unstyled. Returns '-' for falsy input.
     """
     if not status:
@@ -437,7 +470,7 @@ def fmt_size(size) -> str | None:
     if size is None:
         return None
     try:
-        n = int(size)
+        n: float = int(size)
     except (ValueError, TypeError):
         return str(size)
     for unit in ('B', 'KB', 'MB', 'GB', 'TB'):

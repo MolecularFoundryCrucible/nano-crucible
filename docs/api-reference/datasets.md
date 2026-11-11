@@ -29,15 +29,13 @@ File operations are also available via `client.files` (by MFID) and ingestion vi
         - update_thumbnail
         - delete_thumbnail
         - add_keyword
-        - get_keywords
+        - list_keywords
         - link_sample
         - unlink_sample
         - link
         - unlink
         - list_parents
         - list_children
-        - get_access_groups
-        - add_access_group
         - list_access
         - set_access
         - revoke_access
@@ -46,4 +44,4 @@ File operations are also available via `client.files` (by MFID) and ingestion vi
         - transfer_ownership
         - reassign_project
         - assign_instrument
-        - graph
+        - postprocess

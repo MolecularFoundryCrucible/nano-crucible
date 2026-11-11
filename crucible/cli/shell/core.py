@@ -26,7 +26,7 @@ from .builtins import find_builtin
 try:
     from .completer import CrucibleCompleter
 except ImportError:
-    CrucibleCompleter = None
+    CrucibleCompleter = None  # type: ignore[assignment,misc]
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +50,7 @@ class CrucibleShell:
 
     def run(self):
         """Start the interactive shell."""
-        if CrucibleCompleter:
+        if CrucibleCompleter is not None:
             self._run_prompt_toolkit()
         else:
             self._run_readline()
@@ -193,10 +193,16 @@ class CrucibleShell:
             print(f"Pending: {'; '.join(parts)}.")
 
     def _hidden_commands(self):
-        """Top-level commands this caller cannot use, kept out of completion."""
+        """Commands this caller cannot use, kept out of completion.
+
+        Entries are top-level names, or "resource subcommand" pairs.
+        """
         hidden = set()
         if not self._can_manage_service_accounts():
             hidden.update({'sa', 'service-account'})
+        if not self.client.can_elevate:
+            hidden.update({'user create', 'user set-role', 'user list-keys', 'user revoke-keys',
+                           'user approve', 'user reject', 'deletion delete'})
         return hidden
 
     def _can_manage_service_accounts(self):
@@ -390,13 +396,6 @@ class CrucibleShell:
 
     def _activate_project(self, project_id, title=None):
         """Persist a project selection and apply it to the running shell."""
-        if os.environ.get('CRUCIBLE_CURRENT_PROJECT') is not None:
-            from ..helpers import show_warning
-            show_warning(
-                "CRUCIBLE_CURRENT_PROJECT controls the current project. "
-                "Unset it before using the shell project selector."
-            )
-            return False
         from ..config import set_config_value
         set_config_value('current_project', project_id)
         self.state['project'] = project_id
@@ -443,6 +442,8 @@ class CrucibleShell:
                 begin_page(page['start'], page.get('total')) if page else begin_page()
                 try:
                     from ..pager import paged
+                    from ..stepup import install_for
+                    install_for(args)
                     with paged(args):
                         args.func(args)
                     if getattr(args, 'pageable', False):
@@ -502,6 +503,14 @@ class CrucibleShell:
                 pass
             self.refresh()
 
+        if words and words[0] in ('login', 'logout'):
+            try:
+                self.rebind_client()
+            except ValueError as exc:
+                print(exc)
+                return True
+            self.refresh()
+
         return True
 
     def _run_prompt_toolkit(self):
@@ -522,12 +531,6 @@ class CrucibleShell:
         self._init_state(info)
 
         print_welcome(self._welcome_rows(info), shutil.get_terminal_size((80, 24)).columns)
-        if self.state.get('project_source') == 'environment':
-            from ..helpers import show_warning
-            show_warning(
-                "CRUCIBLE_CURRENT_PROJECT is controlling the current project and is deprecated. "
-                "Use 'use PROJECT_ID' to save a selection after unsetting the environment variable."
-            )
 
         self.completer = CrucibleCompleter(
             self.parser,

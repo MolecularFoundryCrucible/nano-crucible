@@ -8,5 +8,10 @@ Access via `client.account`. Self-service operations — no admin required.
         - whoami
         - profile
         - update_profile
-        - api_key
+        - create_api_key
+        - list_api_keys
+        - rename_api_key
+        - revoke_api_key
         - verify
+        - join_requests
+        - sync_projects

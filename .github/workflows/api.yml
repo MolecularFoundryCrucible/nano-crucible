@@ -1,0 +1,36 @@
+name: API checks
+
+# Compares the client's API calls with the staging OpenAPI document, kept
+# apart from Tests so a staging outage never blocks a push or a release.
+# Live API tests belong to the crucible-tests repository.
+on:
+  push:
+    branches:
+      - dev
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+    inputs:
+      api_url:
+        description: "API to test against"
+        type: string
+        default: "https://crucible.lbl.gov/testapi-staging"
+
+permissions:
+  contents: read
+
+jobs:
+  routes:
+    name: Client routes exist on staging
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Compare client calls with the staging OpenAPI document
+        run: python scripts/check_api_routes.py "${API_URL}/openapi.json"
+        env:
+          API_URL: ${{ inputs.api_url || 'https://crucible.lbl.gov/testapi-staging' }}

@@ -3,7 +3,7 @@
 """
 Ingestion request operations for the Crucible API.
 
-Access via: client.ingestion.list(), client.ingestion.get(), etc.
+Access via: client.ingestions.list(), client.ingestions.get(), etc.
 """
 
 import logging
@@ -16,35 +16,50 @@ from ..constants import DEFAULT_LIMIT
 logger = logging.getLogger(__name__)
 
 
+def _one_of(name, value, alias, alias_value):
+    if alias_value is None:
+        return value
+    if value is not None and value != alias_value:
+        raise ValueError(f"{name} and {alias} name the same filter; pass only one")
+    return alias_value
+
+
 class IngestionOperations(BaseResource):
     """Operations on ingestion requests (/ingestion_requests endpoints).
 
-    Access via: client.ingestion.list(), client.ingestion.get(), etc.
+    Access via: client.ingestions.list(), client.ingestions.get(), etc.
     """
 
-    def list(self, dsid: Optional[str] = None,
-             file_id: Optional[str] = None,
+    def list(self, dataset_mfid: Optional[str] = None,
+             file_mfid: Optional[str] = None,
              limit: int = DEFAULT_LIMIT,
              offset: int = 0,
-             cursor: Optional[str] = None) -> List[Dict]:
+             cursor: Optional[str] = None,
+             *,
+             dsid: Optional[str] = None,
+             file_id: Optional[str] = None) -> List[Dict]:
         """List ingestion requests, optionally filtered by dataset or file.
 
         Args:
-            dsid: Filter by dataset MFID
-            file_id: Filter by file MFID
+            dataset_mfid: Filter by dataset MFID
+            file_mfid: Filter by file MFID
             limit: Maximum number of results
             offset: Starting position in the full result set (default: 0).
             cursor: Continuation token from a previous result's next_cursor;
                 the listing resumes there.
+            dsid: Same as dataset_mfid.
+            file_id: Same as file_mfid.
 
         Returns:
             List[Dict]: IngestionRequest records
         """
+        dataset_mfid = _one_of('dataset_mfid', dataset_mfid, 'dsid', dsid)
+        file_mfid = _one_of('file_mfid', file_mfid, 'file_id', file_id)
         params = {}
-        if dsid:
-            params['dataset_mfid'] = dsid
-        if file_id:
-            params['file_mfid'] = file_id
+        if dataset_mfid:
+            params['dataset_mfid'] = dataset_mfid
+        if file_mfid:
+            params['file_mfid'] = file_mfid
         return self._paginate('/ingestion_requests', params, limit=limit, offset=offset, cursor=cursor)
 
     def get(self, request_id: str) -> Dict:

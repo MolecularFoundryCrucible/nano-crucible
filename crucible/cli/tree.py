@@ -30,7 +30,7 @@ def register_subcommand(subparsers):
         description=(
             'Display ancestor chains and the full descendant tree of a dataset or sample. '
             'The queried entity is highlighted in green. Node IDs are clickable links to '
-            'the Graph Explorer. By default only nodes of the same type are shown; '
+            'the Crucible Hub. By default only nodes of the same type are shown; '
             'use --all to mix types.'
         ),
         formatter_class=term.ColorHelpFormatter,
@@ -94,10 +94,10 @@ def _find_path(start, target, adj):
 
 
 def _explorer_url(base_url, project_id, entity_type, uid):
-    if not (base_url and project_id and uid):
+    if not (base_url and uid):
         return None
     dtype = 'samples' if entity_type == 'sample' else 'datasets'
-    return f"{base_url.rstrip('/')}/{project_id}/{dtype}/{uid}"
+    return f"{base_url.rstrip('/')}/{dtype}/{uid}"
 
 
 # ── Rendering ─────────────────────────────────────────────────────────────────
@@ -153,8 +153,8 @@ def execute(args):
     try:
         client     = get_client()
         graph_data = client.graphs.get(args.resource_id, recursive=True)
-    except Exception as e:
-        logger.error(f"Error fetching graph: {e}")
+    except Exception as exc:
+        logger.error(f"Error fetching graph: {exc}")
         if getattr(args, 'debug', False):
             import traceback; traceback.print_exc()
         sys.exit(1)
@@ -167,14 +167,8 @@ def execute(args):
 
     nodes_by_id = {n['id']: n for n in nodes}
 
-    # Fetch root entity once for project_id (needed for explorer URLs)
     project_id = None
-    try:
-        root_ent   = client.get(args.resource_id, include_datasets=False)
-        project_id = root_ent.get('project_id')
-    except Exception:
-        pass
-    base_url = _cfg.graph_explorer_url if project_id else None
+    base_url = _cfg.hub_url
 
     # Raw adjacency + in-degree
     raw_adj    = {n['id']: [] for n in nodes}

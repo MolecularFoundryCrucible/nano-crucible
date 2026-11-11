@@ -56,7 +56,7 @@ ds = client.datasets.get("0tkn2knjast3h0008nyq9zps2c", include_metadata=True)
 Full-text search across all scientific metadata in your accessible datasets:
 
 ```python
-results = client.datasets.search_scientific_metadata("temperature", limit=20)
+results = client.datasets.search_metadata("temperature", limit=20)
 ```
 
 The search is ranked and operates across all key names and string values in the metadata store.
@@ -74,12 +74,12 @@ crucible dataset update DATASET_MFID --metadata '{"pressure_bar": 1.0}'
 crucible dataset update DATASET_MFID --metadata '{"new_key": "value"}' --overwrite
 
 # Search
-crucible dataset search "temperature" --limit 10
+crucible dataset search-metadata "temperature" --limit 10
 
 # Get a dataset record including metadata
 crucible dataset get DATASET_MFID --include-metadata
 # or as JSON:
-crucible dataset get DATASET_MFID -o json
+crucible dataset get DATASET_MFID --json
 ```
 
 ## Tips

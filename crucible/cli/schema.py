@@ -34,7 +34,7 @@ DATASET_FIELDS: List[FieldDef] = [
     FieldDef('project_id',                 'Project',       editable=False, verbose=False),
     FieldDef('timestamp',                  'Timestamp',     editable=True,  verbose=False),
     FieldDef('public',                     'Public',        editable=False, verbose=True),
-    FieldDef('owner_orcid',                'Owner ORCID',   editable=False, verbose=True),
+    FieldDef('owner_orcid',                'Owner ID',      editable=False, verbose=True),
     FieldDef('data_format',                'Data Format',   editable=True,  verbose=True),
     FieldDef('size',                       'Size',          editable=False, verbose=True),
     FieldDef('creation_time',              'Created',       editable=False, verbose=True),
@@ -49,7 +49,7 @@ SAMPLE_FIELDS: List[FieldDef] = [
     FieldDef('project_id',                 'Project',       editable=False, verbose=False),
     FieldDef('timestamp',                  'Timestamp',     editable=True,  verbose=False),
     FieldDef('description',                'Description',   editable=True,  verbose=False),
-    FieldDef('owner_orcid',                'Owner ORCID',   editable=False, verbose=True),
+    FieldDef('owner_orcid',                'Owner ID',      editable=False, verbose=True),
     FieldDef('creation_time',              'Created',       editable=False, verbose=True),
     FieldDef('modification_time',          'Modified',      editable=False, verbose=True),
 ]
@@ -76,7 +76,7 @@ PROJECT_FIELDS: List[FieldDef] = [
     FieldDef('title',                      'Title',         editable=True,  verbose=False),
     FieldDef('organization',               'Organization',  editable=True,  verbose=False),
     FieldDef('status',                     'Status',        editable=True,  verbose=False),
-    FieldDef('project_lead_orcid',         'Lead ORCID',    editable=False, verbose=True),
+    FieldDef('project_lead_orcid',         'Lead ID',       editable=False, verbose=True),
     FieldDef('creation_time',              'Created',       editable=False, verbose=True),
     FieldDef('modification_time',          'Modified',      editable=False, verbose=True),
 ]

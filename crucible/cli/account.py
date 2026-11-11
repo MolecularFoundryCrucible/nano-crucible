@@ -18,7 +18,7 @@ from . import term
 def register_subcommand(subparsers):
     parser = subparsers.add_parser(
         'account',
-        help='Manage your own account (show, edit, update, api-key, verify)',
+        help='Manage your own account (show, edit, update, keys, verify)',
         description='Self-service account management. No admin required.',
     )
     sub = parser.add_subparsers(dest='account_command', metavar='COMMAND')
@@ -27,7 +27,9 @@ def register_subcommand(subparsers):
     _register_show(sub)
     _register_edit(sub)
     _register_update(sub)
-    _register_api_key(sub)
+    _register_keys(sub)
+    from .helpers import add_removed_command
+    add_removed_command(sub, 'api-key', "'crucible account keys create NAME'")
     _register_verify(sub)
 
 
@@ -83,13 +85,160 @@ Examples:
     parser.set_defaults(func=_execute_update)
 
 
-def _register_api_key(subparsers):
+def _register_keys(subparsers):
+    from .helpers import add_limit_arguments
     parser = subparsers.add_parser(
-        'api-key',
-        help='Show your API key',
-        description='Display the API key associated with your account.',
+        'keys',
+        help='List, create, rename, or revoke your API keys',
+        description='Manage your API keys. A key is shown only once, when it is created.',
+        formatter_class=term.ColorHelpFormatter,
+        epilog="""
+Examples:
+    crucible account keys list
+    crucible account keys list --inactive
+    crucible account keys create laptop --expires 2027-06-30
+    crucible account keys rename 12 "cluster jobs"
+    crucible account keys revoke 12
+""",
     )
-    parser.set_defaults(func=_execute_api_key)
+    sub = parser.add_subparsers(dest='keys_command', metavar='COMMAND')
+    sub.required = True
+
+    list_parser = sub.add_parser('list', help='List your API keys',
+                                 formatter_class=term.ColorHelpFormatter)
+    list_parser.add_argument('--inactive', action='store_true', default=False,
+                             help='List expired and revoked keys instead of active ones')
+    add_limit_arguments(list_parser, 'keys')
+    list_parser.add_argument('--json', action='store_true', default=False, help='Output as JSON')
+    list_parser.set_defaults(func=_execute_keys_list)
+
+    create = sub.add_parser(
+        'create', help='Create an API key (needs a recent sign-in, not an API key)',
+        description='Create an API key and show it once. Creating a key needs a recent '
+                    'sign-in to the Crucible Hub; an API key is refused.',
+        formatter_class=term.ColorHelpFormatter)
+    create.add_argument('name', metavar='NAME', help='What the key is for, such as a machine or script')
+    create.add_argument('--expires', metavar='DATE', default=None,
+                        help='Expiry date or time, at most a year away (default: a year); '
+                             'UTC unless a zone is given')
+    create.add_argument('--json', action='store_true', default=False, help='Output as JSON')
+    create.set_defaults(func=_execute_keys_create)
+
+    rename = sub.add_parser('rename', help='Rename an API key',
+                            formatter_class=term.ColorHelpFormatter)
+    rename.add_argument('key_id', metavar='ID', type=int, help='Key ID from `crucible account keys list`')
+    rename.add_argument('name', metavar='NAME', help='New name')
+    rename.set_defaults(func=_execute_keys_rename)
+
+    revoke = sub.add_parser('revoke', help='Revoke an API key',
+                            formatter_class=term.ColorHelpFormatter)
+    revoke.add_argument('key_id', metavar='ID', type=int, help='Key ID from `crucible account keys list`')
+    revoke.add_argument('-y', '--yes', action='store_true', default=False,
+                        help='Skip the confirmation prompt')
+    revoke.set_defaults(func=_execute_keys_revoke)
+
+
+def print_key_list(keys, title: str, args) -> None:
+    """Print API key records as a table, or as JSON with --json."""
+    import json
+    from .helpers import count_label, print_more_hint, resolve_limit
+    if getattr(args, 'json', False):
+        print_more_hint(keys, resolve_limit(args), args)
+        print(json.dumps(keys, indent=2, default=str))
+        return
+    term.header(f"{title} ({count_label(keys)})")
+    if not keys:
+        print(f"  {term.dim('No keys found.')}")
+        return
+    rows = [(
+        str(key.get('id')),
+        key.get('name') or '-',
+        f"...{key['last4']}" if key.get('last4') else '-',
+        key.get('status') or '-',
+        term.fmt_ts(key.get('created_at')) or '-',
+        term.fmt_ts(key.get('last_used_at')) or '-',
+        term.fmt_ts(key.get('revoked_at') or key.get('expires_at')) or '-',
+    ) for key in keys]
+    ends = 'Ended' if getattr(args, 'inactive', False) else 'Expires'
+    term.table(rows, ['ID', 'Name', 'Key', 'Status', 'Created', 'Last used', ends],
+               max_widths=[8, 30, 8, 8, 20, 20, 20])
+    print_more_hint(keys, resolve_limit(args), args)
+
+
+def _parse_expiry(text):
+    from datetime import timezone
+    from dateutil import parser as dateparser
+    try:
+        when = dateparser.isoparse(text)
+    except ValueError:
+        raise ValueError(f"--expires {text!r} is not an ISO date or time, such as 2027-06-30.")
+    return when if when.tzinfo is not None else when.replace(tzinfo=timezone.utc)
+
+
+def _execute_keys_list(args):
+    from crucible.config import get_client
+    from .helpers import page_kwargs, resolve_limit
+    try:
+        state = 'inactive' if args.inactive else 'active'
+        keys = get_client().account.list_api_keys(
+            state=state, limit=resolve_limit(args), **page_kwargs(args))
+        print_key_list(keys, 'Inactive API Keys' if args.inactive else 'API Keys', args)
+    except Exception as e:
+        from .helpers import fail
+        fail("listing your API keys", e, args)
+
+
+def _execute_keys_create(args):
+    import json
+    from crucible.config import get_client
+    try:
+        expires = _parse_expiry(args.expires) if args.expires else None
+        key = get_client().account.create_api_key(args.name, expires_at=expires)
+        if getattr(args, 'json', False):
+            print(json.dumps(key, indent=2, default=str))
+            return
+        _p = term.field_printer(9)
+        term.header("New API Key")
+        _p("ID", str(key.get('id')))
+        _p("Name", key.get('name'))
+        _p("Expires", term.fmt_ts(key.get('expires_at')))
+        _p("Key", key.get('api_key'))
+        print(f"  {term.dim('Store it now: it is not shown again. `crucible config set api_key` saves it.')}")
+    except ValueError as e:
+        logger.error(str(e))
+        sys.exit(1)
+    except Exception as e:
+        from .helpers import fail
+        fail("creating an API key", e, args)
+
+
+def _execute_keys_rename(args):
+    from crucible.config import get_client
+    try:
+        key = get_client().account.rename_api_key(args.key_id, args.name)
+        term.success(f"Renamed key {key.get('id')} to {key.get('name')!r}", args)
+    except Exception as e:
+        from .helpers import fail
+        fail("renaming the API key", e, args)
+
+
+def _execute_keys_revoke(args):
+    from crucible.config import get_client
+    from .helpers import prompt_confirm
+    try:
+        confirmed = args.yes or prompt_confirm(
+            f"Revoke API key {args.key_id}? Anything using it stops working.",
+            option='--yes')
+        if not confirmed:
+            logger.info("Aborted.")
+            return
+        get_client().account.revoke_api_key(args.key_id)
+        term.success(f"Revoked API key {args.key_id}", args)
+    except Exception as e:
+        from .helpers import fail
+        fail("revoking the API key", e, args)
+
+
 
 
 def _register_verify(subparsers):
@@ -106,12 +255,14 @@ def _execute_verify(args):
     from crucible.config import get_client
     try:
         info = get_client().account.verify()
-        _p = term.field_printer(10)
+        _p = term.field_printer(11)
         term.header("API Key")
         valid = info.get('valid', False)
         _p("Valid",   term.green("yes") if valid else term.red("no"))
         _p("Created", term.fmt_ts(info.get('created_at')))
         _p("Expires", term.fmt_ts(info.get('expires_at')))
+        if info.get('last_used_at'):
+            _p("Last used", term.fmt_ts(info.get('last_used_at')))
     except _req.exceptions.HTTPError as e:
         if e.response is not None and e.response.status_code == 404:
             logger.error("No API key found for this account.")
@@ -130,9 +281,8 @@ def _show_profile(user):
     _p = term.field_printer(12)
     term.header("Account")
     _p("Username", user.get('username') or term.dim('(not set)'))
-    uid = user.get('unique_id')
     _p("Name",  term.fmt_name(user, fallback_username=False))
-    _p(term.user_id_label(uid), term.user_id_link(uid))
+    term.print_user_ids(_p, user)
     _p("Email",  user.get('email'))
     if user.get('is_service_account'):
         _p("Type", "service account")
@@ -223,24 +373,3 @@ def _execute_update(args):
         fail("", e, args)
 
 
-def _execute_api_key(args):
-    import requests as _req
-    from crucible.config import get_client
-    try:
-        key = get_client().account.api_key()
-        _p = term.field_printer(8)
-        term.header("API Key")
-        _p("Key", key)
-    except _req.exceptions.HTTPError as e:
-        if e.response is not None and e.response.status_code == 404:
-            logger.error("No API key found for this account. "
-                         "Use the web interface to generate one.")
-        else:
-            logger.error(f"Error: {e}")
-        if getattr(args, 'debug', False):
-            import traceback
-            traceback.print_exc()
-        sys.exit(1)
-    except Exception as e:
-        from .helpers import fail
-        fail("", e, args)

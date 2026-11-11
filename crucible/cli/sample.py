@@ -14,7 +14,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 from . import term
-from .helpers import add_limit_arguments, count_label, print_more_hint, resolve_limit, sort_like, page_kwargs
+from .helpers import RemovedOptionAction, add_limit_arguments, count_label, print_more_hint, resolve_limit, sort_like, page_kwargs
 
 try:
     import argcomplete
@@ -59,9 +59,16 @@ def register_subcommand(subparsers):
     _register_list_parents(sample_subparsers)
     _register_list_children(sample_subparsers)
     _register_list_datasets(sample_subparsers)
+    _register_unlink(sample_subparsers)
     _register_add_dataset(sample_subparsers)
+    _register_add_dataset(sample_subparsers, 'add-dataset')
     _register_remove_dataset(sample_subparsers)
+    _register_remove_dataset(sample_subparsers, 'remove-dataset')
     _register_remove_child(sample_subparsers)
+    from .helpers import deprecate_command
+    deprecate_command(sample_subparsers, 'add-dataset', "'crucible sample link-dataset'")
+    deprecate_command(sample_subparsers, 'remove-dataset', "'crucible sample unlink-dataset'")
+    deprecate_command(sample_subparsers, 'remove-child', "'crucible sample unlink -p PARENT -c CHILD'")
     _register_facets(sample_subparsers)
     from ._access import register_access_commands
     register_access_commands(sample_subparsers, 'samples', id_metavar='SAMPLE_MFID')
@@ -203,7 +210,7 @@ Examples:
         help='Sample name. If not provided, will prompt interactively.'
     )
 
-    from .helpers import DeprecatedAliasAction
+    from .helpers import RemovedOptionAction
     parser.add_argument(
         '--project-id', '-p',
         required=False,
@@ -220,8 +227,8 @@ Examples:
     )
     parser.add_argument(
         '-pid',
-        action=DeprecatedAliasAction,
-        deprecated_options={'-pid'},
+        action=RemovedOptionAction,
+        removed_options={'-pid'},
         replacement='--project-id',
         dest='project_id',
         default=argparse.SUPPRESS,
@@ -245,8 +252,8 @@ Examples:
     )
     parser.add_argument(
         '--sample-type',
-        action=DeprecatedAliasAction,
-        deprecated_options={'--sample-type'},
+        action=RemovedOptionAction,
+        removed_options={'--sample-type'},
         replacement='--type',
         dest='sample_type',
         default=argparse.SUPPRESS,
@@ -346,8 +353,10 @@ Use `sample reassign-project` or `sample transfer-ownership` to change project o
     )
 
     group = parser.add_mutually_exclusive_group()
-    group.add_argument('--public', dest='public', action='store_true', default=None, help=argparse.SUPPRESS)
-    group.add_argument('--no-public', dest='public', action='store_false', help=argparse.SUPPRESS)
+    group.add_argument('--public', dest='public', action=RemovedOptionAction, nargs=0, default=None,
+                       replacement="'sample set-public'")
+    group.add_argument('--no-public', dest='public', action=RemovedOptionAction, nargs=0,
+                       replacement="'sample set-private'")
 
     parser.set_defaults(func=_execute_update, public=None)
 
@@ -359,22 +368,12 @@ def _execute_update(args):
 
     has_set      = bool(getattr(args, 'set_fields', None))
     has_metadata = bool(getattr(args, 'metadata', None))
-    has_public   = getattr(args, 'public', None) is not None
-
-    if has_public:
-        warning = term.yellow('Warning:', stream=sys.stderr)
-        replacement = 'set-public' if args.public else 'set-private'
-        option = '--public' if args.public else '--no-public'
-        print(
-            f"{warning} {option} is deprecated; use sample {replacement} instead.",
-            file=sys.stderr,
-        )
 
     named = {k: getattr(args, k) for k in
              ('sample_name', 'sample_type', 'description', 'timestamp')
              if getattr(args, k, None) is not None}
 
-    if not has_set and not has_metadata and not has_public and not named:
+    if not has_set and not has_metadata and not named:
         logger.error("Error: provide at least one field to update")
         sys.exit(1)
 
@@ -412,12 +411,6 @@ def _execute_update(args):
         if updates:
             client.samples.update(args.sample_id, **updates)
             term.success(f"Sample {args.sample_id} fields updated", args)
-
-        if has_public:
-            operation = client.samples.set_public if args.public else client.samples.set_private
-            operation(args.sample_id)
-            visibility = 'publicly viewable' if args.public else 'private'
-            term.success(f"Sample {args.sample_id} is now {visibility}", args)
 
         if metadata_dict is not None:
             overwrite = getattr(args, 'overwrite', False)
@@ -525,7 +518,7 @@ Examples:
 
 def _edit_sample(sid, client, debug=False):
     """Core edit logic for a sample — shared with the top-level 'crucible edit' command."""
-    sample = client.samples.get(sid, include_metadata=True, include_datasets=False)
+    sample = client.samples.get(sid, include_metadata=True)
     if sample is None:
         logger.error(f"Sample not found: {sid}")
         sys.exit(1)
@@ -618,16 +611,16 @@ def _register_link(subparsers):
     parser.set_defaults(func=_execute_link)
 
 
-def _register_add_dataset(subparsers):
-    """Register the 'sample add-dataset' subcommand."""
+def _register_add_dataset(subparsers, name='link-dataset'):
+    """Register the 'sample link-dataset' subcommand."""
     parser = subparsers.add_parser(
-        'add-dataset',
+        name,
         help='Link a sample to a dataset',
         description='Associate a dataset with a sample',
         formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
-    crucible sample add-dataset SAMPLE_MFID --dataset DATASET_MFID
+    crucible sample link-dataset SAMPLE_MFID --dataset DATASET_MFID
 """
     )
     parser.add_argument('sample_id', metavar='SAMPLE_MFID', help='Sample MFID')
@@ -652,6 +645,8 @@ Examples:
     add_limit_arguments(parser)
     from .helpers import add_relationship_type_filter
     add_relationship_type_filter(parser)
+    parser.add_argument('--json', action='store_true', default=False,
+                        help='Output as JSON array')
     parser.set_defaults(func=_execute_list_parents)
 
 
@@ -672,6 +667,8 @@ Examples:
     add_limit_arguments(parser)
     from .helpers import add_relationship_type_filter
     add_relationship_type_filter(parser)
+    parser.add_argument('--json', action='store_true', default=False,
+                        help='Output as JSON array')
     parser.set_defaults(func=_execute_list_children)
 
 
@@ -713,6 +710,8 @@ Examples:
     )
     parser.add_argument('sample_id', metavar='SAMPLE_MFID', help='Sample MFID')
     add_limit_arguments(parser)
+    parser.add_argument('--json', action='store_true', default=False,
+                        help='Output as JSON array')
     parser.set_defaults(func=_execute_list_datasets)
 
 
@@ -951,9 +950,9 @@ def _execute_get(args):
     try:
         graph  = getattr(args, 'graph', False)
         client = get_client()
-        sample = client.samples.get(args.sample_id, include_links=graph or _config.include_links,
-                                    include_metadata=include_metadata, include_owner=True,
-                                    include_datasets=as_json)
+        sample = client.samples.get(args.sample_id,
+                                    include_links=graph or as_json or _config.include_links,
+                                    include_metadata=include_metadata, include_owner=True)
         if sample is None:
             logger.error(f"Sample not found: {args.sample_id}")
             sys.exit(1)
@@ -1113,6 +1112,10 @@ def _execute_list_parents(args):
             args.sample_id, limit=resolve_limit(args), **page_kwargs(args),
             relationship_type=args.relationship_type),
                          key=lambda s: (s.get('sample_name') or '').lower())
+        if getattr(args, 'json', False):
+            print_more_hint(parents, resolve_limit(args), args)
+            print(json.dumps(parents, indent=2, default=str))
+            return
         term.header(f"Parent Samples · {args.sample_id} ({count_label(parents)})")
         if not parents:
             print(f"  {term.dim('No parent samples found.')}")
@@ -1136,6 +1139,10 @@ def _execute_list_children(args):
             args.sample_id, limit=resolve_limit(args), **page_kwargs(args),
             relationship_type=args.relationship_type),
                           key=lambda s: (s.get('sample_name') or '').lower())
+        if getattr(args, 'json', False):
+            print_more_hint(children, resolve_limit(args), args)
+            print(json.dumps(children, indent=2, default=str))
+            return
         term.header(f"Child Samples · {args.sample_id} ({count_label(children)})")
         if not children:
             print(f"  {term.dim('No child samples found.')}")
@@ -1157,6 +1164,10 @@ def _execute_list_datasets(args):
         client = get_client()
         datasets = sort_like(client.datasets.list(sample_mfid=args.sample_id, limit=resolve_limit(args), **page_kwargs(args)),
                           key=lambda ds: (ds.get('dataset_name') or '').lower())
+        if getattr(args, 'json', False):
+            print_more_hint(datasets, resolve_limit(args), args)
+            print(json.dumps(datasets, indent=2, default=str))
+            return
         term.header(f"Datasets · {args.sample_id} ({count_label(datasets)})")
         if not datasets:
             print(f"  {term.dim('No datasets linked.')}")
@@ -1172,7 +1183,7 @@ def _execute_list_datasets(args):
 
 
 def _execute_link_dataset(args):
-    """Execute the 'sample add-dataset' subcommand."""
+    """Execute the 'sample link-dataset' subcommand."""
     from crucible.config import get_client
     try:
         client = get_client()
@@ -1186,8 +1197,26 @@ def _execute_link_dataset(args):
         fail("linking dataset to sample", e, args)
 
 
+def _register_unlink(subparsers):
+    """Register the 'sample unlink' subcommand."""
+    parser = subparsers.add_parser(
+        'unlink',
+        help='Unlink parent and child samples',
+        description='Remove the parent-child relationship between two samples',
+        formatter_class=term.ColorHelpFormatter,
+        epilog="""
+Examples:
+    crucible sample unlink -p PARENT_MFID -c CHILD_MFID
+"""
+    )
+    parser.add_argument('-p', '--parent', dest='parent_id', required=True, metavar='PARENT_MFID',
+                        help='Parent sample MFID')
+    parser.add_argument('-c', '--child', required=True, metavar='CHILD_MFID', help='Child sample MFID')
+    parser.set_defaults(func=_execute_remove_child)
+
+
 def _register_remove_child(subparsers):
-    """Register the 'sample remove-child' subcommand."""
+    """Register the deprecated 'sample remove-child' subcommand."""
     parser = subparsers.add_parser(
         'remove-child',
         help='Unlink a child sample from a parent sample',
@@ -1204,7 +1233,7 @@ Examples:
 
 
 def _execute_remove_child(args):
-    """Execute the 'sample remove-child' subcommand."""
+    """Execute the 'sample unlink' subcommand."""
     from crucible.config import get_client
     try:
         client = get_client()
@@ -1215,16 +1244,16 @@ def _execute_remove_child(args):
         fail("unlinking child sample", e, args)
 
 
-def _register_remove_dataset(subparsers):
-    """Register the 'sample remove-dataset' subcommand."""
+def _register_remove_dataset(subparsers, name='unlink-dataset'):
+    """Register the 'sample unlink-dataset' subcommand."""
     parser = subparsers.add_parser(
-        'remove-dataset',
+        name,
         help='Unlink a dataset from a sample',
         description='Remove the association between a sample and a dataset (requires admin)',
         formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
-    crucible sample remove-dataset SAMPLE_MFID --dataset DATASET_MFID
+    crucible sample unlink-dataset SAMPLE_MFID --dataset DATASET_MFID
 """
     )
     parser.add_argument('sample_id', metavar='SAMPLE_MFID', help='Sample MFID')
@@ -1258,7 +1287,7 @@ Examples:
 """,
     )
     parser.add_argument('query', metavar='QUERY', help='Search term (min 3 chars)')
-    from .helpers import DeprecatedAliasAction
+    from .helpers import RemovedOptionAction
     parser.add_argument(
         '--project-id', '-p',
         dest='project_id',
@@ -1268,8 +1297,8 @@ Examples:
     )
     parser.add_argument(
         '--project', '-pid',
-        action=DeprecatedAliasAction,
-        deprecated_options={'--project', '-pid'},
+        action=RemovedOptionAction,
+        removed_options={'--project', '-pid'},
         replacement='--project-id',
         dest='project_id',
         default=argparse.SUPPRESS,

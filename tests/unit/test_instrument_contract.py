@@ -167,22 +167,6 @@ def test_create_rejects_expanded_owner_object():
         ))
 
 
-def test_create_warns_for_legacy_owner_orcid():
-    operations = make_ops()
-    operations._request = MagicMock(side_effect=[
-        {'total': 0, 'items': []},
-        {'unique_id': MFID, 'owner_orcid': USER_MFID},
-    ])
-
-    with pytest.warns(DeprecationWarning, match='Instrument.owner_orcid'):
-        operations.create(Instrument(
-            instrument_id='team-i',
-            instrument_name='TEAM I',
-            location='72-150',
-            owner_orcid=USER_MFID,
-        ))
-
-    assert operations._request.call_args.kwargs['json']['owner_orcid'] == USER_MFID
 
 
 def test_create_omits_inherited_response_fields():
@@ -251,7 +235,7 @@ def test_mfid_backed_owner_is_not_linked_to_orcid(monkeypatch):
     monkeypatch.setattr(term, '_tty', lambda stream=None: True)
     monkeypatch.setattr(term, '_interactive', lambda stream=None: True)
     monkeypatch.setitem(
-        config._data, 'graph_explorer_url', 'https://example.org/explore')
+        config._data, 'hub_url', 'https://example.org/hub')
     rendered = term.fmt_owner({
         'owner_orcid': USER_MFID,
         'owner': {
@@ -265,7 +249,7 @@ def test_mfid_backed_owner_is_not_linked_to_orcid(monkeypatch):
     assert 'T. User One' in rendered
     assert '(@test-user-one)' in rendered
     assert 'orcid.org' not in rendered
-    assert f'https://example.org/explore/user/{USER_MFID}' in rendered
+    assert f'https://example.org/hub/users/{USER_MFID}' in rendered
 
 
 def test_list_parser_exposes_status_and_json():

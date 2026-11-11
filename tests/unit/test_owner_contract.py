@@ -72,13 +72,17 @@ def test_get_requests_and_preserves_public_owner_by_default(operations_class, re
 
     result = operations.get(MFID)
 
+    expected = {'include_owner': True}
+    if resource_name == 'samples':
+        expected['include_datasets'] = False
     operations._request.assert_called_once_with(
         'get',
         f'/{resource_name}/{MFID}',
-        params={'include_owner': True},
+        params=expected,
     )
     assert result['owner'] == PUBLIC_OWNER
-    assert result['capabilities'] == CAPABILITIES
+    assert result['capabilities'] == {**CAPABILITIES, 'can_view_access': None,
+                                      'can_delete': None, 'can_request_deletion': None}
 
 
 @pytest.mark.parametrize(
@@ -179,14 +183,14 @@ def test_get_can_suppress_owner_expansion(operations_class, resource_name):
     operations._request.assert_called_once_with(
         'get',
         f'/{resource_name}/{MFID}',
-        params=None,
+        params={'include_datasets': False} if resource_name == 'samples' else None,
     )
 
 
-def test_sample_get_can_suppress_legacy_dataset_expansion():
+def test_sample_get_leaves_out_embedded_datasets_by_default():
     operations = make_ops(SampleOperations, {'unique_id': MFID, 'datasets': None})
 
-    result = operations.get(MFID, include_datasets=False)
+    result = operations.get(MFID)
 
     operations._request.assert_called_once_with(
         'get',
@@ -194,6 +198,15 @@ def test_sample_get_can_suppress_legacy_dataset_expansion():
         params={'include_owner': True, 'include_datasets': False},
     )
     assert result['datasets'] is None
+
+
+def test_sample_get_with_embedded_datasets_still_works_with_a_warning():
+    operations = make_ops(SampleOperations, {'unique_id': MFID, 'datasets': []})
+
+    with pytest.warns(DeprecationWarning, match='include_links'):
+        operations.get(MFID, include_datasets=True)
+
+    assert operations._request.call_args.kwargs['params']['include_datasets'] is True
 
 
 def test_generic_get_requests_owner_by_default():
@@ -209,7 +222,7 @@ def test_generic_get_requests_owner_by_default():
     client._request.assert_called_once_with(
         'get',
         f'/resources/{MFID}',
-        params={'include_owner': True},
+        params={'include_owner': True, 'include_datasets': False},
     )
     assert result['capabilities'] == CAPABILITIES
 
@@ -220,10 +233,11 @@ def test_generic_get_can_suppress_owner_expansion():
 
     client.get(MFID, include_owner=False)
 
-    client._request.assert_called_once_with('get', f'/resources/{MFID}', params=None)
+    client._request.assert_called_once_with(
+        'get', f'/resources/{MFID}', params={'include_datasets': False})
 
 
-def test_generic_get_can_suppress_legacy_sample_dataset_expansion():
+def test_generic_get_leaves_out_embedded_sample_datasets_by_default():
     client = CrucibleClient(api_url='https://example.invalid', api_key='test')
     client._request = MagicMock(return_value={
         'unique_id': MFID,
@@ -231,7 +245,7 @@ def test_generic_get_can_suppress_legacy_sample_dataset_expansion():
         'datasets': None,
     })
 
-    result = client.get(MFID, include_datasets=False)
+    result = client.get(MFID)
 
     client._request.assert_called_once_with(
         'get',
@@ -241,29 +255,18 @@ def test_generic_get_can_suppress_legacy_sample_dataset_expansion():
     assert result['datasets'] is None
 
 
-def test_typed_generic_sample_get_propagates_include_datasets():
+@pytest.mark.parametrize('include_datasets', [False, True])
+def test_typed_generic_sample_get_propagates_include_datasets(include_datasets):
     client = CrucibleClient(api_url='https://example.invalid', api_key='test')
-    client.samples.get = MagicMock(return_value={'unique_id': MFID})
+    client.samples._get_by_mfid = MagicMock(return_value={'unique_id': MFID})
 
-    client.get(MFID, resource_type='sample', include_datasets=False)
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore', DeprecationWarning)
+        client.get(MFID, resource_type='sample', include_datasets=include_datasets)
 
-    client.samples.get.assert_called_once_with(
+    client.samples._get_by_mfid.assert_called_once_with(
         MFID,
-        include_links=False,
-        include_metadata=False,
-        include_owner=True,
-        include_datasets=False,
-    )
-
-
-def test_typed_generic_sample_get_preserves_default_call_contract():
-    client = CrucibleClient(api_url='https://example.invalid', api_key='test')
-    client.samples.get = MagicMock(return_value={'unique_id': MFID})
-
-    client.get(MFID, resource_type='sample')
-
-    client.samples.get.assert_called_once_with(
-        MFID,
+        include_datasets=include_datasets,
         include_links=False,
         include_metadata=False,
         include_owner=True,
@@ -306,22 +309,8 @@ def test_typed_generic_project_get_uses_project_mfid():
     )
 
 
-def test_dataset_create_warns_for_owner_orcid_and_preserves_payload():
-    operations = make_ops(DatasetOperations, {'unique_id': MFID})
-
-    with pytest.warns(DeprecationWarning, match='Dataset.owner_orcid'):
-        operations.create(Dataset(unique_id=MFID, dataset_name='test', owner_orcid=ORCID))
-
-    assert operations._request.call_args.kwargs['json']['owner_orcid'] == ORCID
 
 
-def test_sample_create_warns_for_owner_orcid_and_preserves_payload():
-    operations = make_ops(SampleOperations, {'unique_id': MFID})
-
-    with pytest.warns(DeprecationWarning, match='Sample.owner_orcid'):
-        operations.create(Sample(unique_id=MFID, sample_name='test', owner_orcid=ORCID))
-
-    assert operations._request.call_args.kwargs['json']['owner_orcid'] == ORCID
 
 
 @pytest.mark.parametrize(

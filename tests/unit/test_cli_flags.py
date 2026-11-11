@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from crucible.cli import _remap_deprecated, dataset, file as file_cli, instrument, project, sample, upload
+from crucible.cli import dataset, file as file_cli, instrument, project, sample
 from crucible.parsers import BaseParser
 
 
@@ -25,17 +25,6 @@ def test_dataset_search_accepts_canonical_project_flags(flag):
     assert args.project_id == 'project-one'
 
 
-@pytest.mark.parametrize('flag', ['--project', '-pid'])
-def test_dataset_search_warns_for_legacy_project_flags(flag, capsys):
-    args = make_parser(dataset).parse_args([
-        'dataset', 'search', 'query', flag, 'project-one',
-    ])
-
-    assert args.project_id == 'project-one'
-    assert (
-        f'Warning: {flag} is deprecated; use --project-id instead.'
-        in capsys.readouterr().err
-    )
 
 
 def test_sample_create_uses_canonical_type_flag():
@@ -46,16 +35,6 @@ def test_sample_create_uses_canonical_type_flag():
     assert args.sample_type == 'substrate'
 
 
-def test_sample_create_warns_for_legacy_type_flag(capsys):
-    args = make_parser(sample).parse_args([
-        'sample', 'create', '--sample-type', 'substrate',
-    ])
-
-    assert args.sample_type == 'substrate'
-    assert (
-        'Warning: --sample-type is deprecated; use --type instead.'
-        in capsys.readouterr().err
-    )
 
 
 def test_project_create_uses_canonical_short_flag():
@@ -66,28 +45,8 @@ def test_project_create_uses_canonical_short_flag():
     assert args.project_id == 'project-one'
 
 
-def test_project_create_warns_for_legacy_short_flag(capsys):
-    args = make_parser(project).parse_args([
-        'project', 'create', '-id', 'project-one',
-    ])
-
-    assert args.project_id == 'project-one'
-    assert (
-        'Warning: -id is deprecated; use --project-id instead.'
-        in capsys.readouterr().err
-    )
 
 
-def test_legacy_upload_project_flag_remains_compatible(capsys):
-    args = make_parser(upload).parse_args([
-        'upload', '-i', 'data.csv', '-pid', 'project-one',
-    ])
-
-    assert args.project_id == 'project-one'
-    assert (
-        'Warning: -pid is deprecated; use --project-id instead.'
-        in capsys.readouterr().err
-    )
 
 
 def test_dataset_create_accepts_no_input():
@@ -133,15 +92,6 @@ def test_resources_accept_canonical_visibility_commands(module, command):
     assert args.resource_id == 'resource-id'
 
 
-@pytest.mark.parametrize(
-    ('old_command', 'new_command'),
-    [('publish', 'set-public'), ('unpublish', 'set-private')],
-)
-def test_visibility_commands_remap_deprecated_names(old_command, new_command, capsys):
-    remapped = _remap_deprecated(['dataset', old_command, 'resource-id'])
-
-    assert remapped == ['dataset', new_command, 'resource-id']
-    assert f"'dataset {old_command}' is deprecated" in capsys.readouterr().err
 
 
 @pytest.mark.parametrize(
@@ -160,21 +110,6 @@ def test_visibility_commands_dispatch_to_canonical_methods(
     assert 'resource-id' in capsys.readouterr().out
 
 
-@pytest.mark.parametrize(
-    ('option', 'method_name'),
-    [('--public', 'set_public'), ('--no-public', 'set_private')],
-)
-def test_sample_update_visibility_options_delegate_with_warning(
-        option, method_name, monkeypatch, capsys):
-    client = MagicMock()
-    monkeypatch.setattr('crucible.config.get_client', lambda: client)
-    args = make_parser(sample).parse_args(['sample', 'update', 'sample-id', option])
-
-    args.func(args)
-
-    getattr(client.samples, method_name).assert_called_once_with('sample-id')
-    client.samples.update.assert_not_called()
-    assert f'{option} is deprecated' in capsys.readouterr().err
 
 
 @pytest.mark.parametrize('module', [dataset, sample])
@@ -285,11 +220,11 @@ def test_parser_preserves_creation_selectors():
     assert parsed.instrument_mfid == '0tk8pf1me0h3h0003fp91vr037'
 
 
-def test_parser_new_selectors_preserve_legacy_positional_arguments():
+def test_parser_third_positional_argument_is_the_owner():
     parsed = BaseParser([], 'project-one', '0000-0001-6402-3752')
 
     assert parsed.project_id == 'project-one'
-    assert parsed.owner_orcid == '0000-0001-6402-3752'
+    assert parsed.to_dataset().owner == '0000-0001-6402-3752'
 
 
 def test_sample_create_with_project_mfid_does_not_apply_project_default(monkeypatch):
@@ -336,9 +271,9 @@ def test_dataset_add_thumbnail_dispatches_local_image(monkeypatch, tmp_path, cap
 @pytest.mark.parametrize(
     ('module', 'command', 'visible', 'hidden'),
     [
-        (dataset, ['dataset', 'search'], '--project-id ID, -p ID', '--project ID'),
-        (sample, ['sample', 'create'], '--type TYPE, -t TYPE', '--sample-type TYPE'),
-        (project, ['project', 'create'], '--project-id ID, -i ID', ', -id ID'),
+        (dataset, ['dataset', 'search'], ('--project-id', '-p'), '--project '),
+        (sample, ['sample', 'create'], ('--type', '-t'), '--sample-type'),
+        (project, ['project', 'create'], ('--project-id', '-i'), ' -id '),
     ],
 )
 def test_help_hides_legacy_flags(module, command, visible, hidden, capsys):
@@ -346,6 +281,34 @@ def test_help_hides_legacy_flags(module, command, visible, hidden, capsys):
         make_parser(module).parse_args(command + ['--help'])
 
     assert exit_info.value.code == 0
-    output = capsys.readouterr().out
-    assert visible in output
-    assert hidden not in output
+    options = capsys.readouterr().out.split('options:', 1)[1].split('Examples:', 1)[0]
+    options = options.replace(',', ' ')
+    assert all(f' {flag} ' in options for flag in visible)
+    assert hidden not in options
+
+
+def test_dataset_create_no_upload_catalogs_hashed_relative_paths(monkeypatch, tmp_path):
+    for folder in ('freq_001', 'freq_002'):
+        (tmp_path / folder).mkdir()
+        (tmp_path / folder / 'kpoints.json').write_text(folder)
+    client = MagicMock()
+    client.replace_existing = False
+    client.projects.get.return_value = {'project_id': 'project-one'}
+    seen = {}
+    client.datasets.create.side_effect = lambda *a, **k: (
+        seen.update(replace=client.replace_existing) or {'created_record': {}})
+    monkeypatch.setattr('crucible.config.get_client', lambda: client)
+    args = make_parser(dataset).parse_args([
+        'dataset', 'create', '--project-id', 'project-one', '--name', 'Phonons',
+        '-i', str(tmp_path / 'freq_001' / 'kpoints.json'),
+        str(tmp_path / 'freq_002' / 'kpoints.json'),
+        '--no-upload', '--backend', 'nersc', '--replace',
+    ])
+
+    args.func(args)
+
+    files = client.datasets.create.call_args.kwargs['files']
+    assert [f.filename for f in files] == ['freq_001/kpoints.json', 'freq_002/kpoints.json']
+    assert {f.storage_backend for f in files} == {'nersc'}
+    assert all(f.sha256_hash and f.size for f in files)
+    assert seen['replace'] is True

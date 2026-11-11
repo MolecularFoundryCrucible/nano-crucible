@@ -13,7 +13,7 @@ Shortcuts:
     Alt+G     toggle graph view for last fetched resource
     Alt+R     refresh projects, user info, and pending deletions
     Alt+P     interactive project picker
-    Alt+O     open last fetched resource in Graph Explorer
+    Alt+O     open last fetched resource in the Crucible Hub
 """
 
 import logging
@@ -132,12 +132,12 @@ def register(kb, shell):
                 if resource_type == 'instrument':
                     url = instrument_explorer_url(uid)
                 elif resource_type == 'project':
-                    url = project_explorer_url(last['data'].get('project_id'))
+                    url = project_explorer_url(uid or last['data'].get('project_id'))
                 else:
                     _, pid, _ = project_reference(last['data'])
                     url = explorer_url(uid, pid, resource_type)
                 if not url:
-                    raise ValueError("No Explorer route is available for this resource.")
+                    raise ValueError("No Hub page is available for this resource.")
                 webbrowser.open(url)
             except Exception as e:
                 logger.error(f"Could not open resource: {e}")

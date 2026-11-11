@@ -62,7 +62,8 @@ Configuration keys (by section):
   [crucible]  -- API connection
     api_key             Crucible API authentication key (required)
     api_url             Crucible API endpoint URL
-    graph_explorer_url  Crucible Graph Explorer URL (optional)
+    hub_url             Crucible Hub URL, for signing in and API keys (optional)
+    auth_store          Where `crucible login` keeps tokens: auto, keyring, file, memory
     current_project     Current project ID (optional)
 
   [cache]
@@ -83,8 +84,10 @@ Priority order (highest to lowest):
     2. Config file (~/.config/nano-crucible/config.ini)
     3. Defaults
 
-CRUCIBLE_CURRENT_PROJECT is deprecated. Use --project-id for automation or
-the interactive shell's 'use PROJECT_ID' command to save a selection.
+Settings removed in 4.0.0 (graph_explorer_url, current_session, upload_protocol,
+upload_chunk_size_mb) are ignored; `config show` lists any left in your file and
+`config unset KEY` removes them. CRUCIBLE_CURRENT_PROJECT was removed too: use
+--project-id, or the shell's 'use PROJECT_ID' command.
 """
     )
 
@@ -120,12 +123,12 @@ the interactive shell's 'use PROJECT_ID' command to save a selection.
     )
     get_parser.add_argument(
         'key',
-        choices=['api_key', 'api_url', 'graph_explorer_url', 'current_project',
-                 'privilege_mode', 'cache_dir',
+        choices=['api_key', 'api_url', 'hub_url', 'current_project',
+                 'privilege_mode', 'auth_store', 'cache_dir',
                  'editor', 'sample_group_by', 'dataset_group_by',
                  'include_metadata', 'include_links', 'pager',
                  'connect_timeout', 'read_timeout', 'default_limit',
-                 'upload_chunk_size_mb', 'upload_max_workers', 'upload_protocol'],
+                 'upload_max_workers'],
         help='Configuration key to retrieve'
     )
     get_parser.set_defaults(func=cmd_get)
@@ -137,12 +140,12 @@ the interactive shell's 'use PROJECT_ID' command to save a selection.
     )
     set_parser.add_argument(
         'key',
-        choices=['api_key', 'api_url', 'graph_explorer_url', 'current_project',
-                 'privilege_mode', 'cache_dir',
+        choices=['api_key', 'api_url', 'hub_url', 'current_project',
+                 'privilege_mode', 'auth_store', 'cache_dir',
                  'editor', 'sample_group_by', 'dataset_group_by',
                  'include_metadata', 'include_links', 'pager',
                  'connect_timeout', 'read_timeout', 'default_limit',
-                 'upload_chunk_size_mb', 'upload_max_workers', 'upload_protocol'],
+                 'upload_max_workers'],
         help='Configuration key to set'
     )
     set_parser.add_argument(
@@ -157,12 +160,13 @@ the interactive shell's 'use PROJECT_ID' command to save a selection.
     )
     unset_parser.add_argument(
         'key',
-        choices=['api_key', 'api_url', 'graph_explorer_url', 'current_project',
-                 'privilege_mode', 'cache_dir',
+        choices=['api_key', 'api_url', 'hub_url', 'current_project',
+                 'privilege_mode', 'auth_store', 'cache_dir',
                  'editor', 'sample_group_by', 'dataset_group_by',
                  'include_metadata', 'include_links', 'pager',
                  'connect_timeout', 'read_timeout', 'default_limit',
-                 'upload_chunk_size_mb', 'upload_max_workers', 'upload_protocol'],
+                 'upload_max_workers',
+                 'graph_explorer_url', 'current_session', 'upload_protocol', 'upload_chunk_size_mb'],
         help='Configuration key to remove from the config file'
     )
     unset_parser.set_defaults(func=cmd_unset)
@@ -206,8 +210,7 @@ def cmd_init(args):
             'CRUCIBLE_API_KEY',
             'CRUCIBLE_API_URL',
             'CRUCIBLE_CACHE_DIR',
-            'CRUCIBLE_GRAPH_EXPLORER_URL',
-            'CRUCIBLE_CURRENT_PROJECT',
+            'CRUCIBLE_HUB_URL',
         )
         if os.environ.get(name) is not None
     ]
@@ -227,7 +230,7 @@ def cmd_init(args):
 
     # Get API key
     print("\n1. Crucible API Key (required)")
-    print("   Get your key from: https://crucible.lbl.gov/api/v3/user_apikey")
+    print(f"   Sign in to the Crucible Hub and create a key: {config.hub_url}/account#api-keys")
     api_key = prompt_secret("API Key", option='CRUCIBLE_API_KEY')
 
     # Get API URL
@@ -241,11 +244,9 @@ def cmd_init(args):
     print(f"   Press Enter to use default: {config.cache_dir}")
     cache_dir = prompt_optional("Cache directory")
 
-    # Get Graph Explorer URL
-    print("\n4. Graph Explorer URL (optional)")
-    print("   Press Enter to use default: https://crucible.lbl.gov/explore")
-    graph_explorer_url = prompt_optional(
-        "Graph Explorer URL", validator=validate_http_url)
+    print("\n4. Crucible Hub URL (optional)")
+    print(f"   Press Enter to use default: {_Cfg.DEFAULT_HUB_URL}")
+    hub_url = prompt_optional("Hub URL", validator=validate_http_url)
 
     # Get current project
     print("\n5. Current Project ID (optional)")
@@ -259,7 +260,7 @@ def cmd_init(args):
             api_key=api_key,
             api_url=api_url,
             cache_dir=cache_dir,
-            graph_explorer_url=graph_explorer_url,
+            hub_url=hub_url,
             current_project=current_project
         )
         print()
@@ -293,8 +294,8 @@ def cmd_show(args):
     except ValueError:
         _p("api_key",           None)
     _p("api_url",              config.api_url)
-    _p("graph_explorer_url",   config.graph_explorer_url)
-    _p("current_project",      config.current_project)
+    _p("hub_url",              config.hub_url)
+    _p("current_project",      config._data.get('current_project'))
     _p("project source",       config.source('current_project'))
 
     # [cache]
@@ -316,14 +317,19 @@ def cmd_show(args):
 
     # [upload] — multipart upload tuning
     term.subheader("[upload]  multipart upload")
-    _p("upload_chunk_size_mb", config.upload_chunk_size_mb)
     _p("upload_max_workers",   config.upload_max_workers)
-    _p("upload_protocol",      config.upload_protocol)
+
+    leftovers = config.removed_in_use()
+    if leftovers:
+        term.subheader("Removed in 4.0.0, ignored")
+        for where, name, instead in leftovers:
+            fix = f"crucible config unset {name}" if where == 'config file' else f"unset {name}"
+            print(f"  {name}  ({where}): {instead}.  {term.dim(fix)}")
 
     from crucible.config.config import Config
     env_overrides = {
         mapping['env']: os.environ.get(mapping['env'])
-        for mapping in Config._CONFIG_MAP.values()
+        for mapping in Config._CONFIG_MAP.values() if mapping['env']
     }
     active = {k: v for k, v in env_overrides.items() if v is not None}
     if active:
@@ -398,16 +404,14 @@ def set_config_value(key, value):
 
 def cmd_set(args):
     """Set a configuration value, preserving comments."""
-    if args.key == 'current_project' and os.environ.get('CRUCIBLE_CURRENT_PROJECT') is not None:
-        from .helpers import show_warning
-        show_warning(
-            "CRUCIBLE_CURRENT_PROJECT currently overrides this saved selection. "
-            "Unset the environment variable to use the saved project."
-        )
     key   = args.key
     value = args.value
     if key == 'privilege_mode' and value not in PRIVILEGE_MODES:
         logger.error(f"privilege_mode must be one of: {', '.join(PRIVILEGE_MODES)}.")
+        sys.exit(1)
+    from ..auth.store import AUTH_STORES
+    if key == 'auth_store' and value not in AUTH_STORES:
+        logger.error(f"auth_store must be one of: {', '.join(AUTH_STORES)}.")
         sys.exit(1)
     section, config_file = set_config_value(key, value)
     term.success(f"Set {key} = {value}  (in [{section}])", args)
@@ -420,9 +424,11 @@ def unset_config_value(key):
     from crucible.config import config
     from crucible.config.config import Config, restrict_config_permissions
 
-    mapping = Config._CONFIG_MAP[key]
-    section = mapping['section']
-    ini_key = mapping['ini']
+    if key in Config.REMOVED_SETTINGS:
+        section, ini_key, env_key, _ = Config.REMOVED_SETTINGS[key]
+    else:
+        mapping = Config._CONFIG_MAP[key]
+        section, ini_key, env_key = mapping['section'], mapping['ini'], mapping['env']
     config_file = config.config_file_path
     removed = False
 
@@ -444,7 +450,7 @@ def unset_config_value(key):
             restrict_config_permissions(config_file)
 
     config.reload()
-    return removed, config_file, mapping['env']
+    return removed, config_file, env_key
 
 
 def cmd_unset(args):
@@ -456,7 +462,7 @@ def cmd_unset(args):
     else:
         print(f"{args.key} is not set in {config_file}")
 
-    if os.environ.get(env_key) is not None:
+    if env_key and os.environ.get(env_key) is not None:
         print(f"{env_key} remains active and takes precedence")
 
 
@@ -479,13 +485,6 @@ def cmd_edit(args):
     from crucible.config import config
 
     config_file = config.config_file_path
-
-    if os.environ.get('CRUCIBLE_CURRENT_PROJECT') is not None:
-        from .helpers import show_warning
-        show_warning(
-            "CRUCIBLE_CURRENT_PROJECT overrides current_project in this file. "
-            "Unset the environment variable to use the saved project."
-        )
 
     if not config_file.exists():
         print(f"Config file does not exist: {config_file}")

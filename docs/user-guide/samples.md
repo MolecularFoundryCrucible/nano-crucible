@@ -9,8 +9,8 @@
 | `project` | Current project title, ID, and canonical identity when the relationship resolves | server-assigned |
 | `description` | Free-text description of the sample | create, update |
 | `timestamp` | Date associated with the sample (ISO 8601 format) | create, update |
-| `public` | Whether the sample is publicly accessible (default: `False`) | create, update |
-| `owner_orcid` | Canonical owner identifier returned by the API; deprecated as a creation input | read; deprecated for create |
+| `public` | Whether the sample is publicly accessible (default: `False`) | create; later changes use `set_public()` / `set_private()` |
+| `owner_orcid` | Canonical owner identifier returned by the API; read only; set `owner` when creating | read |
 | `owner` | Flexible owner identifier on create; public-safe user record on singleton reads | create with an ORCID, MFID, username, or email; expanded by default on `get()` |
 | `unique_id` | System-assigned MFID identifier | server-assigned |
 | `creation_time` | When the record was created | server-assigned |
@@ -53,13 +53,12 @@ sample = client.samples.get("0td7evvtg5wb90005k1j97ak94")
 sample_with_details = client.samples.get(
     "0td7evvtg5wb90005k1j97ak94",
     include_links=True,
-    include_datasets=False,
 )
 ```
 
 Samples are retrieved only by their canonical 26-character MFID. Sample names are display values, not identifiers.
 
-Sample detail responses retain the legacy embedded `datasets` collection by default for compatibility. The field is deprecated. Pass `include_datasets=False` to avoid loading complete dataset records, use `include_links=True` for lightweight relationship references, or use `client.datasets.list(sample_mfid=sample_mfid)` for complete paginated dataset records.
+Sample responses no longer embed the linked datasets. Use `include_links=True` for lightweight references to linked datasets and samples, or `client.datasets.list(sample_mfid=sample_mfid)` for the full dataset records. `include_datasets=True` still embeds them, with a deprecation warning, because the API has deprecated that field.
 
 Singleton retrieval expands `owner` by default as a public-safe user record containing `unique_id`, `username`, `first_name`, and `last_name`. Pass `include_owner=False` to suppress expansion. List operations remain opt-in with `include_owner=True`. The canonical owner identifier remains available as `owner_orcid`.
 
@@ -173,12 +172,12 @@ client.samples.unlink_dataset(sample_mfid=sample_mfid, dataset_mfid=dataset_mfid
 
 ```python
 # First-degree connections (datasets, parent/child samples)
-graph = client.samples.graph(sample_mfid)
+graph = client.graphs.get(sample_mfid)
 
 # Full connected component
-graph = client.samples.graph(sample_mfid, recursive=True)
+graph = client.graphs.get(sample_mfid, recursive=True)
 
 # As a networkx DiGraph (requires networkx)
 import networkx as nx
-G = client.samples.graph(sample_mfid, recursive=True, as_networkx=True)
+G = client.graphs.get(sample_mfid, recursive=True, as_networkx=True)
 ```

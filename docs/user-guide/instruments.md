@@ -4,7 +4,7 @@
 |---|---|---|
 | `instrument_id` | Unique 3-to-25-character slug used to reference the instrument | create, update |
 | `instrument_name` | Human-readable display name | create, update |
-| `owner_orcid` | Canonical owner identifier returned by the API; deprecated as a creation input | read; deprecated for create |
+| `owner_orcid` | Canonical owner identifier returned by the API; read only; set `owner` when creating | read |
 | `owner` | Flexible owner identifier on create; public-safe user record on reads with owner expansion | create with an ORCID, MFID, username, or email; expanded by default on `get()` |
 | `location` | Physical location (e.g. room number or building) | create, update |
 | `manufacturer` | Instrument manufacturer (e.g. `"FEI"`, `"Bruker"`) | create, update |
@@ -71,7 +71,7 @@ The canonical owner identifier remains available as `owner_orcid`.
 
 Exact MFID and slug lookups include caller-specific `capabilities` when the server has calculated them. General lists and searches normally return `capabilities=None`, which means the guidance was not calculated rather than that every action is denied. The API remains authoritative for each mutation.
 
-Use `instrument_id=` or `instrument_mfid=` when the intended identifier type must be explicit. Display names are not identifiers and are not accepted by the general lookup. For compatibility, an MFID-shaped value supplied as `instrument_id=` is temporarily treated as an MFID and emits a deprecation warning.
+Use `instrument_id=` or `instrument_mfid=` when the intended identifier type must be explicit. Display names are not identifiers and are not accepted by the general lookup. An MFID passed as `instrument_id=` raises `RemovedError`; use `instrument_mfid=`.
 
 ## Updating an instrument
 

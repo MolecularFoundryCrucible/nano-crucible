@@ -68,9 +68,9 @@ def test_project_list_json_returns_raw_array(monkeypatch, capsys):
         member_ref=None, member_role=None)
 
 
-@pytest.mark.parametrize(('json_output', 'include_datasets'), [(False, False), (True, True)])
+@pytest.mark.parametrize('json_output', [False, True])
 def test_sample_get_optimizes_human_output_and_preserves_json(
-        monkeypatch, capsys, json_output, include_datasets):
+        monkeypatch, capsys, json_output):
     sample = {'unique_id': MFID, 'resource_type': 'sample', 'datasets': []}
     operations = SimpleNamespace(get=MagicMock(return_value=sample))
     client = SimpleNamespace(samples=operations)
@@ -89,10 +89,9 @@ def test_sample_get_optimizes_human_output_and_preserves_json(
 
     operations.get.assert_called_once_with(
         MFID,
-        include_links=False,
+        include_links=json_output,
         include_metadata=json_output,
         include_owner=True,
-        include_datasets=include_datasets,
     )
     if json_output:
         assert json.loads(capsys.readouterr().out) == sample

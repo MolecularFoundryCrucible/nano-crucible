@@ -66,15 +66,23 @@ def execute(args):
     """Execute the download command."""
     from crucible.config import get_client
     try:
-        downloaded = get_client().download(
-            args.resource_id,
-            output_dir=args.output_dir,
-            no_files=args.no_files,
-            no_record=args.no_record,
-            overwrite_existing=not args.no_overwrite,
-            include=args.include,
-            exclude=args.exclude,
-        )
+        client = get_client()
+        resource_type = client.get_resource_type(args.resource_id)
+        if resource_type == 'dataset':
+            downloaded = client.datasets.download(
+                args.resource_id,
+                output_dir=args.output_dir,
+                no_files=args.no_files,
+                no_record=args.no_record,
+                overwrite_existing=not args.no_overwrite,
+                include=args.include,
+                exclude=args.exclude,
+            )
+        elif resource_type == 'sample':
+            downloaded = client.samples.download(args.resource_id, output_dir=args.output_dir)
+        else:
+            raise ValueError(f"Cannot download a {resource_type or 'resource of unknown type'}; "
+                             "only datasets and samples can be downloaded.")
         for path in downloaded:
             logger.info(path)
     except Exception as e:

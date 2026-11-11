@@ -6,6 +6,8 @@ Package-wide constants for the Crucible API client.
 
 DEFAULT_LIMIT = 100   # default page size for list requests
 API_PAGE_MAX  = 1000  # server hard cap per request
+API_KEY_PAGE_MAX = 200  # cap on the API key list routes
+MFID_FILTER_MAX = 100  # values per repeatable mfid filter
 
 PROJECT_MEMBER_ROLES = ('viewer', 'contributor', 'editor', 'admin')
 PROJECT_ACCESS_ROLES = ('viewer', 'contributor', 'editor', 'admin', 'owner')  # member_role filter; grants cannot assign owner
@@ -35,8 +37,19 @@ DELETION_REQUEST_SORTS = ('request_time', 'resource_name', 'project_id',
                           'requester_name', 'status')
 DELETION_AUDIT_SCOPES = ('all', 'submitted')
 
+# Join request workflow.
+JOIN_REQUEST_STATUSES = ('pending', 'approved', 'rejected', 'withdrawn')
+JOIN_REQUEST_SCOPES = ('accessible', 'submitted', 'reviewable')
+JOIN_REQUEST_SORTS = ('request_time', 'review_time', 'status', 'project',
+                      'requester_name')
+JOIN_REQUEST_FACET_FIELDS = ('status', 'project', 'requester')
+
+# Postprocessing run states.
+POSTPROCESSING_RUN_STATUSES = ('requested', 'running', 'completed', 'failed')
+
 # Platform-wide roles a human user or service account may hold.
 PLATFORM_ROLES = ('none', 'contributor', 'admin')
+API_KEY_STATES = ('active', 'inactive')
 
 # Values for the Crucible-Privilege-Mode request header.
 PRIVILEGE_MODES = ('normal', 'elevated')
@@ -56,9 +69,7 @@ RELATIONSHIP_TYPES = ('is_derived_from', 'is_part_of')
 GCS_BUCKET_PREFIX = 'mf-storage-prod/'
 
 # Multipart upload defaults (tuned via benchmarking — see testing/tune_results.jsonl)
-UPLOAD_CHUNK_SIZE_MB = 64   # GCS XML multipart part size in MiB
 UPLOAD_MAX_WORKERS   = 8    # concurrent upload threads
-UPLOAD_PROTOCOLS     = ('auto', 'signed', 'legacy')
 
 AVAILABLE_INGESTORS = [
     'AFMIngestor',

@@ -71,6 +71,48 @@ def test_mfid_backed_human_uses_user_id_label(capsys):
     assert 'ORCID' not in output
 
 
+def test_linked_orcid_is_shown_from_the_orcid_field(capsys):
+    _show_user({
+        **BASE_USER,
+        'unique_id': '0tkvpezyz1zzf00076nahf85j4',
+        'orcid': '0000-0002-1825-0097',
+        'orcid_verified': True,
+    })
+
+    output = capsys.readouterr().out
+    assert 'User ID' in output
+    assert '0000-0002-1825-0097' in output
+    assert '(verified)' in output
+
+
+def test_null_orcid_hides_an_orcid_shaped_unique_id_label(capsys):
+    _show_user({**BASE_USER, 'unique_id': '0000-0002-1825-0097', 'orcid': None})
+
+    output = capsys.readouterr().out
+    assert 'User ID' in output
+    assert 'ORCID' not in output
+
+
+def test_server_without_orcid_field_labels_by_unique_id_shape(capsys):
+    _show_user(dict(BASE_USER))
+
+    output = capsys.readouterr().out
+    assert 'ORCID' in output
+    assert 'User ID' not in output
+
+
+def test_owner_id_comes_from_the_owner_object(monkeypatch):
+    monkeypatch.setattr('crucible.cli.helpers.user_explorer_url', lambda uid: f'url/{uid}')
+    linked = []
+    monkeypatch.setattr(term, 'user_link', lambda label, uid: linked.append(uid) or label)
+
+    term.fmt_owner({'owner_orcid': '0000-0002-1825-0097',
+                    'owner': {'unique_id': '0tkvpezyz1zzf00076nahf85j4', 'first_name': 'A',
+                              'last_name': 'B'}})
+
+    assert linked == ['0tkvpezyz1zzf00076nahf85j4']
+
+
 def test_admin_view_shows_platform_role_and_key_status(capsys):
     _show_user({
         **BASE_USER,
@@ -334,7 +376,7 @@ def test_grid_fills_columns_top_to_bottom(capsys):
 
 def test_list_projects_shows_the_users_role(monkeypatch, capsys):
     client = SimpleNamespace(users=SimpleNamespace())
-    client.users.get_projects = MagicMock(return_value=[
+    client.users.list_projects = MagicMock(return_value=[
         {'project_id': 'zeta', 'title': 'Zeta', 'organization': 'LBL', 'role': 'viewer'},
         {'project_id': 'Alpha', 'title': 'Alpha', 'organization': 'LBL', 'role': 'contributor'},
     ])
@@ -343,7 +385,7 @@ def test_list_projects_shows_the_users_role(monkeypatch, capsys):
 
     _execute_list_projects(SimpleNamespace(user='alice', json=False, debug=False))
 
-    client.users.get_projects.assert_called_once_with(
+    client.users.list_projects.assert_called_once_with(
         'U' * 26, limit=None, role=None, sort=None, direction=None)
     output = capsys.readouterr().out
     assert 'contributor' in output
@@ -352,7 +394,7 @@ def test_list_projects_shows_the_users_role(monkeypatch, capsys):
 
 def test_list_projects_keeps_the_server_order_for_an_explicit_sort(monkeypatch, capsys):
     client = SimpleNamespace(users=SimpleNamespace())
-    client.users.get_projects = MagicMock(return_value=[
+    client.users.list_projects = MagicMock(return_value=[
         {'project_id': 'zeta', 'title': 'Zeta', 'role': 'owner'},
         {'project_id': 'Alpha', 'title': 'Alpha', 'role': 'owner'},
     ])
@@ -362,7 +404,7 @@ def test_list_projects_keeps_the_server_order_for_an_explicit_sort(monkeypatch, 
     _execute_list_projects(SimpleNamespace(user='alice', role=['owner'], sort='updated',
                                            direction='desc', json=False, debug=False))
 
-    client.users.get_projects.assert_called_once_with(
+    client.users.list_projects.assert_called_once_with(
         'U' * 26, limit=None, role=['owner'], sort='updated', direction='desc')
     output = capsys.readouterr().out
     assert output.index('zeta') < output.index('Alpha')

@@ -1,4 +1,4 @@
-"""Unit coverage for the signed multipart upload flow and its fallback."""
+"""Unit coverage for the signed multipart upload flow."""
 
 import base64
 from types import SimpleNamespace
@@ -36,7 +36,8 @@ class FakeApi:
         self.errors = {}
         self.acknowledged = list(acknowledged)
         self.existing = existing
-        self._config = SimpleNamespace(connect_timeout=5, read_timeout=30, upload_protocol='auto')
+        self._config = SimpleNamespace(connect_timeout=5, read_timeout=30, upload_protocol='auto',
+                                       upload_max_workers=8)
 
     def fail(self, method, path, *errors):
         self.errors.setdefault((method, path), []).extend(errors)
@@ -161,70 +162,76 @@ def test_rejected_part_aborts_the_upload(source, storage):
     assert f'{BASE}/complete' not in api.paths('post')
 
 
-@pytest.mark.parametrize('error', [http_error(503, 'New multipart uploads are disabled', '60')])
-def test_auto_falls_back_to_the_legacy_route(source, monkeypatch, error):
-    api = FakeApi()
-    api.fail('post', f'{BASE}/initiate', error)
-    legacy = MagicMock(return_value=(RECORD, False))
-    monkeypatch.setattr(dispatch, 'upload_file_gcs_multipart', legacy)
-
-    assert dispatch.upload_file_gcs(api, DSID, source) == (RECORD, False)
-    assert dispatch.upload_file_gcs(api, DSID, source) == (RECORD, False)
-
-    assert legacy.call_count == 2
-    assert api.paths('post').count(f'{BASE}/initiate') == 1
-
-
-def test_missing_route_is_an_error_not_a_fallback(source, monkeypatch):
-    api = FakeApi()
-    api.fail('post', f'{BASE}/initiate', http_error(404, 'Not Found'))
-    monkeypatch.setattr(dispatch, 'upload_file_gcs_multipart',
-                        lambda *a, **k: pytest.fail('fell back'))
-
-    with pytest.raises(requests.HTTPError):
-        dispatch.upload_file_gcs(api, DSID, source)
-
-
-def test_signed_protocol_does_not_fall_back(source, monkeypatch):
+def test_switched_off_server_is_an_error(source):
     api = FakeApi()
     api.fail('post', f'{BASE}/initiate', http_error(503, 'New multipart uploads are disabled', '60'))
-    monkeypatch.setattr(dispatch, 'upload_file_gcs_multipart',
-                        lambda *a, **k: pytest.fail('fell back'))
 
-    with pytest.raises(sm.SignedMultipartUnavailable):
-        dispatch.upload_file_gcs(api, DSID, source, protocol='signed')
+    with pytest.raises(RuntimeError, match='switched off'):
+        dispatch.upload_file_gcs(api, DSID, source)
+
+    assert not any('initiate/multipart' in p or p.endswith('/upload/initiate') for p in api.paths())
 
 
-def test_dataset_not_found_is_not_a_fallback(source, monkeypatch):
+@pytest.mark.parametrize('replace', [False, True])
+def test_server_without_uploads_says_so(source, replace):
     api = FakeApi()
-    api.fail('post', f'{BASE}/initiate', http_error(404, 'Dataset not found'))
-    monkeypatch.setattr(dispatch, 'upload_file_gcs_multipart',
-                        lambda *a, **k: pytest.fail('fell back'))
+    api.fail('post', f'{BASE}/initiate', http_error(
+        501, {'code': 'feature_disabled', 'feature': 'uploads', 'message': 'not enabled'}))
+
+    with pytest.raises(RuntimeError, match='not enabled on this server'):
+        dispatch.upload_file_gcs(api, DSID, source, replace=replace)
+    assert len(api.paths('post')) == 1
+
+
+def test_missing_route_is_an_error(source):
+    api = FakeApi()
+    api.fail('post', f'{BASE}/initiate', http_error(404, 'Not Found'))
 
     with pytest.raises(requests.HTTPError):
         dispatch.upload_file_gcs(api, DSID, source)
 
 
-def test_legacy_protocol_skips_signed_uploads(source, monkeypatch):
-    api = FakeApi()
-    legacy = MagicMock(return_value=(RECORD, False))
-    monkeypatch.setattr(dispatch, 'upload_file_gcs_multipart', legacy)
-
-    dispatch.upload_file_gcs(api, DSID, source, protocol='legacy')
-
-    assert api.calls == [] and legacy.called
 
 
-def test_empty_files_use_the_legacy_route(tmp_path, monkeypatch):
+class EmptyApi(FakeApi):
+    def _request(self, method, path, retry=True, log_body=True, **kwargs):
+        if path.endswith('/initiate'):
+            self.calls.append((method, path, kwargs))
+            return {'upload_id': 'u1', 'state': 'uploading', 'part_size': 0,
+                    'part_count': 0, 'parts': [], 'existing_file': None}
+        return super()._request(method, path, retry=retry, log_body=log_body, **kwargs)
+
+
+EMPTY_SHA256 = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'
+
+
+def test_empty_file_initiates_and_completes_with_no_parts(tmp_path, storage):
+    path = tmp_path / 'empty.bin'
+    path.write_bytes(b'')
+    api = EmptyApi()
+
+    assert dispatch.upload_file_gcs(api, DSID, str(path)) == (RECORD, False)
+
+    initiate = next(c for c in api.calls if c[1] == f'{BASE}/initiate')
+    assert initiate[2]['json']['size'] == 0
+    complete = next(c for c in api.calls if c[1] == f'{BASE}/complete')
+    assert complete[2]['json']['sha256_hash'] == EMPTY_SHA256
+    assert complete[2]['json']['crc32c'] == 'AAAAAA=='
+    assert api.paths('get') == []
+    assert not any(p.endswith('/parts') for p in api.paths())
+    assert storage.puts == []
+
+
+def test_empty_file_on_a_server_without_support_explains(tmp_path):
     path = tmp_path / 'empty.bin'
     path.write_bytes(b'')
     api = FakeApi()
-    legacy = MagicMock(return_value=(RECORD, False))
-    monkeypatch.setattr(dispatch, 'upload_file_gcs_multipart', legacy)
+    api.fail('post', f'{BASE}/initiate', http_error(422, [{'loc': ['body', 'size']}]))
 
-    dispatch.upload_file_gcs(api, DSID, str(path))
+    with pytest.raises(RuntimeError, match='does not accept empty uploads'):
+        dispatch.upload_file_gcs(api, DSID, str(path))
 
-    assert legacy.called and not getattr(api, '_signed_uploads_unavailable', False)
+
 
 
 def test_client_upload_progress_is_used_by_default(source, storage):
@@ -255,17 +262,6 @@ def test_progress_line_renders_only_on_a_terminal():
     assert out.endswith('\n') and out.count('\n') == 1
 
 
-def test_client_upload_protocol_overrides_the_setting(source, monkeypatch):
-    api = FakeApi()
-    api.upload_protocol = 'legacy'
-    legacy = MagicMock(return_value=(RECORD, False))
-    monkeypatch.setattr(dispatch, 'upload_file_gcs_multipart', legacy)
-
-    dispatch.upload_file_gcs(api, DSID, source)
-
-    assert legacy.called and api.calls == []
-
-
 def test_client_request_ingestion_false_skips_ingestion(monkeypatch):
     from crucible.resources.datasets import DatasetOperations
     seen = []
@@ -287,13 +283,12 @@ def test_upload_session_applies_and_restores_options():
     from crucible.cli.helpers import upload_session
 
     client = SimpleNamespace()
-    args = SimpleNamespace(upload_protocol='signed', no_ingest=True)
+    args = SimpleNamespace(no_ingest=True)
     with upload_session(client, args):
-        assert (client.upload_protocol, client.request_ingestion) == ('signed', False)
+        assert client.request_ingestion is False
         assert client.upload_progress is not None
 
-    assert (client.upload_protocol, client.request_ingestion, client.upload_progress) == (
-        None, True, None)
+    assert (client.request_ingestion, client.upload_progress) == (True, None)
 
 
 def test_add_file_cli_rejects_no_ingest_with_wait(tmp_path, monkeypatch, capsys):
@@ -380,13 +375,9 @@ def test_replace_refuses_a_changed_file(source, storage):
     assert storage.puts == []
 
 
-def test_replace_needs_signed_uploads(source, monkeypatch):
-    with pytest.raises(ValueError, match='legacy'):
-        dispatch.upload_file_gcs(FakeApi(), DSID, source, protocol='legacy', replace=True)
-
+def test_replace_on_a_switched_off_server_is_an_error(source):
     api = FakeApi()
     api.fail('post', f'{BASE}/initiate', http_error(503, 'New multipart uploads are disabled', '60'))
-    monkeypatch.setattr(dispatch, 'upload_file_gcs_multipart', lambda *a, **k: pytest.fail('legacy'))
     with pytest.raises(RuntimeError, match='switched off'):
         dispatch.upload_file_gcs(api, DSID, source, replace=True)
 
@@ -493,3 +484,7 @@ def test_replace_with_identical_content_uploads_nothing(source, storage):
 
     assert unchanged is True and record['mfid'] == 'old'
     assert storage.puts == [] and api.calls == []
+
+
+
+

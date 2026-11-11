@@ -27,7 +27,6 @@ Each file's upload and ingestion request happen together in one call
 already recorded in the lock and re-attempts the rest.
 """
 
-import fcntl
 import hashlib
 import json
 import logging
@@ -55,6 +54,14 @@ def _file_sha256(path: str) -> str:
         for chunk in iter(lambda: f.read(65536), b''):
             h.update(chunk)
     return h.hexdigest()
+
+
+def _instrument_ref(value: Optional[str]) -> Dict[str, str]:
+    """Map a recipe's instrument (MFID or instrument_id) to the matching Dataset field."""
+    if not value:
+        return {}
+    from crucible.utils.identifiers import is_mfid
+    return {'instrument_mfid' if is_mfid(value) else 'instrument_id': value}
 
 
 class CastExecutor:
@@ -90,6 +97,7 @@ class CastExecutor:
     @contextmanager
     def _file_lock(self):
         """Exclusive file lock to prevent simultaneous cast runs on the same recipe."""
+        import fcntl
         lock_file = self.plan.lock_path.with_suffix('.lck')
         with open(lock_file, 'w') as f:
             try:
@@ -171,7 +179,7 @@ class CastExecutor:
     # Public entry point
     # ------------------------------------------------------------------
 
-    def apply(self, client, dry_run: bool = False) -> Dict[str, str]:
+    def apply(self, client, dry_run: bool = False) -> Dict[str, Optional[str]]:
         """
         Create all entities and apply all links.
 
@@ -287,7 +295,7 @@ class CastExecutor:
                 dataset_name=ds.name,
                 session_name=ds.session,
                 public=ds.public,
-                instrument_name=ds.instrument,
+                **_instrument_ref(ds.instrument),
                 data_format=ds.data_format,
                 timestamp=ds.timestamp,
             )
@@ -304,7 +312,7 @@ class CastExecutor:
                 measurement=ds.measurement,
                 session_name=ds.session,
                 public=ds.public,
-                instrument_name=ds.instrument,
+                **_instrument_ref(ds.instrument),
                 data_format=ds.data_format,
                 timestamp=ds.timestamp,
             )
@@ -345,7 +353,7 @@ class CastExecutor:
             scientific_metadata=metadata,
             keywords=keywords,
         )
-        dsid = result['dsid']
+        dsid = result['dataset_mfid']
         self._mark_created(local_id, dsid, _hash_entity(ds))
         logger.info(f"Created dataset '{ds.name}': {dsid}")
 

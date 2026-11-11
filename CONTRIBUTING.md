@@ -12,7 +12,7 @@ cd nano-crucible
 python -m pip install -e ".[dev,docs]"
 ```
 
-The package supports Python 3.10 and newer.
+The package supports Python 3.11 and newer.
 
 ## Make and verify a change
 
@@ -28,11 +28,7 @@ Build the documentation when changing Markdown, docstrings, or public APIs:
 mkdocs build
 ```
 
-Integration tests call a live Crucible API, require credentials, create records, and do not remove those records afterward. If live verification is necessary, configure a non-production account and run only the relevant module against the `crucible-test` project:
-
-```bash
-pytest tests/integration/test_datasets.py -v
-```
+The tests in this repository are mocked and never contact an API. Checks against a live Crucible API live in the separate `crucible-tests` repository, which runs nano-crucible against staging.
 
 Please never put an API key in source code, test output, notebooks, or commits.
 

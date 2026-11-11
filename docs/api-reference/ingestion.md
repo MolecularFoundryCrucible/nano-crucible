@@ -9,3 +9,4 @@ Access via `client.ingestions`.
         - get
         - wait
         - update
+        - list_ingestors

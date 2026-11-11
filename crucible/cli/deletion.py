@@ -8,6 +8,7 @@ admins approve or reject them.
 """
 
 import sys
+import json
 import logging
 
 logger = logging.getLogger(__name__)
@@ -131,6 +132,8 @@ Examples:
                         help='Field to order by')
     parser.add_argument('--direction', choices=list(SORT_DIRECTIONS), default=None,
                         help='Sort direction')
+    parser.add_argument('--json', action='store_true', default=False,
+                        help='Output as JSON array')
     parser.set_defaults(func=_execute_list)
 
 
@@ -148,6 +151,8 @@ Examples:
     )
     parser.add_argument('request_id', metavar='REQUEST_ID', type=int,
                         help='Integer ID of the deletion request')
+    parser.add_argument('--json', action='store_true', default=False,
+                        help='Output as JSON object')
     parser.set_defaults(func=_execute_get)
 
 
@@ -203,13 +208,15 @@ def _register_delete(subparsers):
         epilog="""
 Examples:
     crucible deletion delete mf-abc123
-    crucible deletion delete mf-abc123 --force
+    crucible deletion delete mf-abc123 --force --yes
 """,
     )
     parser.add_argument('resource_id', metavar='RESOURCE_ID',
                         help='MFID of the resource to permanently delete')
     parser.add_argument('--force', action='store_true',
                         help='Skip the deletion request workflow and delete immediately')
+    parser.add_argument('-y', '--yes', action='store_true', default=False,
+                        help='Skip the confirmation prompt')
     parser.set_defaults(func=_execute_delete)
 
 
@@ -243,6 +250,7 @@ Examples:
     parser.add_argument('--direction', choices=list(SORT_DIRECTIONS), default=None,
                         help='Sort direction on deletion time')
     add_limit_arguments(parser)
+    parser.add_argument('--json', action='store_true', default=False, help='Output as JSON array')
     parser.set_defaults(func=_execute_list_deleted)
 
 
@@ -259,6 +267,7 @@ Examples:
     )
     parser.add_argument('audit_id', metavar='ID', type=int,
                         help='Integer ID of the audit log entry')
+    parser.add_argument('--json', action='store_true', default=False, help='Output as JSON object')
     parser.set_defaults(func=_execute_get_deleted)
 
 
@@ -270,7 +279,7 @@ def _execute_list_deleted(args):
     try:
         client = get_client()
         records = client.deletions.list_deleted(
-            resource_id=args.resource_id,
+            resource_mfid=args.resource_id,
             requester_id=args.requester_id,
             reviewer_id=args.reviewer_id,
             limit=resolve_limit(args), **page_kwargs(args),
@@ -279,6 +288,10 @@ def _execute_list_deleted(args):
             project_mfid=args.project_mfid,
             direction=args.direction,
         )
+        if getattr(args, 'json', False):
+            print_more_hint(records, resolve_limit(args), args)
+            print(json.dumps(records, indent=2, default=str))
+            return
 
         term.header(f"Deleted Resources ({count_label(records)})")
         if not records:
@@ -317,6 +330,9 @@ def _execute_get_deleted(args):
     try:
         client = get_client()
         record = client.deletions.get_deleted(args.audit_id)
+        if getattr(args, 'json', False):
+            print(json.dumps(record, indent=2, default=str))
+            return
         _p = term.field_printer(16)
         from .helpers import explorer_url, project_explorer_url
         rid  = record.get('resource_id') or ''
@@ -373,6 +389,10 @@ def _execute_list(args):
         if args.sort is None and args.direction is None:
             records = sorted(records, key=lambda r: r.get('id') or 0)
 
+        if getattr(args, 'json', False):
+            print(json.dumps(records, indent=2, default=str))
+            return
+
         term.header(f"Deletion Requests — {args.status} ({len(records)})")
 
         if not records:
@@ -418,6 +438,9 @@ def _execute_get(args):
     try:
         client = get_client()
         record = client.deletions.get(args.request_id)
+        if getattr(args, 'json', False):
+            print(json.dumps(record, indent=2, default=str))
+            return
         _show_deletion_request(record, client=client)
     except Exception as e:
         from .helpers import fail
@@ -455,6 +478,11 @@ def _execute_delete(args):
     """Execute the 'deletion delete' subcommand."""
     import requests as _req
     from crucible.config import get_client
+    from .helpers import prompt_confirm
+    question = f"Permanently delete {args.resource_id}? This cannot be undone."
+    if not (getattr(args, 'yes', False) or prompt_confirm(question, option='--yes')):
+        logger.info("Aborted.")
+        return
     try:
         client = get_client()
         result = client.deletions.delete(args.resource_id, force=args.force)

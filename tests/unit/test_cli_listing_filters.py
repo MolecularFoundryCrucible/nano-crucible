@@ -191,7 +191,3 @@ def test_dataset_facets_accepts_instrument_id():
     assert args.instrument_id == 'titan'
 
 
-def test_instrument_name_filter_warns(monkeypatch, capsys):
-    _run_list(dataset, ['--all-projects', '--instrument', 'Titan'], [], monkeypatch)
-
-    assert 'deprecated' in capsys.readouterr().err

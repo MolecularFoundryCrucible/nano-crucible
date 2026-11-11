@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-GCS transport helpers for Crucible file operations.
+Storage transport helpers for Crucible file operations.
 
 Submodules
 ----------
-upload   : Resumable and parallel multipart upload to GCS
-download : Parallel range-request download from GCS (planned)
+upload           : Upload entry point (signed multipart only)
+signed_multipart : The signed multipart flow and file replacement
+download         : Dataset file downloads
 """
 
 from .upload import upload_file_gcs, upload_file_gcs_multipart, upload_file_gcs_resumable

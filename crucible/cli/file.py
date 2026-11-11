@@ -8,6 +8,7 @@ live under 'crucible dataset'. Operations that take a file MFID live here.
 """
 
 import sys
+import json
 import logging
 from . import term
 from .helpers import add_limit_arguments, count_label, print_more_hint, resolve_limit, page_kwargs
@@ -71,6 +72,8 @@ Examples:
         '--sha256', metavar='HASH',
         help='Filter by SHA-256 hex digest',
     )
+    parser.add_argument('--json', action='store_true', default=False,
+                        help='Output as JSON array')
     parser.set_defaults(func=_execute_list)
 
 
@@ -90,6 +93,11 @@ def _execute_list(args):
         sha256_filter = getattr(args, 'sha256', None)
         if sha256_filter and dsid:
             files = [f for f in files if f.get('sha256_hash', '').startswith(sha256_filter)]
+
+        if getattr(args, 'json', False):
+            print_more_hint(fetched, limit, args)
+            print(json.dumps(files, indent=2, default=str))
+            return
 
         count = count_label(fetched, len(files))
         header = f"Files · {dsid} ({count})" if dsid else f"Files ({count})"
@@ -133,6 +141,8 @@ Examples:
 """,
     )
     parser.add_argument('file_id', metavar='FILE_ID', help='File MFID')
+    parser.add_argument('--json', action='store_true', default=False,
+                        help='Output as JSON object')
     parser.set_defaults(func=_execute_get)
 
 
@@ -142,6 +152,10 @@ def _execute_get(args):
     try:
         client = get_client()
         f = client.files.get(args.file_id)
+
+        if getattr(args, 'json', False):
+            print(json.dumps(f, indent=2, default=str))
+            return
 
         _p = term.field_printer(12)
         term.header("File")
@@ -351,6 +365,7 @@ Examples:
 """,
     )
     parser.add_argument('file_id', metavar='FILE_ID', help='File MFID')
+    parser.add_argument('--json', action='store_true', default=False, help='Output as JSON array')
     parser.set_defaults(func=_execute_ingestion)
 
 
@@ -359,7 +374,10 @@ def _execute_ingestion(args):
     from crucible.config import get_client
     try:
         client = get_client()
-        reqs = client.ingestions.list(file_id=args.file_id)
+        reqs = client.ingestions.list(file_mfid=args.file_id)
+        if getattr(args, 'json', False):
+            print(json.dumps(reqs, indent=2, default=str))
+            return
 
         term.header(f"Ingestion Requests · {args.file_id} ({len(reqs)})")
         if not reqs:
@@ -372,7 +390,7 @@ def _execute_ingestion(args):
                 str(r.get('id', '-')),
                 term.status_label(r.get('status')),
                 r.get('ingestion_class') or '-',
-                term.fmt_ts(r.get('created_at') or r.get('creation_time')) or '-',
+                term.fmt_ts(r.get('time_created')) or '-',
             ))
         term.table(rows, ['ID', 'Status', 'Class', 'Created'], max_widths=[8, 12, 25, 20])
 

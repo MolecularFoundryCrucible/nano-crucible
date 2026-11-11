@@ -10,14 +10,14 @@ import argparse
 import sys
 import logging
 import json
-import warnings
 
 logger = logging.getLogger(__name__)
 
 from . import term
-from .helpers import add_limit_arguments, count_label, print_more_hint, resolve_limit, page_kwargs
+from .helpers import RemovedOptionAction, add_limit_arguments, count_label, print_more_hint, resolve_limit, page_kwargs
 from ..config import config as _config
-from ..constants import PROJECT_ACCESS_ROLES, PROJECT_MEMBER_ROLES, PROJECT_SORTS, SORT_DIRECTIONS
+from ..constants import (JOIN_REQUEST_STATUSES, PROJECT_ACCESS_ROLES, PROJECT_MEMBER_ROLES,
+                         PROJECT_SORTS, SORT_DIRECTIONS)
 
 try:
     import argcomplete
@@ -26,19 +26,6 @@ except ImportError:
     ARGCOMPLETE_AVAILABLE = False
 
 
-class _DeprecatedMembersAction(argparse.Action):
-    """Set include_members while warning about the former CLI spelling."""
-
-    def __init__(self, option_strings, dest, **kwargs):
-        super().__init__(option_strings, dest, nargs=0, **kwargs)
-
-    def __call__(self, parser, namespace, values, option_string=None):
-        warnings.warn(
-            "--members is deprecated; use --include-members instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        setattr(namespace, self.dest, True)
 
 
 def register_subcommand(subparsers):
@@ -166,9 +153,10 @@ def _register_get(subparsers):
 
     parser.add_argument(
         '--members',
-        action=_DeprecatedMembersAction,
+        action=RemovedOptionAction,
+        nargs=0,
         dest='include_members',
-        help='Deprecated alias for --include-members'
+        replacement='--include-members'
     )
 
     parser.add_argument(
@@ -201,7 +189,7 @@ Examples:
 """
     )
 
-    from .helpers import DeprecatedAliasAction
+    from .helpers import RemovedOptionAction
     parser.add_argument(
         '--project-id', '-i',
         required=False,
@@ -211,8 +199,8 @@ Examples:
     )
     parser.add_argument(
         '-id',
-        action=DeprecatedAliasAction,
-        deprecated_options={'-id'},
+        action=RemovedOptionAction,
+        removed_options={'-id'},
         replacement='--project-id',
         dest='project_id',
         default=argparse.SUPPRESS,
@@ -271,6 +259,8 @@ def _register_list_users(subparsers):
         if ARGCOMPLETE_AVAILABLE:
             pid_arg.completer = argcomplete.completers.SuppressCompleter()
         add_limit_arguments(p, 'members')
+        p.add_argument('--json', action='store_true', default=False,
+                       help='Output as JSON array')
 
     parser = subparsers.add_parser(
         'list-users',
@@ -317,9 +307,9 @@ Examples:
                         help='Role to grant (default: contributor)')
 
     group = parser.add_mutually_exclusive_group()
-    group.add_argument('--orcid',    metavar='ORCID',    help='(deprecated, use --user)')
-    group.add_argument('--email',    metavar='EMAIL',    help='(deprecated, use --user)')
-    group.add_argument('--username', metavar='USERNAME', help='(deprecated, use --user)')
+    group.add_argument('--orcid', action=RemovedOptionAction, replacement='--user', default=None)
+    group.add_argument('--email', action=RemovedOptionAction, replacement='--user', default=None)
+    group.add_argument('--username', action=RemovedOptionAction, replacement='--user', default=None)
 
     parser.set_defaults(func=_execute_add_user)
 
@@ -376,9 +366,9 @@ Examples:
                         help='ORCID, MFID, username, or email of the user')
 
     group = parser.add_mutually_exclusive_group()
-    group.add_argument('--orcid',    metavar='ORCID',    help='(deprecated, use --user)')
-    group.add_argument('--email',    metavar='EMAIL',    help='(deprecated, use --user)')
-    group.add_argument('--username', metavar='USERNAME', help='(deprecated, use --user)')
+    group.add_argument('--orcid', action=RemovedOptionAction, replacement='--user', default=None)
+    group.add_argument('--email', action=RemovedOptionAction, replacement='--user', default=None)
+    group.add_argument('--username', action=RemovedOptionAction, replacement='--user', default=None)
     parser.set_defaults(func=_execute_remove_user)
 
 
@@ -605,12 +595,17 @@ def _execute_create(args):
 
 
 def _execute_list_users(args):
-    """Execute the 'project get-users' subcommand."""
+    """Execute the 'project list-users' subcommand."""
     from crucible.config import get_client
     from .helpers import sort_members
     try:
         client = get_client()
-        users = sort_members(client.projects.get_users(args.project_id, limit=resolve_limit(args), **page_kwargs(args)))
+        users = sort_members(client.projects.list_users(args.project_id, limit=resolve_limit(args), **page_kwargs(args)))
+
+        if getattr(args, 'json', False):
+            print_more_hint(users, resolve_limit(args), args)
+            print(json.dumps([u.model_dump(mode='json') for u in users], indent=2, default=str))
+            return
 
         term.header(f"Users · {args.project_id} ({count_label(users)})")
         if not users:
@@ -636,38 +631,22 @@ def _execute_list_users(args):
 
 def _execute_add_user(args):
     """Execute the 'project add-user' subcommand."""
-    import re
-    import warnings
     from crucible.config import get_client
     from .helpers import parse_user_ref
 
-    orcid    = getattr(args, 'orcid', None)
-    email    = getattr(args, 'email', None)
-    username = getattr(args, 'username', None)
     user_ref = getattr(args, 'user', None)
 
-    if orcid or email or username:
-        warnings.warn(
-            "--orcid/--email/--username are deprecated; use --user instead: "
-            "crucible project add-user PROJECT_ID --user VALUE",
-            DeprecationWarning, stacklevel=2,
-        )
-    elif user_ref:
+    if user_ref:
         ref = parse_user_ref(user_ref)
-        orcid, email, username = ref.get('orcid'), ref.get('email'), ref.get('username')
+        orcid, email, username = ref.get('user_unique_id'), ref.get('email'), ref.get('username')
     else:
         logger.error("Provide a user identifier: crucible project add-user PROJECT_ID --user VALUE")
-        sys.exit(1)
-
-    if orcid and not re.match(r'^\d{4}-\d{4}-\d{4}-\d{3}[0-9X]$', orcid):
-        logger.error(f"Invalid ORCID format: {orcid}")
-        logger.error("Expected format: 0000-0000-0000-000X")
         sys.exit(1)
 
     try:
         client = get_client()
         role = getattr(args, 'role', None)
-        users = client.projects.add_user(user_unique_id=orcid, project_id=args.project_id,
+        users = client.projects.add_user(user_ref=orcid, project_id=args.project_id,
                                          email=email, username=username, role=role)
 
         name = orcid or username or email
@@ -739,24 +718,14 @@ def _execute_update(args):
 def _execute_remove_user(args):
     """Execute the 'project remove-user' subcommand."""
     import requests as _req
-    import warnings
     from crucible.config import get_client
     from .helpers import parse_user_ref
 
-    orcid    = getattr(args, 'orcid', None)
-    email    = getattr(args, 'email', None)
-    username = getattr(args, 'username', None)
     user_ref = getattr(args, 'user', None)
 
-    if orcid or email or username:
-        warnings.warn(
-            "--orcid/--email/--username are deprecated; use --user instead: "
-            "crucible project remove-user PROJECT_ID --user VALUE",
-            DeprecationWarning, stacklevel=2,
-        )
-    elif user_ref:
+    if user_ref:
         ref = parse_user_ref(user_ref)
-        orcid, email, username = ref.get('orcid'), ref.get('email'), ref.get('username')
+        orcid, email, username = ref.get('user_unique_id'), ref.get('email'), ref.get('username')
     else:
         logger.error("Provide a user identifier: crucible project remove-user PROJECT_ID --user VALUE")
         sys.exit(1)
@@ -765,7 +734,7 @@ def _execute_remove_user(args):
         client = get_client()
 
         try:
-            user = client.users.get(orcid=orcid, email=email, username=username)
+            user = client.users.get(**ref)
             user_unique_id = user.get('unique_id')
             first = user.get('first_name') or ''
             last  = user.get('last_name') or ''
@@ -856,10 +825,6 @@ def _follow_project_rename(old_id, new_id):
     current = config.current_project
     if not old_id or not current or current.lower() != old_id.lower():
         return
-    if config.source('current_project') == 'environment':
-        logger.warning(f"CRUCIBLE_CURRENT_PROJECT still names '{old_id}'; "
-                       f"update it to '{new_id}'.")
-        return
     set_config_value('current_project', new_id)
     logger.info(f"Current project updated: {old_id} -> {new_id}")
 
@@ -937,8 +902,9 @@ def _register_list_join_requests(subparsers):
     """Register the 'project list-join-requests' subcommand."""
     parser = subparsers.add_parser(
         'list-join-requests',
-        help='List join requests for a project (admin or project lead)',
-        description='List join requests for a project. Requires admin or project lead permissions.',
+        help='List join requests for a project',
+        description='List join requests for a project. Project editors and above (and admins) '
+                    'see every request; others see only their own.',
         formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
@@ -946,9 +912,9 @@ Examples:
     crucible project list-join-requests my-project --status pending
 """
     )
-    parser.add_argument('project_id', metavar='PROJECT_ID', help='Project ID')
-    parser.add_argument('--status', choices=['pending', 'approved', 'rejected'], default=None,
-                        help='Filter by status')
+    parser.add_argument('project_id', metavar='PROJECT_ID', help='Project ID or MFID')
+    parser.add_argument('--status', choices=list(JOIN_REQUEST_STATUSES), action='append', default=None,
+                        help='Filter by status; repeatable')
     add_limit_arguments(parser, 'requests')
     parser.set_defaults(func=_execute_list_join_requests)
 
@@ -966,7 +932,7 @@ def _execute_list_join_requests(args):
             print(f"  {term.dim('No join requests found.')}")
             return
         term.table(_table_rows(records, client=client),
-                  ['ID', 'Group', 'Status', 'Requester', 'Requested'],
+                  ['ID', 'Project', 'Status', 'Requester', 'Requested'],
                   max_widths=[6, 25, 10, 25, 12])
         print_more_hint(records, resolve_limit(args), args)
     except Exception as e:
