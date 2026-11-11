@@ -145,6 +145,12 @@ def _disabled(error) -> bool:
             and 'multipart uploads are disabled' in _detail(error).lower())
 
 
+def _not_enabled(error) -> bool:
+    detail = _detail_payload(error)
+    return (getattr(error.response, 'status_code', None) == 501 and isinstance(detail, dict)
+            and detail.get('code') == 'feature_disabled' and detail.get('feature') == 'uploads')
+
+
 def _api(client, method: str, path: str, **kwargs):
     """Call the API without the session's retry adapter, honoring Retry-After.
 
@@ -252,6 +258,8 @@ class _Upload:
             return _api(self.client, 'post', path, json=body, headers=headers)
         except requests.HTTPError as error:
             status = getattr(error.response, 'status_code', None)
+            if _not_enabled(error):
+                raise RuntimeError("File uploads are not enabled on this server.") from error
             if _disabled(error):
                 raise RuntimeError(
                     "Uploads are switched off on this server for now; try again later.") from error

@@ -44,6 +44,7 @@
 - Requests send a `nano-crucible/<version>` User-Agent.
 - Calls to routes the API marks deprecated raise a `DeprecationWarning` once per route, with the date, sunset, and link the API gives.
 - Uploads always use signed multipart; the legacy GCS upload routes and the fallback to them are gone, empty files upload through signed multipart, and `google-cloud-storage` is no longer a dependency.
+- Uploading to a server without uploads enabled says so instead of failing with a generic error.
 - `upload_max_workers` now sets how many parts upload at once.
 - User references are no longer shape-checked: `users.get()` and the CLI pass any value they cannot classify to the API.
 - Owner and lead fields show as "Owner ID" and "Lead ID", and the owner shown comes from the owner object when present.

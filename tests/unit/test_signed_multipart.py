@@ -172,6 +172,17 @@ def test_switched_off_server_is_an_error(source):
     assert not any('initiate/multipart' in p or p.endswith('/upload/initiate') for p in api.paths())
 
 
+@pytest.mark.parametrize('replace', [False, True])
+def test_server_without_uploads_says_so(source, replace):
+    api = FakeApi()
+    api.fail('post', f'{BASE}/initiate', http_error(
+        501, {'code': 'feature_disabled', 'feature': 'uploads', 'message': 'not enabled'}))
+
+    with pytest.raises(RuntimeError, match='not enabled on this server'):
+        dispatch.upload_file_gcs(api, DSID, source, replace=replace)
+    assert len(api.paths('post')) == 1
+
+
 def test_missing_route_is_an_error(source):
     api = FakeApi()
     api.fail('post', f'{BASE}/initiate', http_error(404, 'Not Found'))
