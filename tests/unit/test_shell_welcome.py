@@ -127,3 +127,42 @@ def test_shell_welcome_names_the_user_with_their_username(user, expected):
 
     user_line = next(line for line in text if line.startswith('User'))
     assert user_line.split(None, 1)[1] == f'{expected} · admin'
+
+
+def test_welcome_rows_show_the_api_name_version_auth_and_update():
+    text = rows_text(info(api_name='staging', api_url='https://crucible.lbl.gov/testapi-staging',
+                          api_version='4.0.0a1', signed_in_with='Crucible sign-in (browser, OS keyring)',
+                          update=('4.0.1', 'pip install -U nano-crucible')))
+
+    api_line = next(line for line in text if line.startswith('API'))
+    assert 'staging  https://crucible.lbl.gov/testapi-staging  (API 4.0.0a1)' in api_line
+    assert any(line.startswith('Auth') and 'sign-in (browser, OS keyring)' in line for line in text)
+    assert any(line.startswith('Update') and '4.0.1 is available: pip install -U nano-crucible' in line
+               for line in text)
+
+
+def test_welcome_rows_leave_out_update_and_auth_when_unknown():
+    text = rows_text(info())
+
+    assert not any(line.startswith(('Update', 'Auth')) for line in text)
+
+
+@pytest.mark.parametrize('error, expected', [
+    (__import__('requests').ConnectionError('refused'), 'Cannot reach https://x.test/api'),
+    (ValueError("No API key. Run 'crucible login'."), "No API key. Run 'crucible login'."),
+])
+def test_startup_errors_say_what_to_do(error, expected):
+    from crucible.cli.shell.core import _startup_error
+
+    assert _startup_error(error, 'https://x.test/api').startswith(expected)
+
+
+def test_startup_error_for_a_refused_credential():
+    import requests
+    from crucible.cli.shell.core import _startup_error
+
+    response = requests.Response()
+    response.status_code = 401
+    message = _startup_error(requests.HTTPError('401', response=response), 'https://x.test/api')
+
+    assert 'refused the credential' in message and 'crucible login' in message

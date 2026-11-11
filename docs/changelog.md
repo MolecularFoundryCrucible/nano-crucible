@@ -22,6 +22,7 @@
 - Shell completion reaches nested commands such as `account keys list` and fixed-choice arguments such as `config get KEY`, and leaves out removed and renamed commands, administrator-only `user` commands you cannot use, and `user create` and `deletion delete` for callers who cannot elevate.
 - `--json` on the `list-parents`, `list-children`, `list-samples`, `list-datasets`, `list-files`, `list-keywords`, `list-users`, `list-projects` and `list-access-groups` commands, `file`, `ingestion`, `ag` and `deletion` `list` and `get`, `ag mine`, `deletion list-deleted` and `get-deleted`, `file ingestion`, `ingestion list-ingestors`, `whoami`, and `status`.
 - The package ships type information (`py.typed`) and passes mypy; `get()` methods are typed as returning `None` when the API sends no record.
+- The shell says at startup when PyPI has a newer release, with the command to upgrade; `update_check` (`CRUCIBLE_UPDATE_CHECK`) turns it off.
 
 ### Removed
 
@@ -43,6 +44,7 @@
 - Calls to routes the API marks deprecated raise a `DeprecationWarning` once per route, pointing at the calling code, with the date, sunset, and link the API gives.
 - Uploads always use signed multipart, including empty files; `upload_max_workers` sets how many parts upload at once, and a server without uploads enabled says so.
 - Resource, project, instrument, and user links, `crucible open`, and Alt+O go to the Crucible Hub (`hub_url`) instead of the Graph Explorer.
+- The shell starts faster, says why when it cannot start, and its summary shows the API's name, version, and how you are signed in. The status bar names the API (production, staging, or its host), shows the API version only for pre-release or older servers, shows whether you use a key or a sign-in, adapts to narrow terminals, and no longer shows a clock.
 - Renamed, with the old names still working and warning: `datasets.list_keywords()`, `projects.list_users()`, `instruments.list_users()`, `users.list_projects()`, and the parameters `file_mfid` (files), `resource_mfid` (deletions), `service_account_ref`, `instrument_ref`, and `user_ref` (users and project members). `ingestions.list()` takes `dataset_mfid` and `file_mfid`; `dsid` and `file_id` still work.
 - Renamed CLI commands, with the old names still working and warning: `dataset link-sample`, `unlink-sample`, `unlink -p -c`; `sample link-dataset`, `unlink-dataset`, `unlink -p -c`; `dataset ingestors` is now `ingestion list-ingestors`, which takes `--filter`.
 - `datasets.graph()` and `samples.graph()` still work but are deprecated in favour of `graphs.get()`.

@@ -9,6 +9,7 @@ Provides organized access to API endpoints.
 import requests
 import json
 import logging
+import threading
 from requests.adapters import HTTPAdapter
 from urllib.parse import urlparse
 from urllib3.util.retry import Retry
@@ -157,6 +158,7 @@ class CrucibleClient:
         self._authorization: Optional['AccountAuthorization'] = None
         self._capabilities: Optional['AccountCapabilities'] = None
         self._profile_stale = False
+        self._profile_lock = threading.Lock()
         self.upload_progress = None
 
         self.request_ingestion = True
@@ -164,10 +166,16 @@ class CrucibleClient:
 
     def _load_profile(self, refresh: bool = False) -> None:
         """Populate the cached authorization and capability blocks."""
-        from .models import AccountAuthorization, AccountCapabilities
-
         if self._authorization is not None and not self._profile_stale and not refresh:
             return
+        with self._profile_lock:
+            if self._authorization is not None and not self._profile_stale and not refresh:
+                return
+            self._read_profile()
+
+    def _read_profile(self) -> None:
+        from .models import AccountAuthorization, AccountCapabilities
+
         self._profile_stale = False
         try:
             profile = self.account.profile()
@@ -286,7 +294,6 @@ class CrucibleClient:
         Only when the CLI installed a handler (crucible.auth.stepup) and on
         the main thread: a library or worker thread never prompts.
         """
-        import threading
         from .auth import stepup
         code = _error_code(response) if response.status_code in (401, 403) else None
         if code not in stepup.STEP_UP_CODES or stepup.handler() is None:

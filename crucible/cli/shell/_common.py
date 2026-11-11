@@ -66,7 +66,7 @@ def brand_colors(depth=None):
 
 def shell_style_rules(depth=None):
     names = ('bottom-toolbar', 'bottom-toolbar.text', 'tb-project', 'tb-separator',
-             'tb-api', 'tb-api-attention', 'tb-clock', 'tb-debug', 'tb-elevated',
+             'tb-user', 'tb-api', 'tb-api-attention', 'tb-debug', 'tb-elevated',
              'welcome-title', 'welcome-dim', 'welcome-elevated')
     if not term.color_enabled():
         return {name: 'noinherit' for name in names}
@@ -78,7 +78,7 @@ def shell_style_rules(depth=None):
         'tb-separator':        f"noinherit bg:{c['dark_blue']} fg:{c['orange']}",
         'tb-api':              f"noinherit bg:{c['dark_blue']} fg:{c['light_blue']}",
         'tb-api-attention':    f"noinherit bg:{c['dark_blue']} fg:{c['orange']} bold",
-        'tb-clock':            f"noinherit bg:{c['dark_blue']} fg:{c['light_blue']}",
+        'tb-user':             f"noinherit bg:{c['dark_blue']} fg:{c['light_blue']}",
         'tb-debug':            f"noinherit bg:{c['orange']} fg:{c['dark_blue']} bold",
         'tb-elevated':         f"noinherit bg:{c['alert']} fg:{c['off_white']} bold",
         'welcome-title':       f"bold fg:{c['orange']}",

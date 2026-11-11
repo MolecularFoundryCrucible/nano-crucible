@@ -240,7 +240,8 @@ def test_shell_toolbar_restores_context_symbols(monkeypatch):
         'project': 'example-project',
         'session': 'deprecated-session',
         'user_label': 'Test User',
-        'api_label': 'api: testapi-staging',
+        'auth_label': 'signed in',
+        'api_label': 'staging',
         'api_attention': True,
         'debug': False,
     }
@@ -251,10 +252,11 @@ def test_shell_toolbar_restores_context_symbols(monkeypatch):
     rendered = fragment_list_to_text(to_formatted_text(shell._toolbar()))
 
     assert '🔬 example-project' in rendered
-    assert '🧸 Test User' in rendered
-    assert '🔗 api: testapi-staging' in rendered
-    assert rendered.count('│') == 3
+    assert '🧸 Test User · signed in' in rendered
+    assert '🔗 staging' in rendered
+    assert rendered.count('│') == 2
     assert 'deprecated-session' not in rendered
+    assert shell_common.vlen(rendered) == 100
 
 
 def test_shell_toolbar_uses_brand_palette_without_completion_styles(monkeypatch):
@@ -355,7 +357,7 @@ def test_shell_toolbar_marks_custom_api_and_debug(monkeypatch):
     shell.state = {
         'project': 'example-project',
         'user_label': 'Test User',
-        'api_label': 'api: testapi-staging',
+        'api_label': 'staging',
         'api_attention': True,
         'debug': True,
     }
@@ -365,9 +367,69 @@ def test_shell_toolbar_marks_custom_api_and_debug(monkeypatch):
 
     fragments = to_formatted_text(shell._toolbar())
 
-    assert ('class:tb-api-attention', ' 🔗 api: testapi-staging ') in fragments
+    assert ('class:tb-api-attention', ' 🔗 staging ') in fragments
     assert ('class:tb-debug', ' DEBUG ') in fragments
-    assert sum(text.count('│') for _, text in fragments) == 4
+    assert sum(text.count('│') for _, text in fragments) == 3
+
+
+def _toolbar_text(monkeypatch, columns, **state):
+    from prompt_toolkit.formatted_text import fragment_list_to_text, to_formatted_text
+
+    shell = shell_cli.CrucibleShell.__new__(shell_cli.CrucibleShell)
+    shell.state = {'project': 'example-project', 'user_label': 'Test User',
+                   'auth_label': 'key', 'api_label': 'production', **state}
+    app = SimpleNamespace(output=SimpleNamespace(
+        get_size=lambda: SimpleNamespace(columns=columns)))
+    monkeypatch.setattr('prompt_toolkit.application.get_app', lambda: app)
+    return fragment_list_to_text(to_formatted_text(shell._toolbar()))
+
+
+def test_shell_toolbar_flags_a_noteworthy_api_version(monkeypatch):
+    assert '🔗 staging · API 4.0.0a1' in _toolbar_text(
+        monkeypatch, 100, api_label='staging', api_version_note='4.0.0a1')
+
+
+def test_shell_toolbar_gives_way_on_narrow_terminals_but_keeps_the_api_and_badge(monkeypatch):
+    wide = _toolbar_text(monkeypatch, 120, elevated=True)
+    narrow = _toolbar_text(monkeypatch, 50, elevated=True)
+
+    assert '🧸 Test User · key' in wide
+    assert '🧸' not in narrow
+    assert '🔗 production' in narrow and 'ELEVATED' in narrow
+
+
+def test_shell_toolbar_escapes_markup_in_names(monkeypatch):
+    assert '🧸 R&D <bot> · key' in _toolbar_text(monkeypatch, 100, user_label='R&D <bot>')
+
+
+@pytest.mark.parametrize('url, name', [
+    ('https://crucible.lbl.gov/api/v3', 'production'),
+    ('https://crucible.lbl.gov/api/v3/', 'production'),
+    ('https://crucible.lbl.gov/testapi-staging', 'staging'),
+    ('https://crucible.lbl.gov/testapi', 'testapi'),
+    ('http://localhost:8000', 'localhost:8000'),
+])
+def test_api_environment_names_the_endpoint(url, name):
+    assert helpers.api_environment(url) == name
+
+
+@pytest.mark.parametrize('api, client, note', [
+    ('4.0.0', '4.0.0', None),
+    ('4.1.2', '4.0.0', None),
+    ('4.0.0a1', '4.0.0', '4.0.0a1'),
+    ('3.3.1', '4.0.0', '3.3.1'),
+    (None, '4.0.0', None),
+])
+def test_api_version_note_only_for_prereleases_and_older_servers(api, client, note):
+    assert helpers.api_version_note(api, client) == note
+
+
+@pytest.mark.parametrize('source, label', [
+    ('sign-in', 'signed in'), ('this session', 'signed in'),
+    ('config file', 'key'), ('CRUCIBLE_API_KEY', 'key [env]'), (None, None),
+])
+def test_auth_label(source, label):
+    assert helpers.auth_label(SimpleNamespace(credential_source=source)) == label
 
 
 def test_shell_api_attention_is_reserved_for_nondefault_endpoints(monkeypatch):

@@ -68,7 +68,8 @@ def shell_banner_row_fragments(banner, depth=None):
 
 
 def welcome_rows(*, version, first_name, user_label, platform_role, api_url,
-                 project, elevated, deletions, joins):
+                 project, elevated, deletions, joins, api_name=None, api_version=None,
+                 signed_in_with=None, update=None):
     """Build the session summary printed beside the mark at startup."""
     def field(label, *value):
         return [(_DIM, label.ljust(10))] + list(value)
@@ -80,7 +81,11 @@ def welcome_rows(*, version, first_name, user_label, platform_role, api_url,
         [('', f'Welcome, {first_name}.')],
         [],
         field('User', ('', user)),
-        field('API', ('', api_url or '?')),
+        field('API', *([(_TITLE if api_name != 'production' else '', api_name), ('', '  ')]
+                       if api_name else []),
+              ('', api_url or '?'),
+              *([(_DIM, f'  (API {api_version})')] if api_version else [])),
+        *([field('Auth', ('', signed_in_with))] if signed_in_with else []),
         field('Project', ('', project) if project else (_DIM, 'none')),
         field('Access', ((_ELEVATED, ' elevated ' if term.color_enabled() else 'elevated')
                          if elevated else ('', 'normal'))),
@@ -92,6 +97,9 @@ def welcome_rows(*, version, first_name, user_label, platform_role, api_url,
         pending.append(f"{joins} join request{'s' if joins != 1 else ''}")
     if pending:
         rows.append(field('Pending', ('', ' · '.join(pending))))
+    if update:
+        latest, command = update
+        rows.append(field('Update', (_TITLE, latest), ('', ' is available: '), ('', command)))
     rows += [[], [(_DIM, "Type 'help' for commands, 'exit' to quit.")]]
     return rows
 

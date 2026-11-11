@@ -45,6 +45,7 @@ class Config:
         'include_metadata':   {'env': 'CRUCIBLE_INCLUDE_METADATA',   'ini': 'include_metadata',   'section': 'display'},
         'include_links':      {'env': 'CRUCIBLE_INCLUDE_LINKS',      'ini': 'include_links',      'section': 'display'},
         'pager':              {'env': 'CRUCIBLE_PAGER_MODE',         'ini': 'pager',              'section': 'display'},
+        'update_check':       {'env': 'CRUCIBLE_UPDATE_CHECK',       'ini': 'update_check',       'section': 'display'},
         # [network] – timeouts and pagination
         'connect_timeout':    {'env': 'CRUCIBLE_CONNECT_TIMEOUT',    'ini': 'connect_timeout',    'section': 'network'},
         'read_timeout':       {'env': 'CRUCIBLE_READ_TIMEOUT',       'ini': 'read_timeout',       'section': 'network'},
@@ -296,6 +297,11 @@ class Config:
     def include_metadata(self) -> bool:
         """Include scientific metadata by default in get/list commands."""
         return self._parse_bool('include_metadata')
+
+    @property
+    def update_check(self) -> bool:
+        """Whether the shell says so at startup when PyPI has a newer release (default true)."""
+        return self._data.get('update_check', 'true').lower() not in ('false', '0', 'no', 'off')
 
     @property
     def include_links(self) -> bool:

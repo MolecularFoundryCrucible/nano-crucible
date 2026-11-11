@@ -1270,17 +1270,58 @@ def resolve_project_context(args=None, project_id=None):
     return fetch_project_context()
 
 
+def api_environment(api_url):
+    """A short name for an API URL: production, staging, or where it points."""
+    from urllib.parse import urlparse
+    from crucible.config.config import Config
+    url = (api_url or '').rstrip('/')
+    if url == Config.DEFAULT_API_URL.rstrip('/'):
+        return 'production'
+    parsed = urlparse(url)
+    parts = [p for p in parsed.path.split('/') if p]
+    if parsed.hostname == urlparse(Config.DEFAULT_API_URL).hostname:
+        if any('staging' in part for part in parts):
+            return 'staging'
+        return parts[0] if parts else parsed.netloc
+    return parsed.netloc or '?'
+
+
 def fetch_api_label():
-    """Return 'api: <last-path-segment>' derived from the configured api_url."""
+    """Return the configured API's short name, for the shell toolbar."""
     try:
-        from urllib.parse import urlparse
         from crucible.config import config
-        parsed = urlparse(config.api_url or '')
-        parts  = [p for p in parsed.path.split('/') if p]
-        label  = parts[-1] if parts else (parsed.netloc or '?')
-        return f"api: {label}"
+        return api_environment(config.api_url)
     except Exception:
-        return 'api: ?'
+        return '?'
+
+
+def api_version_note(api_version, client_version):
+    """The API version when it deserves a glance, else None.
+
+    That is a pre-release server, or one older than the client's major
+    version, which lacks the routes this client relies on.
+    """
+    if not api_version:
+        return None
+    version = str(api_version)
+    if not re.fullmatch(r'\d+(\.\d+)*', version):
+        return version
+    try:
+        if int(version.split('.')[0]) < int(str(client_version).split('.')[0]):
+            return version
+    except ValueError:
+        return None
+    return None
+
+
+def auth_label(client):
+    """'signed in', 'key', or 'key [env]', for the shell toolbar."""
+    source = getattr(client, 'credential_source', None)
+    if source in ('sign-in', 'this session'):
+        return 'signed in'
+    if source == 'CRUCIBLE_API_KEY':
+        return 'key [env]'
+    return 'key' if source else None
 
 
 def fetch_api_attention():

@@ -126,7 +126,7 @@ upload_chunk_size_mb) are ignored; `config show` lists any left in your file and
         choices=['api_key', 'api_url', 'hub_url', 'current_project',
                  'privilege_mode', 'auth_store', 'cache_dir',
                  'editor', 'sample_group_by', 'dataset_group_by',
-                 'include_metadata', 'include_links', 'pager',
+                 'include_metadata', 'include_links', 'pager', 'update_check',
                  'connect_timeout', 'read_timeout', 'default_limit',
                  'upload_max_workers'],
         help='Configuration key to retrieve'
@@ -143,7 +143,7 @@ upload_chunk_size_mb) are ignored; `config show` lists any left in your file and
         choices=['api_key', 'api_url', 'hub_url', 'current_project',
                  'privilege_mode', 'auth_store', 'cache_dir',
                  'editor', 'sample_group_by', 'dataset_group_by',
-                 'include_metadata', 'include_links', 'pager',
+                 'include_metadata', 'include_links', 'pager', 'update_check',
                  'connect_timeout', 'read_timeout', 'default_limit',
                  'upload_max_workers'],
         help='Configuration key to set'
@@ -163,7 +163,7 @@ upload_chunk_size_mb) are ignored; `config show` lists any left in your file and
         choices=['api_key', 'api_url', 'hub_url', 'current_project',
                  'privilege_mode', 'auth_store', 'cache_dir',
                  'editor', 'sample_group_by', 'dataset_group_by',
-                 'include_metadata', 'include_links', 'pager',
+                 'include_metadata', 'include_links', 'pager', 'update_check',
                  'connect_timeout', 'read_timeout', 'default_limit',
                  'upload_max_workers',
                  'graph_explorer_url', 'current_session', 'upload_protocol', 'upload_chunk_size_mb'],
@@ -308,6 +308,7 @@ def cmd_show(args):
     _p("sample_group_by",      config.sample_group_by)
     _p("dataset_group_by",     config.dataset_group_by)
     _p("pager",                config.pager)
+    _p("update_check",         config.update_check)
 
     # [network] — timeouts and pagination
     term.subheader("[network]  timeouts / pagination")

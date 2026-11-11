@@ -15,8 +15,8 @@ import threading
 import itertools
 import logging
 from collections import deque
-from datetime import datetime
-from concurrent.futures import ThreadPoolExecutor
+from html import escape
+from concurrent.futures import Future, ThreadPoolExecutor
 
 from .. import term
 from ._common import PROMPT, shell_color_depth, shell_html, shell_style_rules, vlen
@@ -29,6 +29,42 @@ except ImportError:
     CrucibleCompleter = None  # type: ignore[assignment,misc]
 
 logger = logging.getLogger(__name__)
+
+
+def _in_background(fn, *args):
+    """Run fn on a daemon thread, so a slow call never holds up exit."""
+    future: Future = Future()
+
+    def work():
+        try:
+            future.set_result(fn(*args))
+        except BaseException as exc:
+            future.set_exception(exc)
+    threading.Thread(target=work, daemon=True).start()
+    return future
+
+
+def _settle(future, timeout, default=None):
+    try:
+        return future.result(timeout=timeout)
+    except Exception:
+        return default
+
+
+def _startup_error(exc, api_url):
+    """One actionable line for a shell that cannot start."""
+    import requests
+    from crucible.auth.errors import SignInRequired
+    if isinstance(exc, (requests.ConnectionError, requests.Timeout)):
+        return (f"Cannot reach {api_url}. Check your network, or the API URL "
+                "('crucible config get api_url').")
+    if isinstance(exc, SignInRequired) or isinstance(exc, ValueError):
+        return str(exc)
+    status = getattr(getattr(exc, 'response', None), 'status_code', None)
+    if status == 401:
+        return (f"{api_url} refused the credential (401). Run 'crucible login', "
+                "or set a new API key with 'crucible config init'.")
+    return f"Cannot connect to Crucible: {exc}"
 
 
 class CrucibleShell:
@@ -46,7 +82,7 @@ class CrucibleShell:
         self.state     = {}
         self.completer = None
         self._session  = None         # prompt_toolkit PromptSession
-        self._clock_stop = threading.Event()
+        self._background = {}
 
     def run(self):
         """Start the interactive shell."""
@@ -94,8 +130,10 @@ class CrucibleShell:
         else:
             print('  Connecting to Crucible...')
 
+        from crucible.config import config as _cfg
         try:
             self.client = get_client()
+            self._start_background_checks()
             info = self.client.whoami()
         except Exception as e:
             _stop.set()
@@ -103,7 +141,7 @@ class CrucibleShell:
                 _spin_thread.join()
             for _h in logging.getLogger().handlers:
                 _h.removeFilter(_filt)
-            logger.error(f"Cannot connect to Crucible: {e}")
+            logger.error(_startup_error(e, _cfg.api_url))
             sys.exit(1)
 
         _stop.set()
@@ -119,16 +157,24 @@ class CrucibleShell:
         from ..helpers import (
             fetch_projects, fetch_deletions, fetch_join_requests, fetch_service_accounts,
             fetch_user_label, fetch_project_context, fetch_api_label, fetch_api_attention,
+            auth_label,
         )
-        deletions     = fetch_deletions(self.client)
-        join_requests = fetch_join_requests(self.client)
-        service_accounts = (fetch_service_accounts(self.client)
-                            if self._can_manage_service_accounts() else None)
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            projects_f = pool.submit(fetch_projects, self.client)
+            deletions_f = pool.submit(fetch_deletions, self.client)
+            joins_f = pool.submit(fetch_join_requests, self.client)
+            accounts_f = (pool.submit(fetch_service_accounts, self.client)
+                          if self._can_manage_service_accounts() else None)
+            projects = projects_f.result()
+            deletions = deletions_f.result()
+            join_requests = joins_f.result()
+            service_accounts = accounts_f.result() if accounts_f else None
 
         project_id, project_source = fetch_project_context()
         self.state = {
             'user_label':        fetch_user_label(self.client, whoami_info),
-            'projects':          fetch_projects(self.client),
+            'auth_label':        auth_label(self.client),
+            'projects':          projects,
             'project':           project_id,
             'project_source':    project_source,
             'api_label':         fetch_api_label(),
@@ -140,6 +186,30 @@ class CrucibleShell:
             'service_accounts':  service_accounts or [],
             'recent_mfids':      deque(maxlen=15),
         }
+        self._collect_background_checks()
+
+    def _start_background_checks(self):
+        """Ask for the API version and for a newer release while startup goes on."""
+        from crucible import __version__
+        from crucible.config import config as _cfg
+        from ..updates import available_update
+        self._background = {
+            'health': _in_background(self.client.health),
+            'update': _in_background(available_update, __version__, _cfg.update_check),
+        }
+
+    def _collect_background_checks(self, wait=3.0):
+        from crucible import __version__
+        from ..helpers import api_version_note
+        from ..status import _readiness_details
+        health = self._background.get('health')
+        version = (_readiness_details(_settle(health, wait)).get('api_version')
+                   if health is not None else None)
+        self.state['api_version'] = version
+        self.state['api_version_note'] = api_version_note(version, __version__)
+        update = self._background.get('update')
+        if update is not None:
+            self.state['update'] = _settle(update, 0.5)
 
     def _pending_counts(self):
         """Pending deletion reviews and join requests awaiting this caller."""
@@ -166,7 +236,10 @@ class CrucibleShell:
             user_label = f'{full_name} (@{username})'
         else:
             user_label = full_name or (f'@{username}' if username else None)
+        from ..updates import upgrade_command
+        from ..whoami import credential_label
         deletions, joins = self._pending_counts()
+        latest = self.state.get('update')
         return welcome_rows(
             version=__version__,
             first_name=first_name,
@@ -177,6 +250,10 @@ class CrucibleShell:
             elevated=self.state.get('elevated', False),
             deletions=deletions,
             joins=joins,
+            api_name=self.state.get('api_label'),
+            api_version=self.state.get('api_version'),
+            signed_in_with=credential_label(self.client),
+            update=(latest, upgrade_command()) if latest else None,
         )
 
     def _print_pending(self):
@@ -252,6 +329,7 @@ class CrucibleShell:
         from ..helpers import (
             fetch_projects, fetch_deletions, fetch_join_requests, fetch_service_accounts,
             fetch_user_label, fetch_project_context, fetch_api_label, fetch_api_attention,
+            auth_label,
         )
         self.client.refresh_profile()
         with ThreadPoolExecutor(max_workers=4) as pool:
@@ -272,6 +350,9 @@ class CrucibleShell:
         self.state['project_source']   = project_source
         self.state['api_label']        = fetch_api_label()
         self.state['api_attention']    = fetch_api_attention()
+        self.state['auth_label']       = auth_label(self.client)
+        self._background = {'health': _in_background(self.client.health)}
+        self._collect_background_checks()
         self.state['deletions']        = new_deletions or []
         self.state['join_requests']    = new_join_requests or []
         self.state['service_accounts'] = new_service_accounts or []
@@ -291,67 +372,54 @@ class CrucibleShell:
 
     def _toolbar(self):
         from prompt_toolkit.application import get_app
-        label = self.state.get('project') or '(no project set)'
-        if len(label) > 22:
-            label = label[:21] + '…'
-        source = self.state.get('project_source')
-        source_label = ' [env]' if source == 'environment' else ''
-        project_label = f'🔬 {label}{source_label}'
-        proj_content = project_label + ' ' * max(0, 25 - vlen(project_label))
-        clock        = datetime.now().strftime('%H:%M')
-
-        left_str  = f' {proj_content} '
-        mid_str   = f' 🧸 {self.state.get("user_label", "?")} '
-        api_str   = f' 🔗 {self.state.get("api_label", "?")} '
-        clock_str = f' {clock} '
-        separator = ' │ '
-        debug_str = ' DEBUG ' if self.state.get('debug') else ''
-        elevated_str = ' ELEVATED ' if self.state.get('elevated') else ''
-
         try:
             term_width = get_app().output.get_size().columns
         except Exception:
             term_width = 80
 
-        fixed_width = (
-            vlen(left_str) + vlen(mid_str) + vlen(api_str)
-            + vlen(clock_str) + 3 * vlen(separator)
-            + len(debug_str) + len(elevated_str)
-        )
-        if debug_str:
-            fixed_width += vlen(separator)
-        if elevated_str:
-            fixed_width += vlen(separator)
-        pad = ' ' * max(0, term_width - fixed_width)
-        api_tag = 'tb-api-attention' if self.state.get('api_attention') else 'tb-api'
-        debug_segment = (
-            f'<tb-separator>{separator}</tb-separator><tb-debug>{debug_str}</tb-debug>'
-            if debug_str else ''
-        )
-        elevated_segment = (
-            f'<tb-separator>{separator}</tb-separator>'
-            f'<tb-elevated>{elevated_str}</tb-elevated>'
-            if elevated_str else ''
-        )
-        return shell_html(
-            f'<tb-project>{left_str}</tb-project>'
-            f'<tb-separator>{separator}</tb-separator>{mid_str}'
-            f'<tb-separator>{separator}</tb-separator><{api_tag}>{api_str}</{api_tag}>'
-            f'{pad}{elevated_segment}{debug_segment}'
-            f'<tb-separator>{separator}</tb-separator><tb-clock>{clock_str}</tb-clock>'
-        )
+        separator = ' │ '
+        project = self.state.get('project') or '(no project set)'
+        if self.state.get('project_source') == 'environment':
+            project += ' [env]'
+        user = self.state.get('user_label') or '?'
+        auth = self.state.get('auth_label')
+        api = self.state.get('api_label') or '?'
+        note = self.state.get('api_version_note')
+        if note:
+            api += f' · API {note}'
+        badges = [(tag, f' {text} ') for tag, text, on in (
+            ('tb-elevated', 'ELEVATED', self.state.get('elevated')),
+            ('tb-debug', 'DEBUG', self.state.get('debug'))) if on]
 
-    def _clock_tick(self):
-        """Background thread: invalidate toolbar once per minute."""
-        secs_to_next = 60 - datetime.now().second
-        if self._clock_stop.wait(timeout=secs_to_next):
-            return
-        while not self._clock_stop.is_set():
-            try:
-                self._session.app.invalidate()
-            except Exception:
-                pass
-            self._clock_stop.wait(timeout=60)
+        def fit(project_label, user_label):
+            parts = [f' 🔬 {project_label} ', f' 🔗 {api} ']
+            if user_label:
+                parts.insert(1, f' 🧸 {user_label} ')
+            used = sum(vlen(p) for p in parts) + vlen(separator) * (len(parts) - 1)
+            used += sum(len(text) + vlen(separator) for _, text in badges)
+            return parts, used
+
+        def short(text, width):
+            return text if len(text) <= width else text[:width - 1] + '…'
+
+        user_full = f'{user} · {auth}' if auth else user
+        for project_label, user_label in (
+                (short(project, 30), user_full),
+                (short(project, 30), user),
+                (short(project, 20), None),
+                (short(project, 12), None)):
+            parts, used = fit(project_label, user_label)
+            if used <= term_width:
+                break
+        pad = ' ' * max(0, term_width - used)
+
+        api_tag = ('tb-api-attention'
+                   if self.state.get('api_attention') or note else 'tb-api')
+        tags = ['tb-project'] + (['tb-user'] if len(parts) == 3 else []) + [api_tag]
+        sep = f'<tb-separator>{separator}</tb-separator>'
+        body = sep.join(f'<{tag}>{escape(text)}</{tag}>' for tag, text in zip(tags, parts))
+        tail = ''.join(f'{sep}<{tag}>{text}</{tag}>' for tag, text in badges)
+        return shell_html(f'{body}{pad}{tail}')
 
     def _resolve_future(self, last, key, default=None):
         """Resolve a named future from last_resource, returning default on failure."""
@@ -558,8 +626,6 @@ class CrucibleShell:
             color_depth=shell_color_depth(),
         )
 
-        threading.Thread(target=self._clock_tick, daemon=True).start()
-
         while True:
             try:
                 line = self._session.prompt(PROMPT)
@@ -572,7 +638,6 @@ class CrucibleShell:
                 break
             print()
 
-        self._clock_stop.set()
 
     def _run_readline(self):
         """Fallback shell using stdlib readline."""
