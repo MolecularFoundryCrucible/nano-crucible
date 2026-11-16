@@ -696,7 +696,8 @@ def _resolve_credential(config, api_url: str, api_key: Optional[str]):
             return SessionCredential(tokens, store)
     if configured:
         return ApiKeyCredential(configured, 'config file')
-    raise ValueError(
+    from .errors import NotSignedInError
+    raise NotSignedInError(
         "Not signed in to Crucible. Run 'crucible login', or set an API key with "
         "'crucible config init'.")
 

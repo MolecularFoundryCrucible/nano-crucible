@@ -62,6 +62,17 @@ def _startup_error(exc, api_url):
     return f"Cannot connect to Crucible: {exc}"
 
 
+def _needs_sign_in(exc):
+    """Whether signing in or configuring a credential would fix a failed start."""
+    from crucible.auth.errors import SignInRequired
+    status = getattr(getattr(exc, 'response', None), 'status_code', None)
+    return isinstance(exc, (SignInRequired, ValueError)) or status == 401
+
+
+SIGNED_OUT_COMMANDS = ('login', 'config', 'status', 'help', 'exit')
+_SIGNED_OUT_RETRY = {'login', 'config'}
+
+
 SLOW_COMMAND_SECONDS = 2.0
 _INTERACTIVE_WORDS = {'edit', 'login', 'reload', 'cd', 'init'}
 
@@ -98,13 +109,18 @@ class CrucibleShell:
         self._idle_lock  = threading.Lock()
         self._idle_timer = None
         self._idle_dropped = 0
+        self._signed_out_reason = None
 
     def run(self):
         """Start the interactive shell."""
         self._run_prompt_toolkit()
 
-    def _verify_connection(self):
-        """Spinner + whoami. Sets self.client. Exits on failure."""
+    def _verify_connection(self, fatal=True):
+        """Spinner + whoami. Sets self.client and returns the whoami info.
+
+        Returns None, with the reason in self._signed_out_reason, when a
+        credential is missing or refused; other failures exit when fatal.
+        """
         from crucible.config import get_client
 
         _spin_state = {'msg': 'Connecting to Crucible'}
@@ -153,8 +169,15 @@ class CrucibleShell:
                 _spin_thread.join()
             for _h in logging.getLogger().handlers:
                 _h.removeFilter(_filt)
-            logger.error(_startup_error(e, _cfg.api_url))
-            sys.exit(1)
+            from crucible.errors import NotSignedInError
+            if fatal and not _needs_sign_in(e):
+                logger.error(_startup_error(e, _cfg.api_url))
+                sys.exit(1)
+            self.client = None
+            self._signed_out_reason = (f"Not signed in to {_cfg.api_url}."
+                                       if isinstance(e, NotSignedInError)
+                                       else _startup_error(e, _cfg.api_url))
+            return None
 
         _stop.set()
         if _is_tty:
@@ -651,7 +674,12 @@ class CrucibleShell:
 
         print('\033[2J\033[H', end='', flush=True)
 
+        history = PrivateFileHistory(history_path)
         info = self._verify_connection()
+        if info is None:
+            info = self._signed_out_prompt(history)
+            if info is None:
+                return
         self._init_state(info)
 
         print_welcome(self._welcome_rows(info), shutil.get_terminal_size((80, 24)).columns)
@@ -672,7 +700,7 @@ class CrucibleShell:
         _register_keybindings(kb, self)
 
         self._session = PromptSession(
-            history=PrivateFileHistory(history_path),
+            history=history,
             auto_suggest=AutoSuggestFromHistory(),
             completer=ThreadedCompleter(self.completer),
             complete_while_typing=True,
@@ -698,6 +726,95 @@ class CrucibleShell:
                 break
             _report_duration(line, time.monotonic() - started)
             print()
+
+
+    def _signed_out_prompt(self, history):
+        """Offer sign-in and configuration until a credential works.
+
+        Returns the whoami info once connected, or None when the user leaves.
+        """
+        from prompt_toolkit import PromptSession
+        from prompt_toolkit.completion import WordCompleter
+        from prompt_toolkit.styles import Style
+
+        hint = (f"Type {term.cyan('login')} to sign in with a browser, or "
+                f"{term.cyan('config init')} to set an API key.")
+        print(term.yellow(self._signed_out_reason))
+        print(hint)
+        print()
+        session = PromptSession(
+            history=history,
+            completer=WordCompleter(list(SIGNED_OUT_COMMANDS)),
+            complete_while_typing=True,
+            bottom_toolbar=self._signed_out_toolbar,
+            style=Style.from_dict(shell_style_rules()),
+            color_depth=shell_color_depth(),
+        )
+        while True:
+            try:
+                line = session.prompt(PROMPT)
+            except KeyboardInterrupt:
+                print()
+                continue
+            except EOFError:
+                return None
+            words = line.split()
+            if not words:
+                continue
+            if words[0] in ('exit', 'quit'):
+                return None
+            if words[0] not in SIGNED_OUT_COMMANDS:
+                print(f"Not signed in. Until you are, the shell runs only "
+                      f"{', '.join(SIGNED_OUT_COMMANDS)}. {hint}")
+                continue
+            if words[0] == 'help':
+                print(f"Not signed in. {hint} {term.cyan('status')} checks the API; "
+                      f"{term.cyan('exit')} leaves.")
+                continue
+            self._run_signed_out_command(line)
+            if words[0] not in _SIGNED_OUT_RETRY:
+                continue
+            info = self._connect_if_credential()
+            if info is not None:
+                print()
+                return info
+            print()
+
+    def _run_signed_out_command(self, line):
+        from .. import setup_logging
+        try:
+            args = self.parser.parse_args(shlex.split(line))
+            setup_logging(debug=getattr(args, 'debug', False))
+            if hasattr(args, 'func'):
+                args.func(args)
+        except SystemExit:
+            pass
+        except KeyboardInterrupt:
+            print("\nCancelled.")
+        except Exception as e:
+            logger.error(f"Error: {e}")
+
+    def _connect_if_credential(self):
+        """Connect when a credential now resolves; stay quiet while none does."""
+        from crucible.config import config as _cfg, get_client
+        from crucible.errors import NotSignedInError
+        _cfg.reload()
+        try:
+            get_client()
+        except NotSignedInError:
+            return None
+        except ValueError:
+            pass
+        info = self._verify_connection(fatal=False)
+        if info is None:
+            print(term.yellow(self._signed_out_reason))
+        return info
+
+    def _signed_out_toolbar(self):
+        from ..helpers import fetch_api_label
+        sep = '<tb-separator> │ </tb-separator>'
+        api = escape(fetch_api_label() or '?')
+        return shell_html(f'<tb-user> not signed in </tb-user>{sep}<tb-api> 🔗 {api} </tb-api>')
 
 
 def run(parser):

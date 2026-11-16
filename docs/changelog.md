@@ -26,6 +26,7 @@
 - The shell switches elevation off after 15 idle minutes at the prompt; `elevation_timeout` (`CRUCIBLE_ELEVATION_TIMEOUT`) changes it, `0` never.
 - `owner_ref` filter for up to 10 owners on lists, facets, and search, and `owner_is_null`; `--owner` is repeatable.
 - `affiliation` values `member` (datasets, samples, instruments) and `instrument` (datasets).
+- The shell opens signed out when no credential works, offering `login` and `config init`.
 
 ### Removed
 
