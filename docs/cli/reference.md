@@ -16,7 +16,7 @@ Project options use `--project-id` with the conventional `-p` short alias. Sampl
 
 By default no privilege mode is sent, so a platform administrator runs elevated and sees every record, while everyone else gets their normal, ACL-derived access. Set `crucible config set privilege_mode normal` to restrict an administrator account to its own access; `--elevate` (`-E`) then widens a single command. A future release will default to `normal`. Administrator-only commands, such as `service-account show`, `service-account set-role`, and deletion review, elevate on their own and do not need the flag.
 
-Explicit elevation can also come from the `privilege_mode` config key or the `CRUCIBLE_PRIVILEGE_MODE` environment variable. Because neither is visible on the command line, the CLI prints a notice to stderr when a command runs elevated without `--elevate`. In the interactive shell, `elevate on|off` toggles it for the session, `elevate COMMAND` runs a single command elevated, and an `ELEVATED` badge appears in the toolbar while the toggle is on.
+Explicit elevation can also come from the `privilege_mode` config key or the `CRUCIBLE_PRIVILEGE_MODE` environment variable. Because neither is visible on the command line, the CLI prints a notice to stderr when a command runs elevated without `--elevate`. In the interactive shell, `elevate on|off` toggles it for the session, `elevate COMMAND` runs a single command elevated, and an `ELEVATED` badge appears in the toolbar while the toggle is on. The shell switches elevation off after `elevation_timeout` idle minutes (default 15, `0` never).
 
 `deletion list` shows the caller's review queue by default when they can review requests. Pass `--scope` to choose a different view.
 

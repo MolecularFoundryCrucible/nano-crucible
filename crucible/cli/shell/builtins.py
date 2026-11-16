@@ -12,11 +12,6 @@ import sys
 from .. import term
 from ._common import vlen
 
-try:
-    from .completer import CrucibleCompleter
-except ImportError:
-    CrucibleCompleter = None  # type: ignore[assignment,misc]
-
 logger = logging.getLogger(__name__)
 
 
@@ -77,18 +72,17 @@ def _help(shell, line):
         ('exit / quit',   'exit the shell'),
     ]:
         print(f"  {term.cyan(_cmd)}{' ' * (_W - len(_cmd))} {_desc}")
-    if CrucibleCompleter is not None:
-        print()
-        term.header("Keyboard shortcuts")
-        for _key, _desc in [
-            ('Alt+V',  'toggle verbose view for last fetched resource'),
-            ('Alt+G',  'toggle graph view for last fetched resource'),
-            ('Alt+R',  'refresh projects, user info, and deletions'),
-            ('Alt+P',  'project picker (type a number or filter text)'),
-            ('Alt+O',  'open last resource in the Crucible Hub'),
-            ('Ctrl+L', 'clear screen'),
-        ]:
-            print(f"  {term.bold(_key)}{' ' * (_W - len(_key))} {_desc}")
+    print()
+    term.header("Keyboard shortcuts")
+    for _key, _desc in [
+        ('Alt+V',  'toggle verbose view for last fetched resource'),
+        ('Alt+G',  'toggle graph view for last fetched resource'),
+        ('Alt+R',  'refresh projects, user info, and deletions'),
+        ('Alt+P',  'project picker (type a number or filter text)'),
+        ('Alt+O',  'open last resource in the Crucible Hub'),
+        ('Ctrl+L', 'clear screen'),
+    ]:
+        print(f"  {term.bold(_key)}{' ' * (_W - len(_key))} {_desc}")
     print()
     return True
 
@@ -302,6 +296,10 @@ def _elevate(shell, line):
     if on:
         print("Elevated privilege enabled. Requests now ask for "
               "platform-administrator access.")
+        from crucible.config import config as _cfg
+        if _cfg.elevation_timeout:
+            print(f"It switches off after {_cfg.elevation_timeout} idle minutes "
+                  "(elevation_timeout).")
     else:
         print("Elevated privilege disabled.")
     return True

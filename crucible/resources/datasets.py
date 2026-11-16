@@ -753,7 +753,9 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
             dataset_mfid: Dataset MFID
             file_path: Local path to the file
             ingestion_class: Ingestion class for the worker (e.g. 'lammps', 'nexus').
-                Defaults to the server-side default if omitted.
+                Defaults to the server-side default if omitted. With
+                skip_ingestion it is recorded on the not-requested ingestion
+                request.
             wait_for_ingestion_response: Block until ingestion completes. Ignored if
                 skip_ingestion is True.
             multipart: Removed in 4.0.0; passing it raises RemovedError.
@@ -801,7 +803,7 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
             return {'associated_file': file_record, 'ingestion_request': None}
 
         if skip_ingestion:
-            ingestion_request = self._client.files._skip_ingestion(file_id)
+            ingestion_request = self._client.files._skip_ingestion(file_id, ingestion_class)
             logger.info(f"Uploaded {stored_filename} to dataset {dataset_mfid}, ingestion not requested")
 
         else:

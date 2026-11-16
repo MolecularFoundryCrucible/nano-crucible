@@ -2,7 +2,6 @@
 Interactive shell for the Crucible CLI.
 
 Starts when `crucible` is invoked with no arguments.
-Uses prompt_toolkit if available, falls back to readline + input().
 """
 
 import os
@@ -22,11 +21,7 @@ from .. import term
 from ._common import PROMPT, shell_color_depth, shell_html, shell_style_rules, vlen
 from .banner import print_welcome, welcome_rows
 from .builtins import find_builtin
-
-try:
-    from .completer import CrucibleCompleter
-except ImportError:
-    CrucibleCompleter = None  # type: ignore[assignment,misc]
+from .completer import CrucibleCompleter
 
 logger = logging.getLogger(__name__)
 
@@ -100,13 +95,13 @@ class CrucibleShell:
         self.completer = None
         self._session  = None         # prompt_toolkit PromptSession
         self._background = {}
+        self._idle_lock  = threading.Lock()
+        self._idle_timer = None
+        self._idle_dropped = 0
 
     def run(self):
         """Start the interactive shell."""
-        if CrucibleCompleter is not None:
-            self._run_prompt_toolkit()
-        else:
-            self._run_readline()
+        self._run_prompt_toolkit()
 
     def _verify_connection(self):
         """Spinner + whoami. Sets self.client. Exits on failure."""
@@ -340,6 +335,42 @@ class CrucibleShell:
             self.client.refresh_profile()
             if getattr(self, 'completer', None) is not None:
                 self.completer.hidden = self._hidden_commands()
+
+    def _arm_idle_timer(self):
+        """Switch elevation off if the prompt sits idle for elevation_timeout minutes."""
+        from crucible.config import config as _cfg
+        minutes = _cfg.elevation_timeout
+        if not minutes or not self.state.get('elevated'):
+            return
+        timer = threading.Timer(minutes * 60, self._idle_expired, args=(minutes,))
+        timer.daemon = True
+        with self._idle_lock:
+            self._idle_timer = timer
+        timer.start()
+
+    def _idle_expired(self, minutes):
+        with self._idle_lock:
+            if self._idle_timer is None:
+                return
+            self._idle_timer = None
+            self._idle_dropped = minutes
+            self.state['elevated'] = False
+            if self.client is not None:
+                self.client.privilege_mode = 'normal'
+        if self._session is not None:
+            self._session.app.invalidate()
+
+    def _disarm_idle_timer(self):
+        """Stop the idle timer once a line is entered, and report a drop."""
+        with self._idle_lock:
+            timer, self._idle_timer = self._idle_timer, None
+            minutes, self._idle_dropped = self._idle_dropped, 0
+        if timer is not None:
+            timer.cancel()
+        if minutes:
+            self._apply_elevated(False)
+            print(term.yellow(f"Elevated privilege switched off after {minutes} idle "
+                              "minutes; 'elevate on' turns it back on."))
 
     def refresh(self):
         """Re-fetch projects, user info, deletions, join requests, and service accounts. Updates state + completer."""
@@ -652,6 +683,7 @@ class CrucibleShell:
         )
 
         while True:
+            self._arm_idle_timer()
             try:
                 line = self._session.prompt(PROMPT)
             except KeyboardInterrupt:
@@ -659,29 +691,8 @@ class CrucibleShell:
                 continue
             except EOFError:
                 break
-            started = time.monotonic()
-            if not self._dispatch(line):
-                break
-            _report_duration(line, time.monotonic() - started)
-            print()
-
-
-    def _run_readline(self):
-        """Fallback shell using stdlib readline."""
-        print("\nCrucible interactive shell  (type 'help' for commands, 'exit' to quit)")
-        try:
-            import readline  # noqa: F401
-        except ImportError:
-            pass
-
-        while True:
-            try:
-                line = input(PROMPT)
-            except KeyboardInterrupt:
-                print()
-                continue
-            except EOFError:
-                break
+            finally:
+                self._disarm_idle_timer()
             started = time.monotonic()
             if not self._dispatch(line):
                 break

@@ -23,6 +23,7 @@
 - `--json` on the `list-parents`, `list-children`, `list-samples`, `list-datasets`, `list-files`, `list-keywords`, `list-users`, `list-projects` and `list-access-groups` commands, `file`, `ingestion`, `ag` and `deletion` `list` and `get`, `ag mine`, `deletion list-deleted` and `get-deleted`, `file ingestion`, `ingestion list-ingestors`, `whoami`, and `status`.
 - The package ships type information (`py.typed`) and passes mypy; `get()` methods are typed as returning `None` when the API sends no record.
 - The shell says at startup when PyPI has a newer release, with the command to upgrade; `update_check` (`CRUCIBLE_UPDATE_CHECK`) turns it off.
+- The shell switches elevation off after 15 idle minutes at the prompt; `elevation_timeout` (`CRUCIBLE_ELEVATION_TIMEOUT`) changes it, `0` never.
 
 ### Removed
 
@@ -34,6 +35,7 @@
 - `dataset update --set public=...`; use `dataset set-public` or `set-private`.
 - `users.get(orcid=)` (pass the user reference), `projects.list(orcid=)` (use `member_ref` or `users.list_projects()`), the `AccessGrant` properties `principal`, `kind` and `effective_permission` (use `principal_id`, `principal_type`, `permission`), the `relationship` key in `get_links()` results (use `direction`), and the `dsid` key in `datasets.create()` results (use `dataset_mfid`).
 - The legacy GCS upload routes, the fallback to them, and the `google-cloud-storage` dependency.
+- The basic shell used without prompt_toolkit; a broken install now says to reinstall.
 
 ### Changed
 
@@ -62,6 +64,7 @@
 
 ### Fixed
 
+- `add_file()` and `files.replace()` with `skip_ingestion=True` record `ingestion_class` on the ingestion request instead of dropping it.
 - Datasets whose files have an absolute legacy filename, such as `/mnt/gcs/api-uploads/scan.h5`, download instead of being skipped.
 - `datasets.create(upload_files=False)` and `dataset create --no-upload` send each file's size and SHA-256, which the server requires, and name files by relative path so files sharing a basename in different folders stay separate.
 - `add_remote_file()` sets `storage_path` in the create request, and updates it when re-adding an existing file at a new location.

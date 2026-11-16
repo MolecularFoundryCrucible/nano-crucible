@@ -36,6 +36,7 @@ class Config:
         'current_project':    {'env': None,                          'ini': 'current_project',    'section': 'crucible'},
         'privilege_mode':     {'env': 'CRUCIBLE_PRIVILEGE_MODE',     'ini': 'privilege_mode',     'section': 'crucible'},
         'auth_store':         {'env': 'CRUCIBLE_AUTH_STORE',         'ini': 'auth_store',         'section': 'crucible'},
+        'elevation_timeout':  {'env': 'CRUCIBLE_ELEVATION_TIMEOUT',  'ini': 'elevation_timeout',  'section': 'crucible'},
         # [cache]
         'cache_dir':          {'env': 'CRUCIBLE_CACHE_DIR',          'ini': 'cache_dir',          'section': 'cache'},
         # [display] – UI preferences
@@ -249,6 +250,14 @@ class Config:
             raise ValueError(
                 f"privilege_mode must be one of: {', '.join(PRIVILEGE_MODES)}.")
         return value
+
+    @property
+    def elevation_timeout(self) -> int:
+        """Idle minutes after which the shell switches elevation off (default 15, 0 never)."""
+        try:
+            return max(0, int(self._data.get('elevation_timeout', 15)))
+        except (TypeError, ValueError):
+            return 15
 
     @property
     def auth_store(self):

@@ -43,7 +43,7 @@ Shell-specific commands:
 | `refresh` | Re-read config, permissions, projects, and pending reviews |
 | `reload` | Re-exec the process (picks up code changes) |
 | `debug on` / `debug off` | Toggle debug logging |
-| `elevate on` / `elevate off` | Toggle platform-administrator elevation; an `ELEVATED` badge appears in the toolbar while it is on. It starts on for platform administrators unless `privilege_mode` is set to `normal` |
+| `elevate on` / `elevate off` | Toggle platform-administrator elevation; an `ELEVATED` badge appears in the toolbar while it is on. It starts on for platform administrators unless `privilege_mode` is set to `normal`, and switches off after 15 idle minutes at the prompt (`elevation_timeout`, `CRUCIBLE_ELEVATION_TIMEOUT`; `0` keeps it on) |
 | `elevate COMMAND` | Run one command with platform-administrator elevation, like `--elevate COMMAND` |
 | `more` | Show the next page of the last listing, continuing from where it stopped with the same filters and limit |
 | `help` | List commands, shell commands, and keyboard shortcuts |

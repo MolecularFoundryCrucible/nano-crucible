@@ -64,6 +64,7 @@ Configuration keys (by section):
     api_url             Crucible API endpoint URL
     hub_url             Crucible Hub URL, for signing in and API keys (optional)
     auth_store          Where `crucible login` keeps tokens: auto, keyring, file, memory
+    elevation_timeout   Idle minutes before the shell switches elevation off (default 15, 0 never)
     current_project     Current project ID (optional)
 
   [cache]
@@ -124,7 +125,7 @@ upload_chunk_size_mb) are ignored; `config show` lists any left in your file and
     get_parser.add_argument(
         'key',
         choices=['api_key', 'api_url', 'hub_url', 'current_project',
-                 'privilege_mode', 'auth_store', 'cache_dir',
+                 'privilege_mode', 'elevation_timeout', 'auth_store', 'cache_dir',
                  'editor', 'sample_group_by', 'dataset_group_by',
                  'include_metadata', 'include_links', 'pager', 'update_check',
                  'connect_timeout', 'read_timeout', 'default_limit',
@@ -141,7 +142,7 @@ upload_chunk_size_mb) are ignored; `config show` lists any left in your file and
     set_parser.add_argument(
         'key',
         choices=['api_key', 'api_url', 'hub_url', 'current_project',
-                 'privilege_mode', 'auth_store', 'cache_dir',
+                 'privilege_mode', 'elevation_timeout', 'auth_store', 'cache_dir',
                  'editor', 'sample_group_by', 'dataset_group_by',
                  'include_metadata', 'include_links', 'pager', 'update_check',
                  'connect_timeout', 'read_timeout', 'default_limit',
@@ -161,7 +162,7 @@ upload_chunk_size_mb) are ignored; `config show` lists any left in your file and
     unset_parser.add_argument(
         'key',
         choices=['api_key', 'api_url', 'hub_url', 'current_project',
-                 'privilege_mode', 'auth_store', 'cache_dir',
+                 'privilege_mode', 'elevation_timeout', 'auth_store', 'cache_dir',
                  'editor', 'sample_group_by', 'dataset_group_by',
                  'include_metadata', 'include_links', 'pager', 'update_check',
                  'connect_timeout', 'read_timeout', 'default_limit',
@@ -296,6 +297,7 @@ def cmd_show(args):
     _p("api_url",              config.api_url)
     _p("hub_url",              config.hub_url)
     _p("current_project",      config._data.get('current_project'))
+    _p("elevation_timeout",    config.elevation_timeout)
     _p("project source",       config.source('current_project'))
 
     # [cache]
@@ -409,6 +411,9 @@ def cmd_set(args):
     value = args.value
     if key == 'privilege_mode' and value not in PRIVILEGE_MODES:
         logger.error(f"privilege_mode must be one of: {', '.join(PRIVILEGE_MODES)}.")
+        sys.exit(1)
+    if key == 'elevation_timeout' and not (value.isdigit()):
+        logger.error("elevation_timeout must be a whole number of minutes (0 never switches off).")
         sys.exit(1)
     from ..auth.store import AUTH_STORES
     if key == 'auth_store' and value not in AUTH_STORES:

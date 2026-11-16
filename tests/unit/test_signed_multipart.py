@@ -279,6 +279,25 @@ def test_client_request_ingestion_false_skips_ingestion(monkeypatch):
     assert not client.files.request_ingestion.called
 
 
+@pytest.mark.parametrize('ingestion_class, params', [
+    ('LammpsIngestor', {'status': 'not_requested', 'ingestion_class': 'LammpsIngestor'}),
+    (None, {'status': 'not_requested'})])
+def test_skipped_ingestion_records_the_ingestion_class(monkeypatch, ingestion_class, params):
+    from crucible.resources.datasets import DatasetOperations
+    from crucible.resources.files import FileOperations
+    monkeypatch.setattr('crucible.resources.datasets.upload_file_gcs',
+                        lambda client, dsid, path, **kw: ({'mfid': 'f1', 'filename': 'x'}, False))
+    client = MagicMock()
+    client.files = FileOperations(client)
+    client.files._request = MagicMock(return_value={'id': 7})
+
+    DatasetOperations(client).add_file(DSID, 'x', ingestion_class=ingestion_class,
+                                       skip_ingestion=True)
+
+    client.files._request.assert_called_once_with('post', '/files/f1/ingest', params=params)
+    assert not client._request.called
+
+
 def test_upload_session_applies_and_restores_options():
     from crucible.cli.helpers import upload_session
 
