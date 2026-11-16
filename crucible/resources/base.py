@@ -279,6 +279,41 @@ class BaseResource:
         return reference
 
     @staticmethod
+    def _owner_ref_body(details: dict, label: str) -> dict:
+        """Send a create body's owner as owner_ref, the API's name for it."""
+        owner = details.pop('owner', None)
+        if owner is None:
+            return details
+        if not isinstance(owner, str):
+            raise ValueError(f"{label}.owner must be a string identifier on create.")
+        if details.get('owner_ref') not in (None, owner):
+            raise ValueError(f"Pass {label}.owner or owner_ref, not both.")
+        details['owner_ref'] = owner
+        return details
+
+    @staticmethod
+    def _owner_filters(params: dict) -> dict:
+        """Rename deprecated owner filters in place and check owner_ref."""
+        import warnings
+        from ..constants import OWNER_REF_MAX
+
+        for old, new in (('owner_id', 'owner_ref'), ('owner_id_is_null', 'owner_is_null')):
+            if old in params:
+                warnings.warn(f"The '{old}' filter is deprecated; use '{new}' instead.",
+                              DeprecationWarning, stacklevel=4)
+                value = params.pop(old)
+                if params.get(new) not in (None, value):
+                    raise ValueError(f"Pass '{new}' or '{old}', not both.")
+                params[new] = value
+        refs = params.get('owner_ref')
+        if refs is not None and not isinstance(refs, str):
+            refs = list(refs)
+            if not refs or len(refs) > OWNER_REF_MAX:
+                raise ValueError(f"owner_ref takes 1 to {OWNER_REF_MAX} values.")
+            params['owner_ref'] = refs
+        return params
+
+    @staticmethod
     def _validate_filter_params(params: dict, allowed, endpoint: str) -> dict:
         """Reject query parameters the endpoint does not accept.
 
@@ -297,6 +332,7 @@ class BaseResource:
         Raises:
             ValueError: If any key is not accepted by the endpoint.
         """
+        BaseResource._owner_filters(params)
         unknown = [key for key in params if key not in allowed]
         if not unknown:
             return params

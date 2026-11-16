@@ -97,7 +97,7 @@ class TestResourceCapabilities:
         project = Project(
             project_id='example',
             organization='LBNL',
-            project_lead='alice',
+            owner='alice',
             capabilities=ResourceCapabilities(
                 can_edit=True,
                 can_manage_access=True,
@@ -217,7 +217,7 @@ class TestTransferOwnership:
 
         dataset_ops._request.assert_called_once_with(
             'post', '/resources/ds-1/transfer_ownership',
-            params={'confirm': False}, json={'new_owner': 'new'})
+            params={'confirm': False}, json={'new_owner_ref': 'new'})
         assert isinstance(result, OwnershipTransfer)
         assert result.new_owner.username == 'new'
 
@@ -521,12 +521,18 @@ def test_project_mfids_skip_the_lookup(project_ops):
     assert request.call_count == 1
 
 
+MEMBER = {'unique_id': '0000-0002-1825-0097', 'username': 'jdoe', 'first_name': 'Jane',
+          'last_name': 'Doe', 'role': 'owner'}
+
+
 def _instrument_lookup(instrument_ops, members=None):
     def request(method, endpoint, **kwargs):
         if endpoint == '/instruments':
             return {'items': [{'unique_id': INSTRUMENT_MFID, 'instrument_id': 'xrd-1',
                                'members': members}], 'total': 1}
-        return {'principal_id': 'u', 'principal_type': 'user', 'permission': 'editor'}
+        if endpoint.endswith('/users'):
+            return {'items': [MEMBER], 'total': 1}
+        return [MEMBER]
     instrument_ops._request = MagicMock(side_effect=request)
     return instrument_ops._request
 
@@ -534,24 +540,56 @@ def _instrument_lookup(instrument_ops, members=None):
 def test_instrument_slug_resolves_through_the_list_route(instrument_ops):
     request = _instrument_lookup(instrument_ops)
 
-    instrument_ops.add_user('XRD-1', 'alice', 'editor')
+    members = instrument_ops.add_user('XRD-1', 'alice', 'editor')
 
-    lookup, grant = request.call_args_list
+    lookup, add = request.call_args_list
     assert lookup.args[1] == '/instruments'
     assert lookup.kwargs['params']['instrument_id'] == 'XRD-1'
-    assert grant.args[1] == f'/resources/{INSTRUMENT_MFID}/access/users/alice'
-    assert grant.kwargs['json'] == {'permission': 'editor'}
+    assert add.args[:2] == ('post', f'/instruments/{INSTRUMENT_MFID}/users/alice')
+    assert add.kwargs['params'] == {'role': 'editor'}
+    assert members[0].role == 'owner'
+
+
+@pytest.mark.parametrize('call, method, params', [
+    (lambda ops: ops.add_user(INSTRUMENT_MFID, 'alice'), 'post', {'role': 'viewer'}),
+    (lambda ops: ops.update_user_role(INSTRUMENT_MFID, 'alice', 'admin'), 'patch', {'role': 'admin'}),
+    (lambda ops: ops.remove_user(INSTRUMENT_MFID, 'alice'), 'delete', None),
+])
+def test_instrument_member_changes_use_the_members_routes(instrument_ops, call, method, params):
+    request = _instrument_lookup(instrument_ops)
+
+    members = call(instrument_ops)
+
+    request.assert_called_once_with(method, f'/instruments/{INSTRUMENT_MFID}/users/alice',
+                                    params=params)
+    assert members[0].username == 'jdoe'
 
 
 def test_instrument_members_are_typed_or_none(instrument_ops):
-    _instrument_lookup(instrument_ops, members=[
-        {'principal_id': '0000-0002-1825-0097', 'principal_type': 'user',
-         'permission': 'owner', 'slug': 'jdoe', 'display_name': 'Jane Doe'}])
-    members = instrument_ops.list_users('xrd-1')
-    assert members[0].permission == 'owner'
+    from crucible.errors import CrucibleAPIError
 
-    _instrument_lookup(instrument_ops, members=None)
-    assert instrument_ops.list_users('xrd-1') is None
+    _instrument_lookup(instrument_ops)
+    members = instrument_ops.list_users(INSTRUMENT_MFID)
+    assert members[0].role == 'owner' and members[0].username == 'jdoe'
+
+    response = MagicMock(status_code=403, reason='Forbidden')
+    instrument_ops._request = MagicMock(side_effect=CrucibleAPIError('403', response, 403))
+    assert instrument_ops.list_users(INSTRUMENT_MFID) is None
+
+
+def test_instrument_get_members_take_the_project_member_shape(instrument_ops):
+    _instrument_lookup(instrument_ops, members=[MEMBER])
+    instrument = instrument_ops.get('xrd-1', include_members=True)
+    assert instrument['members'][0]['role'] == 'owner'
+
+
+def test_instrument_grants_point_to_the_member_methods(instrument_ops):
+    from crucible.errors import RemovedError
+
+    with pytest.raises(RemovedError, match='add_user'):
+        instrument_ops.set_access(INSTRUMENT_MFID, 'users', 'alice', 'editor')
+    with pytest.raises(RemovedError, match='remove_user'):
+        instrument_ops.revoke_access(INSTRUMENT_MFID, 'users', 'alice')
 
 
 def test_instrument_member_roles_exclude_owner(instrument_ops):

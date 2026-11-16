@@ -735,7 +735,8 @@ class CrucibleCompleter(Completer):
         if subcommand == 'update-user-role' and len(words) >= 4:
             prefix = '' if trailing_space else words[-1]
             if (trailing_space and len(words) == 4) or (not trailing_space and len(words) == 5):
-                for role in ('editor', 'admin'):
+                from crucible.resources.instruments import INSTRUMENT_MEMBER_ROLES
+                for role in INSTRUMENT_MEMBER_ROLES:
                     if role.startswith(prefix):
                         yield Completion(role + ' ', start_position=-len(prefix))
                 return True

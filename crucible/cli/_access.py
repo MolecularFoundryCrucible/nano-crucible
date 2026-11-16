@@ -13,18 +13,24 @@ from . import term
 from .helpers import fail
 
 
-def register_access_commands(subparsers, resource_ops_name, id_metavar='RESOURCE_MFID'):
-    """Register access and public-visibility subcommands."""
-    _register_access(subparsers, resource_ops_name, id_metavar)
+def register_access_commands(subparsers, resource_ops_name, id_metavar='RESOURCE_MFID',
+                             grants_moved_to=None):
+    """Register access and public-visibility subcommands.
+
+    grants_moved_to names the commands that replace 'access grant' and
+    'access revoke' for a resource whose members are managed elsewhere.
+    """
+    _register_access(subparsers, resource_ops_name, id_metavar, grants_moved_to)
     _register_set_public(subparsers, resource_ops_name, id_metavar)
     _register_set_private(subparsers, resource_ops_name, id_metavar)
 
 
-def _register_access(subparsers, resource_ops_name, id_metavar):
+def _register_access(subparsers, resource_ops_name, id_metavar, grants_moved_to=None):
     parser = subparsers.add_parser(
         'access',
-        help='Manage direct ACL entries on a resource',
-        description='List, grant, or revoke direct access grants',
+        help='List access grants' if grants_moved_to else 'Manage direct ACL entries on a resource',
+        description=('List access grants' if grants_moved_to
+                     else 'List, grant, or revoke direct access grants'),
         formatter_class=term.ColorHelpFormatter,
     )
     access_subparsers = parser.add_subparsers(dest='access_command', required=True)
@@ -32,6 +38,12 @@ def _register_access(subparsers, resource_ops_name, id_metavar):
     list_parser = access_subparsers.add_parser('list', help='List access grants')
     list_parser.add_argument('resource_id', metavar=id_metavar)
     list_parser.set_defaults(func=_execute_list, _resource_ops_name=resource_ops_name)
+
+    if grants_moved_to:
+        from .helpers import add_removed_command
+        for name in ('grant', 'revoke'):
+            add_removed_command(access_subparsers, name, grants_moved_to)
+        return
 
     grant_parser = access_subparsers.add_parser('grant', help='Grant access to a principal')
     grant_parser.add_argument('resource_id', metavar=id_metavar)

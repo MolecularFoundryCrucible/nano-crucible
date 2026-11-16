@@ -138,7 +138,7 @@ def test_dataset_filters_reach_the_api(monkeypatch):
     assert kwargs['sample_mfid'] == 'S' * 26
     assert kwargs['session_name_is_null'] is True
     assert kwargs['instrument_mfid_is_null'] is True
-    assert kwargs['owner_id'] == '0000-0002-1825-0097'
+    assert kwargs['owner_ref'] == ['0000-0002-1825-0097']
     assert kwargs['measurement'] == 'XRD'
 
 

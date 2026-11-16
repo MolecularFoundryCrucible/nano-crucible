@@ -14,7 +14,7 @@ Project options use `--project-id` with the conventional `-p` short alias. Sampl
 | `--no-color` | Disable ANSI colors while retaining interactive terminal hyperlinks; place it before the command |
 | `--no-pager` | Print a long listing directly even when the `pager` setting is `auto`; place it before the command |
 
-By default no privilege mode is sent, so a platform administrator runs elevated and sees every record, while everyone else gets their normal, ACL-derived access. Set `crucible config set privilege_mode normal` to restrict an administrator account to its own access; `--elevate` (`-E`) then widens a single command. A future release will default to `normal`. Administrator-only commands, such as `service-account show`, `service-account set-role`, and deletion review, elevate on their own and do not need the flag.
+By default no privilege mode is sent and the API decides: a platform administrator using an API key runs elevated and sees every record, a signed-in administrator runs normal, and everyone else gets their normal, ACL-derived access. `whoami` shows which mode applies. Set `crucible config set privilege_mode normal` to restrict an administrator account to its own access; `--elevate` (`-E`) then widens a single command. A future release will default to `normal`. Administrator-only commands, such as `service-account show`, `service-account set-role`, and deletion review, elevate on their own and do not need the flag.
 
 Explicit elevation can also come from the `privilege_mode` config key or the `CRUCIBLE_PRIVILEGE_MODE` environment variable. Because neither is visible on the command line, the CLI prints a notice to stderr when a command runs elevated without `--elevate`. In the interactive shell, `elevate on|off` toggles it for the session, `elevate COMMAND` runs a single command elevated, and an `ELEVATED` badge appears in the toolbar while the toggle is on. The shell switches elevation off after `elevation_timeout` idle minutes (default 15, `0` never).
 
@@ -173,14 +173,14 @@ Sample creation accepts `--project-id` or `--project-mfid`, including both when 
 
 Project member tables sort by standing from lead through viewer, display the API `owner` role as `lead`, and use semantic role colors when terminal color is enabled: gold for lead, magenta for admin, blue for editor, the default foreground for contributor, and gray for viewer.
 
-The `access grant` commands accept `viewer`, `contributor`, `editor`, or `admin`. Use the resource's `transfer-ownership` command to change ownership.
+The `access grant` commands accept `viewer`, `contributor`, `editor`, or `admin`. Use the resource's `transfer-ownership` command to change ownership. Instruments have no `access grant` or `access revoke`; use their member commands.
 
 ## Instrument commands
 
 | Command | Description |
 |---|---|
-| `instrument list` | List instruments; `--mine` lists those you own or maintain, `--sort`/`--direction` order them, `--manufacturer`, `--model`, `--location`, `--type`, `--owner` filter exactly, and a My role column shows your effective role |
-| `instrument get INSTRUMENT` | Show an instrument by MFID or instrument slug (any casing); `--include-members` adds the owner and maintainers |
+| `instrument list` | List instruments; `--mine` lists those you own or are a member of, `--sort`/`--direction` order them, `--manufacturer`, `--model`, `--location`, `--type` filter exactly, `--owner` (repeatable, up to 10) filters by owner, and a My role column shows your effective role |
+| `instrument get INSTRUMENT` | Show an instrument by MFID or instrument slug (any casing); `--include-members` adds the members |
 | `instrument create` | Register an instrument |
 | `instrument update MFID` | Update an instrument record or scientific metadata |
 | `instrument set-status MFID STATUS` | Change an instrument lifecycle status |
@@ -188,19 +188,19 @@ The `access grant` commands accept `viewer`, `contributor`, `editor`, or `admin`
 | `instrument list-service-accounts MFID` | List service accounts bound as instrument operators |
 | `instrument bind-sa MFID SA_MFID` | Bind a service account as an instrument operator |
 | `instrument unbind-sa MFID SA_MFID` | Remove an instrument operator binding |
-| `instrument list-users INSTRUMENT` | List the owner and maintainers (visible to callers with a role) |
-| `instrument add-user INSTRUMENT --user USER [--role editor\|admin]` | Add or change a maintainer |
-| `instrument remove-user INSTRUMENT --user USER` | Remove a maintainer |
-| `instrument update-user-role INSTRUMENT USER ROLE` | Change a maintainer's role |
+| `instrument list-users INSTRUMENT` | List the members, owner first (visible to members) |
+| `instrument add-user INSTRUMENT --user USER [--role viewer\|editor\|admin]` | Add a member (default `viewer`) |
+| `instrument remove-user INSTRUMENT --user USER` | Remove a member, or yourself |
+| `instrument update-user-role INSTRUMENT USER ROLE` | Change a member's role |
 | `instrument edit MFID` | Edit instrument fields interactively |
 | `instrument search QUERY [--status STATUS]` | Search names, types, and manufacturers with optional lifecycle filtering |
 | `instrument search-metadata QUERY` | Search scientific metadata; `search-md` is an alias |
-| `instrument access ...` | List, grant, or revoke direct access entries |
+| `instrument access list INSTRUMENT` | List direct access entries |
 | `instrument set-public MFID` | Make an instrument publicly viewable |
 | `instrument set-private MFID` | Remove public access from an instrument |
 
 
-Instrument commands accept an MFID or the instrument slug, which ignores case. An instrument has two separate kinds of access. Its owner and maintainers manage the instrument record: `editor` edits details, `admin` also changes status, binds service accounts, and grants access. Maintainer roles never grant access to datasets recorded with the instrument; only bound service accounts reach those, at `contributor`. Member commands check the instrument's `can_manage_access` capability before sending a change.
+Instrument commands accept an MFID or the instrument slug, which ignores case. Instrument members work like project members: every member reads the datasets assigned to the instrument, `editor` also edits its details, and `admin` also changes status, binds service accounts, and manages members. Admins cannot grant above their own role, and the owner changes only with `instrument transfer-ownership`. Service accounts are bound with `instrument bind-sa` rather than added. `add-user` and `update-user-role` check the instrument's `can_manage_access` capability before sending a change.
 
 ## User commands
 

@@ -6,8 +6,8 @@
 | `organization` | Free-text institution or group name (e.g. `"LBNL"`, `"Stanford"`) | create, update |
 | `title` | Human-readable project title | create, update |
 | `status` | Project status (e.g. `"active"`) | create, update |
-| `project_lead` | Project lead identified by ORCID, MFID, username, or email | create |
-| `lead` | Public-safe resolved project lead record without email | server-assigned |
+| `owner` | On create, the owner's ORCID, MFID, username, or email; in responses, their public-safe user record | create |
+| `lead`, `project_lead*` | Deprecated names for the owner; use `owner` | - |
 | `creation_time` | When the record was created | server-assigned |
 | `modification_time` | When the record was last modified | server-assigned |
 | `capabilities` | Optional caller-specific actions calculated for an exact response | server-assigned |
@@ -57,13 +57,13 @@ from crucible.models import Project
 result = client.projects.create(Project(
     project_id="MFP12345",
     organization="LBNL",
-    project_lead="lead-username",
+    owner="lead-username",
     title="Nanoparticle synthesis study",
     status="active",
 ))
 ```
 
-`project_id` must be unique across the system. The project lead must identify an existing Crucible user.
+`project_id` must be unique across the system. The owner must identify an existing Crucible user, and only platform administrators may name someone other than themselves.
 
 ## Updating a project
 

@@ -25,7 +25,7 @@ SAMPLE_LIST_PARAMS = frozenset({
     'dataset_mfid', 'description', 'direction',
     'include_links', 'include_metadata', 'include_owner', 'include_total',
     'limit', 'modification_time_gte', 'modification_time_lte', 'offset',
-    'owner_id', 'owner_id_is_null', 'project_id',
+    'owner_is_null', 'owner_ref', 'project_id',
     'project_mfid', 'project_mfid_is_null', 'project_scope', 'public',
     'sample_name', 'sample_type', 'sample_type_is_null', 'sort',
     'timestamp', 'mfid', 'visibility',
@@ -36,7 +36,7 @@ SAMPLE_FACET_PARAMS = frozenset({
     'accessible_to_project', 'accessible_to_user', 'affiliation',
     'creation_time_gte', 'creation_time_lte', 'cursor', 'dataset_mfid',
     'direction', 'field', 'limit', 'modification_time_gte',
-    'modification_time_lte', 'owner_id', 'owner_id_is_null', 'project_id',
+    'modification_time_lte', 'owner_is_null', 'owner_ref', 'project_id',
     'project_mfid', 'project_mfid_is_null', 'project_scope',
     'sample_type', 'sample_type_is_null', 'sort', 'visibility',
 })
@@ -113,7 +113,7 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
     @_removed_parameter('dataset_id', 'dataset_mfid')
     @_removed_parameter('parent_id', 'parent_mfid')
     @_removed_parameter('parent_sample_mfid', 'parent_mfid')
-    @_removed_parameter('owner_orcid', 'owner_id')
+    @_removed_parameter('owner_orcid', 'owner_ref')
     @_removed_parameter('include_datasets', 'include_links')
     def list(self, dataset_mfid: Optional[str] = None,
              parent_mfid: Optional[str] = None,
@@ -166,8 +166,9 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
                   Omit to keep the legacy unique_id descending order.
             direction: Sort direction, asc or desc. Requires sort.
             visibility: Restrict results by public visibility: all, public, or private.
-            affiliation: Caller relationship each result must have, currently
-                         only 'owner'. Accepts a single value or a sequence.
+            affiliation: Caller relationship each result must have: 'owner',
+                         or 'member' (reached through the caller's own
+                         grants). Accepts a single value or a sequence (OR).
             include_total: Request the exact authorization-filtered total. Omit
                            to keep the endpoint's default behavior.
             creation_time_gte: Inclusive lower creation-time bound. Accepts a
@@ -196,7 +197,8 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
         if 'mfid' in params:
             collection_params['mfid'] = params.pop('mfid')
         collection_params.update(self._ordering_params(sort, direction))
-        collection_params.update(self._affiliation_params(affiliation))
+        from ..constants import SAMPLE_AFFILIATIONS
+        collection_params.update(self._affiliation_params(affiliation, SAMPLE_AFFILIATIONS))
         collection_params.update(self._choice_params(
             visibility=(visibility, VISIBILITIES)))
         collection_params.update(self._time_range_params(
@@ -372,8 +374,7 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
             raise RemovedError(removed_message(
                 "Setting Sample.owner_orcid when creating a sample",
                 "set Sample.owner to an ORCID, MFID, username, or email instead."))
-        if sample_info.get('owner') is not None and not isinstance(sample_info['owner'], str):
-            raise ValueError("Sample.owner must be a string identifier when creating a sample.")
+        self._owner_ref_body(sample_info, 'Sample')
 
         new_samp = self._parse(
             self._request('post', "/samples", json=sample_info))
@@ -548,7 +549,8 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
             'delete', f"/samples/{parent_mfid}/children/{child_mfid}")
 
     def search(self, q: str, project_id: Optional[str] = None,
-               limit: int = 20) -> List[Dict]:
+               limit: int = 20,
+               owner_ref: Optional[Union[str, Sequence[str]]] = None) -> List[Dict]:
         """Fuzzy name search across samples. Available to all authenticated users.
 
         Matches against sample_name. Returns samples the caller can read.
@@ -558,6 +560,8 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
             q: Search term (min 3 chars). Typo-tolerant.
             project_id: Optional project to scope results to.
             limit: Max results (default 20, max 50).
+            owner_ref: Owner or owners (up to 10, any matches): unique_id,
+                linked ORCID, username, or email.
 
         Returns:
             List[Dict]: Matching SampleResponse records, ranked by relevance.
@@ -565,6 +569,9 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
         params = {'q': q, 'limit': limit}
         if project_id:
             params['project_id'] = project_id
+        if owner_ref is not None:
+            params['owner_ref'] = owner_ref
+            self._owner_filters(params)
         result = self._request('get', '/samples/search', params=params)
         return result.get('items', result) if isinstance(result, dict) else result
 

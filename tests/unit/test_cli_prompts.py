@@ -261,7 +261,7 @@ def test_project_create_reprompts_for_invalid_required_values(monkeypatch):
     project_cli._execute_create(SimpleNamespace(
         project_id=None,
         organization=None,
-        project_lead=None,
+        owner=None,
         title=None,
         status=None,
         metadata=None,
@@ -271,7 +271,7 @@ def test_project_create_reprompts_for_invalid_required_values(monkeypatch):
     project = client.projects.create.call_args.args[0]
     assert project.project_id == 'valid-project'
     assert project.organization == 'LBNL'
-    assert project.project_lead == 'alice'
+    assert project.owner == 'alice'
 
 
 def test_instrument_create_reprompts_for_invalid_slug(monkeypatch):
@@ -376,3 +376,15 @@ def test_sample_create_uses_active_shell_project_without_prompt(monkeypatch):
 
     sample = client.samples.create.call_args.args[0]
     assert sample.project_id == 'shell-project'
+
+
+def test_project_create_lead_is_a_deprecated_owner_alias(capsys):
+    import argparse
+    from crucible.cli import project as project_cli
+
+    parser = argparse.ArgumentParser()
+    project_cli.register_subcommand(parser.add_subparsers(dest='resource'))
+    args = parser.parse_args(['project', 'create', '--lead', 'alice'])
+
+    assert args.owner == 'alice'
+    assert '--owner' in capsys.readouterr().err

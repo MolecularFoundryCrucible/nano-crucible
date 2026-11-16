@@ -22,7 +22,7 @@ from ..utils.identifiers import (
 )
 
 if TYPE_CHECKING:
-    from ..models import AccessGrant, Instrument, ProjectMember
+    from ..models import Instrument, ProjectMember
 
 logger = logging.getLogger(__name__)
 
@@ -30,13 +30,13 @@ logger = logging.getLogger(__name__)
 # list() takes as named parameters.
 INSTRUMENT_LIST_FILTERS = frozenset({
     'instrument_id', 'instrument_name', 'manufacturer', 'model', 'location',
-    'description', 'instrument_type', 'owner_id', 'other_id', 'other_id_source',
+    'description', 'instrument_type', 'owner_ref', 'other_id', 'other_id_source',
     'include_total',
 })
 
-# Roles that can be granted to an instrument maintainer; ownership moves only
+# Roles that can be granted to an instrument member; ownership moves only
 # through transfer_ownership().
-INSTRUMENT_MEMBER_ROLES = ('editor', 'admin')
+INSTRUMENT_MEMBER_ROLES = ('viewer', 'editor', 'admin')
 
 
 class InstrumentOperations(OwnershipMixin, AccessControlMixin, BaseResource):
@@ -71,15 +71,16 @@ class InstrumentOperations(OwnershipMixin, AccessControlMixin, BaseResource):
             status (str, optional): Filter by active, maintenance, or decommissioned.
                                     When omitted, the API defaults to active
                                     (or every status for an instrument_id lookup).
-            affiliation: Caller relationship: 'owner', 'maintainer', or both
-                         (combined with OR) to list the caller's instruments.
+            affiliation: Caller relationship: 'owner', 'maintainer' (editor or
+                         admin member), or 'member' (any role), combined with
+                         OR, to list the caller's instruments.
             sort: Explicit ordering, one of crucible.constants.INSTRUMENT_SORTS.
             direction: Sort direction, asc or desc. Requires sort. Without it,
                        dates default to desc and everything else to asc.
             mfid (str or list, optional): Only these instrument MFIDs (up to 100).
             **filters: Exact-match filters accepted by GET /instruments, such as
                        instrument_id (case-insensitive slug), manufacturer,
-                       model, location, instrument_type, owner_id, other_id.
+                       model, location, instrument_type, owner_ref (up to 10 owners), other_id.
 
         Returns:
             List[Dict]: Instrument objects with specifications, the caller's
@@ -132,9 +133,9 @@ class InstrumentOperations(OwnershipMixin, AccessControlMixin, BaseResource):
             include_owner (bool): Resolve the owner into a public-safe user object (default: True)
             instrument_mfid (str, optional): Explicit instrument MFID
             instrument_name (str, optional): Removed in 4.0.0; passing it raises RemovedError.
-            include_members (bool): Include the owner and maintainers as
-                ``members``. The API returns ``members: None`` to callers
-                without a role on the instrument.
+            include_members (bool): Include the members, owner first, as
+                ``members`` (ProjectMember records). The API returns
+                ``members: None`` to callers who are not members.
 
         Returns:
             Dict or None: Instrument information if found, None otherwise
@@ -265,8 +266,7 @@ class InstrumentOperations(OwnershipMixin, AccessControlMixin, BaseResource):
             raise RemovedError(removed_message(
                 "Setting Instrument.owner_orcid when creating an instrument",
                 "set Instrument.owner to an ORCID, MFID, username, or email instead."))
-        if payload.get('owner') is not None and not isinstance(payload['owner'], str):
-            raise ValueError("Instrument.owner must be a string identifier when creating an instrument.")
+        self._owner_ref_body(payload, 'Instrument')
 
         try:
             existing = self._get_by_instrument_id(payload['instrument_id'])
@@ -315,7 +315,7 @@ class InstrumentOperations(OwnershipMixin, AccessControlMixin, BaseResource):
     def bind_service_account(self, instrument_ref: str, service_account_ref: str) -> List['ProjectMember']:
         """Bind a service account as an operator of an instrument.
 
-        Requires admin on the instrument (its owner or an admin maintainer).
+        Requires admin on the instrument (its owner or an admin member).
         A bound service account gets contributor on every dataset assigned
         to the instrument.
 
@@ -335,7 +335,7 @@ class InstrumentOperations(OwnershipMixin, AccessControlMixin, BaseResource):
     def unbind_service_account(self, instrument_ref: str, service_account_ref: str) -> List['ProjectMember']:
         """Remove a service account as an operator of an instrument.
 
-        Requires admin on the instrument (its owner or an admin maintainer).
+        Requires admin on the instrument (its owner or an admin member).
 
         Args:
             instrument_ref (str): Instrument unique identifier (MFID)
@@ -366,44 +366,85 @@ class InstrumentOperations(OwnershipMixin, AccessControlMixin, BaseResource):
         """Deprecated: use list_users()."""
         return self.list_users(*args, **kwargs)
 
-    def list_users(self, instrument_ref: str) -> Optional[List['AccessGrant']]:
-        """List the instrument's owner and maintainers, owner first.
+    def list_users(self, instrument_ref: str, limit: int = DEFAULT_LIMIT,
+                   offset: int = 0,
+                   cursor: Optional[str] = None) -> Optional[List['ProjectMember']]:
+        """List the instrument's members, highest role first, owner first.
 
-        Maintainers manage the instrument record only; they never gain access
-        to datasets recorded with the instrument (bound service accounts do).
+        Every member reads the datasets assigned to the instrument.
 
         Returns:
-            List[AccessGrant] or None: None when the caller holds no role on
-            the instrument and is not a platform administrator.
+            List[ProjectMember] or None: None when the caller is not a member
+            and not a platform administrator.
         """
-        from ..models import AccessGrant
+        from ..errors import CrucibleAPIError
+        from ..models import ProjectMember
 
-        instrument = self.get(instrument_ref, include_owner=False, include_members=True)
-        members = instrument.get('members') if instrument is not None else None
-        if members is None:
-            return None
-        return [AccessGrant.model_validate(m) for m in members]
+        try:
+            raw = self._paginate(f'/instruments/{self._resource_mfid(instrument_ref)}/users',
+                                 {}, limit, offset, cursor=cursor)
+        except CrucibleAPIError as exc:
+            if exc.status == 403:
+                return None
+            raise
+        return ListResult.like(raw, [ProjectMember.model_validate(m) for m in raw])
+
+    @staticmethod
+    def _member_role(role: str) -> str:
+        if role not in INSTRUMENT_MEMBER_ROLES:
+            if role == 'owner':
+                raise ValueError("Use transfer_ownership() to change the instrument owner.")
+            raise ValueError(f"role must be one of: {', '.join(INSTRUMENT_MEMBER_ROLES)}")
+        return role
+
+    def _members_request(self, method: str, instrument_ref: str, user: str,
+                         role: Optional[str] = None) -> List['ProjectMember']:
+        from ..models import ProjectMember
+
+        params = {'role': self._member_role(role)} if role is not None else None
+        raw = self._request(
+            method, f'/instruments/{self._resource_mfid(instrument_ref)}/users/{user}',
+            params=params)
+        return [ProjectMember.model_validate(m) for m in raw]
 
     def add_user(self, instrument_ref: str, user: str,
-                 role: str = 'editor') -> 'AccessGrant':
-        """Add or change a maintainer: 'editor' edits details, 'admin' also
-        changes status, binds service accounts, and grants access.
+                 role: str = 'viewer') -> List['ProjectMember']:
+        """Add a member: 'viewer' reads the instrument's datasets, 'editor'
+        also edits details, 'admin' also changes status, binds service
+        accounts, and manages members.
 
         Requires admin on the instrument; you cannot grant above your own role.
-        ``user`` accepts an ORCID, service-account MFID, username, or email.
+        ``user`` accepts an ORCID, MFID, or username; service accounts are
+        bound with bind_service_account() instead.
+
+        Returns:
+            List[ProjectMember]: The instrument's members after the change.
         """
-        if role not in INSTRUMENT_MEMBER_ROLES:
-            raise ValueError(
-                f"role must be one of: {', '.join(INSTRUMENT_MEMBER_ROLES)}")
-        return self.set_access(instrument_ref, 'users', user, role)
+        return self._members_request('post', instrument_ref, user, role)
 
-    def remove_user(self, instrument_ref: str, user: str) -> Dict:
-        """Remove a maintainer. Requires admin on the instrument."""
-        return self.revoke_access(instrument_ref, 'users', user)
+    def update_user_role(self, instrument_ref: str, user: str,
+                         role: str) -> List['ProjectMember']:
+        """Change a member's role (same rules as add_user()). Returns the members."""
+        return self._members_request('patch', instrument_ref, user, role)
 
-    def update_user_role(self, instrument_ref: str, user: str, role: str) -> 'AccessGrant':
-        """Change a maintainer's role (same rules as add_user())."""
-        return self.add_user(instrument_ref, user, role)
+    def remove_user(self, instrument_ref: str, user: str) -> List['ProjectMember']:
+        """Remove a member. Requires admin on the instrument, except to remove
+        yourself. Returns the remaining members."""
+        return self._members_request('delete', instrument_ref, user)
+
+    def set_access(self, mfid: str, kind: str, principal: str, permission: str):
+        """Removed for instruments: use add_user() or update_user_role()."""
+        from ..errors import RemovedError
+        from ..utils.deprecation import removed_message
+        raise RemovedError(removed_message(
+            "Granting access on an instrument", "use add_user() or update_user_role() instead."))
+
+    def revoke_access(self, mfid: str, kind: str, principal: str):
+        """Removed for instruments: use remove_user()."""
+        from ..errors import RemovedError
+        from ..utils.deprecation import removed_message
+        raise RemovedError(removed_message(
+            "Revoking access on an instrument", "use remove_user() instead."))
 
     def set_status(self, instrument_mfid: str, status: str) -> Dict:
         """Change an instrument lifecycle status.
@@ -423,7 +464,8 @@ class InstrumentOperations(OwnershipMixin, AccessControlMixin, BaseResource):
     def search(self, q: str, limit: int = 20,
                include_owner: bool = False,
                status: Optional[str] = None,
-               affiliation: Optional[Union[str, Sequence[str]]] = None) -> List[Dict]:
+               affiliation: Optional[Union[str, Sequence[str]]] = None,
+               owner_ref: Optional[Union[str, Sequence[str]]] = None) -> List[Dict]:
         """Fuzzy search across instruments. Available to all authenticated users.
 
         Matches against instrument_name, instrument_type, and manufacturer
@@ -434,8 +476,11 @@ class InstrumentOperations(OwnershipMixin, AccessControlMixin, BaseResource):
             limit: Max results (default 20, max 50).
             include_owner: Resolve the owner into a public-safe user object.
             status: Restrict results to active, maintenance, or decommissioned.
-            affiliation: 'owner', 'maintainer', or both, to search only the
-                         caller's instruments.
+            affiliation: 'owner', 'maintainer' (editor or admin member), or
+                         'member' (any role), to search only the caller's
+                         instruments.
+            owner_ref: Owner or owners (up to 10, any matches): unique_id,
+                linked ORCID, username, or email.
 
         Returns:
             List[Dict]: Matching instrument records, ranked by relevance.
@@ -448,6 +493,9 @@ class InstrumentOperations(OwnershipMixin, AccessControlMixin, BaseResource):
         if status is not None:
             params['status'] = self._instrument_status(status)
         params.update(self._affiliation_params(affiliation, INSTRUMENT_AFFILIATIONS))
+        if owner_ref is not None:
+            params['owner_ref'] = owner_ref
+            self._owner_filters(params)
         result = self._request('get', '/instruments/search', params=params)
         items = result.get('items', result) if isinstance(result, dict) else result
         return [self._parse(item) for item in items]

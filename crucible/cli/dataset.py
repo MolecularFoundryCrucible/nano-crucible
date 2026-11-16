@@ -1887,13 +1887,13 @@ def _execute_list(args):
             print(f"  {term.dim('No datasets found.')}")
             return
 
-        from .helpers import explorer_url, project_reference
+        from .helpers import explorer_url, instrument_reference, project_reference
 
         _GROUP_FIELD = {
             'measurement': 'measurement',
             'session':     'session_name',
             'format':      'data_format',
-            'instrument':  'instrument_name',
+            'instrument':  lambda ds: instrument_reference(ds)[0],
         }
         group_by = _GROUP_FIELD.get(args.group_by or config.dataset_group_by or 'none')
         show_project = project_label is None or project_scope in ('shared', 'all')

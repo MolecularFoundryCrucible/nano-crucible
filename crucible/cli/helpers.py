@@ -46,6 +46,21 @@ class RemovedOptionAction(argparse.Action):
         setattr(namespace, self.dest, values)
 
 
+class RenamedOptionAction(argparse.Action):
+    """A renamed option: the old spelling still works, with a warning, and is hidden from help."""
+
+    def __init__(self, option_strings, dest, replacement=None, **kwargs):
+        self.replacement = replacement
+        kwargs.setdefault('help', argparse.SUPPRESS)
+        super().__init__(option_strings, dest, **kwargs)
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        from . import term
+        print(f"{term.yellow('Warning:', stream=sys.stderr)} {option_string} is deprecated; "
+              f"use {self.replacement} instead.", file=sys.stderr)
+        setattr(namespace, self.dest, values)
+
+
 def deprecate_command(subparsers, name, replacement):
     """Keep a renamed command working with a warning, left out of help and completion."""
     parser = subparsers.choices[name]
@@ -295,8 +310,9 @@ def add_scope_filters(parser, resource: str) -> None:
         help=f'Only include {resource}s you own'
     )
     parser.add_argument(
-        '--owner', default=None, dest='owner_id', metavar='USER',
-        help='Only include records owned by this user (username, ORCID, or MFID)'
+        '--owner', default=None, dest='owner_ref', metavar='USER', action='append',
+        help='Only include records owned by this user (username, ORCID, MFID, or email); '
+             'repeat for any of up to 10 owners'
     )
     parser.add_argument(
         '--created-after', dest='creation_time_gte', default=None, metavar='WHEN',
@@ -361,7 +377,7 @@ _EMPTY_FIELD_PARAMS = {
     'data_format': 'data_format_is_null',
     'instrument': 'instrument_mfid_is_null',
     'project': 'project_mfid_is_null',
-    'owner': 'owner_id_is_null',
+    'owner': 'owner_is_null',
     'sample_type': 'sample_type_is_null',
 }
 
@@ -713,12 +729,12 @@ def scope_filter_kwargs(args, client=None) -> dict:
         value = getattr(args, name, None)
         if value is not None:
             kwargs[name] = value
-    owner = getattr(args, 'owner_id', None)
-    if owner is not None:
+    owners = getattr(args, 'owner_ref', None)
+    if owners:
         if client is None:
             from ..config import get_client
             client = get_client()
-        kwargs['owner_id'] = resolve_user_id(client, owner)
+        kwargs['owner_ref'] = [resolve_user_id(client, owner) for owner in owners]
     if getattr(args, 'mine', False):
         kwargs['affiliation'] = 'owner'
     for field in getattr(args, 'missing', None) or []:
@@ -759,8 +775,10 @@ def display_order(records: list, sort: str | None = None,
     return list(reversed(records))
 
 
-def group_records(records: list, field: str) -> list:
+def group_records(records: list, field) -> list:
     """Split display-ordered records into (value, records) groups.
+
+    field is a record key, or a function returning the group value.
 
     Groups keep the records' order and are themselves ordered by the
     position of their last record, so the group holding the newest record
@@ -769,7 +787,7 @@ def group_records(records: list, field: str) -> list:
     groups: dict[Any, list] = {}
     last_seen: dict[Any, int] = {}
     for index, record in enumerate(records):
-        key = record.get(field) or None
+        key = (field(record) if callable(field) else record.get(field)) or None
         groups.setdefault(key, []).append(record)
         last_seen[key] = index
     return [(key, groups[key]) for key in sorted(groups, key=last_seen.__getitem__)]

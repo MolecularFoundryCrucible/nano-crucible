@@ -452,7 +452,7 @@ def test_add_user_grants_the_requested_role(monkeypatch):
         '0tkn2knjast3h0008nyq9zps2c', 'jdoe', 'admin')
 
 
-def test_list_mine_asks_for_owned_and_maintained(monkeypatch):
+def test_list_mine_asks_for_every_membership(monkeypatch):
     from unittest.mock import MagicMock
 
     client = MagicMock()
@@ -460,4 +460,25 @@ def test_list_mine_asks_for_owned_and_maintained(monkeypatch):
 
     _instrument_cli(['list', '--mine'], client, monkeypatch)
 
-    assert client.instruments.list.call_args.kwargs['affiliation'] == ['owner', 'maintainer']
+    assert client.instruments.list.call_args.kwargs['affiliation'] == ['owner', 'member']
+
+
+@pytest.mark.parametrize('action', ['grant', 'revoke'])
+def test_instrument_access_grants_point_to_the_member_commands(monkeypatch, capsys, action):
+    from unittest.mock import MagicMock
+
+    client = MagicMock()
+    with pytest.raises(SystemExit):
+        _instrument_cli(['access', action, 'titan', 'users', 'alice', 'editor'], client, monkeypatch)
+
+    assert 'add-user' in capsys.readouterr().err
+    client.instruments.set_access.assert_not_called()
+
+
+def test_instrument_access_list_still_works(monkeypatch):
+    from unittest.mock import MagicMock
+
+    client = MagicMock()
+    client.instruments.list_access.return_value = []
+    _instrument_cli(['access', 'list', 'titan'], client, monkeypatch)
+    client.instruments.list_access.assert_called_once_with('titan')

@@ -8,6 +8,7 @@ DEFAULT_LIMIT = 100   # default page size for list requests
 API_PAGE_MAX  = 1000  # server hard cap per request
 API_KEY_PAGE_MAX = 200  # cap on the API key list routes
 MFID_FILTER_MAX = 100  # values per repeatable mfid filter
+OWNER_REF_MAX = 10  # values per repeatable owner_ref filter
 
 PROJECT_MEMBER_ROLES = ('viewer', 'contributor', 'editor', 'admin')
 PROJECT_ACCESS_ROLES = ('viewer', 'contributor', 'editor', 'admin', 'owner')  # member_role filter; grants cannot assign owner
@@ -22,7 +23,9 @@ PROJECT_SORTS = ('project_id', 'title', 'created', 'updated')
 INSTRUMENT_SORTS = ('instrument_id', 'name', 'created', 'updated')
 VISIBILITIES = ('all', 'public', 'private')
 AFFILIATIONS = ('owner',)
-INSTRUMENT_AFFILIATIONS = ('owner', 'maintainer')
+DATASET_AFFILIATIONS = ('owner', 'member', 'instrument')
+SAMPLE_AFFILIATIONS = ('owner', 'member')
+INSTRUMENT_AFFILIATIONS = ('owner', 'maintainer', 'member')
 INSTRUMENT_STATUSES = ('active', 'maintenance', 'decommissioned')
 
 # Facet grouping fields and bucket ordering.

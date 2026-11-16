@@ -20,7 +20,7 @@ from crucible.cli import status as status_cli
 from crucible.cli import user as user_cli
 from crucible.cli import whoami as whoami_cli
 from crucible.config import config
-from crucible.models import (AccessGrant, AccountAuthorization, AccountCapabilities,
+from crucible.models import (AccountAuthorization, AccountCapabilities,
                              ProjectMember)
 
 
@@ -182,19 +182,19 @@ def test_project_list_users(monkeypatch, capsys, as_json):
 
 @pytest.mark.parametrize('as_json', [False, True])
 def test_instrument_list_users(monkeypatch, capsys, as_json):
-    grant = AccessGrant(principal_id=ORCID, principal_type='user', permission='admin',
-                        slug='jdoe', display_name='Jane Doe')
+    member = ProjectMember(unique_id=ORCID, username='jdoe', first_name='Jane',
+                           last_name='Doe', role='admin')
     use_client(monkeypatch, instruments=SimpleNamespace(
-        list_users=MagicMock(return_value=[grant])))
+        list_users=MagicMock(return_value=[member])))
     argv = ['list-users', 'titan'] + (['--json'] if as_json else [])
 
     instrument_cli._execute_list_users(parse(instrument_cli._register_member_commands, *argv))
 
     if as_json:
-        assert json_output(capsys) == [grant.model_dump(mode='json')]
+        assert json_output(capsys) == [member.model_dump(mode='json')]
     else:
         out = capsys.readouterr().out
-        assert 'Members' in out and 'Jane Doe' in out
+        assert 'Members' in out and 'J. Doe' in out
 
 
 # ── user ─────────────────────────────────────────────────────────────────────

@@ -24,21 +24,32 @@
 - The package ships type information (`py.typed`) and passes mypy; `get()` methods are typed as returning `None` when the API sends no record.
 - The shell says at startup when PyPI has a newer release, with the command to upgrade; `update_check` (`CRUCIBLE_UPDATE_CHECK`) turns it off.
 - The shell switches elevation off after 15 idle minutes at the prompt; `elevation_timeout` (`CRUCIBLE_ELEVATION_TIMEOUT`) changes it, `0` never.
+- `owner_ref` filter for up to 10 owners on lists, facets, and search, and `owner_is_null`; `--owner` is repeatable.
+- `affiliation` values `member` (datasets, samples, instruments) and `instrument` (datasets).
 
 ### Removed
 
 - Everything deprecated before 4.0.0. Calling a removed method, keyword, or setting raises `crucible.RemovedError` (a `TypeError`) naming the replacement, and removed CLI commands and options stop with the one to use; the CLI reference lists them under "Removed in 4.0.0".
 - Removed settings (`graph_explorer_url`, `current_session`, `upload_protocol`, `upload_chunk_size_mb`) are ignored in old config files; `config show` lists them and `config unset` removes them. `get_graph_explorer_url()` is replaced by `get_hub_url()`.
 - `CRUCIBLE_CURRENT_PROJECT` stops the CLI; use `--project-id`.
-- `owner_orcid` on `datasets.list()` and `samples.list()` (use `owner_id`), `include_datasets` on `samples.list()` (use `include_links`), and `instrument_id`/`instrument_name` in `datasets.update()` (use `assign_instrument()`).
+- `owner_orcid` on `datasets.list()` and `samples.list()` (use `owner_ref`), `include_datasets` on `samples.list()` (use `include_links`), and `instrument_id`/`instrument_name` in `datasets.update()` (use `assign_instrument()`).
 - Parser `owner_orcid` and `instrument_name` arguments and the `_instrument_name` class default; use `owner`, `instrument_id`/`instrument_mfid`, and `_instrument_id`.
 - `dataset update --set public=...`; use `dataset set-public` or `set-private`.
 - `users.get(orcid=)` (pass the user reference), `projects.list(orcid=)` (use `member_ref` or `users.list_projects()`), the `AccessGrant` properties `principal`, `kind` and `effective_permission` (use `principal_id`, `principal_type`, `permission`), the `relationship` key in `get_links()` results (use `direction`), and the `dsid` key in `datasets.create()` results (use `dataset_mfid`).
 - The legacy GCS upload routes, the fallback to them, and the `google-cloud-storage` dependency.
 - The basic shell used without prompt_toolkit; a broken install now says to reinstall.
+- Instrument `set_access()`, `revoke_access()`, and `access grant|revoke`; use the member methods and commands.
 
 ### Changed
 
+- Instrument members work like project members: every member reads the instrument's datasets, member methods return `ProjectMember` lists, and `Instrument.members` holds `ProjectMember` records.
+- Instrument `add_user()` and `add-user` accept `viewer` and default to it instead of `editor`.
+- `instrument list --mine` includes every instrument you are a member of.
+- Creates send `owner_ref` and transfers send `new_owner_ref`; the `owner_id` and `owner_id_is_null` filters are deprecated.
+- Projects take `owner` on create (`project create --owner`); `project_lead*` and `--lead` are deprecated.
+- Project lists and `project get` show the owner instead of the lead.
+- `--group-by instrument`, `--group-by project`, and the download cache read the nested references.
+- `is_elevated`, `whoami`, and the shell badge follow the privilege mode the API reports.
 - Python 3.11 or later is required; `keyring` is a new dependency.
 - API errors raise `crucible.CrucibleAPIError`, a `requests.HTTPError` with `status`, `code`, `detail`, and `request_id`; CLI errors show the request ID.
 - POST and PATCH requests without an `Idempotency-Key` are no longer retried after a 502, 503, 504, or lost response, which could duplicate records; 429 and failed connections are still retried.
@@ -64,7 +75,7 @@
 
 ### Fixed
 
-- `add_file()` and `files.replace()` with `skip_ingestion=True` record `ingestion_class` on the ingestion request instead of dropping it.
+- `skip_ingestion=True` uploads record `ingestion_class` instead of dropping it.
 - Datasets whose files have an absolute legacy filename, such as `/mnt/gcs/api-uploads/scan.h5`, download instead of being skipped.
 - `datasets.create(upload_files=False)` and `dataset create --no-upload` send each file's size and SHA-256, which the server requires, and name files by relative path so files sharing a basename in different folders stay separate.
 - `add_remote_file()` sets `storage_path` in the create request, and updates it when re-adding an existing file at a new location.

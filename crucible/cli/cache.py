@@ -135,7 +135,7 @@ def _execute_show(args):
         def _lookup(dsid):
             try:
                 ds  = client.datasets.get(dsid)
-                pid = ds.get('project_id') if ds else None
+                pid = ((ds.get('project') or {}).get('project_id') or ds.get('project_id')) if ds else None
                 url = explorer_url(dsid, pid, 'dataset')
             except Exception:
                 url = None

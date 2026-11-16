@@ -7,6 +7,7 @@ Provides organized access to project-related API endpoints.
 """
 
 import logging
+import warnings
 from typing import Any, Optional, List, Dict, Sequence, Union
 from .base import BaseResource, ListResult
 from .capabilities import AccessControlMixin, OwnershipMixin
@@ -26,13 +27,8 @@ from ..utils.identifiers import (
 logger = logging.getLogger(__name__)
 
 
-def _build_project_from_args(project_id, organization, project_lead_orcid):
-    """Default function to build project info from arguments."""
-    return {
-        "project_id": project_id,
-        "organization": organization,
-        "project_lead_orcid": project_lead_orcid,
-    }
+PROJECT_LEAD_FIELDS = ('project_lead', 'project_lead_orcid', 'project_lead_email',
+                       'project_lead_username')
 
 
 class ProjectOperations(OwnershipMixin, AccessControlMixin, BaseResource):
@@ -141,10 +137,11 @@ class ProjectOperations(OwnershipMixin, AccessControlMixin, BaseResource):
              member_ref: Optional[Union[str, Sequence[str]]] = None,
              member_role: Optional[Union[str, Sequence[str]]] = None,
              cursor: Optional[str] = None,
-             mfid: Optional[Union[str, Sequence[str]]] = None) -> List[Dict]:
+             mfid: Optional[Union[str, Sequence[str]]] = None,
+             owner_ref: Optional[Union[str, Sequence[str]]] = None) -> List[Dict]:
         """List all accessible projects.
 
-        Each project dict includes a ``lead`` key with the project lead's
+        Each project dict includes an ``owner`` key with the owner's
         public-safe user record and a ``role`` key with the caller's
         membership role (None when the project is only visible through
         platform role or resource grants).
@@ -171,9 +168,11 @@ class ProjectOperations(OwnershipMixin, AccessControlMixin, BaseResource):
                          values use OR semantics and require member_ref.
             mfid: Only these project MFIDs (up to 100). Applies to /projects
                   only. Unreadable or missing MFIDs are left out.
+            owner_ref: Owner or owners (up to 10, any matches): unique_id,
+                linked ORCID, username, or email.
 
         Returns:
-            List[Dict]: Project metadata including project_id, title, organization, lead, role
+            List[Dict]: Project metadata including project_id, title, organization, owner, role
         """
         if orcid is not None:
             raise RemovedError(removed_message(
@@ -198,23 +197,23 @@ class ProjectOperations(OwnershipMixin, AccessControlMixin, BaseResource):
         if member_roles:
             params['member_role'] = member_roles
         self._apply_mfid_filter(params, mfid)
+        if owner_ref is not None:
+            params['owner_ref'] = owner_ref
+            self._owner_filters(params)
         return self._paginate('/projects', params, limit, offset, cursor=cursor)
 
     def create(self, project: Union[Project, Dict],
                scientific_metadata: Optional[Dict] = None) -> Dict:
         """Create a new project.
 
-        Any authenticated user may create a project. The selected lead must be
-        an existing user.
+        Any authenticated user may create a project they own; only platform
+        administrators may name someone else as the owner.
 
         Args:
             project: A Project model instance or a dict with project_id,
-                     organization, and project_lead_email. Alternatively, pass
-                     a flexible `project_lead` field (ORCID, username, or
-                     email - resolved server-side) instead of the three
-                     explicit `project_lead_orcid`/`project_lead_email`/
-                     `project_lead_username` fields; providing both is a 400,
-                     as is providing neither.
+                     organization, and owner (ORCID, MFID, username, or
+                     email). The project_lead* fields still work but are
+                     deprecated.
             scientific_metadata (Dict, optional): Scientific metadata to attach after creation.
 
         Returns:
@@ -225,7 +224,7 @@ class ProjectOperations(OwnershipMixin, AccessControlMixin, BaseResource):
             >>> project = Project(
             ...     project_id="my-project",
             ...     organization="Molecular Foundry",
-            ...     project_lead_email="lead@lbl.gov"
+            ...     owner="lead@lbl.gov"
             ... )
             >>> result = client.projects.create(project)
         """
@@ -240,20 +239,20 @@ class ProjectOperations(OwnershipMixin, AccessControlMixin, BaseResource):
 
         validate_slug(project_details.get('project_id'), 'project')
 
-        flexible_lead = project_details.get('project_lead')
-        explicit_leads = [
-            project_details.get('project_lead_orcid'),
-            project_details.get('project_lead_email'),
-            project_details.get('project_lead_username'),
-        ]
-        if flexible_lead and any(explicit_leads):
-            raise ValueError(
-                "Pass 'project_lead' or one explicit project lead field, not both."
-            )
-        if sum(lead is not None for lead in explicit_leads) > 1:
-            raise ValueError("Pass only one explicit project lead field.")
-        if not flexible_lead and not any(explicit_leads):
-            raise ValueError("A project lead is required.")
+        leads = [field for field in PROJECT_LEAD_FIELDS if project_details.get(field) is not None]
+        if leads:
+            warnings.warn(
+                f"{', '.join(leads)} on project create is deprecated; set owner instead.",
+                DeprecationWarning, stacklevel=2)
+            if len(leads) > 1 or project_details.get('owner') is not None:
+                raise ValueError("Pass the project owner once, as owner.")
+            project_details['owner'] = project_details[leads[0]]
+        for field in PROJECT_LEAD_FIELDS:
+            project_details.pop(field, None)
+        project_details.pop('lead', None)
+        self._owner_ref_body(project_details, 'Project')
+        if not project_details.get('owner_ref'):
+            raise ValueError("A project owner is required: set owner to an ORCID, MFID, username, or email.")
 
         result = self._request('post', "/projects", json=project_details)
         if scientific_metadata:

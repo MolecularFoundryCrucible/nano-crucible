@@ -227,9 +227,14 @@ class CrucibleClient:
 
     @property
     def is_elevated(self) -> bool:
-        """Whether ordinary requests from this client run elevated."""
+        """Whether ordinary requests from this client run elevated.
+
+        Without an explicit mode the server decides: it elevates an
+        administrator's API key but not a sign-in, and reports which.
+        """
         if self.privilege_mode is None:
-            return self.can_elevate
+            reported = self.authorization.effective_privilege_mode
+            return reported == 'elevated' if reported else self.can_elevate
         return self.privilege_mode == 'elevated'
 
     def _admin_mode(self) -> Optional[str]:

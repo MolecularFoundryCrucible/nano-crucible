@@ -167,13 +167,14 @@ class Instrument(CrucibleResource):
     other_id_source: Optional[str] = None
     status: Optional[str] = None
     capabilities: Optional[ResourceCapabilities] = None
-    members: Optional[List['AccessGrant']] = None
+    members: Optional[List['ProjectMember']] = None
 
 
 class Project(BaseModel):
     project_id: str
     organization: str
     unique_id: Optional[str] = None
+    owner: Optional[Union[str, PublicUser]] = None
     lead: Optional[Dict] = None
     project_lead: Optional[str] = None
     project_lead_orcid: Optional[str] = None
