@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 4.0.0
+
 Requires Crucible API 4.0 and Python 3.11 or later. [Upgrading to 4.0](upgrading.md) lists what to change in existing scripts.
 
 ### Added
@@ -73,7 +75,6 @@ Requires Crucible API 4.0 and Python 3.11 or later. [Upgrading to 4.0](upgrading
 - User references are no longer shape-checked: `users.get()` and the CLI pass any value they cannot classify to the API.
 - `users.resolve()` uses the exact filters of `GET /users` instead of the deprecated `POST /users/resolve`; its result is unchanged.
 - `users.search()` reads the paginated `items` response.
-- Owner and lead fields show as "Owner ID" and "Lead ID", and the owner shown comes from the owner object when present.
 - `datasets.create()` leaves out `instrument_name` when `instrument_id` or `instrument_mfid` is set.
 - A cast recipe's `instrument` is an instrument ID or MFID, not a name.
 - CI tests Python 3.13 and macOS, runs mypy, checks the client's routes against staging, and gates PyPI releases on the tests; the live-API integration tests moved to the `crucible-tests` repository.
