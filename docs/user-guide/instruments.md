@@ -4,7 +4,7 @@
 |---|---|---|
 | `instrument_id` | Unique 3-to-25-character slug used to reference the instrument | create, update |
 | `instrument_name` | Human-readable display name | create, update |
-| `owner_orcid` | Canonical owner identifier returned by the API; read only; set `owner` when creating | read |
+| `owner_orcid` | Deprecated by the API; read `owner` instead | read |
 | `owner` | Flexible owner identifier on create; public-safe user record on reads with owner expansion | create with an ORCID, MFID, username, or email; expanded by default on `get()` |
 | `location` | Physical location (e.g. room number or building) | create, update |
 | `manufacturer` | Instrument manufacturer (e.g. `"FEI"`, `"Bruker"`) | create, update |
@@ -56,6 +56,11 @@ for i in instruments:
 Normal list operations return active instruments.
 Pass `status="maintenance"` or `status="decommissioned"` to select another lifecycle state.
 List owner expansion is opt-in with `include_owner=True`.
+`owner_ref` (one owner or up to 10) keeps instruments owned by any of them, and `affiliation` keeps those you own (`owner`), help run as an editor or admin member (`maintainer`), or belong to at any role (`member`):
+
+```python
+mine = client.instruments.list(affiliation=["owner", "member"])
+```
 
 ## Getting an instrument
 
@@ -67,7 +72,6 @@ instrument = client.instruments.get("0tkn2knjast3h0008nyq9zps2c")
 
 Singleton retrieval expands `owner` by default as a public-safe user record containing `unique_id`, `username`, `first_name`, and `last_name`.
 Pass `include_owner=False` to suppress expansion.
-The canonical owner identifier remains available as `owner_orcid`.
 
 Exact MFID and slug lookups include caller-specific `capabilities` when the server has calculated them. General lists and searches normally return `capabilities=None`, which means the guidance was not calculated rather than that every action is denied. The API remains authoritative for each mutation.
 
@@ -99,6 +103,19 @@ client.instruments.transfer_ownership(
     confirm=True,
 )
 ```
+
+## Managing members
+
+Instrument members work like project members. Every member reads the instrument's datasets, `editor` also edits the instrument's details, and `admin` also changes its status, binds service accounts, and manages members. The member list is visible to members and to platform administrators running elevated; `list_users()` returns `None` for anyone else.
+
+```python
+members = client.instruments.list_users("team-i")
+client.instruments.add_user("team-i", "alice")                  # viewer by default
+client.instruments.update_user_role("team-i", "alice", "editor")
+client.instruments.remove_user("team-i", "alice")
+```
+
+Each change returns the updated `list[ProjectMember]`. Adding an existing member returns 409; use `update_user_role()`. Ownership changes only through `transfer_ownership()`. A member may remove themselves. `set_access()` and `revoke_access()` raise `RemovedError` for instruments.
 
 ## Managing service-account operators
 

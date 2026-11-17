@@ -91,7 +91,7 @@ Creation commands prompt for missing required fields when run in an interactive 
 
 When stdin is not interactive, optional prompts are skipped and configured defaults remain usable. A missing required value exits with status 2 and identifies the command-line option that must be supplied.
 
-`config init` hides API-key input. It also warns when an active environment variable will override a value saved by the wizard.
+`config init` offers to create an API key after a browser sign-in, and hides a pasted key. It also warns when an active environment variable will override a value saved by the wizard.
 
 Destructive commands default confirmation to no and accept `yes`, `y`, `no`, or `n`. When stdin is not interactive, supply the command's explicit `--yes` option. Ownership transfers and project reassignments use a different safety model: they preview by default and execute only with `--confirm`.
 

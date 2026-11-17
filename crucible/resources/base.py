@@ -7,7 +7,7 @@ Provides shared functionality for all resource operation classes.
 """
 
 # typing
-from typing import Optional, Sequence, Union
+from typing import Any, Dict, Optional, Sequence, Union
 
 # internal modules
 from ..constants import DEFAULT_LIMIT, MFID_FILTER_MAX
@@ -449,7 +449,8 @@ class BaseResource:
         return ListResult(items[:need], has_more=has_more, total=total,
                           next_offset=next_offset, start=offset)
 
-    def search_metadata(self, q: str, limit: int = 20) -> list:
+    def search_metadata(self, q: str, limit: int = 20,
+                        owner_ref: Optional[Union[str, Sequence[str]]] = None) -> list:
         """Full-text search across scientific metadata of all accessible resources.
 
         Results are ranked by relevance (rank field) and include resource_type, name,
@@ -459,13 +460,18 @@ class BaseResource:
         Args:
             q: Plain-text search query (English-language stemmed).
             limit: Max results to return (default 20, max 50).
+            owner_ref: Owner or owners (up to 10, any matches): unique_id,
+                linked ORCID, username, or email.
 
         Returns:
             List of result dicts with unique_id, resource_type, name, owner_orcid,
             creation_time, modification_time, rank, and scientific_metadata.
         """
-        resp = self._request('get', '/resources/metadata/search',
-                             params={"q": q, "limit": limit})
+        params: Dict[str, Any] = {"q": q, "limit": limit}
+        if owner_ref is not None:
+            params['owner_ref'] = owner_ref
+            self._owner_filters(params)
+        resp = self._request('get', '/resources/metadata/search', params=params)
         if isinstance(resp, dict) and 'items' in resp:
             return resp['items']
         return resp or []

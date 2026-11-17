@@ -113,9 +113,10 @@ Examples:
     list_parser.set_defaults(func=_execute_keys_list)
 
     create = sub.add_parser(
-        'create', help='Create an API key (needs a recent sign-in, not an API key)',
-        description='Create an API key and show it once. Creating a key needs a recent '
-                    'sign-in to the Crucible Hub; an API key is refused.',
+        'create', help='Create an API key (needs a recent browser sign-in)',
+        description='Create an API key and show it once. Creating a key needs a browser '
+                    'sign-in from the last 10 minutes; in a terminal on a computer with a '
+                    'browser, the command signs you in again when needed.',
         formatter_class=term.ColorHelpFormatter)
     create.add_argument('name', metavar='NAME', help='What the key is for, such as a machine or script')
     create.add_argument('--expires', metavar='DATE', default=None,

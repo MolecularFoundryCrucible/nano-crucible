@@ -472,3 +472,26 @@ def test_project_list_filters_by_owner_ref():
     operations = make_ops(ProjectOperations, {'total': 0, 'items': []})
     operations.list(owner_ref=['alice'])
     assert operations._request.call_args.kwargs['params']['owner_ref'] == ['alice']
+
+
+def test_project_search_filters_by_owner_ref():
+    from crucible.resources.projects import ProjectOperations
+
+    operations = make_ops(ProjectOperations, {'items': []})
+    operations.search('alphafold', owner_ref=['alice', 'bob'])
+    assert operations._request.call_args.kwargs['params'] == {
+        'q': 'alphafold', 'limit': 20, 'owner_ref': ['alice', 'bob']}
+    operations.search('alphafold')
+    assert 'owner_ref' not in operations._request.call_args.kwargs['params']
+
+
+def test_metadata_search_filters_by_owner_ref():
+    from crucible.resources.datasets import DatasetOperations
+
+    operations = make_ops(DatasetOperations, {'items': []})
+    operations.search_metadata('perovskite', owner_ref=['alice', 'bob'])
+    assert operations._request.call_args.args[1] == '/resources/metadata/search'
+    assert operations._request.call_args.kwargs['params'] == {
+        'q': 'perovskite', 'limit': 20, 'owner_ref': ['alice', 'bob']}
+    operations.search_metadata('perovskite')
+    assert 'owner_ref' not in operations._request.call_args.kwargs['params']

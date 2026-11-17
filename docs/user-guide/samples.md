@@ -10,7 +10,7 @@
 | `description` | Free-text description of the sample | create, update |
 | `timestamp` | Date associated with the sample (ISO 8601 format) | create, update |
 | `public` | Whether the sample is publicly accessible (default: `False`) | create; later changes use `set_public()` / `set_private()` |
-| `owner_orcid` | Canonical owner identifier returned by the API; read only; set `owner` when creating | read |
+| `owner_orcid` | Deprecated by the API; read `owner` instead | read |
 | `owner` | Flexible owner identifier on create; public-safe user record on singleton reads | create with an ORCID, MFID, username, or email; expanded by default on `get()` |
 | `unique_id` | System-assigned MFID identifier | server-assigned |
 | `creation_time` | When the record was created | server-assigned |
@@ -60,11 +60,11 @@ Samples are retrieved only by their canonical 26-character MFID. Sample names ar
 
 Sample responses no longer embed the linked datasets. Use `include_links=True` for lightweight references to linked datasets and samples, or `client.datasets.list(sample_mfid=sample_mfid)` for the full dataset records. `include_datasets=True` still embeds them, with a deprecation warning, because the API has deprecated that field.
 
-Singleton retrieval expands `owner` by default as a public-safe user record containing `unique_id`, `username`, `first_name`, and `last_name`. Pass `include_owner=False` to suppress expansion. List operations remain opt-in with `include_owner=True`. The canonical owner identifier remains available as `owner_orcid`.
+Singleton retrieval expands `owner` by default as a public-safe user record containing `unique_id`, `username`, `first_name`, and `last_name`. Pass `include_owner=False` to suppress expansion. List operations remain opt-in with `include_owner=True`. `owner_ref`, `owner_is_null`, and `affiliation` (`owner` or `member`) filter listings as they do for datasets.
 
 Canonical detail responses include caller-specific `capabilities` when the server has calculated them. Sample capabilities always report `can_change_status=False` because samples have no lifecycle-status operation. Collections and search results normally return `capabilities=None`, which means the guidance was not calculated rather than that every action is denied. The API remains authoritative for each mutation.
 
-Sample responses include a lightweight `project` reference when the canonical relationship resolves. Use its `title` and `project_id` for display and its `unique_id` for stable navigation. The flat `project_id` remains the compatibility fallback for legacy records. A project reference does not imply permission to retrieve the complete project.
+Sample responses include a lightweight `project` reference when the canonical relationship resolves. Use its `title` and `project_id` for display and its `unique_id` for stable navigation. The flat `project_id` is deprecated by the API but remains the fallback for legacy records. A project reference does not imply permission to retrieve the complete project.
 
 ## Listing samples
 

@@ -106,8 +106,7 @@ class AccountOperations(BaseResource):
             cursor: Continuation token from a previous result's next_cursor.
 
         Returns:
-            ListResult[Dict]: ApiKeyInfo records. older_routes marks the key
-                the deprecated single-key routes show.
+            ListResult[Dict]: ApiKeyInfo records.
         """
         return _key_page(self, '/account/apikeys', state, limit, cursor)
 

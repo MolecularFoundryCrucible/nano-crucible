@@ -24,8 +24,6 @@ Instrument members work like project members (`list_users()`, `add_user()`, `rem
         - bind_service_account
         - unbind_service_account
         - list_access
-        - set_access
-        - revoke_access
         - set_public
         - set_private
         - transfer_ownership

@@ -428,7 +428,8 @@ class ProjectOperations(OwnershipMixin, AccessControlMixin, BaseResource):
             params={'role': role})
         return self._parse_members(raw)
 
-    def search(self, q: str, limit: int = 20) -> List[Dict]:
+    def search(self, q: str, limit: int = 20,
+               owner_ref: Optional[Union[str, Sequence[str]]] = None) -> List[Dict]:
         """Fuzzy search across all projects (not just the caller's). Available
         to all authenticated users — supports project discovery ahead of
         request_join().
@@ -439,11 +440,17 @@ class ProjectOperations(OwnershipMixin, AccessControlMixin, BaseResource):
         Args:
             q: Search term (min 3 chars). Typo-tolerant.
             limit: Max results (default 20, max 50).
+            owner_ref: Owner or owners (up to 10, any matches): unique_id,
+                linked ORCID, username, or email.
 
         Returns:
             List[Dict]: Matching ProjectRead records, ranked by relevance.
         """
-        result = self._request('get', '/projects/search', params={'q': q, 'limit': limit})
+        params: Dict[str, Any] = {'q': q, 'limit': limit}
+        if owner_ref is not None:
+            params['owner_ref'] = owner_ref
+            self._owner_filters(params)
+        result = self._request('get', '/projects/search', params=params)
         return result.get('items', result) if isinstance(result, dict) else result
 
     def request_join(self, project_id: str, reason: Optional[str] = None) -> Dict:

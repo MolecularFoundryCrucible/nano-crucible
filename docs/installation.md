@@ -3,6 +3,7 @@
 ## Requirements
 
 - Python 3.11 or later
+- A Crucible API at version 4.0 or later; the shell's status bar flags an older server. Upgrading from 3.x? See [Upgrading to 4.0](upgrading.md).
 - A Crucible account ([crucible.lbl.gov](https://crucible.lbl.gov)); an API key only for scripts, CI, and batch jobs
 
 ## Install from PyPI
@@ -55,7 +56,7 @@ Run the interactive setup wizard once after installing:
 crucible config init
 ```
 
-This securely prompts for your API key without displaying it and writes a config file at `~/.config/nano-crucible/config.ini` (path varies by OS). All subsequent CLI and Python API calls will use it automatically. If a corresponding environment variable is set, it takes precedence and the wizard reports that override.
+It offers to sign you in with this computer's browser and create a key, or takes a key you paste without displaying it, and writes a config file at `~/.config/nano-crucible/config.ini` (path varies by OS). All subsequent CLI and Python API calls will use it automatically. If a corresponding environment variable is set, it takes precedence and the wizard reports that override.
 
 You can review or change settings at any time:
 
@@ -102,7 +103,7 @@ If an older config explicitly selects API v1 or v2, Nano displays a migration wa
 
 ## Getting your API key
 
-Sign in to the Crucible Hub and create a key on your account page: [crucible.lbl.gov/hub/account](https://crucible.lbl.gov/hub/account#api-keys). After `crucible login`, `crucible account keys create NAME` also creates one. A key is shown only once.
+`crucible config init` can create one: it signs you in with your browser and saves the new key. You can also create a key on your Hub account page: [crucible.lbl.gov/hub/account](https://crucible.lbl.gov/hub/account#api-keys). After `crucible login`, `crucible account keys create NAME` also creates one. A key is shown only once.
 
 ---
 

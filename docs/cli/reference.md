@@ -14,7 +14,7 @@ Project options use `--project-id` with the conventional `-p` short alias. Sampl
 | `--no-color` | Disable ANSI colors while retaining interactive terminal hyperlinks; place it before the command |
 | `--no-pager` | Print a long listing directly even when the `pager` setting is `auto`; place it before the command |
 
-By default no privilege mode is sent and the API decides: a platform administrator using an API key runs elevated and sees every record, a signed-in administrator runs normal, and everyone else gets their normal, ACL-derived access. `whoami` shows which mode applies. Set `crucible config set privilege_mode normal` to restrict an administrator account to its own access; `--elevate` (`-E`) then widens a single command. A future release will default to `normal`. Administrator-only commands, such as `service-account show`, `service-account set-role`, and deletion review, elevate on their own and do not need the flag.
+By default no privilege mode is sent and the API decides: a platform administrator using an API key runs elevated and sees every record, a signed-in administrator runs normal, and everyone else gets their normal, ACL-derived access. `whoami` shows which mode applies. Set `crucible config set privilege_mode normal` to restrict an administrator account to its own access; `--elevate` (`-E`) then widens a single command. A future release will default to `normal` for API keys too. Administrator-only commands, such as `service-account show`, `service-account set-role`, and deletion review, elevate on their own and do not need the flag.
 
 Explicit elevation can also come from the `privilege_mode` config key or the `CRUCIBLE_PRIVILEGE_MODE` environment variable. Because neither is visible on the command line, the CLI prints a notice to stderr when a command runs elevated without `--elevate`. In the interactive shell, `elevate on|off` toggles it for the session, `elevate COMMAND` runs a single command elevated, and an `ELEVATED` badge appears in the toolbar while the toggle is on. The shell switches elevation off after `elevation_timeout` idle minutes (default 15, `0` never).
 
@@ -110,7 +110,7 @@ Use `dataset list --project-id PROJECT --project-scope shared` to show resources
 
 `dataset list` and `sample list` use the current project when one is set and otherwise list every accessible project; `--all-projects` ignores the current project, and the table then shows each record's project. Results are fetched newest first, so `--limit N` keeps the N most recent, and printed oldest to newest so the newest row sits next to the prompt. `--sort created|updated|name` with `--direction asc|desc` changes the server ordering (`--direction` requires `--sort`); an ascending sort prints in that order. Tables are flat unless `--group-by` or the `dataset_group_by`/`sample_group_by` config key selects a field; groups keep chronological order and the group with the newest record comes last. `--json` returns records in server order.
 
-Both commands accept `--visibility all|public|private`, `--mine`, `--owner USER` (username, ORCID, or MFID, resolved to the stable identifier before the request), the time bounds `--created-after`, `--created-before`, `--modified-after`, and `--modified-before` (ISO 8601 or `YYYY-MM-DD`; a bare date covers the whole day and a time without an offset is UTC), and `--missing FIELD` (repeatable) to select records with no value for a field. Dataset listing adds `--name`, `-m/--measurement`, `--session`, `--data-format`, `--data-type`, `--instrument-id` (resolved to the instrument MFID), `--instrument-mfid`, `--sample-mfid`, and `-k/--keyword`; sample listing adds `--name`, `--type`, `--description`, and `--dataset-mfid`.
+Both commands accept `--visibility all|public|private`, `--mine` (records you own), `--owner USER` (username, ORCID, MFID, or email, resolved to the stable identifier before the request; repeat it for any of up to 10 owners), the time bounds `--created-after`, `--created-before`, `--modified-after`, and `--modified-before` (ISO 8601 or `YYYY-MM-DD`; a bare date covers the whole day and a time without an offset is UTC), and `--missing FIELD` (repeatable) to select records with no value for a field. Dataset listing adds `--name`, `-m/--measurement`, `--session`, `--data-format`, `--data-type`, `--instrument-id` (resolved to the instrument MFID), `--instrument-mfid`, `--sample-mfid`, and `-k/--keyword`; sample listing adds `--name`, `--type`, `--description`, and `--dataset-mfid`.
 
 `dataset facets FIELD` and `sample facets FIELD` count how many records fall into each value of a grouping field without fetching the records. Dataset fields are `session`, `measurement`, `data_format`, `owner`, `instrument`, and `project`; sample fields are `sample_type`, `owner`, and `project`. Both accept `--sort value|label|count`, `--direction`, `--limit`, `--json`, and the same project, visibility, ownership, time, exact-match, and `--missing` filters as the matching list command. In the interactive shell, `-m/--measurement`, `--session`, `--data-format`, and `--type` complete from these counts, scoped to the `--project-id` typed on the line or else the current project. These values and project IDs match fuzzily, so `xt` offers `xrd-titan`; commands, flags, fixed choices, and MFIDs complete by prefix.
 
@@ -151,7 +151,7 @@ Sample creation accepts `--project-id` or `--project-mfid`, including both when 
 |---|---|
 | `project list` | List accessible projects; `--sort`/`--direction` order them, `--member` (repeatable) and `--member-role` narrow to memberships, and a Role column shows your role in each |
 | `project get PROJECT [--include-members]` | Show a project by MFID or project slug, optionally with its members; also shows your role |
-| `project create` | Create a project |
+| `project create` | Create a project; `--owner USER` names the owner (`--lead` still works with a notice) |
 | `project update ID` | Update a project record or scientific metadata |
 | `project edit ID` | Edit project fields interactively |
 | `project search QUERY` | Search project names and IDs |
@@ -259,7 +259,7 @@ Service-account creation uses the same username rules and interactive validation
 | Command | Description |
 |---|---|
 | `sa create` | Create a service account |
-| `sa rotate-key USER` | Generate a new key and invalidate the previous key |
+| `sa rotate-key USER` | Generate a new key and revoke every key the account holds |
 | `sa get USER [--groups]` | Show a service account; administrators also see its platform role and API key status, and `--groups` lists the projects and instruments it belongs to |
 | `sa list [-q TEXT]` | List service accounts with their platform roles; `-q` filters by username or name |
 | `sa update USER` | Update a service account |
@@ -404,3 +404,5 @@ These commands and options stop with the form to use instead.
 | `--upload-protocol` | drop it; every upload uses signed multipart |
 | `ag list --group` | `--project` |
 | `CRUCIBLE_CURRENT_PROJECT` | `--project-id`, or `use PROJECT_ID` in the shell |
+| `instrument access grant`, `instrument access revoke` | `instrument add-user`, `update-user-role`, `remove-user` |
+| `dataset update --set public=...` | `dataset set-public`, `dataset set-private` |

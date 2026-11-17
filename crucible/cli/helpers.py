@@ -148,9 +148,10 @@ def _error_hint(error_type, status, details):
         return ("A code-approved sign-in cannot do this. Run the command in a terminal on a computer "
                 f"with a browser (`crucible login`), or do it in the Hub ({config.hub_url}).")
     if status == 403 and any(item.get('code') == 'hub_session_required' for item in details):
-        return (f"This needs a recent sign-in to the Crucible Hub, not an API key; do it from the Hub "
+        return ("This needs a recent browser sign-in, not an API key. Run the command in a terminal "
+                f"on a computer with a browser, which signs you in again, or do it in the Hub "
                 f"({config.hub_url}). Server operators can change roles with "
-                f"`python -m app.cli admin set-role`.")
+                "`python -m app.cli admin set-role`.")
     if status == 403:
         return ("Your account is not allowed to do this. `crucible whoami` shows your role; "
                 "administrators can retry with -E/--elevate.")

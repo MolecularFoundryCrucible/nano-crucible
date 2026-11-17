@@ -57,8 +57,8 @@ API_KEY_STATES = ('active', 'inactive')
 # Values for the Crucible-Privilege-Mode request header.
 PRIVILEGE_MODES = ('normal', 'elevated')
 
-# None sends no header, so the server applies its legacy behavior: elevated for
-# a platform administrator, normal for everyone else. Sending 'elevated'
+# None sends no header and the server decides: elevated for an administrator's
+# API key, normal for a sign-in and for everyone else. Sending 'elevated'
 # explicitly would instead be rejected with a 403 for ineligible callers.
 DEFAULT_PRIVILEGE_MODE = None
 

@@ -61,7 +61,7 @@ class CrucibleClient:
         file.
 
         Raises:
-            ValueError: If there is no API key and no stored sign-in
+            NotSignedInError: If there is no API key and no stored sign-in (a ValueError)
         """
         # Load from config if not provided
         from .config import config as _config

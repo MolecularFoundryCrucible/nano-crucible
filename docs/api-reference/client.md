@@ -33,7 +33,7 @@ A new client uses the first credential it finds: an `api_key` argument, then `CR
 
 ## Privilege mode
 
-Endpoints distinguish normal ACL-derived authorization from explicit platform-administrator elevation, selected with the `Crucible-Privilege-Mode` header. By default the client sends no header, so the server applies its legacy behavior: a platform administrator runs elevated and sees every record, and everyone else gets their normal, ACL-derived access. `client.is_elevated` reports which applies.
+Endpoints distinguish normal ACL-derived authorization from explicit platform-administrator elevation, selected with the `Crucible-Privilege-Mode` header. By default the client sends no header and the server decides: a platform administrator using an API key runs elevated and sees every record, a signed-in administrator runs normal, and everyone else gets their normal, ACL-derived access. `client.is_elevated` reports the mode the server applies.
 
 Pass `privilege_mode="normal"` to see only what you can access through your own memberships and grants, or `"elevated"` to request elevation explicitly. The `privilege_mode` config key and `CRUCIBLE_PRIVILEGE_MODE` environment variable set the same thing.
 
@@ -41,7 +41,7 @@ Pass `privilege_mode="normal"` to see only what you can access through your own 
 client = CrucibleClient(privilege_mode="normal")
 ```
 
-A future release will default to `normal`. Platform administrators who rely on seeing every record should set `privilege_mode = elevated` now.
+A future release will default to `normal` for API keys too. Platform administrators whose scripts rely on seeing every record should set `privilege_mode = elevated` now.
 
 Administrator-only operations, such as service-account administration and deletion review, request elevation per call, so they work without elevating the whole client. Requesting elevation as an ineligible caller is rejected with a 403, so those calls elevate only when `client.can_elevate` is true.
 

@@ -229,16 +229,17 @@ def cmd_init(args):
             print("Cancelled.")
             return
 
-    # Get API key
-    print("\n1. Crucible API Key (required)")
-    print(f"   Sign in to the Crucible Hub and create a key: {config.hub_url}/account#api-keys")
-    api_key = prompt_secret("API Key", option='CRUCIBLE_API_KEY')
-
-    # Get API URL
     from crucible.config.config import Config as _Cfg
-    print("\n2. Crucible API URL (optional)")
+    print("\n1. Crucible API URL (optional)")
     print(f"   Press Enter to use the built-in default ({_Cfg.DEFAULT_API_URL})")
     api_url = prompt_optional("API URL", validator=validate_http_url)
+
+    print("\n2. Crucible API Key (required)")
+    api_key = _offer_browser_key(api_url or os.environ.get('CRUCIBLE_API_URL') or _Cfg.DEFAULT_API_URL)
+    if api_key is None:
+        print(f"   Paste a key from the Crucible Hub ({config.hub_url}/account#api-keys), or from "
+              "`crucible account keys create NAME` on a computer with a browser.")
+        api_key = prompt_secret("API Key", option='CRUCIBLE_API_KEY')
 
     # Get cache directory
     print("\n3. Cache Directory (optional)")
@@ -271,6 +272,50 @@ def cmd_init(args):
     except Exception as e:
         logger.error(f"Error creating configuration: {e}")
         sys.exit(1)
+
+
+def _offer_browser_key(api_url):
+    """Sign in with this computer's browser and create a key, or None to paste one."""
+    import socket
+
+    import requests
+
+    from ..auth import oauth
+    from ..auth.errors import SignInError
+    from ..auth.loopback import browser_available
+    from ..auth.session import SessionCredential, sign_in
+    from ..auth.store import TokenStore
+    from ..client import CrucibleClient
+    from .helpers import prompt_confirm, prompt_optional, show_warning
+
+    if not browser_available():
+        print("   Creating a key here needs a browser on this computer.")
+        return None
+    if not prompt_confirm("Sign in with your browser now and create a key?", default=True):
+        return None
+    name = prompt_optional("Key name", default=f"nano-crucible on {socket.gethostname()}"[:100])
+
+    def notify(message, url):
+        print(f"   {message}\n   {url}")
+
+    try:
+        tokens = sign_in(api_url, 'browser', notify=notify)
+    except (SignInError, requests.RequestException) as exc:
+        show_warning(f"Sign-in did not finish: {exc}")
+        return None
+    try:
+        client = CrucibleClient(api_url=api_url, api_key='unused')
+        client._credential = SessionCredential(tokens, TokenStore())
+        client.api_key = None
+        key = client.account.create_api_key(name)
+    except (ValueError, requests.RequestException) as exc:
+        show_warning(f"Could not create the key: {exc}")
+        return None
+    finally:
+        oauth.revoke(tokens)
+    print(f"   Created API key {key.get('name')!r} (ID {key.get('id')}), "
+          f"expires {term.fmt_ts(key.get('expires_at'))}; it is saved below.")
+    return key['api_key']
 
 
 def cmd_show(args):

@@ -7,7 +7,7 @@
 | `project_mfid` | Canonical project selector for creation | create |
 | `measurement` | Industry-standard experiment type (e.g. `"Raman Spectroscopy"`) | create, update |
 | `data_type` | Institution-specific data organization descriptor (e.g. `"ScopeFoundry H5 file"`) | create, update |
-| `instrument_name` | Display name derived from the assigned instrument; may repeat, so it does not identify an instrument | server-assigned |
+| `instrument_name` | Display name derived from the assigned instrument; may repeat, so it does not identify an instrument; deprecated in responses, read `instrument` | server-assigned |
 | `instrument_id` | Registered instrument slug | create; later changes use `assign_instrument()` |
 | `instrument_mfid` | Canonical registered instrument selector | create; later changes use `assign_instrument()` |
 | `instrument` | Current instrument identity and display fields, including its canonical MFID | server-assigned |
@@ -16,7 +16,7 @@
 | `session_name` | Optional tag grouping datasets collected in the same session | create, update |
 | `timestamp` | When the data was collected (ISO 8601 format) | create, update |
 | `public` | Whether the dataset is publicly accessible (default: `False`) | create; later changes use `set_public()` / `set_private()` |
-| `owner_orcid` | Canonical owner identifier returned by the API; read only; set `owner` when creating | read |
+| `owner_orcid` | Deprecated by the API; read `owner` instead | read |
 | `owner` | Flexible owner identifier on create; public-safe user record on singleton reads | create with an ORCID, MFID, username, or email; expanded by default on `get()` |
 | `unique_id` | System-assigned MFID identifier | server-assigned |
 | `size` | Total file size in bytes | server-assigned |
@@ -124,7 +124,7 @@ Singleton retrieval expands `owner` by default as a public-safe user record cont
 
 Canonical detail responses include caller-specific `capabilities` when the server has calculated them. Dataset capabilities always report `can_change_status=False` because datasets have no lifecycle-status operation. Collections and search results normally return `capabilities=None`, which means the guidance was not calculated rather than that every action is denied. The API remains authoritative for each mutation.
 
-Dataset responses include lightweight `instrument` and `project` references when those canonical relationships resolve. Use `dataset["instrument"]["unique_id"]` and `dataset["project"]["unique_id"]` for stable navigation. The flat `instrument_id`, `instrument_name`, and `project_id` fields remain available and provide display fallbacks for legacy records whose canonical relationship is unresolved. A reference exposes identity and display information only and does not imply access to the complete instrument or project.
+Dataset responses include lightweight `instrument` and `project` references when those canonical relationships resolve. Use `dataset["instrument"]["unique_id"]` and `dataset["project"]["unique_id"]` for stable navigation. The flat `instrument_id`, `instrument_name`, and `project_id` fields are deprecated by the API but remain available as display fallbacks for legacy records whose canonical relationship is unresolved. A reference exposes identity and display information only and does not imply access to the complete instrument or project.
 
 ## Listing datasets
 
@@ -160,6 +160,13 @@ datasets = client.datasets.list(
 Pass the project slug as `project_id` or the canonical project MFID as `project_mfid`. Both may be supplied when they identify the same project; conflicting identifiers produce an API validation error. `project_scope` accepts `assigned`, `shared`, or `all` and defaults to `assigned`. Scoped collection results expose `project_relation` as `assigned` or `shared`; `project` may be `None` when a shared resource has no primary project.
 
 The `sample_mfid` relationship filter uses the normal paginated dataset collection and can be combined with compatible dataset filters such as project, instrument, and access selectors. Results follow cursor pagination and include only datasets the caller may read.
+
+Owner and affiliation filters narrow any listing. `owner_ref` takes one owner or a list of up to 10 (unique_id, linked ORCID, username, or email) and matches records owned by any of them; `owner_is_null=True` selects records with no owner. `affiliation` relates each record to you: `owner` (you own it), `member` (you reach it through your own grants), or `instrument` (you read it as a member of its instrument).
+
+```python
+mine = client.datasets.list(affiliation=["owner", "member"])
+theirs = client.datasets.list(owner_ref=["alice", "bob"], project_id="my-project")
+```
 
 Access selectors accept user MFIDs, ORCIDs, usernames, or emails and project MFIDs or project IDs. Multiple selectors use intersection semantics and only narrow resources the authenticated caller may read. Inspecting another user requires platform-administrator access, while inspecting a project requires membership in that project or platform-administrator access.
 

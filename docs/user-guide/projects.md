@@ -27,6 +27,13 @@ shared_projects = client.projects.list(
 )
 ```
 
+`owner_ref` (one owner or up to 10) keeps projects owned by any of them, on `list()` and `search()`:
+
+```python
+owned = client.projects.list(owner_ref=["alice", "bob"])
+found = client.projects.search("alphafold", owner_ref="alice")
+```
+
 Typed access selectors accept one reference or a list of references. Multiple selectors use intersection semantics and only narrow projects readable by the authenticated caller.
 
 ## Getting a project
@@ -57,7 +64,7 @@ from crucible.models import Project
 result = client.projects.create(Project(
     project_id="MFP12345",
     organization="LBNL",
-    owner="lead-username",
+    owner="owner-username",
     title="Nanoparticle synthesis study",
     status="active",
 ))
@@ -81,7 +88,7 @@ for u in users:
     print(u.unique_id, u.username, u.role)
 ```
 
-Project lead, member, and operator records are public-safe and do not expose email addresses.
+Project owner, member, and operator records are public-safe and do not expose email addresses.
 
 ### Add a user
 
@@ -114,8 +121,8 @@ All three member mutations return the updated `list[ProjectMember]`.
 Ownership transfer is preview-only unless `confirm=True`:
 
 ```python
-preview = client.projects.transfer_ownership("MFP12345", "new-lead@example.org")
-result = client.projects.transfer_ownership("MFP12345", "new-lead@example.org", confirm=True)
+preview = client.projects.transfer_ownership("MFP12345", "new-owner@example.org")
+result = client.projects.transfer_ownership("MFP12345", "new-owner@example.org", confirm=True)
 ```
 
 Direct access grants are managed separately:
