@@ -137,12 +137,14 @@ class FileOperations(BaseResource):
 
 
 
-    def _skip_ingestion(self, file_id) -> Dict:
+    def _skip_ingestion(self, file_id, ingestion_class: Optional[str] = None) -> Dict:
 
         log_message = f"Skipping ingestion for file {file_id}"
 
         logger.info(log_message)
         params = {'status': 'not_requested'}
+        if ingestion_class:
+            params['ingestion_class'] = ingestion_class
 
         ingestion_request = self._request('post', f'/files/{file_id}/ingest',
                                           params=params)
@@ -240,7 +242,8 @@ class FileOperations(BaseResource):
                 refused if the file changed since; None replaces whatever is
                 current.
             ingestion_class: Ingestion class for the worker; defaults to
-                server auto-detection.
+                server auto-detection. With skip_ingestion it is recorded on
+                the not-requested ingestion request.
             wait_for_ingestion_response: Block until ingestion completes.
             skip_ingestion: Replace without requesting ingestion. Also implied
                 when client.request_ingestion is False.
@@ -263,7 +266,7 @@ class FileOperations(BaseResource):
             logger.info(f"{record.get('filename')} already holds this content, nothing replaced")
             return {'associated_file': record, 'ingestion_request': None}
         if skip_ingestion or not getattr(self._client, 'request_ingestion', True):
-            return {'associated_file': record, 'ingestion_request': self._skip_ingestion(file_mfid)}
+            return {'associated_file': record, 'ingestion_request': self._skip_ingestion(file_mfid, ingestion_class)}
         return {'associated_file': record,
                 'ingestion_request': self.request_ingestion(file_mfid, ingestion_class,
                                                             wait_for_ingestion_response)}

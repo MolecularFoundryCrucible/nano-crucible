@@ -16,7 +16,7 @@ def register_subcommand(subparsers):
     """Register the whoami subcommand."""
     parser = subparsers.add_parser(
         'whoami',
-        help='Show current user info for the active API key',
+        help='Show who you are and how you are signed in',
         description='Display account information associated with the configured API key',
     )
     parser.add_argument(

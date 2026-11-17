@@ -14,9 +14,9 @@ Project options use `--project-id` with the conventional `-p` short alias. Sampl
 | `--no-color` | Disable ANSI colors while retaining interactive terminal hyperlinks; place it before the command |
 | `--no-pager` | Print a long listing directly even when the `pager` setting is `auto`; place it before the command |
 
-By default no privilege mode is sent, so a platform administrator runs elevated and sees every record, while everyone else gets their normal, ACL-derived access. Set `crucible config set privilege_mode normal` to restrict an administrator account to its own access; `--elevate` (`-E`) then widens a single command. A future release will default to `normal`. Administrator-only commands, such as `service-account show`, `service-account set-role`, and deletion review, elevate on their own and do not need the flag.
+By default no privilege mode is sent and the API decides: a platform administrator using an API key runs elevated and sees every record, a signed-in administrator runs normal, and everyone else gets their normal, ACL-derived access. `whoami` shows which mode applies. Set `crucible config set privilege_mode normal` to restrict an administrator account to its own access; `--elevate` (`-E`) then widens a single command. A future release will default to `normal` for API keys too. Administrator-only commands, such as `service-account show`, `service-account set-role`, and deletion review, elevate on their own and do not need the flag.
 
-Explicit elevation can also come from the `privilege_mode` config key or the `CRUCIBLE_PRIVILEGE_MODE` environment variable. Because neither is visible on the command line, the CLI prints a notice to stderr when a command runs elevated without `--elevate`. In the interactive shell, `elevate on|off` toggles it for the session, `elevate COMMAND` runs a single command elevated, and an `ELEVATED` badge appears in the toolbar while the toggle is on.
+Explicit elevation can also come from the `privilege_mode` config key or the `CRUCIBLE_PRIVILEGE_MODE` environment variable. Because neither is visible on the command line, the CLI prints a notice to stderr when a command runs elevated without `--elevate`. In the interactive shell, `elevate on|off` toggles it for the session, `elevate COMMAND` runs a single command elevated, and an `ELEVATED` badge appears in the toolbar while the toggle is on. The shell switches elevation off after `elevation_timeout` idle minutes (default 15, `0` never).
 
 `deletion list` shows the caller's review queue by default when they can review requests. Pass `--scope` to choose a different view.
 
@@ -110,7 +110,7 @@ Use `dataset list --project-id PROJECT --project-scope shared` to show resources
 
 `dataset list` and `sample list` use the current project when one is set and otherwise list every accessible project; `--all-projects` ignores the current project, and the table then shows each record's project. Results are fetched newest first, so `--limit N` keeps the N most recent, and printed oldest to newest so the newest row sits next to the prompt. `--sort created|updated|name` with `--direction asc|desc` changes the server ordering (`--direction` requires `--sort`); an ascending sort prints in that order. Tables are flat unless `--group-by` or the `dataset_group_by`/`sample_group_by` config key selects a field; groups keep chronological order and the group with the newest record comes last. `--json` returns records in server order.
 
-Both commands accept `--visibility all|public|private`, `--mine`, `--owner USER` (username, ORCID, or MFID, resolved to the stable identifier before the request), the time bounds `--created-after`, `--created-before`, `--modified-after`, and `--modified-before` (ISO 8601 or `YYYY-MM-DD`; a bare date covers the whole day and a time without an offset is UTC), and `--missing FIELD` (repeatable) to select records with no value for a field. Dataset listing adds `--name`, `-m/--measurement`, `--session`, `--data-format`, `--data-type`, `--instrument-id` (resolved to the instrument MFID), `--instrument-mfid`, `--sample-mfid`, and `-k/--keyword`; sample listing adds `--name`, `--type`, `--description`, and `--dataset-mfid`.
+Both commands accept `--visibility all|public|private`, `--mine` (records you own), `--owner USER` (username, ORCID, MFID, or email, resolved to the stable identifier before the request; repeat it for any of up to 10 owners), the time bounds `--created-after`, `--created-before`, `--modified-after`, and `--modified-before` (ISO 8601 or `YYYY-MM-DD`; a bare date covers the whole day and a time without an offset is UTC), and `--missing FIELD` (repeatable) to select records with no value for a field. Dataset listing adds `--name`, `-m/--measurement`, `--session`, `--data-format`, `--data-type`, `--instrument-id` (resolved to the instrument MFID), `--instrument-mfid`, `--sample-mfid`, and `-k/--keyword`; sample listing adds `--name`, `--type`, `--description`, and `--dataset-mfid`.
 
 `dataset facets FIELD` and `sample facets FIELD` count how many records fall into each value of a grouping field without fetching the records. Dataset fields are `session`, `measurement`, `data_format`, `owner`, `instrument`, and `project`; sample fields are `sample_type`, `owner`, and `project`. Both accept `--sort value|label|count`, `--direction`, `--limit`, `--json`, and the same project, visibility, ownership, time, exact-match, and `--missing` filters as the matching list command. In the interactive shell, `-m/--measurement`, `--session`, `--data-format`, and `--type` complete from these counts, scoped to the `--project-id` typed on the line or else the current project. These values and project IDs match fuzzily, so `xt` offers `xrd-titan`; commands, flags, fixed choices, and MFIDs complete by prefix.
 
@@ -151,7 +151,7 @@ Sample creation accepts `--project-id` or `--project-mfid`, including both when 
 |---|---|
 | `project list` | List accessible projects; `--sort`/`--direction` order them, `--member` (repeatable) and `--member-role` narrow to memberships, and a Role column shows your role in each |
 | `project get PROJECT [--include-members]` | Show a project by MFID or project slug, optionally with its members; also shows your role |
-| `project create` | Create a project |
+| `project create` | Create a project; `--owner USER` names the owner (`--lead` still works with a notice) |
 | `project update ID` | Update a project record or scientific metadata |
 | `project edit ID` | Edit project fields interactively |
 | `project search QUERY` | Search project names and IDs |
@@ -173,14 +173,14 @@ Sample creation accepts `--project-id` or `--project-mfid`, including both when 
 
 Project member tables sort by standing from lead through viewer, display the API `owner` role as `lead`, and use semantic role colors when terminal color is enabled: gold for lead, magenta for admin, blue for editor, the default foreground for contributor, and gray for viewer.
 
-The `access grant` commands accept `viewer`, `contributor`, `editor`, or `admin`. Use the resource's `transfer-ownership` command to change ownership.
+The `access grant` commands accept `viewer`, `contributor`, `editor`, or `admin`. Use the resource's `transfer-ownership` command to change ownership. Instruments have no `access grant` or `access revoke`; use their member commands.
 
 ## Instrument commands
 
 | Command | Description |
 |---|---|
-| `instrument list` | List instruments; `--mine` lists those you own or maintain, `--sort`/`--direction` order them, `--manufacturer`, `--model`, `--location`, `--type`, `--owner` filter exactly, and a My role column shows your effective role |
-| `instrument get INSTRUMENT` | Show an instrument by MFID or instrument slug (any casing); `--include-members` adds the owner and maintainers |
+| `instrument list` | List instruments; `--mine` lists those you own or are a member of, `--sort`/`--direction` order them, `--manufacturer`, `--model`, `--location`, `--type` filter exactly, `--owner` (repeatable, up to 10) filters by owner, and a My role column shows your effective role |
+| `instrument get INSTRUMENT` | Show an instrument by MFID or instrument slug (any casing); `--include-members` adds the members |
 | `instrument create` | Register an instrument |
 | `instrument update MFID` | Update an instrument record or scientific metadata |
 | `instrument set-status MFID STATUS` | Change an instrument lifecycle status |
@@ -188,19 +188,19 @@ The `access grant` commands accept `viewer`, `contributor`, `editor`, or `admin`
 | `instrument list-service-accounts MFID` | List service accounts bound as instrument operators |
 | `instrument bind-sa MFID SA_MFID` | Bind a service account as an instrument operator |
 | `instrument unbind-sa MFID SA_MFID` | Remove an instrument operator binding |
-| `instrument list-users INSTRUMENT` | List the owner and maintainers (visible to callers with a role) |
-| `instrument add-user INSTRUMENT --user USER [--role editor\|admin]` | Add or change a maintainer |
-| `instrument remove-user INSTRUMENT --user USER` | Remove a maintainer |
-| `instrument update-user-role INSTRUMENT USER ROLE` | Change a maintainer's role |
+| `instrument list-users INSTRUMENT` | List the members, owner first (visible to members) |
+| `instrument add-user INSTRUMENT --user USER [--role viewer\|editor\|admin]` | Add a member (default `viewer`) |
+| `instrument remove-user INSTRUMENT --user USER` | Remove a member, or yourself |
+| `instrument update-user-role INSTRUMENT USER ROLE` | Change a member's role |
 | `instrument edit MFID` | Edit instrument fields interactively |
 | `instrument search QUERY [--status STATUS]` | Search names, types, and manufacturers with optional lifecycle filtering |
 | `instrument search-metadata QUERY` | Search scientific metadata; `search-md` is an alias |
-| `instrument access ...` | List, grant, or revoke direct access entries |
+| `instrument access list INSTRUMENT` | List direct access entries |
 | `instrument set-public MFID` | Make an instrument publicly viewable |
 | `instrument set-private MFID` | Remove public access from an instrument |
 
 
-Instrument commands accept an MFID or the instrument slug, which ignores case. An instrument has two separate kinds of access. Its owner and maintainers manage the instrument record: `editor` edits details, `admin` also changes status, binds service accounts, and grants access. Maintainer roles never grant access to datasets recorded with the instrument; only bound service accounts reach those, at `contributor`. Member commands check the instrument's `can_manage_access` capability before sending a change.
+Instrument commands accept an MFID or the instrument slug, which ignores case. Instrument members work like project members: every member reads the datasets assigned to the instrument, `editor` also edits its details, and `admin` also changes status, binds service accounts, and manages members. Admins cannot grant above their own role, and the owner changes only with `instrument transfer-ownership`. Service accounts are bound with `instrument bind-sa` rather than added. `add-user` and `update-user-role` check the instrument's `can_manage_access` capability before sending a change.
 
 ## User commands
 
@@ -259,7 +259,7 @@ Service-account creation uses the same username rules and interactive validation
 | Command | Description |
 |---|---|
 | `sa create` | Create a service account |
-| `sa rotate-key USER` | Generate a new key and invalidate the previous key |
+| `sa rotate-key USER` | Generate a new key and revoke every key the account holds |
 | `sa get USER [--groups]` | Show a service account; administrators also see its platform role and API key status, and `--groups` lists the projects and instruments it belongs to |
 | `sa list [-q TEXT]` | List service accounts with their platform roles; `-q` filters by username or name |
 | `sa update USER` | Update a service account |
@@ -404,3 +404,5 @@ These commands and options stop with the form to use instead.
 | `--upload-protocol` | drop it; every upload uses signed multipart |
 | `ag list --group` | `--project` |
 | `CRUCIBLE_CURRENT_PROJECT` | `--project-id`, or `use PROJECT_ID` in the shell |
+| `instrument access grant`, `instrument access revoke` | `instrument add-user`, `update-user-role`, `remove-user` |
+| `dataset update --set public=...` | `dataset set-public`, `dataset set-private` |

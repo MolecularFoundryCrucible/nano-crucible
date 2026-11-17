@@ -56,6 +56,17 @@ def test_is_elevated_reflects_the_server_default(make_client, mode, can_elevate,
     assert client.is_elevated is expected
 
 
+@pytest.mark.parametrize('reported, expected', [('normal', False), ('elevated', True)])
+def test_is_elevated_follows_the_mode_the_server_reports(make_client, reported, expected):
+    from crucible.models import AccountAuthorization
+
+    client = make_client()
+    client._authorization = AccountAuthorization(
+        can_elevate=True, effective_privilege_mode=reported)
+
+    assert client.is_elevated is expected
+
+
 def test_client_level_mode_is_sent_on_every_request(make_client):
     client = make_client(privilege_mode='elevated')
 

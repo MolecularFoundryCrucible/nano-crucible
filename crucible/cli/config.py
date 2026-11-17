@@ -64,6 +64,7 @@ Configuration keys (by section):
     api_url             Crucible API endpoint URL
     hub_url             Crucible Hub URL, for signing in and API keys (optional)
     auth_store          Where `crucible login` keeps tokens: auto, keyring, file, memory
+    elevation_timeout   Idle minutes before the shell switches elevation off (default 15, 0 never)
     current_project     Current project ID (optional)
 
   [cache]
@@ -124,9 +125,9 @@ upload_chunk_size_mb) are ignored; `config show` lists any left in your file and
     get_parser.add_argument(
         'key',
         choices=['api_key', 'api_url', 'hub_url', 'current_project',
-                 'privilege_mode', 'auth_store', 'cache_dir',
+                 'privilege_mode', 'elevation_timeout', 'auth_store', 'cache_dir',
                  'editor', 'sample_group_by', 'dataset_group_by',
-                 'include_metadata', 'include_links', 'pager',
+                 'include_metadata', 'include_links', 'pager', 'update_check',
                  'connect_timeout', 'read_timeout', 'default_limit',
                  'upload_max_workers'],
         help='Configuration key to retrieve'
@@ -141,9 +142,9 @@ upload_chunk_size_mb) are ignored; `config show` lists any left in your file and
     set_parser.add_argument(
         'key',
         choices=['api_key', 'api_url', 'hub_url', 'current_project',
-                 'privilege_mode', 'auth_store', 'cache_dir',
+                 'privilege_mode', 'elevation_timeout', 'auth_store', 'cache_dir',
                  'editor', 'sample_group_by', 'dataset_group_by',
-                 'include_metadata', 'include_links', 'pager',
+                 'include_metadata', 'include_links', 'pager', 'update_check',
                  'connect_timeout', 'read_timeout', 'default_limit',
                  'upload_max_workers'],
         help='Configuration key to set'
@@ -161,9 +162,9 @@ upload_chunk_size_mb) are ignored; `config show` lists any left in your file and
     unset_parser.add_argument(
         'key',
         choices=['api_key', 'api_url', 'hub_url', 'current_project',
-                 'privilege_mode', 'auth_store', 'cache_dir',
+                 'privilege_mode', 'elevation_timeout', 'auth_store', 'cache_dir',
                  'editor', 'sample_group_by', 'dataset_group_by',
-                 'include_metadata', 'include_links', 'pager',
+                 'include_metadata', 'include_links', 'pager', 'update_check',
                  'connect_timeout', 'read_timeout', 'default_limit',
                  'upload_max_workers',
                  'graph_explorer_url', 'current_session', 'upload_protocol', 'upload_chunk_size_mb'],
@@ -228,16 +229,17 @@ def cmd_init(args):
             print("Cancelled.")
             return
 
-    # Get API key
-    print("\n1. Crucible API Key (required)")
-    print(f"   Sign in to the Crucible Hub and create a key: {config.hub_url}/account#api-keys")
-    api_key = prompt_secret("API Key", option='CRUCIBLE_API_KEY')
-
-    # Get API URL
     from crucible.config.config import Config as _Cfg
-    print("\n2. Crucible API URL (optional)")
+    print("\n1. Crucible API URL (optional)")
     print(f"   Press Enter to use the built-in default ({_Cfg.DEFAULT_API_URL})")
     api_url = prompt_optional("API URL", validator=validate_http_url)
+
+    print("\n2. Crucible API Key (required)")
+    api_key = _offer_browser_key(api_url or os.environ.get('CRUCIBLE_API_URL') or _Cfg.DEFAULT_API_URL)
+    if api_key is None:
+        print(f"   Paste a key from the Crucible Hub ({config.hub_url}/account#api-keys), or from "
+              "`crucible account keys create NAME` on a computer with a browser.")
+        api_key = prompt_secret("API Key", option='CRUCIBLE_API_KEY')
 
     # Get cache directory
     print("\n3. Cache Directory (optional)")
@@ -272,6 +274,50 @@ def cmd_init(args):
         sys.exit(1)
 
 
+def _offer_browser_key(api_url):
+    """Sign in with this computer's browser and create a key, or None to paste one."""
+    import socket
+
+    import requests
+
+    from ..auth import oauth
+    from ..auth.errors import SignInError
+    from ..auth.loopback import browser_available
+    from ..auth.session import SessionCredential, sign_in
+    from ..auth.store import TokenStore
+    from ..client import CrucibleClient
+    from .helpers import prompt_confirm, prompt_optional, show_warning
+
+    if not browser_available():
+        print("   Creating a key here needs a browser on this computer.")
+        return None
+    if not prompt_confirm("Sign in with your browser now and create a key?", default=True):
+        return None
+    name = prompt_optional("Key name", default=f"nano-crucible on {socket.gethostname()}"[:100])
+
+    def notify(message, url):
+        print(f"   {message}\n   {url}")
+
+    try:
+        tokens = sign_in(api_url, 'browser', notify=notify)
+    except (SignInError, requests.RequestException) as exc:
+        show_warning(f"Sign-in did not finish: {exc}")
+        return None
+    try:
+        client = CrucibleClient(api_url=api_url, api_key='unused')
+        client._credential = SessionCredential(tokens, TokenStore())
+        client.api_key = None
+        key = client.account.create_api_key(name)
+    except (ValueError, requests.RequestException) as exc:
+        show_warning(f"Could not create the key: {exc}")
+        return None
+    finally:
+        oauth.revoke(tokens)
+    print(f"   Created API key {key.get('name')!r} (ID {key.get('id')}), "
+          f"expires {term.fmt_ts(key.get('expires_at'))}; it is saved below.")
+    return key['api_key']
+
+
 def cmd_show(args):
     """Show current configuration."""
     from crucible.config import config
@@ -296,6 +342,7 @@ def cmd_show(args):
     _p("api_url",              config.api_url)
     _p("hub_url",              config.hub_url)
     _p("current_project",      config._data.get('current_project'))
+    _p("elevation_timeout",    config.elevation_timeout)
     _p("project source",       config.source('current_project'))
 
     # [cache]
@@ -308,6 +355,7 @@ def cmd_show(args):
     _p("sample_group_by",      config.sample_group_by)
     _p("dataset_group_by",     config.dataset_group_by)
     _p("pager",                config.pager)
+    _p("update_check",         config.update_check)
 
     # [network] — timeouts and pagination
     term.subheader("[network]  timeouts / pagination")
@@ -408,6 +456,9 @@ def cmd_set(args):
     value = args.value
     if key == 'privilege_mode' and value not in PRIVILEGE_MODES:
         logger.error(f"privilege_mode must be one of: {', '.join(PRIVILEGE_MODES)}.")
+        sys.exit(1)
+    if key == 'elevation_timeout' and not (value.isdigit()):
+        logger.error("elevation_timeout must be a whole number of minutes (0 never switches off).")
         sys.exit(1)
     from ..auth.store import AUTH_STORES
     if key == 'auth_store' and value not in AUTH_STORES:

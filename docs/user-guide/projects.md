@@ -6,8 +6,8 @@
 | `organization` | Free-text institution or group name (e.g. `"LBNL"`, `"Stanford"`) | create, update |
 | `title` | Human-readable project title | create, update |
 | `status` | Project status (e.g. `"active"`) | create, update |
-| `project_lead` | Project lead identified by ORCID, MFID, username, or email | create |
-| `lead` | Public-safe resolved project lead record without email | server-assigned |
+| `owner` | On create, the owner's ORCID, MFID, username, or email; in responses, their public-safe user record | create |
+| `lead`, `project_lead*` | Deprecated names for the owner; use `owner` | - |
 | `creation_time` | When the record was created | server-assigned |
 | `modification_time` | When the record was last modified | server-assigned |
 | `capabilities` | Optional caller-specific actions calculated for an exact response | server-assigned |
@@ -25,6 +25,13 @@ shared_projects = client.projects.list(
     accessible_to_user="alice",
     accessible_to_project="my-project",
 )
+```
+
+`owner_ref` (one owner or up to 10) keeps projects owned by any of them, on `list()` and `search()`:
+
+```python
+owned = client.projects.list(owner_ref=["alice", "bob"])
+found = client.projects.search("alphafold", owner_ref="alice")
 ```
 
 Typed access selectors accept one reference or a list of references. Multiple selectors use intersection semantics and only narrow projects readable by the authenticated caller.
@@ -57,13 +64,13 @@ from crucible.models import Project
 result = client.projects.create(Project(
     project_id="MFP12345",
     organization="LBNL",
-    project_lead="lead-username",
+    owner="owner-username",
     title="Nanoparticle synthesis study",
     status="active",
 ))
 ```
 
-`project_id` must be unique across the system. The project lead must identify an existing Crucible user.
+`project_id` must be unique across the system. The owner must identify an existing Crucible user, and only platform administrators may name someone other than themselves.
 
 ## Updating a project
 
@@ -81,7 +88,7 @@ for u in users:
     print(u.unique_id, u.username, u.role)
 ```
 
-Project lead, member, and operator records are public-safe and do not expose email addresses.
+Project owner, member, and operator records are public-safe and do not expose email addresses.
 
 ### Add a user
 
@@ -114,8 +121,8 @@ All three member mutations return the updated `list[ProjectMember]`.
 Ownership transfer is preview-only unless `confirm=True`:
 
 ```python
-preview = client.projects.transfer_ownership("MFP12345", "new-lead@example.org")
-result = client.projects.transfer_ownership("MFP12345", "new-lead@example.org", confirm=True)
+preview = client.projects.transfer_ownership("MFP12345", "new-owner@example.org")
+result = client.projects.transfer_ownership("MFP12345", "new-owner@example.org", confirm=True)
 ```
 
 Direct access grants are managed separately:

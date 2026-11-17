@@ -46,6 +46,21 @@ class RemovedOptionAction(argparse.Action):
         setattr(namespace, self.dest, values)
 
 
+class RenamedOptionAction(argparse.Action):
+    """A renamed option: the old spelling still works, with a warning, and is hidden from help."""
+
+    def __init__(self, option_strings, dest, replacement=None, **kwargs):
+        self.replacement = replacement
+        kwargs.setdefault('help', argparse.SUPPRESS)
+        super().__init__(option_strings, dest, **kwargs)
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        from . import term
+        print(f"{term.yellow('Warning:', stream=sys.stderr)} {option_string} is deprecated; "
+              f"use {self.replacement} instead.", file=sys.stderr)
+        setattr(namespace, self.dest, values)
+
+
 def deprecate_command(subparsers, name, replacement):
     """Keep a renamed command working with a warning, left out of help and completion."""
     parser = subparsers.choices[name]
@@ -133,9 +148,10 @@ def _error_hint(error_type, status, details):
         return ("A code-approved sign-in cannot do this. Run the command in a terminal on a computer "
                 f"with a browser (`crucible login`), or do it in the Hub ({config.hub_url}).")
     if status == 403 and any(item.get('code') == 'hub_session_required' for item in details):
-        return (f"This needs a recent sign-in to the Crucible Hub, not an API key; do it from the Hub "
+        return ("This needs a recent browser sign-in, not an API key. Run the command in a terminal "
+                f"on a computer with a browser, which signs you in again, or do it in the Hub "
                 f"({config.hub_url}). Server operators can change roles with "
-                f"`python -m app.cli admin set-role`.")
+                "`python -m app.cli admin set-role`.")
     if status == 403:
         return ("Your account is not allowed to do this. `crucible whoami` shows your role; "
                 "administrators can retry with -E/--elevate.")
@@ -295,8 +311,9 @@ def add_scope_filters(parser, resource: str) -> None:
         help=f'Only include {resource}s you own'
     )
     parser.add_argument(
-        '--owner', default=None, dest='owner_id', metavar='USER',
-        help='Only include records owned by this user (username, ORCID, or MFID)'
+        '--owner', default=None, dest='owner_ref', metavar='USER', action='append',
+        help='Only include records owned by this user (username, ORCID, MFID, or email); '
+             'repeat for any of up to 10 owners'
     )
     parser.add_argument(
         '--created-after', dest='creation_time_gte', default=None, metavar='WHEN',
@@ -361,7 +378,7 @@ _EMPTY_FIELD_PARAMS = {
     'data_format': 'data_format_is_null',
     'instrument': 'instrument_mfid_is_null',
     'project': 'project_mfid_is_null',
-    'owner': 'owner_id_is_null',
+    'owner': 'owner_is_null',
     'sample_type': 'sample_type_is_null',
 }
 
@@ -713,12 +730,12 @@ def scope_filter_kwargs(args, client=None) -> dict:
         value = getattr(args, name, None)
         if value is not None:
             kwargs[name] = value
-    owner = getattr(args, 'owner_id', None)
-    if owner is not None:
+    owners = getattr(args, 'owner_ref', None)
+    if owners:
         if client is None:
             from ..config import get_client
             client = get_client()
-        kwargs['owner_id'] = resolve_user_id(client, owner)
+        kwargs['owner_ref'] = [resolve_user_id(client, owner) for owner in owners]
     if getattr(args, 'mine', False):
         kwargs['affiliation'] = 'owner'
     for field in getattr(args, 'missing', None) or []:
@@ -759,8 +776,10 @@ def display_order(records: list, sort: str | None = None,
     return list(reversed(records))
 
 
-def group_records(records: list, field: str) -> list:
+def group_records(records: list, field) -> list:
     """Split display-ordered records into (value, records) groups.
+
+    field is a record key, or a function returning the group value.
 
     Groups keep the records' order and are themselves ordered by the
     position of their last record, so the group holding the newest record
@@ -769,7 +788,7 @@ def group_records(records: list, field: str) -> list:
     groups: dict[Any, list] = {}
     last_seen: dict[Any, int] = {}
     for index, record in enumerate(records):
-        key = record.get(field) or None
+        key = (field(record) if callable(field) else record.get(field)) or None
         groups.setdefault(key, []).append(record)
         last_seen[key] = index
     return [(key, groups[key]) for key in sorted(groups, key=last_seen.__getitem__)]
@@ -1270,17 +1289,58 @@ def resolve_project_context(args=None, project_id=None):
     return fetch_project_context()
 
 
+def api_environment(api_url):
+    """A short name for an API URL: production, staging, or where it points."""
+    from urllib.parse import urlparse
+    from crucible.config.config import Config
+    url = (api_url or '').rstrip('/')
+    if url == Config.DEFAULT_API_URL.rstrip('/'):
+        return 'production'
+    parsed = urlparse(url)
+    parts = [p for p in parsed.path.split('/') if p]
+    if parsed.hostname == urlparse(Config.DEFAULT_API_URL).hostname:
+        if any('staging' in part for part in parts):
+            return 'staging'
+        return parts[0] if parts else parsed.netloc
+    return parsed.netloc or '?'
+
+
 def fetch_api_label():
-    """Return 'api: <last-path-segment>' derived from the configured api_url."""
+    """Return the configured API's short name, for the shell toolbar."""
     try:
-        from urllib.parse import urlparse
         from crucible.config import config
-        parsed = urlparse(config.api_url or '')
-        parts  = [p for p in parsed.path.split('/') if p]
-        label  = parts[-1] if parts else (parsed.netloc or '?')
-        return f"api: {label}"
+        return api_environment(config.api_url)
     except Exception:
-        return 'api: ?'
+        return '?'
+
+
+def api_version_note(api_version, client_version):
+    """The API version when it deserves a glance, else None.
+
+    That is a pre-release server, or one older than the client's major
+    version, which lacks the routes this client relies on.
+    """
+    if not api_version:
+        return None
+    version = str(api_version)
+    if not re.fullmatch(r'\d+(\.\d+)*', version):
+        return version
+    try:
+        if int(version.split('.')[0]) < int(str(client_version).split('.')[0]):
+            return version
+    except ValueError:
+        return None
+    return None
+
+
+def auth_label(client):
+    """'signed in', 'key', or 'key [env]', for the shell toolbar."""
+    source = getattr(client, 'credential_source', None)
+    if source in ('sign-in', 'this session'):
+        return 'signed in'
+    if source == 'CRUCIBLE_API_KEY':
+        return 'key [env]'
+    return 'key' if source else None
 
 
 def fetch_api_attention():

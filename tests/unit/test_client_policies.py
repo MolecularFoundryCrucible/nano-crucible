@@ -179,3 +179,23 @@ def test_upload_progress_ignores_reports_after_a_file_finished():
     progress('a.dat', 4, 10)
 
     assert stream.getvalue() == shown
+
+
+def test_concurrent_callers_read_the_profile_once(client, monkeypatch):
+    import threading
+    import time
+    calls = []
+
+    def profile():
+        calls.append(1)
+        time.sleep(0.05)
+        return {'authorization': {'platform_role': 'admin', 'can_elevate': True}}
+    monkeypatch.setattr(client.account, 'profile', profile)
+
+    threads = [threading.Thread(target=lambda: client.can_elevate) for _ in range(8)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert len(calls) == 1 and client.can_elevate is True

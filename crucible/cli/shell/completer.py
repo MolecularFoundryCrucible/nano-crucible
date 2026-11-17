@@ -3,7 +3,9 @@
 import argparse
 import os
 import shlex
+import time
 import html as _html
+from collections import OrderedDict
 
 from prompt_toolkit.completion import Completer, Completion
 
@@ -29,8 +31,28 @@ def fuzzy_values(prefix, candidates):
     yield from completer.get_completions(Document(prefix), None)
 
 
+class _BoundedCache(OrderedDict):
+    """A dict that forgets its least recently used entries past size."""
+
+    def __init__(self, size=256):
+        super().__init__()
+        self.size = size
+
+    def __getitem__(self, key):
+        self.move_to_end(key)
+        return super().__getitem__(key)
+
+    def __setitem__(self, key, value):
+        super().__setitem__(key, value)
+        self.move_to_end(key)
+        while len(self) > self.size:
+            self.popitem(last=False)
+
+
 class CrucibleCompleter(Completer):
     """Three-level argparse completer: resource -> subcommand -> flags."""
+
+    SEARCH_DELAY = 0.15
 
     def __init__(self, parser, client=None, projects=None, deletions=None,
                  join_requests=None, service_accounts=None, state=None):
@@ -40,14 +62,25 @@ class CrucibleCompleter(Completer):
         self._deletions         = deletions or []
         self._join_requests     = join_requests or []
         self._service_accounts  = service_accounts or []
-        self._unlink_cache      = {}  # mfid -> [(uid, name, entity_type), ...]
-        self._user_search_cache = {}  # query -> [(username, name, orcid), ...]
-        self._entity_search_cache = {}  # (entity_type, project_id, query) -> [(uid, name), ...]
-        self._project_search_cache = {}
-        self._instrument_search_cache = {}
-        self._facet_cache       = {}  # (resource, field, project_id) -> [(value, label, count), ...]
+        self._unlink_cache      = _BoundedCache()  # mfid -> [(uid, name, entity_type), ...]
+        self._user_search_cache = _BoundedCache()  # query -> [(username, name, orcid), ...]
+        self._entity_search_cache = _BoundedCache()  # (entity_type, project_id, query) -> [(uid, name), ...]
+        self._project_search_cache = _BoundedCache()
+        self._instrument_search_cache = _BoundedCache()
+        self._facet_cache       = _BoundedCache()  # (resource, field, project_id) -> [(value, label, count), ...]
         self._state             = state or {}
         self.hidden             = set()
+        self._keystrokes        = 0
+
+    def _typing_paused(self):
+        """Wait briefly; False when another keystroke arrived meanwhile.
+
+        A search for a query the user is still extending would be thrown
+        away, so it is not sent.
+        """
+        seen = self._keystrokes
+        time.sleep(self.SEARCH_DELAY)
+        return seen == self._keystrokes
 
     def _lazy_projects(self):
         if not self._projects and self._client is not None:
@@ -69,6 +102,8 @@ class CrucibleCompleter(Completer):
         """
         if query in self._user_search_cache:
             return self._user_search_cache[query]
+        if not self._typing_paused():
+            return []
         results = []
         if self._client is not None:
             try:
@@ -110,6 +145,8 @@ class CrucibleCompleter(Completer):
     def _search_projects(self, query):
         if query in self._project_search_cache:
             return self._project_search_cache[query]
+        if not self._typing_paused():
+            return []
         results = []
         if self._client is not None:
             try:
@@ -163,6 +200,8 @@ class CrucibleCompleter(Completer):
     def _search_instruments(self, query):
         if query in self._instrument_search_cache:
             return self._instrument_search_cache[query]
+        if not self._typing_paused():
+            return []
         results = []
         if self._client is not None:
             try:
@@ -204,6 +243,8 @@ class CrucibleCompleter(Completer):
         key = (entity_type, project_id, query)
         if key in self._entity_search_cache:
             return self._entity_search_cache[key]
+        if not self._typing_paused():
+            return []
         results = []
         if self._client is not None:
             try:
@@ -373,6 +414,7 @@ class CrucibleCompleter(Completer):
     }
 
     def get_completions(self, document, complete_event):
+        self._keystrokes += 1
         text           = document.text_before_cursor
         words          = text.split()
         trailing_space = text.endswith(' ')
@@ -693,7 +735,8 @@ class CrucibleCompleter(Completer):
         if subcommand == 'update-user-role' and len(words) >= 4:
             prefix = '' if trailing_space else words[-1]
             if (trailing_space and len(words) == 4) or (not trailing_space and len(words) == 5):
-                for role in ('editor', 'admin'):
+                from crucible.resources.instruments import INSTRUMENT_MEMBER_ROLES
+                for role in INSTRUMENT_MEMBER_ROLES:
                     if role.startswith(prefix):
                         yield Completion(role + ' ', start_position=-len(prefix))
                 return True

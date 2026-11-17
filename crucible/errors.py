@@ -7,6 +7,10 @@ class RemovedError(TypeError):
     """A method, parameter, or setting that was removed; the message names its replacement."""
 
 
+class NotSignedInError(ValueError):
+    """No API key or stored sign-in for the API URL."""
+
+
 class CrucibleAPIError(requests.exceptions.HTTPError):
     """The API answered with an error status.
 

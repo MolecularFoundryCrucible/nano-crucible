@@ -105,7 +105,7 @@ class OwnershipMixin:
             'post',
             f'/resources/{self._resource_mfid(mfid)}/transfer_ownership',
             params={'confirm': confirm},
-            json={'new_owner': new_owner},
+            json={'new_owner_ref': new_owner},
         )
         return OwnershipTransfer.model_validate(raw)
 

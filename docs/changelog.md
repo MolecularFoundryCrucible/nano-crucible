@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 4.0.0
+
+Requires Crucible API 4.0 and Python 3.11 or later. [Upgrading to 4.0](upgrading.md) lists what to change in existing scripts.
+
 ### Added
 
 - Sign in with a browser: `crucible login` (`--device` for SSH and headless machines), `crucible logout`, and `client.login()`/`logout()`; tokens go in the OS keyring, or a private file where none is available (`auth_store`).
@@ -10,7 +14,7 @@
 - Named API keys: `account.create_api_key()`, `list_api_keys()`, `rename_api_key()`, and `revoke_api_key()`, with `account keys list|create|rename|revoke`; administrators list and revoke single keys with `users.list_api_keys()`, `users.revoke_api_key()`, `user list-keys`, and `user revoke-keys --key`.
 - `account verify` shows when the key was last used.
 - Administrators review accounts waiting for approval with `users.list(pending=True)`, `users.approve()`, and `users.reject()`, and `user list --pending`, `user approve`, and `user reject`; `user get` shows a waiting account's status and sign-in methods.
-- `hub_url` setting (`CRUCIBLE_HUB_URL`, default `https://crucible.lbl.gov/hub`); `config init` and sign-in hints point to the Hub to create keys.
+- `hub_url` setting (`CRUCIBLE_HUB_URL`, default `https://crucible.lbl.gov/hub`); `config init` creates an API key after a browser sign-in, or points to the Hub.
 - Join requests: `access_groups.withdraw_join_request()`, `join_request_facets()`, `role` on `approve_join_request()`, `ag withdraw`, and `ag approve --role`; lists filter by scope, several statuses, project, reviewer, time, and requester text, and sort (`ag list --scope/--project/--search/--sort`); requests carry the project, requester, reviewer, granted role, and capabilities.
 - Postprocessing: `datasets.postprocess()` with an optional idempotency key, `client.postprocessing` for pipelines and runs, and `dataset postprocess`, `pipelines`, `list-runs`, and `get-run`.
 - `datasets.add_remote_file(replace=True)` (and `client.replace_existing`, `dataset create --no-upload --replace`) updates a cataloged file whose filename already exists with different content.
@@ -22,20 +26,37 @@
 - Shell completion reaches nested commands such as `account keys list` and fixed-choice arguments such as `config get KEY`, and leaves out removed and renamed commands, administrator-only `user` commands you cannot use, and `user create` and `deletion delete` for callers who cannot elevate.
 - `--json` on the `list-parents`, `list-children`, `list-samples`, `list-datasets`, `list-files`, `list-keywords`, `list-users`, `list-projects` and `list-access-groups` commands, `file`, `ingestion`, `ag` and `deletion` `list` and `get`, `ag mine`, `deletion list-deleted` and `get-deleted`, `file ingestion`, `ingestion list-ingestors`, `whoami`, and `status`.
 - The package ships type information (`py.typed`) and passes mypy; `get()` methods are typed as returning `None` when the API sends no record.
+- The shell says at startup when PyPI has a newer release, with the command to upgrade; `update_check` (`CRUCIBLE_UPDATE_CHECK`) turns it off.
+- The shell switches elevation off after 15 idle minutes at the prompt; `elevation_timeout` (`CRUCIBLE_ELEVATION_TIMEOUT`) changes it, `0` never.
+- `owner_ref` filter for up to 10 owners on lists, facets, and search (project and metadata search included), and `owner_is_null`; `--owner` is repeatable.
+- `affiliation` values `member` (datasets, samples, instruments) and `instrument` (datasets).
+- The shell opens signed out when no credential works, offering `login` and `config init`; a client without a credential raises `crucible.NotSignedInError` (a `ValueError`).
 
 ### Removed
 
 - Everything deprecated before 4.0.0. Calling a removed method, keyword, or setting raises `crucible.RemovedError` (a `TypeError`) naming the replacement, and removed CLI commands and options stop with the one to use; the CLI reference lists them under "Removed in 4.0.0".
 - Removed settings (`graph_explorer_url`, `current_session`, `upload_protocol`, `upload_chunk_size_mb`) are ignored in old config files; `config show` lists them and `config unset` removes them. `get_graph_explorer_url()` is replaced by `get_hub_url()`.
 - `CRUCIBLE_CURRENT_PROJECT` stops the CLI; use `--project-id`.
-- `owner_orcid` on `datasets.list()` and `samples.list()` (use `owner_id`), `include_datasets` on `samples.list()` (use `include_links`), and `instrument_id`/`instrument_name` in `datasets.update()` (use `assign_instrument()`).
+- `owner_orcid` on `datasets.list()` and `samples.list()` (use `owner_ref`), `include_datasets` on `samples.list()` (use `include_links`), and `instrument_id`/`instrument_name` in `datasets.update()` (use `assign_instrument()`).
 - Parser `owner_orcid` and `instrument_name` arguments and the `_instrument_name` class default; use `owner`, `instrument_id`/`instrument_mfid`, and `_instrument_id`.
 - `dataset update --set public=...`; use `dataset set-public` or `set-private`.
 - `users.get(orcid=)` (pass the user reference), `projects.list(orcid=)` (use `member_ref` or `users.list_projects()`), the `AccessGrant` properties `principal`, `kind` and `effective_permission` (use `principal_id`, `principal_type`, `permission`), the `relationship` key in `get_links()` results (use `direction`), and the `dsid` key in `datasets.create()` results (use `dataset_mfid`).
 - The legacy GCS upload routes, the fallback to them, and the `google-cloud-storage` dependency.
+- The basic shell used without prompt_toolkit; a broken install now says to reinstall.
+- Instrument `set_access()`, `revoke_access()`, and `access grant|revoke`; use the member methods and commands.
+- `datasets.request_carrier_segmentation()`, `request_insitu_aggregation()`, `request_rga_analysis()`, and `request_mosaic_stitch()`; use `datasets.postprocess()`.
+- `users.verify_api_key()`; read `api_key_status` from `users.get()`.
 
 ### Changed
 
+- Instrument members work like project members: every member reads the instrument's datasets, member methods return `ProjectMember` lists, and `Instrument.members` holds `ProjectMember` records.
+- Instrument `add_user()` and `add-user` accept `viewer` and default to it instead of `editor`.
+- `instrument list --mine` includes every instrument you are a member of.
+- Creates send `owner_ref` and transfers send `new_owner_ref`; the `owner_id` and `owner_id_is_null` filters are deprecated.
+- Projects take `owner` on create (`project create --owner`); `project_lead*` and `--lead` are deprecated.
+- Project lists and `project get` show the owner instead of the lead.
+- `--group-by instrument`, `--group-by project`, and the download cache read the nested references.
+- Signed-in administrators run normal by default, while API keys still run elevated; `is_elevated`, `whoami`, and the shell badge follow the mode the API reports.
 - Python 3.11 or later is required; `keyring` is a new dependency.
 - API errors raise `crucible.CrucibleAPIError`, a `requests.HTTPError` with `status`, `code`, `detail`, and `request_id`; CLI errors show the request ID.
 - POST and PATCH requests without an `Idempotency-Key` are no longer retried after a 502, 503, 504, or lost response, which could duplicate records; 429 and failed connections are still retried.
@@ -43,6 +64,8 @@
 - Calls to routes the API marks deprecated raise a `DeprecationWarning` once per route, pointing at the calling code, with the date, sunset, and link the API gives.
 - Uploads always use signed multipart, including empty files; `upload_max_workers` sets how many parts upload at once, and a server without uploads enabled says so.
 - Resource, project, instrument, and user links, `crucible open`, and Alt+O go to the Crucible Hub (`hub_url`) instead of the Graph Explorer.
+- The shell starts faster, says why when it cannot reach the API, and its summary shows the API's name, version, and how you are signed in. The status bar names the API (production, staging, or its host), shows the API version only for pre-release or older servers, shows whether you use a key or a sign-in, adapts to narrow terminals, and no longer shows a clock.
+- In the shell, `help` lists commands compactly and `help COMMAND [SUBCOMMAND]` shows a command's options, slow commands print how long they took, completion searches wait for a pause in typing, and creating or updating a project refreshes project completion.
 - Renamed, with the old names still working and warning: `datasets.list_keywords()`, `projects.list_users()`, `instruments.list_users()`, `users.list_projects()`, and the parameters `file_mfid` (files), `resource_mfid` (deletions), `service_account_ref`, `instrument_ref`, and `user_ref` (users and project members). `ingestions.list()` takes `dataset_mfid` and `file_mfid`; `dsid` and `file_id` still work.
 - Renamed CLI commands, with the old names still working and warning: `dataset link-sample`, `unlink-sample`, `unlink -p -c`; `sample link-dataset`, `unlink-dataset`, `unlink -p -c`; `dataset ingestors` is now `ingestion list-ingestors`, which takes `--filter`.
 - `datasets.graph()` and `samples.graph()` still work but are deprecated in favour of `graphs.get()`.
@@ -52,13 +75,13 @@
 - User references are no longer shape-checked: `users.get()` and the CLI pass any value they cannot classify to the API.
 - `users.resolve()` uses the exact filters of `GET /users` instead of the deprecated `POST /users/resolve`; its result is unchanged.
 - `users.search()` reads the paginated `items` response.
-- Owner and lead fields show as "Owner ID" and "Lead ID", and the owner shown comes from the owner object when present.
 - `datasets.create()` leaves out `instrument_name` when `instrument_id` or `instrument_mfid` is set.
 - A cast recipe's `instrument` is an instrument ID or MFID, not a name.
 - CI tests Python 3.13 and macOS, runs mypy, checks the client's routes against staging, and gates PyPI releases on the tests; the live-API integration tests moved to the `crucible-tests` repository.
 
 ### Fixed
 
+- `skip_ingestion=True` uploads record `ingestion_class` instead of dropping it.
 - Datasets whose files have an absolute legacy filename, such as `/mnt/gcs/api-uploads/scan.h5`, download instead of being skipped.
 - `datasets.create(upload_files=False)` and `dataset create --no-upload` send each file's size and SHA-256, which the server requires, and name files by relative path so files sharing a basename in different folders stay separate.
 - `add_remote_file()` sets `storage_path` in the create request, and updates it when re-adding an existing file at a new location.
@@ -71,6 +94,7 @@
 - `deletion` and `ag` views show usernames again.
 - `sa create --unique-id` keeps the given MFID when it prompts for the username.
 - Upload progress no longer crashes when a part of a finished file is retried.
+- `crucible.cast` imports on Windows.
 
 ## 3.3.0
 

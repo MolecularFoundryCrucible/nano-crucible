@@ -330,7 +330,14 @@ Examples:
 
     # If no command specified, start interactive shell
     if args.command is None:
-        from .shell import run as _run_shell
+        try:
+            from .shell import run as _run_shell
+        except ModuleNotFoundError as exc:
+            if not (exc.name or '').startswith('prompt_toolkit'):
+                raise
+            print("The interactive shell needs prompt_toolkit, which is missing. "
+                  "Reinstall nano-crucible to restore it.", file=sys.stderr)
+            sys.exit(1)
         _run_shell(parser)
         return
 

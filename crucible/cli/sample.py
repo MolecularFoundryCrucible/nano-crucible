@@ -786,7 +786,7 @@ def _execute_list(args):
 
         from .helpers import explorer_url, project_reference
 
-        _GROUP_FIELD = {'type': 'sample_type', 'project': 'project_id'}
+        _GROUP_FIELD = {'type': 'sample_type', 'project': lambda s: project_reference(s)[1]}
         group_by = _GROUP_FIELD.get(args.group_by or config.sample_group_by or 'none')
         show_project = project_label is None or project_scope in ('shared', 'all')
 

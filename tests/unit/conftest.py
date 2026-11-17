@@ -49,3 +49,9 @@ def _isolated(tmp_path_factory, monkeypatch):
         else:
             os.environ['TZ'] = saved_tz
         time.tzset()
+
+
+@pytest.fixture(autouse=True)
+def _instant_completion_search(monkeypatch):
+    from crucible.cli.shell.completer import CrucibleCompleter
+    monkeypatch.setattr(CrucibleCompleter, 'SEARCH_DELAY', 0)

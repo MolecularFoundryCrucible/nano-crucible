@@ -200,7 +200,7 @@ def _execute_create(args):
 def _register_rotate_key(subparsers):
     parser = subparsers.add_parser(
         'rotate-key',
-        help='Generate a new API key, invalidating the old one',
+        help='Generate a new API key, revoking every key the account holds',
         formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
@@ -229,7 +229,7 @@ def _execute_rotate_key(args):
         sa = _resolve_sa(client, unique_id=unique_id, username=username, ambiguous=ambiguous)
         from .helpers import prompt_confirm
         question = (f"Rotate the API key of {sa.get('username') or sa.get('unique_id')}? "
-                    "The current key stops working immediately.")
+                    "Every key it holds stops working immediately.")
         if not (getattr(args, 'yes', False) or prompt_confirm(question, option='--yes')):
             logger.info("Aborted.")
             return

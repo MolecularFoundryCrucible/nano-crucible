@@ -30,6 +30,7 @@ When adding a new resource namespace, export the operations class from `crucible
 - Name a parameter `dataset_mfid`, `sample_mfid`, `project_mfid`, `instrument_mfid`, or `resource_mfid` when it accepts only an MFID.
 - Reserve `project_id` and `instrument_id` for their unique, human-readable API identifiers. Dataset and sample names are display values, not identifiers.
 - Use `project_ref`, `instrument_ref`, or `user_ref` only when the client deliberately accepts multiple identifier formats and dispatches them.
+- Send an owner on create through `BaseResource._owner_ref_body()` (Python callers pass `owner`, the wire field is `owner_ref`), and route owner filters through `_validate_filter_params()`, which maps the deprecated `owner_id` names and caps `owner_ref` at `OWNER_REF_MAX`.
 - Use `user_unique_id` for an ORCID-or-MFID parameter because a canonical human identifier may now have either shape; an MFID does not imply a service account.
 - When replacing an ambiguous public keyword such as `dsid`, preserve it temporarily as an explicit deprecated alias. Positional compatibility should remain intact where practical.
 - Keep canonical and exact-filter request methods private. Extract shared request behavior only when validation, request shape, response handling, and error semantics are genuinely identical across resources.
@@ -38,7 +39,7 @@ When adding a new resource namespace, export the operations class from `crucible
 
 ## Respect privilege mode and capabilities
 
-- The client sends no `Crucible-Privilege-Mode` header unless one is configured, which the server treats as elevated for platform administrators. Do not change this default without a deprecation cycle.
+- The client sends no `Crucible-Privilege-Mode` header unless one is configured; the server then elevates an administrator's API key but not a sign-in, and reports the mode in `authorization.effective_privilege_mode`. Do not change this default without a deprecation cycle.
 - An operation that needs elevation requests it per call: `privilege_mode='elevated'` when only administrators can use it, `self._client._admin_mode()` when ordinary callers can also use it (the server rejects `elevated` from an ineligible caller with a 403).
 - Use `client.capabilities` (an `AccountCapabilities` model) and the `capabilities` block on resource responses to decide what a caller may do. Refuse only on an explicit `False`; `None` means unknown, so let the API decide. Do not hard-code role assumptions. Capability fields are response-only: strip them from update payloads.
 

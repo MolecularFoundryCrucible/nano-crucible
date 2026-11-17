@@ -14,7 +14,7 @@ import json
 logger = logging.getLogger(__name__)
 
 from . import term
-from .helpers import RemovedOptionAction, add_limit_arguments, count_label, print_more_hint, resolve_limit, page_kwargs
+from .helpers import RemovedOptionAction, RenamedOptionAction, add_limit_arguments, count_label, print_more_hint, resolve_limit, page_kwargs
 from ..config import config as _config
 from ..constants import (JOIN_REQUEST_STATUSES, PROJECT_ACCESS_ROLES, PROJECT_MEMBER_ROLES,
                          PROJECT_SORTS, SORT_DIRECTIONS)
@@ -217,13 +217,15 @@ Examples:
     )
 
     parser.add_argument(
-        '-e', '--lead',
+        '--owner',
         required=False,
         default=None,
         metavar='USER',
-        dest='project_lead',
-        help='Project lead ORCID, MFID, username, or email. If not provided, will prompt interactively.'
+        dest='owner',
+        help='Project owner ORCID, MFID, username, or email. If not provided, will prompt interactively.'
     )
+    parser.add_argument('--lead', '-e', dest='owner', metavar='USER',
+                        action=RenamedOptionAction, replacement='--owner')
 
     parser.add_argument(
         '--title',
@@ -402,11 +404,11 @@ def _execute_list(args):
                     project_id if title else term.project_link(project_id, url),
                     term.navigation_link(title, url) if title else '-',
                     project.get('organization') or '-',
-                    _lead_name(project) or '-',
+                    _owner_name(project) or '-',
                     term.role_label(project.get('role')),
                 )
             rows = [_project_row(project) for project in projects]
-            term.table(rows, ['Project ID', 'Title', 'Organization', 'Lead', 'Role'],
+            term.table(rows, ['Project ID', 'Title', 'Organization', 'Owner', 'Role'],
                        max_widths=[25, 30, 20, 25, 13],
                        min_widths=[25, 5, 12, 4, 4])
             print_more_hint(projects, resolve_limit(args), args)
@@ -416,19 +418,13 @@ def _execute_list(args):
         fail("listing projects", e, args)
 
 
-def _lead_name(project):
-    """Return the lead's display name or canonical identifier."""
-    lead = project.get('lead') or {}
-    user_id = (
-        lead.get('unique_id')
-        or project.get('project_lead')
-        or project.get('project_lead_orcid')
-    )
-    name = term.fmt_name(
-        lead,
-        default=user_id,
-        fallback_username=False,
-    )
+def _owner_name(project):
+    """Return the owner's display name, linked to their profile."""
+    owner = project.get('owner')
+    if not isinstance(owner, dict):
+        owner = project.get('lead') or {}
+    user_id = owner.get('unique_id') or project.get('project_lead_orcid')
+    name = term.fmt_name(owner, default=user_id, fallback_username=False)
     return term.user_link(name, user_id)
 
 
@@ -450,10 +446,10 @@ def _show_project(project, include_metadata=False, include_members=False):
     _p("Status",       term.status_label(project.get('status')))
     _p("My role",      term.role_label(project.get('role')))
 
-    lead = _lead_name(project)
-    if lead:
+    owner = _owner_name(project)
+    if owner:
         term.subheader("People")
-        _p("Lead", lead)
+        _p("Owner", owner)
 
     timing = (
         ("Created", project.get('creation_time')),
@@ -530,11 +526,11 @@ def _execute_create(args):
     # Interactive mode if any required arguments are missing
     project_id = args.project_id
     organization = args.organization
-    project_lead = args.project_lead
+    owner = args.owner
     title = args.title
     status = args.status
 
-    interactive = project_id is None or organization is None or project_lead is None
+    interactive = project_id is None or organization is None or owner is None
     if interactive:
         term.header("Create Project")
         print("")
@@ -549,11 +545,11 @@ def _execute_create(args):
     if organization is None:
         organization = prompt_required("Organization", option='--organization')
 
-    if project_lead is None:
-        project_lead = prompt_required(
-            "Project lead",
+    if owner is None:
+        owner = prompt_required(
+            "Project owner",
             validator=validate_user_reference,
-            option='--lead',
+            option='--owner',
         )
 
     if interactive:
@@ -574,13 +570,13 @@ def _execute_create(args):
 
     try:
         from crucible.models import Project
-        project_lead = validate_user_reference(project_lead)
+        owner = validate_user_reference(owner)
         client = get_client()
 
         project = Project(
             project_id=project_id,
             organization=organization,
-            project_lead=project_lead,
+            owner=owner,
             title=title,
             status=status,
         )

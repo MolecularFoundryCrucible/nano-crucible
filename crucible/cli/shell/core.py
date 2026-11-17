@@ -2,7 +2,6 @@
 Interactive shell for the Crucible CLI.
 
 Starts when `crucible` is invoked with no arguments.
-Uses prompt_toolkit if available, falls back to readline + input().
 """
 
 import os
@@ -15,20 +14,80 @@ import threading
 import itertools
 import logging
 from collections import deque
-from datetime import datetime
-from concurrent.futures import ThreadPoolExecutor
+from html import escape
+from concurrent.futures import Future, ThreadPoolExecutor
 
 from .. import term
 from ._common import PROMPT, shell_color_depth, shell_html, shell_style_rules, vlen
 from .banner import print_welcome, welcome_rows
 from .builtins import find_builtin
-
-try:
-    from .completer import CrucibleCompleter
-except ImportError:
-    CrucibleCompleter = None  # type: ignore[assignment,misc]
+from .completer import CrucibleCompleter
 
 logger = logging.getLogger(__name__)
+
+
+def _in_background(fn, *args):
+    """Run fn on a daemon thread, so a slow call never holds up exit."""
+    future: Future = Future()
+
+    def work():
+        try:
+            future.set_result(fn(*args))
+        except BaseException as exc:
+            future.set_exception(exc)
+    threading.Thread(target=work, daemon=True).start()
+    return future
+
+
+def _settle(future, timeout, default=None):
+    try:
+        return future.result(timeout=timeout)
+    except Exception:
+        return default
+
+
+def _startup_error(exc, api_url):
+    """One actionable line for a shell that cannot start."""
+    import requests
+    from crucible.auth.errors import SignInRequired
+    if isinstance(exc, (requests.ConnectionError, requests.Timeout)):
+        return (f"Cannot reach {api_url}. Check your network, or the API URL "
+                "('crucible config get api_url').")
+    if isinstance(exc, SignInRequired) or isinstance(exc, ValueError):
+        return str(exc)
+    status = getattr(getattr(exc, 'response', None), 'status_code', None)
+    if status == 401:
+        return (f"{api_url} refused the credential (401). Run 'crucible login', "
+                "or set a new API key with 'crucible config init'.")
+    return f"Cannot connect to Crucible: {exc}"
+
+
+def _needs_sign_in(exc):
+    """Whether signing in or configuring a credential would fix a failed start."""
+    from crucible.auth.errors import SignInRequired
+    status = getattr(getattr(exc, 'response', None), 'status_code', None)
+    return isinstance(exc, (SignInRequired, ValueError)) or status == 401
+
+
+SIGNED_OUT_COMMANDS = ('login', 'config', 'status', 'help', 'exit')
+_SIGNED_OUT_RETRY = {'login', 'config'}
+
+
+SLOW_COMMAND_SECONDS = 2.0
+_INTERACTIVE_WORDS = {'edit', 'login', 'reload', 'cd', 'init'}
+
+
+def _report_duration(line, seconds):
+    """Note how long a slow command took, like zsh's REPORTTIME.
+
+    Commands that wait on an editor, a browser, or the user are left out,
+    since their time is the user's, not Crucible's.
+    """
+    words = line.split()
+    if (seconds < SLOW_COMMAND_SECONDS or not words or line.lstrip().startswith('!')
+            or _INTERACTIVE_WORDS & set(words)):
+        return
+    print(term.dim(f"(took {seconds:.1f}s)"))
 
 
 class CrucibleShell:
@@ -46,17 +105,22 @@ class CrucibleShell:
         self.state     = {}
         self.completer = None
         self._session  = None         # prompt_toolkit PromptSession
-        self._clock_stop = threading.Event()
+        self._background = {}
+        self._idle_lock  = threading.Lock()
+        self._idle_timer = None
+        self._idle_dropped = 0
+        self._signed_out_reason = None
 
     def run(self):
         """Start the interactive shell."""
-        if CrucibleCompleter is not None:
-            self._run_prompt_toolkit()
-        else:
-            self._run_readline()
+        self._run_prompt_toolkit()
 
-    def _verify_connection(self):
-        """Spinner + whoami. Sets self.client. Exits on failure."""
+    def _verify_connection(self, fatal=True):
+        """Spinner + whoami. Sets self.client and returns the whoami info.
+
+        Returns None, with the reason in self._signed_out_reason, when a
+        credential is missing or refused; other failures exit when fatal.
+        """
         from crucible.config import get_client
 
         _spin_state = {'msg': 'Connecting to Crucible'}
@@ -94,8 +158,10 @@ class CrucibleShell:
         else:
             print('  Connecting to Crucible...')
 
+        from crucible.config import config as _cfg
         try:
             self.client = get_client()
+            self._start_background_checks()
             info = self.client.whoami()
         except Exception as e:
             _stop.set()
@@ -103,8 +169,15 @@ class CrucibleShell:
                 _spin_thread.join()
             for _h in logging.getLogger().handlers:
                 _h.removeFilter(_filt)
-            logger.error(f"Cannot connect to Crucible: {e}")
-            sys.exit(1)
+            from crucible.errors import NotSignedInError
+            if fatal and not _needs_sign_in(e):
+                logger.error(_startup_error(e, _cfg.api_url))
+                sys.exit(1)
+            self.client = None
+            self._signed_out_reason = (f"Not signed in to {_cfg.api_url}."
+                                       if isinstance(e, NotSignedInError)
+                                       else _startup_error(e, _cfg.api_url))
+            return None
 
         _stop.set()
         if _is_tty:
@@ -119,16 +192,24 @@ class CrucibleShell:
         from ..helpers import (
             fetch_projects, fetch_deletions, fetch_join_requests, fetch_service_accounts,
             fetch_user_label, fetch_project_context, fetch_api_label, fetch_api_attention,
+            auth_label,
         )
-        deletions     = fetch_deletions(self.client)
-        join_requests = fetch_join_requests(self.client)
-        service_accounts = (fetch_service_accounts(self.client)
-                            if self._can_manage_service_accounts() else None)
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            projects_f = pool.submit(fetch_projects, self.client)
+            deletions_f = pool.submit(fetch_deletions, self.client)
+            joins_f = pool.submit(fetch_join_requests, self.client)
+            accounts_f = (pool.submit(fetch_service_accounts, self.client)
+                          if self._can_manage_service_accounts() else None)
+            projects = projects_f.result()
+            deletions = deletions_f.result()
+            join_requests = joins_f.result()
+            service_accounts = accounts_f.result() if accounts_f else None
 
         project_id, project_source = fetch_project_context()
         self.state = {
             'user_label':        fetch_user_label(self.client, whoami_info),
-            'projects':          fetch_projects(self.client),
+            'auth_label':        auth_label(self.client),
+            'projects':          projects,
             'project':           project_id,
             'project_source':    project_source,
             'api_label':         fetch_api_label(),
@@ -140,6 +221,30 @@ class CrucibleShell:
             'service_accounts':  service_accounts or [],
             'recent_mfids':      deque(maxlen=15),
         }
+        self._collect_background_checks()
+
+    def _start_background_checks(self):
+        """Ask for the API version and for a newer release while startup goes on."""
+        from crucible import __version__
+        from crucible.config import config as _cfg
+        from ..updates import available_update
+        self._background = {
+            'health': _in_background(self.client.health),
+            'update': _in_background(available_update, __version__, _cfg.update_check),
+        }
+
+    def _collect_background_checks(self, wait=3.0):
+        from crucible import __version__
+        from ..helpers import api_version_note
+        from ..status import _readiness_details
+        health = self._background.get('health')
+        version = (_readiness_details(_settle(health, wait)).get('api_version')
+                   if health is not None else None)
+        self.state['api_version'] = version
+        self.state['api_version_note'] = api_version_note(version, __version__)
+        update = self._background.get('update')
+        if update is not None:
+            self.state['update'] = _settle(update, 0.5)
 
     def _pending_counts(self):
         """Pending deletion reviews and join requests awaiting this caller."""
@@ -166,7 +271,10 @@ class CrucibleShell:
             user_label = f'{full_name} (@{username})'
         else:
             user_label = full_name or (f'@{username}' if username else None)
+        from ..updates import upgrade_command
+        from ..whoami import credential_label
         deletions, joins = self._pending_counts()
+        latest = self.state.get('update')
         return welcome_rows(
             version=__version__,
             first_name=first_name,
@@ -177,6 +285,10 @@ class CrucibleShell:
             elevated=self.state.get('elevated', False),
             deletions=deletions,
             joins=joins,
+            api_name=self.state.get('api_label'),
+            api_version=self.state.get('api_version'),
+            signed_in_with=credential_label(self.client),
+            update=(latest, upgrade_command()) if latest else None,
         )
 
     def _print_pending(self):
@@ -247,11 +359,48 @@ class CrucibleShell:
             if getattr(self, 'completer', None) is not None:
                 self.completer.hidden = self._hidden_commands()
 
+    def _arm_idle_timer(self):
+        """Switch elevation off if the prompt sits idle for elevation_timeout minutes."""
+        from crucible.config import config as _cfg
+        minutes = _cfg.elevation_timeout
+        if not minutes or not self.state.get('elevated'):
+            return
+        timer = threading.Timer(minutes * 60, self._idle_expired, args=(minutes,))
+        timer.daemon = True
+        with self._idle_lock:
+            self._idle_timer = timer
+        timer.start()
+
+    def _idle_expired(self, minutes):
+        with self._idle_lock:
+            if self._idle_timer is None:
+                return
+            self._idle_timer = None
+            self._idle_dropped = minutes
+            self.state['elevated'] = False
+            if self.client is not None:
+                self.client.privilege_mode = 'normal'
+        if self._session is not None:
+            self._session.app.invalidate()
+
+    def _disarm_idle_timer(self):
+        """Stop the idle timer once a line is entered, and report a drop."""
+        with self._idle_lock:
+            timer, self._idle_timer = self._idle_timer, None
+            minutes, self._idle_dropped = self._idle_dropped, 0
+        if timer is not None:
+            timer.cancel()
+        if minutes:
+            self._apply_elevated(False)
+            print(term.yellow(f"Elevated privilege switched off after {minutes} idle "
+                              "minutes; 'elevate on' turns it back on."))
+
     def refresh(self):
         """Re-fetch projects, user info, deletions, join requests, and service accounts. Updates state + completer."""
         from ..helpers import (
             fetch_projects, fetch_deletions, fetch_join_requests, fetch_service_accounts,
             fetch_user_label, fetch_project_context, fetch_api_label, fetch_api_attention,
+            auth_label,
         )
         self.client.refresh_profile()
         with ThreadPoolExecutor(max_workers=4) as pool:
@@ -272,6 +421,9 @@ class CrucibleShell:
         self.state['project_source']   = project_source
         self.state['api_label']        = fetch_api_label()
         self.state['api_attention']    = fetch_api_attention()
+        self.state['auth_label']       = auth_label(self.client)
+        self._background = {'health': _in_background(self.client.health)}
+        self._collect_background_checks()
         self.state['deletions']        = new_deletions or []
         self.state['join_requests']    = new_join_requests or []
         self.state['service_accounts'] = new_service_accounts or []
@@ -291,67 +443,54 @@ class CrucibleShell:
 
     def _toolbar(self):
         from prompt_toolkit.application import get_app
-        label = self.state.get('project') or '(no project set)'
-        if len(label) > 22:
-            label = label[:21] + '…'
-        source = self.state.get('project_source')
-        source_label = ' [env]' if source == 'environment' else ''
-        project_label = f'🔬 {label}{source_label}'
-        proj_content = project_label + ' ' * max(0, 25 - vlen(project_label))
-        clock        = datetime.now().strftime('%H:%M')
-
-        left_str  = f' {proj_content} '
-        mid_str   = f' 🧸 {self.state.get("user_label", "?")} '
-        api_str   = f' 🔗 {self.state.get("api_label", "?")} '
-        clock_str = f' {clock} '
-        separator = ' │ '
-        debug_str = ' DEBUG ' if self.state.get('debug') else ''
-        elevated_str = ' ELEVATED ' if self.state.get('elevated') else ''
-
         try:
             term_width = get_app().output.get_size().columns
         except Exception:
             term_width = 80
 
-        fixed_width = (
-            vlen(left_str) + vlen(mid_str) + vlen(api_str)
-            + vlen(clock_str) + 3 * vlen(separator)
-            + len(debug_str) + len(elevated_str)
-        )
-        if debug_str:
-            fixed_width += vlen(separator)
-        if elevated_str:
-            fixed_width += vlen(separator)
-        pad = ' ' * max(0, term_width - fixed_width)
-        api_tag = 'tb-api-attention' if self.state.get('api_attention') else 'tb-api'
-        debug_segment = (
-            f'<tb-separator>{separator}</tb-separator><tb-debug>{debug_str}</tb-debug>'
-            if debug_str else ''
-        )
-        elevated_segment = (
-            f'<tb-separator>{separator}</tb-separator>'
-            f'<tb-elevated>{elevated_str}</tb-elevated>'
-            if elevated_str else ''
-        )
-        return shell_html(
-            f'<tb-project>{left_str}</tb-project>'
-            f'<tb-separator>{separator}</tb-separator>{mid_str}'
-            f'<tb-separator>{separator}</tb-separator><{api_tag}>{api_str}</{api_tag}>'
-            f'{pad}{elevated_segment}{debug_segment}'
-            f'<tb-separator>{separator}</tb-separator><tb-clock>{clock_str}</tb-clock>'
-        )
+        separator = ' │ '
+        project = self.state.get('project') or '(no project set)'
+        if self.state.get('project_source') == 'environment':
+            project += ' [env]'
+        user = self.state.get('user_label') or '?'
+        auth = self.state.get('auth_label')
+        api = self.state.get('api_label') or '?'
+        note = self.state.get('api_version_note')
+        if note:
+            api += f' · API {note}'
+        badges = [(tag, f' {text} ') for tag, text, on in (
+            ('tb-elevated', 'ELEVATED', self.state.get('elevated')),
+            ('tb-debug', 'DEBUG', self.state.get('debug'))) if on]
 
-    def _clock_tick(self):
-        """Background thread: invalidate toolbar once per minute."""
-        secs_to_next = 60 - datetime.now().second
-        if self._clock_stop.wait(timeout=secs_to_next):
-            return
-        while not self._clock_stop.is_set():
-            try:
-                self._session.app.invalidate()
-            except Exception:
-                pass
-            self._clock_stop.wait(timeout=60)
+        def fit(project_label, user_label):
+            parts = [f' 🔬 {project_label} ', f' 🔗 {api} ']
+            if user_label:
+                parts.insert(1, f' 🧸 {user_label} ')
+            used = sum(vlen(p) for p in parts) + vlen(separator) * (len(parts) - 1)
+            used += sum(len(text) + vlen(separator) for _, text in badges)
+            return parts, used
+
+        def short(text, width):
+            return text if len(text) <= width else text[:width - 1] + '…'
+
+        user_full = f'{user} · {auth}' if auth else user
+        for project_label, user_label in (
+                (short(project, 30), user_full),
+                (short(project, 30), user),
+                (short(project, 20), None),
+                (short(project, 12), None)):
+            parts, used = fit(project_label, user_label)
+            if used <= term_width:
+                break
+        pad = ' ' * max(0, term_width - used)
+
+        api_tag = ('tb-api-attention'
+                   if self.state.get('api_attention') or note else 'tb-api')
+        tags = ['tb-project'] + (['tb-user'] if len(parts) == 3 else []) + [api_tag]
+        sep = f'<tb-separator>{separator}</tb-separator>'
+        body = sep.join(f'<{tag}>{escape(text)}</{tag}>' for tag, text in zip(tags, parts))
+        tail = ''.join(f'{sep}<{tag}>{text}</{tag}>' for tag, text in badges)
+        return shell_html(f'{body}{pad}{tail}')
 
     def _resolve_future(self, last, key, default=None):
         """Resolve a named future from last_resource, returning default on failure."""
@@ -496,6 +635,14 @@ class CrucibleShell:
             if self.completer is not None:
                 self.completer._service_accounts = new_service_accounts or []
 
+        if len(words) >= 2 and words[0] == 'project' and words[1] in ('create', 'update', 'edit'):
+            from ..helpers import fetch_projects
+            new_projects = fetch_projects(self.client)
+            self.state['projects'] = new_projects
+            if self.completer is not None:
+                self.completer._projects = new_projects
+                self.completer._project_search_cache.clear()
+
         if len(words) >= 2 and words[0] == 'config' and words[1] in ('set', 'unset', 'edit'):
             try:
                 self.rebind_client(keep_privilege_mode=False)
@@ -527,7 +674,12 @@ class CrucibleShell:
 
         print('\033[2J\033[H', end='', flush=True)
 
+        history = PrivateFileHistory(history_path)
         info = self._verify_connection()
+        if info is None:
+            info = self._signed_out_prompt(history)
+            if info is None:
+                return
         self._init_state(info)
 
         print_welcome(self._welcome_rows(info), shutil.get_terminal_size((80, 24)).columns)
@@ -548,7 +700,7 @@ class CrucibleShell:
         _register_keybindings(kb, self)
 
         self._session = PromptSession(
-            history=PrivateFileHistory(history_path),
+            history=history,
             auto_suggest=AutoSuggestFromHistory(),
             completer=ThreadedCompleter(self.completer),
             complete_while_typing=True,
@@ -558,9 +710,8 @@ class CrucibleShell:
             color_depth=shell_color_depth(),
         )
 
-        threading.Thread(target=self._clock_tick, daemon=True).start()
-
         while True:
+            self._arm_idle_timer()
             try:
                 line = self._session.prompt(PROMPT)
             except KeyboardInterrupt:
@@ -568,31 +719,102 @@ class CrucibleShell:
                 continue
             except EOFError:
                 break
+            finally:
+                self._disarm_idle_timer()
+            started = time.monotonic()
             if not self._dispatch(line):
                 break
+            _report_duration(line, time.monotonic() - started)
             print()
 
-        self._clock_stop.set()
 
-    def _run_readline(self):
-        """Fallback shell using stdlib readline."""
-        print("\nCrucible interactive shell  (type 'help' for commands, 'exit' to quit)")
-        try:
-            import readline  # noqa: F401
-        except ImportError:
-            pass
+    def _signed_out_prompt(self, history):
+        """Offer sign-in and configuration until a credential works.
 
+        Returns the whoami info once connected, or None when the user leaves.
+        """
+        from prompt_toolkit import PromptSession
+        from prompt_toolkit.completion import WordCompleter
+        from prompt_toolkit.styles import Style
+
+        hint = (f"Type {term.cyan('login')} to sign in with a browser, or "
+                f"{term.cyan('config init')} to set an API key.")
+        print(term.yellow(self._signed_out_reason))
+        print(hint)
+        print()
+        session = PromptSession(
+            history=history,
+            completer=WordCompleter(list(SIGNED_OUT_COMMANDS)),
+            complete_while_typing=True,
+            bottom_toolbar=self._signed_out_toolbar,
+            style=Style.from_dict(shell_style_rules()),
+            color_depth=shell_color_depth(),
+        )
         while True:
             try:
-                line = input(PROMPT)
+                line = session.prompt(PROMPT)
             except KeyboardInterrupt:
                 print()
                 continue
             except EOFError:
-                break
-            if not self._dispatch(line):
-                break
+                return None
+            words = line.split()
+            if not words:
+                continue
+            if words[0] in ('exit', 'quit'):
+                return None
+            if words[0] not in SIGNED_OUT_COMMANDS:
+                print(f"Not signed in. Until you are, the shell runs only "
+                      f"{', '.join(SIGNED_OUT_COMMANDS)}. {hint}")
+                continue
+            if words[0] == 'help':
+                print(f"Not signed in. {hint} {term.cyan('status')} checks the API; "
+                      f"{term.cyan('exit')} leaves.")
+                continue
+            self._run_signed_out_command(line)
+            if words[0] not in _SIGNED_OUT_RETRY:
+                continue
+            info = self._connect_if_credential()
+            if info is not None:
+                print()
+                return info
             print()
+
+    def _run_signed_out_command(self, line):
+        from .. import setup_logging
+        try:
+            args = self.parser.parse_args(shlex.split(line))
+            setup_logging(debug=getattr(args, 'debug', False))
+            if hasattr(args, 'func'):
+                args.func(args)
+        except SystemExit:
+            pass
+        except KeyboardInterrupt:
+            print("\nCancelled.")
+        except Exception as e:
+            logger.error(f"Error: {e}")
+
+    def _connect_if_credential(self):
+        """Connect when a credential now resolves; stay quiet while none does."""
+        from crucible.config import config as _cfg, get_client
+        from crucible.errors import NotSignedInError
+        _cfg.reload()
+        try:
+            get_client()
+        except NotSignedInError:
+            return None
+        except ValueError:
+            pass
+        info = self._verify_connection(fatal=False)
+        if info is None:
+            print(term.yellow(self._signed_out_reason))
+        return info
+
+    def _signed_out_toolbar(self):
+        from ..helpers import fetch_api_label
+        sep = '<tb-separator> │ </tb-separator>'
+        api = escape(fetch_api_label() or '?')
+        return shell_html(f'<tb-user> not signed in </tb-user>{sep}<tb-api> 🔗 {api} </tb-api>')
 
 
 def run(parser):

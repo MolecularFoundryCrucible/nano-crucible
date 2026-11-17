@@ -50,7 +50,7 @@ def test_create_posts_the_first_metadata(create):
 
 def test_project_and_instrument_create_post_the_first_metadata(monkeypatch):
     for operations, kwargs in ((ProjectOperations, dict(project_id='proj-a', title='t', organization='o',
-                                                         project_lead_orcid='0000-0001-0000-0000')),
+                                                         owner='0000-0001-0000-0000')),
                                (InstrumentOperations, dict(instrument_id='inst', instrument_name='Inst'))):
         client = MagicMock()
         client._request.side_effect = respond({'unique_id': MFID, 'project_id': 'p', 'instrument_id': 'inst'})

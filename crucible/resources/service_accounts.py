@@ -47,7 +47,7 @@ class ServiceAccountOperations(BaseResource):
 
     @_deprecated_parameter('unique_id', 'service_account_ref')
     def rotate_key(self, service_account_ref: str) -> Dict:
-        """Generate a new API key for a service account, invalidating the old one.
+        """Generate a new API key for a service account, revoking every key it holds.
 
         The new key is returned once only — store it immediately.
 

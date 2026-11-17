@@ -409,7 +409,7 @@ def test_create_prefers_flexible_owner_without_warning(operations_class, resourc
         operations.create(resource)
 
     assert not caught
-    assert operations._request.call_args.kwargs['json']['owner'] == 'roncofaber'
+    assert operations._request.call_args.kwargs['json']['owner_ref'] == 'roncofaber'
 
 
 @pytest.mark.parametrize(
@@ -426,3 +426,72 @@ def test_create_rejects_expanded_owner_record(operations_class, resource):
         operations.create(resource)
 
     operations._request.assert_not_called()
+
+
+def test_owner_filters_use_the_new_names():
+    from crucible.resources.base import BaseResource
+
+    params = {'owner_ref': ['alice', 'bob'], 'owner_is_null': False}
+    assert BaseResource._owner_filters(dict(params)) == params
+    with pytest.raises(ValueError, match='1 to 10'):
+        BaseResource._owner_filters({'owner_ref': [f'u{i}' for i in range(11)]})
+
+
+@pytest.mark.parametrize('old, new', [('owner_id', 'owner_ref'),
+                                      ('owner_id_is_null', 'owner_is_null')])
+def test_deprecated_owner_filters_warn_and_map(old, new):
+    operations = make_ops(DatasetOperations, {'total': 0, 'items': []})
+
+    with pytest.warns(DeprecationWarning, match=new):
+        operations.count(**{old: 'alice' if old == 'owner_id' else True})
+
+    assert old not in operations._request.call_args.kwargs['params']
+    assert new in operations._request.call_args.kwargs['params']
+
+
+def test_project_create_sends_owner_ref_and_maps_the_old_lead_fields():
+    from crucible.resources.projects import ProjectOperations
+
+    operations = make_ops(ProjectOperations, {'unique_id': MFID, 'project_id': 'demo'})
+    operations.create({'project_id': 'demo', 'organization': 'LBNL', 'owner': 'alice'})
+    assert operations._request.call_args.kwargs['json'] == {
+        'project_id': 'demo', 'organization': 'LBNL', 'owner_ref': 'alice'}
+
+    with pytest.warns(DeprecationWarning, match='project_lead_email'):
+        operations.create({'project_id': 'demo', 'organization': 'LBNL',
+                           'project_lead_email': 'a@lbl.gov'})
+    assert operations._request.call_args.kwargs['json']['owner_ref'] == 'a@lbl.gov'
+
+    with pytest.raises(ValueError, match='owner is required'):
+        operations.create({'project_id': 'demo', 'organization': 'LBNL'})
+
+
+def test_project_list_filters_by_owner_ref():
+    from crucible.resources.projects import ProjectOperations
+
+    operations = make_ops(ProjectOperations, {'total': 0, 'items': []})
+    operations.list(owner_ref=['alice'])
+    assert operations._request.call_args.kwargs['params']['owner_ref'] == ['alice']
+
+
+def test_project_search_filters_by_owner_ref():
+    from crucible.resources.projects import ProjectOperations
+
+    operations = make_ops(ProjectOperations, {'items': []})
+    operations.search('alphafold', owner_ref=['alice', 'bob'])
+    assert operations._request.call_args.kwargs['params'] == {
+        'q': 'alphafold', 'limit': 20, 'owner_ref': ['alice', 'bob']}
+    operations.search('alphafold')
+    assert 'owner_ref' not in operations._request.call_args.kwargs['params']
+
+
+def test_metadata_search_filters_by_owner_ref():
+    from crucible.resources.datasets import DatasetOperations
+
+    operations = make_ops(DatasetOperations, {'items': []})
+    operations.search_metadata('perovskite', owner_ref=['alice', 'bob'])
+    assert operations._request.call_args.args[1] == '/resources/metadata/search'
+    assert operations._request.call_args.kwargs['params'] == {
+        'q': 'perovskite', 'limit': 20, 'owner_ref': ['alice', 'bob']}
+    operations.search_metadata('perovskite')
+    assert 'owner_ref' not in operations._request.call_args.kwargs['params']

@@ -20,7 +20,7 @@ from ..errors import RemovedError
 from ..utils.deprecation import removed_message
 from .capabilities import (
     AccessControlMixin, InstrumentAssignmentMixin, OwnershipMixin, ProjectAssignmentMixin)
-from ..constants import DATASET_FACET_FIELDS, DEFAULT_LIMIT, VISIBILITIES
+from ..constants import DATASET_AFFILIATIONS, DATASET_FACET_FIELDS, DEFAULT_LIMIT, VISIBILITIES
 from ..utils.deprecation import _deprecated, _removed, _removed_parameter
 from ..utils.identifiers import is_mfid, require_canonical_identifier
 from ..models import AssociatedFile
@@ -41,7 +41,7 @@ DATASET_LIST_PARAMS = frozenset({
     'include_total', 'instrument_mfid', 'instrument_mfid_is_null',
     'keyword', 'limit', 'measurement',
     'measurement_is_null', 'modification_time_gte',
-    'modification_time_lte', 'offset', 'owner_id', 'owner_id_is_null',
+    'modification_time_lte', 'offset', 'owner_is_null', 'owner_ref',
     'project_id', 'project_mfid', 'project_mfid_is_null',
     'project_scope', 'public', 'sample_mfid', 'session_name',
     'session_name_is_null', 'size', 'sort', 'timestamp', 'mfid',
@@ -55,7 +55,7 @@ DATASET_FACET_PARAMS = frozenset({
     'data_format_is_null', 'direction', 'field', 'instrument_mfid',
     'instrument_mfid_is_null', 'limit', 'measurement',
     'measurement_is_null', 'modification_time_gte',
-    'modification_time_lte', 'owner_id', 'owner_id_is_null', 'project_id',
+    'modification_time_lte', 'owner_is_null', 'owner_ref', 'project_id',
     'project_mfid', 'project_mfid_is_null', 'project_scope',
     'sample_mfid', 'session_name', 'session_name_is_null', 'sort',
     'visibility',
@@ -135,7 +135,7 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
 
 
     @_removed_parameter('sample_id', 'sample_mfid')
-    @_removed_parameter('owner_orcid', 'owner_id')
+    @_removed_parameter('owner_orcid', 'owner_ref')
     def list(self, sample_mfid: Optional[str] = None, include_metadata: bool = False,
              include_links: bool = False, include_owner: bool = False,
              limit: int = DEFAULT_LIMIT, offset: int = 0,
@@ -189,8 +189,10 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
                   Omit to keep the legacy unique_id descending order.
             direction: Sort direction, asc or desc. Requires sort.
             visibility: Restrict results by public visibility: all, public, or private.
-            affiliation: Caller relationship each result must have, currently
-                         only 'owner'. Accepts a single value or a sequence.
+            affiliation: Caller relationship each result must have: 'owner',
+                         'member' (reached through the caller's own grants),
+                         or 'instrument' (read as a member of the dataset's
+                         instrument). Accepts a single value or a sequence (OR).
             include_total: Request the exact authorization-filtered total. Omit
                            to keep the endpoint's default behavior.
             creation_time_gte: Inclusive lower creation-time bound. Accepts a
@@ -201,7 +203,7 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
             modification_time_lte: Inclusive upper modification-time bound,
                 same types.
             **kwargs (Any): Query parameters for filtering. Supported fields include:
-                keyword, public, dataset_name, owner_id, timestamp, size,
+                keyword, public, dataset_name, owner_ref (up to 10 owners), owner_is_null, timestamp, size,
                 data_format, data_type, measurement, and session_name. Filters expect exact matches (case sensitive) except for
                 keywords, which are case insensitive and match substrings.
 
@@ -219,7 +221,7 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
         params.update(self._project_scope_params(
             project_id, project_mfid, project_scope))
         params.update(self._ordering_params(sort, direction))
-        params.update(self._affiliation_params(affiliation))
+        params.update(self._affiliation_params(affiliation, DATASET_AFFILIATIONS))
         params.update(self._choice_params(
             visibility=(visibility, VISIBILITIES)))
         params.update(self._time_range_params(
@@ -371,8 +373,7 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
             raise RemovedError(removed_message(
                 "Setting Dataset.owner_orcid when creating a dataset",
                 "set Dataset.owner to an ORCID, MFID, username, or email instead."))
-        if dataset_details.get('owner') is not None and not isinstance(dataset_details['owner'], str):
-            raise ValueError("Dataset.owner must be a string identifier when creating a dataset.")
+        self._owner_ref_body(dataset_details, 'Dataset')
 
         if dataset_details.get('instrument_name') is not None:
             if (dataset_details.get('instrument_id') is None
@@ -488,7 +489,8 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
         return [self._client.files._parse(f) for f in raw]
 
     def search(self, q: str, project_id: Optional[str] = None,
-               limit: int = 20) -> List[Dict]:
+               limit: int = 20,
+               owner_ref: Optional[Union[str, Sequence[str]]] = None) -> List[Dict]:
         """Fuzzy name search across datasets. Available to all authenticated users.
 
         Matches against dataset_name. Returns datasets the caller can read.
@@ -498,6 +500,8 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
             q: Search term (min 3 chars). Typo-tolerant — "pero" finds "perovskite".
             project_id: Optional project to scope results to.
             limit: Max results (default 20, max 50).
+            owner_ref: Owner or owners (up to 10, any matches): unique_id,
+                linked ORCID, username, or email.
 
         Returns:
             List[Dict]: Matching DatasetResponse records, ranked by relevance.
@@ -505,6 +509,9 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
         params = {'q': q, 'limit': limit}
         if project_id:
             params['project_id'] = project_id
+        if owner_ref is not None:
+            params['owner_ref'] = owner_ref
+            self._owner_filters(params)
         result = self._request('get', '/datasets/search', params=params)
         raw = result.get('items', result) if isinstance(result, dict) else result
         return [self._parse(dataset) for dataset in raw]
@@ -753,7 +760,9 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
             dataset_mfid: Dataset MFID
             file_path: Local path to the file
             ingestion_class: Ingestion class for the worker (e.g. 'lammps', 'nexus').
-                Defaults to the server-side default if omitted.
+                Defaults to the server-side default if omitted. With
+                skip_ingestion it is recorded on the not-requested ingestion
+                request.
             wait_for_ingestion_response: Block until ingestion completes. Ignored if
                 skip_ingestion is True.
             multipart: Removed in 4.0.0; passing it raises RemovedError.
@@ -801,7 +810,7 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
             return {'associated_file': file_record, 'ingestion_request': None}
 
         if skip_ingestion:
-            ingestion_request = self._client.files._skip_ingestion(file_id)
+            ingestion_request = self._client.files._skip_ingestion(file_id, ingestion_class)
             logger.info(f"Uploaded {stored_filename} to dataset {dataset_mfid}, ingestion not requested")
 
         else:

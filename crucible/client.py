@@ -9,6 +9,7 @@ Provides organized access to API endpoints.
 import requests
 import json
 import logging
+import threading
 from requests.adapters import HTTPAdapter
 from urllib.parse import urlparse
 from urllib3.util.retry import Retry
@@ -60,7 +61,7 @@ class CrucibleClient:
         file.
 
         Raises:
-            ValueError: If there is no API key and no stored sign-in
+            NotSignedInError: If there is no API key and no stored sign-in (a ValueError)
         """
         # Load from config if not provided
         from .config import config as _config
@@ -157,6 +158,7 @@ class CrucibleClient:
         self._authorization: Optional['AccountAuthorization'] = None
         self._capabilities: Optional['AccountCapabilities'] = None
         self._profile_stale = False
+        self._profile_lock = threading.Lock()
         self.upload_progress = None
 
         self.request_ingestion = True
@@ -164,10 +166,16 @@ class CrucibleClient:
 
     def _load_profile(self, refresh: bool = False) -> None:
         """Populate the cached authorization and capability blocks."""
-        from .models import AccountAuthorization, AccountCapabilities
-
         if self._authorization is not None and not self._profile_stale and not refresh:
             return
+        with self._profile_lock:
+            if self._authorization is not None and not self._profile_stale and not refresh:
+                return
+            self._read_profile()
+
+    def _read_profile(self) -> None:
+        from .models import AccountAuthorization, AccountCapabilities
+
         self._profile_stale = False
         try:
             profile = self.account.profile()
@@ -219,9 +227,14 @@ class CrucibleClient:
 
     @property
     def is_elevated(self) -> bool:
-        """Whether ordinary requests from this client run elevated."""
+        """Whether ordinary requests from this client run elevated.
+
+        Without an explicit mode the server decides: it elevates an
+        administrator's API key but not a sign-in, and reports which.
+        """
         if self.privilege_mode is None:
-            return self.can_elevate
+            reported = self.authorization.effective_privilege_mode
+            return reported == 'elevated' if reported else self.can_elevate
         return self.privilege_mode == 'elevated'
 
     def _admin_mode(self) -> Optional[str]:
@@ -286,7 +299,6 @@ class CrucibleClient:
         Only when the CLI installed a handler (crucible.auth.stepup) and on
         the main thread: a library or worker thread never prompts.
         """
-        import threading
         from .auth import stepup
         code = _error_code(response) if response.status_code in (401, 403) else None
         if code not in stepup.STEP_UP_CODES or stepup.handler() is None:
@@ -684,7 +696,8 @@ def _resolve_credential(config, api_url: str, api_key: Optional[str]):
             return SessionCredential(tokens, store)
     if configured:
         return ApiKeyCredential(configured, 'config file')
-    raise ValueError(
+    from .errors import NotSignedInError
+    raise NotSignedInError(
         "Not signed in to Crucible. Run 'crucible login', or set an API key with "
         "'crucible config init'.")
 

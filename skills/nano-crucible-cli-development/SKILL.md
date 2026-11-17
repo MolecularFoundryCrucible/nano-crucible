@@ -11,7 +11,7 @@ Follow [`nano-crucible-development`](../nano-crucible-development/SKILL.md), the
 
 - Define or update the command in its resource module and confirm that `crucible/cli/__init__.py` imports and registers the module.
 - Search `_DEPRECATED_SUBCOMMANDS`, shell completion, keybindings, aliases, and generic commands such as `get`, `edit`, and `download` when names or arguments change.
-- Prefer one canonical flag spelling with compatibility warnings for supported old forms. Check [`crucible/cli/KNOWN_ISSUES.md`](../../crucible/cli/KNOWN_ISSUES.md) before introducing a short flag.
+- Prefer one canonical flag spelling with compatibility warnings for supported old forms: `RenamedOptionAction` for a renamed option, `add_removed_command()` for a removed command. Check [`crucible/cli/KNOWN_ISSUES.md`](../../crucible/cli/KNOWN_ISSUES.md) before introducing a short flag.
 - Get the client with `get_client()` from `crucible.config`, never `CrucibleClient()`: the shell shares one client across commands so its session, privilege mode, and cached profile carry over. Tests patch `crucible.config.get_client`.
 - Keep API work in `crucible/resources/`. CLI modules should parse input, call the client, present results, and translate expected failures into useful command errors.
 - Make destructive or access-changing commands identify their target and retain the established confirmation behavior.
