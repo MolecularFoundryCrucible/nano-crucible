@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 4.0.1
+
 Sign-in by pasted code needs Crucible API 4.0.1.
 
 ### Added
