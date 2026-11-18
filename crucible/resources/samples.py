@@ -9,6 +9,7 @@ Provides organized access to sample-related API endpoints.
 from datetime import date, datetime
 import logging
 from typing import Any, Optional, List, Dict, Sequence, Union
+from ..models import Sample
 from .base import BaseResource, ListResult
 from .capabilities import AccessControlMixin, OwnershipMixin, ProjectAssignmentMixin
 from ..constants import DEFAULT_LIMIT, SAMPLE_FACET_FIELDS, VISIBILITIES
@@ -327,14 +328,16 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
             params['relationship_type'] = relationship_type
         return self._paginate(f"/samples/{parent_mfid}/children", params, limit, offset, cursor=cursor)
 
-    def create(self, sample=None, scientific_metadata: Optional[Dict] = None,
+    def create(self, sample: Optional[Union[Sample, Dict]] = None,
+               scientific_metadata: Optional[Dict] = None,
                parents: Optional[List[Dict]] = None,
                children: Optional[List[Dict]] = None,
                **kwargs) -> Dict:
         """Create a new sample record.
 
         Args:
-            sample (Sample): Sample model instance with the desired fields. Use
+            sample (Sample or dict): The sample's fields, as a Sample model or a dict
+                validated through it. Use
                 `owner` with an ORCID, MFID, username, or email to
                 create for a specific owner; `owner_orcid` raises RemovedError. `project_id`
                 accepts the human-readable ID and `project_mfid` accepts the canonical
@@ -346,23 +349,19 @@ class SampleOperations(ProjectAssignmentMixin, OwnershipMixin, AccessControlMixi
         Returns:
             Dict: Created sample record.
         """
-        from crucible.models import Sample
         from ..errors import RemovedError
         from ..utils.deprecation import removed_message
 
-        if sample is None or not isinstance(sample, Sample):
-            if sample is not None:
-                # positional arg was not a Sample — treat it as a mistake
-                raise TypeError(
-                    f"Expected a Sample model, got {type(sample).__name__}. "
-                    "Use: samples.create(Sample(sample_name=..., project_id=...))"
-                )
-            if kwargs:
-                raise RemovedError(removed_message(
-                    "Passing keyword arguments to samples.create()",
-                    "pass a Sample model instead: samples.create(Sample(...))."))
-            else:
-                raise ValueError("Pass a Sample model: samples.create(Sample(...))")
+        if kwargs:
+            raise RemovedError(removed_message(
+                "Passing keyword arguments to samples.create()",
+                "pass the fields as a Sample or a dict instead: samples.create(Sample(...))."))
+        if isinstance(sample, dict):
+            sample = Sample.model_validate(sample)
+        elif not isinstance(sample, Sample):
+            if sample is None:
+                raise ValueError("Pass the sample's fields: samples.create(Sample(...)) or a dict.")
+            raise TypeError(f"Expected a Sample or a dict, got {type(sample).__name__}.")
 
         sample_info = {
             k: v for k, v in sample.model_dump(

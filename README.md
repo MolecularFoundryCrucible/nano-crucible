@@ -28,7 +28,7 @@ pip install nano-crucible
 Sign in and verify connectivity:
 
 ```bash
-crucible login    # browser sign-in; use --device over SSH or without a browser
+crucible login    # browser sign-in; --device over SSH, --paste if the browser can't reach the terminal
 crucible status
 ```
 

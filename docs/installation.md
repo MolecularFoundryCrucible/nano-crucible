@@ -38,9 +38,12 @@ pip install -e ".[dev]"
 ```bash
 crucible login            # opens your browser on this computer
 crucible login --device   # over SSH or without a browser: approve a code on any device
+crucible login --paste    # sign in in any browser and paste the code it shows
 crucible whoami           # shows "Signed in with"
 crucible logout
 ```
+
+If the browser shows an error after you choose Allow, it cannot reach the terminal: Chrome's local network rules, WSL, and containers can block it. Press Enter while `crucible login` waits, sign in again, and paste the code the page shows, or start with `crucible login --paste`. The code works once, within five minutes.
 
 The sign-in is kept in your OS keyring (macOS Keychain, Windows Credential Locker, or Secret Service on Linux). Where no keyring is reachable, such as a headless Linux machine or cluster node, it goes in a file only you can read in the config directory; set `auth_store` to `keyring`, `file`, or `memory` to choose. Sessions renew themselves and end after 14 days without use or 90 days at most.
 

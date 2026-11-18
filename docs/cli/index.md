@@ -130,6 +130,7 @@ The interactive Crucible shell completes command flags and fixed choices. It sea
 ```bash
 crucible login            # sign in with a browser
 crucible login --device   # over SSH or without a browser
+crucible login --paste    # when the browser cannot reach this terminal: paste a code
 ```
 
 For scripts, CI, and batch jobs, use an API key instead: `crucible config init` walks through setting it and optional local defaults, or set `CRUCIBLE_API_KEY`. See [Installation → Configuration](../installation.md#configuration) for details.

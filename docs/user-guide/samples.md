@@ -44,6 +44,8 @@ sample = client.samples.create(
 sample_mfid = sample["unique_id"]
 ```
 
+A dict with the same fields works in place of `Sample(...)`. Pass the fields in one object, not as separate keyword arguments: `scientific_metadata`, `parents`, and `children` are options of `create()`, not fields.
+
 Applications may provide `project_mfid` instead of `project_id`, or provide both when they identify the same project. Conflicting selectors produce an API validation error. The CLI keeps `--project-id` as its normal interactive input and exposes `--project-mfid` for integrations and automation.
 
 ## Retrieving a sample

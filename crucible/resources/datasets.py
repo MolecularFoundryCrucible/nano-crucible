@@ -23,7 +23,7 @@ from .capabilities import (
 from ..constants import DATASET_AFFILIATIONS, DATASET_FACET_FIELDS, DEFAULT_LIMIT, VISIBILITIES
 from ..utils.deprecation import _deprecated, _removed, _removed_parameter
 from ..utils.identifiers import is_mfid, require_canonical_identifier
-from ..models import AssociatedFile
+from ..models import AssociatedFile, Dataset
 
 # upload/download
 from .gcs.upload import upload_file_gcs
@@ -309,7 +309,7 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
         params['instrument_mfid'] = mfid
 
 
-    def create(self, dataset, scientific_metadata: Optional[Dict] = None,
+    def create(self, dataset: Union[Dataset, Dict], scientific_metadata: Optional[Dict] = None,
                keywords: Optional[List[str]] = None,
                files: Optional[List[Union[str, AssociatedFile]]] = None,
                upload_files: bool = True,
@@ -321,7 +321,8 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
         """Create a new dataset record with scientific metadata and keywords.
 
         Args:
-            dataset (Dataset): Dataset object with dataset details. Use `owner` with
+            dataset (Dataset or dict): The dataset's fields, as a Dataset model or a
+                dict validated through it. Use `owner` with
                 an ORCID, MFID, username, or email to create for a
                 specific owner; `owner_orcid` raises RemovedError. `project_id` and `instrument_id` accept
                 human-readable IDs; `project_mfid` and `instrument_mfid` accept
@@ -366,6 +367,10 @@ class DatasetOperations(ProjectAssignmentMixin, InstrumentAssignmentMixin, Owner
                 [f for f in files if not isinstance(f, AssociatedFile)]))
             files = [f if isinstance(f, AssociatedFile) else next(local) for f in files]
 
+        if isinstance(dataset, dict):
+            dataset = Dataset.model_validate(dataset)
+        elif not isinstance(dataset, Dataset):
+            raise TypeError(f"Expected a Dataset or a dict, got {type(dataset).__name__}.")
         dataset_details = dataset.model_dump(
             exclude={'capabilities', 'instrument', 'project'})
 

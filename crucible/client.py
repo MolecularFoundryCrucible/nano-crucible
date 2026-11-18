@@ -36,6 +36,7 @@ def _user_agent() -> str:
 USER_AGENT = _user_agent()
 _REPEATABLE_METHODS = frozenset({'GET', 'HEAD', 'OPTIONS', 'PUT', 'DELETE'})
 _deprecations_seen: set = set()
+_moves_seen: set = set()
 
 
 class CrucibleClient:
@@ -256,9 +257,11 @@ class CrucibleClient:
         """Sign in with a browser and use that session from now on.
 
         Args:
-            method: 'browser' (this computer's browser), 'device' (a code
-                approved in any browser, for SSH or headless machines), or
-                'auto', which picks the browser when one is available here.
+            method: 'browser' (this computer's browser), 'paste' (any browser;
+                you paste the code its page shows, for when the browser cannot
+                reach this machine), 'device' (a code approved in any browser,
+                for SSH or headless machines), or 'auto', which picks the
+                browser when one is available here.
             store: Where to keep the tokens: 'auto' (the OS keyring, else a
                 0600 file), 'keyring', 'file', or 'memory' (this client only).
                 Defaults to the auth_store setting.
@@ -367,6 +370,7 @@ class CrucibleClient:
         stepped_up = self._step_up(response)
         if stepped_up is not None:
             response = session.request(method, url, timeout=timeout, auth=stepped_up, **kwargs)
+        _warn_if_moved(self.api_url, url, response)
         logger.debug(f"Status: {response.status_code}")
         if log_body:
             logger.debug(f"Response: {response.text}")
@@ -700,6 +704,26 @@ def _resolve_credential(config, api_url: str, api_key: Optional[str]):
     raise NotSignedInError(
         "Not signed in to Crucible. Run 'crucible login', or set an API key with "
         "'crucible config init'.")
+
+
+def _warn_if_moved(api_url: str, url: str, response) -> None:
+    """Warn once when the API answers from a new address for good (301 or 308)."""
+    if not response.history or response.history[0].status_code not in (301, 308):
+        return
+    from urllib.parse import urlsplit
+    endpoint = urlsplit(url).path[len(urlsplit(api_url).path):]
+    final = urlsplit(response.url)
+    if not endpoint or not final.path.endswith(endpoint):
+        return
+    warn_moved(api_url, f"{final.scheme}://{final.netloc}{final.path[:-len(endpoint)]}")
+
+
+def warn_moved(api_url: str, moved_to: str) -> None:
+    if moved_to == api_url or (api_url, moved_to) in _moves_seen:
+        return
+    _moves_seen.add((api_url, moved_to))
+    logger.warning(f"The Crucible API at {api_url} has moved to {moved_to}. Update the address: "
+                   f"crucible config set api_url {moved_to}")
 
 
 def _warn_if_deprecated(method: str, endpoint: str, response) -> None:

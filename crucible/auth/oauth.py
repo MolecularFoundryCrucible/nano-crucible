@@ -5,7 +5,7 @@ import base64
 import hashlib
 import secrets
 import time
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 
 import requests
 
@@ -14,6 +14,8 @@ from .tokens import TokenSet
 
 CLIENT_ID = 'nano-crucible'
 DEVICE_GRANT = 'urn:ietf:params:oauth:grant-type:device_code'
+CODE_PAGE_PATH = '/oauth/code'
+WELL_KNOWN_PATH = '/.well-known/oauth-authorization-server'
 
 
 def _headers() -> dict:
@@ -29,14 +31,13 @@ def _timeout():
     return (config.connect_timeout, config.read_timeout)
 
 
-def discover(api_url: str, refresh: bool = False) -> dict:
+def discover(api_url: str, refresh: bool = False, warn: bool = True) -> dict:
     """The API's authorization server metadata, checked against api_url."""
     api_url = api_url.rstrip('/')
     if not refresh and api_url in _metadata_cache:
         return _metadata_cache[api_url]
     try:
-        response = requests.get(f'{api_url}/.well-known/oauth-authorization-server',
-                                timeout=_timeout(), headers=_headers())
+        response = requests.get(f'{api_url}{WELL_KNOWN_PATH}', timeout=_timeout(), headers=_headers())
     except requests.RequestException as exc:
         raise SignInError(f'Could not reach {api_url} to sign in: {exc}') from exc
     if response.status_code == 404:
@@ -44,11 +45,25 @@ def discover(api_url: str, refresh: bool = False) -> dict:
     if not response.ok:
         raise SignInError(f'Sign-in is unavailable on {api_url} (HTTP {response.status_code}).')
     metadata = response.json()
-    if (metadata.get('issuer') or '').rstrip('/') != api_url:
+    issuer = (metadata.get('issuer') or '').rstrip('/')
+    if issuer != api_url and not _moved_within_origin(api_url, response, issuer):
         raise SignInError(
             f"The sign-in server says it is {metadata.get('issuer')!r}, not {api_url!r}; refusing to sign in.")
+    if issuer != api_url and warn:
+        from ..client import warn_moved
+        warn_moved(api_url, issuer)
     _metadata_cache[api_url] = metadata
     return metadata
+
+
+def _moved_within_origin(api_url: str, response: requests.Response, issuer: str) -> bool:
+    """Whether the API redirected discovery, without leaving its scheme and host, to
+    the issuer's own metadata address (RFC 8414 3.3), as when a deployment moves its
+    API to a new path."""
+    if not issuer or not response.history or response.url != f'{issuer}{WELL_KNOWN_PATH}':
+        return False
+    origin = urlsplit(api_url)[:2]
+    return all(urlsplit(hop.url)[:2] == origin for hop in (*response.history, response))
 
 
 def new_pkce() -> tuple[str, str]:
@@ -56,6 +71,12 @@ def new_pkce() -> tuple[str, str]:
     verifier = secrets.token_urlsafe(64)
     challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode('ascii')).digest())
     return verifier, challenge.rstrip(b'=').decode('ascii')
+
+
+def code_page_uri(metadata: dict) -> str:
+    """The API page that shows a sign-in code to paste, used as redirect_uri when the
+    browser cannot reach a loopback listener here."""
+    return f"{metadata['issuer'].rstrip('/')}{CODE_PAGE_PATH}"
 
 
 def authorization_url(metadata: dict, redirect_uri: str, state: str, challenge: str,
