@@ -67,6 +67,8 @@ dataset_mfid = result["dataset_mfid"]
 client.datasets.add_file(dataset_mfid, "xrd_run5.xy")
 ```
 
+A dict with the same fields works in place of `Dataset(...)`.
+
 Applications may use canonical MFIDs instead of human-readable IDs. The API also accepts both forms when they resolve to the same resource:
 
 ```python

@@ -10,7 +10,7 @@ client = CrucibleClient()
 client = CrucibleClient(api_key="your-key")
 ```
 
-A new client uses the first credential it finds: an `api_key` argument, then `CRUCIBLE_API_KEY`, then the sign-in stored by `crucible login` or `client.login()`, then `api_key` in the config file. `client.credential_source` reports which one is in use. `client.login()` signs in with a browser (`method="device"` approves a code on any device, for SSH or headless machines) and switches the client to that session; `client.logout()` ends and forgets the stored sign-in.
+A new client uses the first credential it finds: an `api_key` argument, then `CRUCIBLE_API_KEY`, then the sign-in stored by `crucible login` or `client.login()`, then `api_key` in the config file. `client.credential_source` reports which one is in use. `client.login()` signs in with a browser (`method="device"` approves a code on any device, for SSH or headless machines; `method="paste"` asks for the code the sign-in page shows, for when the browser cannot reach the program) and switches the client to that session; `client.logout()` ends and forgets the stored sign-in.
 
 ## Resource namespaces
 

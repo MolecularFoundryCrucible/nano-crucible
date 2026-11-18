@@ -8,6 +8,7 @@ import socket
 import sys
 import threading
 import time
+from typing import Callable
 from urllib.parse import parse_qs, urlsplit
 
 from .errors import SignInError
@@ -78,8 +79,10 @@ class LoopbackListener:
         self.redirect_uri = f'http://{host}:{self._server.server_address[1]}{CALLBACK_PATH}'
         self.state = secrets.token_urlsafe(32)
 
-    def wait(self, issuer: str, timeout: float = 300, cancelled: threading.Event | None = None) -> str:
-        """The authorization code, once the redirect arrives and checks out."""
+    def wait(self, issuer: str, timeout: float = 300, cancelled: threading.Event | None = None,
+             switch: Callable[[], bool] | None = None) -> str | None:
+        """The authorization code, once the redirect arrives and checks out, or None
+        when switch() asks to stop waiting."""
         deadline = time.monotonic() + timeout
         try:
             while self._server.result is None:
@@ -87,6 +90,8 @@ class LoopbackListener:
                     raise SignInError('Timed out waiting for the browser sign-in.')
                 if cancelled is not None and cancelled.is_set():
                     raise SignInError('Sign-in cancelled.')
+                if switch is not None and switch():
+                    return None
                 self._server.handle_request()
         finally:
             self._server.server_close()

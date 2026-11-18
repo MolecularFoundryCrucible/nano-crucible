@@ -7,7 +7,7 @@ Python client library for the Crucible API - the Molecular Foundry data
 management system.
 """
 
-__version__ = "4.0.0"
+__version__ = "4.0.1"
 __author__ = ("mkywall", "roncofaber")
 
 import logging

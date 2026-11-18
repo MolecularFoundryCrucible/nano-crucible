@@ -14,12 +14,15 @@ def register_subcommand(subparsers):
         help='Sign in to Crucible with a browser',
         description='Sign in with your Crucible account in a browser. On this computer the '
                     'browser opens by itself; over SSH or on a machine without a browser, '
-                    'you approve a short code in a browser on any device.',
+                    'you approve a short code in a browser on any device. If the browser '
+                    'cannot reach this terminal (an error after you choose Allow), press Enter '
+                    'while it waits and paste the code the sign-in page shows instead.',
         formatter_class=term.ColorHelpFormatter,
         epilog="""
 Examples:
     crucible login
     crucible login --device        # approve a code on another device
+    crucible login --paste         # sign in in any browser and paste the code it shows
     crucible login --no-open       # print the address instead of opening the browser
 """,
     )
@@ -28,6 +31,9 @@ Examples:
                         help='Approve a code in a browser on any device (for SSH or headless machines)')
     method.add_argument('--browser', dest='method', action='store_const', const='browser',
                         help='Use a browser on this computer')
+    method.add_argument('--paste', dest='method', action='store_const', const='paste',
+                        help='Sign in in any browser and paste the code it shows (when the browser '
+                             'cannot reach this terminal)')
     parser.add_argument('--no-open', dest='open_browser', action='store_false', default=True,
                         help='Print the sign-in address instead of opening the browser')
     parser.set_defaults(func=execute_login, method='auto')
@@ -60,11 +66,13 @@ def execute_login(args):
     from ..auth.errors import SignInError
     from ..auth.session import save_sign_in, sign_in
     from ..auth.store import open_store
+    from .code_prompt import TerminalCodePrompt
     from .helpers import show_warning
     try:
         api_url = config.api_url.rstrip('/')
         print(f"Signing in to {api_url}")
-        tokens = sign_in(api_url, args.method, open_browser=args.open_browser, notify=_notify)
+        tokens = sign_in(api_url, args.method, open_browser=args.open_browser, notify=_notify,
+                         code_prompt=TerminalCodePrompt())
         store = open_store()
         save_sign_in(tokens, store)
     except KeyboardInterrupt:

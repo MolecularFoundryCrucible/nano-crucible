@@ -24,6 +24,7 @@ def _handle(client, code):
     from ..auth.loopback import browser_available
     from ..auth.session import SessionCredential, save_sign_in, sign_in
     from ..auth.store import TokenStore
+    from .code_prompt import TerminalCodePrompt
     from .helpers import prompt_confirm
     if not browser_available():
         return None
@@ -34,7 +35,8 @@ def _handle(client, code):
         required = client.whoami().get('user_unique_id')
     if not prompt_confirm("This needs a fresh sign-in in your browser. Sign in now?", default=True):
         return None
-    tokens = sign_in(client.api_url, 'browser', required_user=required, max_age=0, notify=_notify)
+    tokens = sign_in(client.api_url, 'browser', required_user=required, max_age=0, notify=_notify,
+                     code_prompt=TerminalCodePrompt(stream=sys.stderr))
     if credential.kind == 'session' and credential.store.name != 'memory':
         save_sign_in(tokens, credential.store)
         client._credential = SessionCredential(tokens, credential.store)

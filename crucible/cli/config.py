@@ -286,6 +286,7 @@ def _offer_browser_key(api_url):
     from ..auth.session import SessionCredential, sign_in
     from ..auth.store import TokenStore
     from ..client import CrucibleClient
+    from .code_prompt import TerminalCodePrompt
     from .helpers import prompt_confirm, prompt_optional, show_warning
 
     if not browser_available():
@@ -299,7 +300,7 @@ def _offer_browser_key(api_url):
         print(f"   {message}\n   {url}")
 
     try:
-        tokens = sign_in(api_url, 'browser', notify=notify)
+        tokens = sign_in(api_url, 'browser', notify=notify, code_prompt=TerminalCodePrompt())
     except (SignInError, requests.RequestException) as exc:
         show_warning(f"Sign-in did not finish: {exc}")
         return None
@@ -464,9 +465,16 @@ def cmd_set(args):
     if key == 'auth_store' and value not in AUTH_STORES:
         logger.error(f"auth_store must be one of: {', '.join(AUTH_STORES)}.")
         sys.exit(1)
+    if key == 'api_url':
+        from crucible.config import config
+        previous = config.api_url
     section, config_file = set_config_value(key, value)
     term.success(f"Set {key} = {value}  (in [{section}])", args)
     term.success(f"Saved to {config_file}", args)
+    if key == 'api_url':
+        from ..auth.session import carry_sign_in
+        if carry_sign_in(previous, value):
+            term.success(f"Your sign-in moved with the API to {value.rstrip('/')}.", args)
 
 
 def unset_config_value(key):

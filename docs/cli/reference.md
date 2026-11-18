@@ -289,7 +289,7 @@ These commands operate on the currently authenticated account and do not require
 
 | Command | Description |
 |---|---|
-| `login [--device\|--browser] [--no-open]` | Sign in with a browser; `--device` approves a code on any device |
+| `login [--device\|--browser\|--paste] [--no-open]` | Sign in with a browser; `--device` approves a code on any device, `--paste` reads the code the sign-in page shows |
 | `logout` | End and delete the stored sign-in for the configured API |
 | `account show` | Show the current profile |
 | `account update` | Update profile fields |

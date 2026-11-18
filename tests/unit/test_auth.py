@@ -472,3 +472,107 @@ def test_a_sign_in_alone_is_enough_to_build_a_client(tmp_path, fake_config):
     assert client.credential_source == 'sign-in'
     assert client.api_key is None
 
+
+
+class ScriptedPrompt(auth_session.CodePrompt):
+    def __init__(self, code='pasted-code', switch=False):
+        self.code, self.switch, self.waited = code, switch, False
+
+    def waiting(self):
+        self.waited = True
+
+    def requested(self):
+        return self.switch
+
+    def read_code(self):
+        return self.code
+
+
+def query_of(url):
+    from urllib.parse import parse_qs, urlsplit
+    return {key: values[0] for key, values in parse_qs(urlsplit(url).query).items()}
+
+
+def test_paste_sign_in_ends_on_the_code_page_and_redeems_the_pasted_code(monkeypatch):
+    posts = fake_server(monkeypatch)
+    shown = []
+
+    tokens = auth_session.sign_in(API, 'paste', required_user=USER, max_age=0, open_browser=False,
+                                  notify=lambda message, url: shown.append(url),
+                                  code_prompt=ScriptedPrompt(' pasted-code\n'))
+
+    asked = query_of(shown[0])
+    assert asked['redirect_uri'] == f'{API}/oauth/code'
+    assert asked['required_user'] == USER and asked['max_age'] == '0'
+    (url, fields), = posts
+    assert fields['code'] == 'pasted-code'
+    assert fields['redirect_uri'] == f'{API}/oauth/code'
+    digest = hashlib.sha256(fields['code_verifier'].encode()).digest()
+    assert base64.urlsafe_b64encode(digest).rstrip(b'=').decode() == asked['code_challenge']
+    assert tokens.user_unique_id == USER
+
+
+def test_enter_during_a_browser_sign_in_switches_to_a_new_paste_request(monkeypatch):
+    posts = fake_server(monkeypatch)
+    monkeypatch.setattr('webbrowser.open', lambda url: True)
+    shown = []
+    prompt = ScriptedPrompt(switch=True)
+
+    auth_session.sign_in(API, 'browser', notify=lambda message, url: shown.append(url), code_prompt=prompt)
+
+    loopback, paste = (query_of(url) for url in shown)
+    assert prompt.waited
+    assert loopback['redirect_uri'].endswith('/callback')
+    assert paste['redirect_uri'] == f'{API}/oauth/code'
+    assert paste['state'] != loopback['state'] and paste['code_challenge'] != loopback['code_challenge']
+    assert posts[0][1]['redirect_uri'] == f'{API}/oauth/code'
+
+
+def test_a_browser_sign_in_with_the_terminal_prompt_still_uses_the_loopback(monkeypatch):
+    posts = fake_server(monkeypatch)
+    monkeypatch.setattr('webbrowser.open', follow_redirect)
+    prompt = ScriptedPrompt(switch=False)
+
+    auth_session.sign_in(API, 'browser', notify=lambda *a: None, code_prompt=prompt)
+
+    assert prompt.waited
+    assert posts[0][1]['code'] == 'the-code'
+    assert posts[0][1]['redirect_uri'].endswith('/callback')
+
+
+def test_a_refused_pasted_code_says_it_expires(monkeypatch):
+    fake_server(monkeypatch, token_replies=[reply(400, {'error': 'invalid_grant'})])
+
+    with pytest.raises(SignInError, match='within five minutes'):
+        auth_session.sign_in(API, 'paste', open_browser=False, notify=lambda *a: None,
+                             code_prompt=ScriptedPrompt())
+
+
+def test_an_empty_pasted_code_is_refused_without_a_request(monkeypatch):
+    posts = fake_server(monkeypatch)
+
+    with pytest.raises(SignInError, match='No sign-in code'):
+        auth_session.sign_in(API, 'paste', open_browser=False, notify=lambda *a: None,
+                             code_prompt=ScriptedPrompt('  '))
+    assert posts == []
+
+
+def test_the_terminal_prompt_never_switches_without_a_terminal(monkeypatch, capsys):
+    from crucible.cli.code_prompt import TerminalCodePrompt
+    monkeypatch.setattr('sys.stdin', SimpleNamespace(isatty=lambda: False))
+    prompt = TerminalCodePrompt()
+
+    prompt.waiting()
+
+    assert prompt.requested() is False
+    assert capsys.readouterr().out == ''
+
+
+def test_login_paste_flag(monkeypatch):
+    import argparse
+    from crucible.cli import login as login_cli
+    parser = argparse.ArgumentParser()
+    login_cli.register_subcommand(parser.add_subparsers())
+
+    assert parser.parse_args(['login', '--paste']).method == 'paste'
+    assert parser.parse_args(['login']).method == 'auto'

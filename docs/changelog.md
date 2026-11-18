@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+## 4.0.1
+
+Sign-in by pasted code needs Crucible API 4.0.1.
+
+### Added
+
+- `crucible login --paste` and `client.login(method="paste")`: sign in in any browser and paste the code its page shows.
+- Press Enter while a browser sign-in waits to paste a code instead, when the browser cannot reach the terminal.
+- When the API answers from a new address for good (301 or 308), the client warns once and names the `crucible config set api_url` command, which also moves a stored sign-in to the new address.
+
+### Changed
+
+- Signing in and renewing a session follow an API that moved to a new path on the same host; a move to another host or from https to http is still refused.
+- `samples.create()` and `datasets.create()` accept the record's fields as a dict as well as a model, like the other `create()` methods.
+
+### Fixed
+
+- `datasets.create()` given something other than a `Dataset` or a dict raises a `TypeError` instead of an `AttributeError`.
+
 ## 4.0.0
 
 Requires Crucible API 4.0 and Python 3.11 or later. [Upgrading to 4.0](upgrading.md) lists what to change in existing scripts.
